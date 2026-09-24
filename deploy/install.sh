@@ -30,9 +30,9 @@ else
 fi
 cd "$destination"
 echo 'Downloading the application image and generating private installation secrets…'
-docker pull vkernel/nsx-security-analyzer:e260cc5
+docker pull vkernel/nsx-security-analyzer:06e589c
 # Generate secrets in a temporary container; no host Python installation is needed.
-docker run --rm --network none --entrypoint python vkernel/nsx-security-analyzer:e260cc5 -c 'import secrets; print("DJANGO_SECRET_KEY="+secrets.token_hex(32)); print("POSTGRES_PASSWORD="+secrets.token_hex(32)); print("WEB_PORT=8000")' > .env
+docker run --rm --network none --entrypoint python vkernel/nsx-security-analyzer:06e589c -c 'import secrets; print("DJANGO_SECRET_KEY="+secrets.token_hex(32)); print("POSTGRES_PASSWORD="+secrets.token_hex(32)); print("WEB_PORT=8000")' > .env
 chmod 600 .env
 docker compose pull
 docker compose up -d

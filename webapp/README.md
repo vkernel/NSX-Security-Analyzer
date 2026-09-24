@@ -137,7 +137,7 @@ migration between databases.
    AND/OR and regex search, evidence search toggle, column filters, sorting,
    pagination, evidence dialogs, copying and CSV exports.
 
-Use **Add testing data** on the Environments page to create a separate,
+Use **Environments → Add environment → Create demo environment** to create a separate,
 paused demo environment with synthetic groups, services and firewall rules. No
 credentials or NSX connection are required. Demo snapshots are labeled as testing
 data and excluded from operational history analysis. JSON import is no longer available.

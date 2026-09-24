@@ -27,11 +27,11 @@ not part of this image.
 
 Linux **AMD64** and **ARM64** are included in each published multi-platform tag.
 
-- `e260cc5`: pinned application image built from Git commit `e260cc5`.
+- `06e589c`: pinned application image built from Git commit `06e589c`.
 - `latest`: mutable tag for the currently published application image.
 
 ```sh
-docker pull vkernel/nsx-security-analyzer:e260cc5
+docker pull vkernel/nsx-security-analyzer:06e589c
 ```
 
 ## Complete installation from Docker Hub
@@ -76,6 +76,9 @@ in `.env` and running `docker compose up -d` again.
 
 For native Windows PowerShell, remote PostgreSQL or upgrades, follow the
 [manual installation guide](https://github.com/vkernel/NSX-Security-Analyzer/blob/main/docs/docker-hub.md).
+
+Create synthetic test data from **Environments → Add environment → Create demo environment**.
+Delete an environment from **Edit environment → Delete environment**, with explicit confirmation.
 
 ## Configuration and data
 
