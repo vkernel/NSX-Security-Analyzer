@@ -17,6 +17,7 @@ or file-based report import/export workflow is included; table CSV export remain
 - Scheduled multi-environment collection with progress and readable errors.
 - Search, column filters, CSV exports, retention policies and display preferences.
 - Synthetic demo data for exploring the application without NSX connectivity.
+- Snapshot comparison, finding ownership and review notes, and collection coverage with observation gaps.
 
 Findings are review candidates, not deletion approvals. Collection only sends GET
 requests to NSX; it does not modify rules or reset counters. IPFIX traffic analysis
@@ -27,11 +28,11 @@ not part of this image.
 
 Linux **AMD64** and **ARM64** are included in each published multi-platform tag.
 
-- `0.1.0`: pinned application image built from Git commit `30fc764`.
+- `0.2.0`: pinned application image built from Git commit `6f8c634`.
 - `latest`: mutable tag for the currently published application image.
 
 ```sh
-docker pull vkernel/nsx-security-analyzer:0.1.0
+docker pull vkernel/nsx-security-analyzer:0.2.0
 ```
 
 ## Complete installation from Docker Hub
@@ -80,7 +81,23 @@ For native Windows PowerShell, remote PostgreSQL or upgrades, follow the
 Create synthetic test data from **Environments → Add environment → Create demo environment**.
 Delete an environment from **Edit environment → Delete environment**, with explicit confirmation.
 
-The sidebar displays **v0.1.0** and the build identifier. Administration also shows the build date.
+The sidebar displays **v0.2.0** and the build identifier. Administration also shows the build date.
+
+## Upgrading to 0.2.0
+
+Back up your database and `.env`, and let active collections finish. Set
+`NSX_IMAGE_TAG=0.2.0` in `.env`, then run from the deployment directory:
+
+```sh
+docker compose pull
+docker compose stop web worker scheduler
+docker compose run --rm migrate
+docker compose up -d
+```
+
+Migration 0011 creates review tables; existing snapshots are preserved.
+Use your usual extra Compose file arguments for remote-database installations.
+[History and review guide](https://github.com/vkernel/NSX-Security-Analyzer/blob/main/docs/history-and-review.md)
 
 ## Configuration and data
 
