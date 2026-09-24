@@ -149,3 +149,5 @@ body[data-theme] .switcher-options button[aria-current]{background:var(--info-bg
 body[data-theme] .button.destructive{background:#b42318;color:#fff;border-color:#b42318}
 body[data-theme] .button.destructive:hover:not(:disabled):not([aria-disabled=true]){background:#912018;border-color:#912018;color:#fff}
 body[data-theme] .button.destructive:focus-visible{outline:3px solid #b42318;outline-offset:3px}
+
+.workspace-sidebar .application-version{display:block;color:#b8c9d8;font-size:11px;margin:10px 10px 0;overflow-wrap:anywhere}

@@ -31,3 +31,6 @@
 **/reports
 **/backups
 **/test-artifacts
+
+# Always regenerate image identity; never copy it from a local build.
+**/_build.json

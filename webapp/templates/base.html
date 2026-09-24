@@ -10,7 +10,7 @@
 <aside class="workspace-sidebar" id="primary-sidebar"><a class="brand" href="{% url 'dashboard' %}"><span class="brand-icon">N</span><span>NSX Security<span class="brand-caption">SECURITY WORKSPACE</span></span></a>
 <button type="button" class="mobile-nav-close" aria-label="Close navigation">×</button>
 {% include 'inventory/workspace_navigation.html' %}
-<div class="sidebar-bottom"><a href="{% url 'workspace-section' 'help' %}{% if selected_environment %}?environment={{ selected_environment.pk }}{% endif %}">{% include 'inventory/nav_icon.html' with icon='help' %}Help &amp; coverage</a><span class="readonly-label"><span class="live-dot"></span>Read-only NSX access</span></div>
+<div class="sidebar-bottom"><a href="{% url 'workspace-section' 'help' %}{% if selected_environment %}?environment={{ selected_environment.pk }}{% endif %}">{% include 'inventory/nav_icon.html' with icon='help' %}Help &amp; coverage</a><span class="readonly-label"><span class="live-dot"></span>Read-only NSX access</span><span class="application-version" title="Revision: {{ application_revision }} · Built: {{ application_built_at }}">v{{ application_version }} · Build {{ application_build }}</span></div>
 </aside>
 <header class="application-topbar">
 <button type="button" class="mobile-nav-toggle" aria-label="Open navigation" aria-controls="primary-sidebar" aria-expanded="false">☰</button>

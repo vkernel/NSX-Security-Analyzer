@@ -24,7 +24,7 @@ TEMPLATES = [{"BACKEND": "django.template.backends.django.DjangoTemplates",
               "DIRS": [BASE_DIR / "templates"], "APP_DIRS": True,
               "OPTIONS": {"context_processors": [
                   "django.template.context_processors.request", "django.contrib.auth.context_processors.auth",
-                  "django.contrib.messages.context_processors.messages", "inventory.preferences.display_preferences"]}}]
+                  "django.contrib.messages.context_processors.messages", "inventory.preferences.display_preferences", "inventory.version.application_version"]}}]
 DATABASES = {"default": {
     "ENGINE": "django.db.backends.postgresql", "NAME": os.getenv("POSTGRES_DB", "nsx"),
     "USER": os.getenv("POSTGRES_USER", "nsx"), "PASSWORD": os.getenv("POSTGRES_PASSWORD", ""),

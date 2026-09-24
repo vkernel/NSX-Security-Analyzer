@@ -33,3 +33,6 @@ htmlcov/
 .DS_Store
 .idea/
 .vscode/
+
+# Generated inside the release image
+webapp/inventory/_build.json

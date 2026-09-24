@@ -153,3 +153,10 @@ alone does not create this application's dependencies.
 
 The standalone [deployment Compose file](../deploy/compose.yaml) can also be used
 with your own `.env`; it requires neither a source checkout nor the Hub override.
+
+## Identify the running release
+
+The sidebar shows the application version and source build identifier.
+**Administration → Application version** also shows the UTC image build time.
+These values come from the running image, not the selected snapshot or mutable
+`latest` tag. Source builds without release metadata show `Build source`.
