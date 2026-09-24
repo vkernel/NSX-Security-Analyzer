@@ -1,8 +1,8 @@
 # Contributing
 
-Discuss substantial changes in an issue before opening a pull request. The project
-has not selected a license yet; resolve licensing expectations with the maintainer
-before submitting contributions.
+Discuss substantial changes in an issue before opening a pull request. Contributions intentionally submitted for inclusion are provided under the
+[Apache License 2.0](LICENSE), unless explicitly stated otherwise. Only submit work
+you have the right to contribute.
 
 ## Local development
 

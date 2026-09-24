@@ -81,6 +81,9 @@ set `NSX_IMAGE_TAG=latest` in `.env` to follow the latest tag instead.
 - [Issues and support](https://github.com/vkernel/NSX-Security-Analyzer/issues)
 - [Security reporting](https://github.com/vkernel/NSX-Security-Analyzer/blob/main/SECURITY.md)
 
-A license has not yet been selected. Public availability does not grant an
-open-source license. This independent project is not affiliated with or endorsed
-by VMware or Broadcom.
+Licensed under the [Apache License 2.0](https://github.com/vkernel/NSX-Security-Analyzer/blob/main/LICENSE).
+[Project attribution](https://github.com/vkernel/NSX-Security-Analyzer/blob/main/NOTICE).
+Third-party dependencies retain their own licenses. The application image includes
+its license and attribution at `/app/LICENSE` and `/app/NOTICE`.
+
+This independent project is not affiliated with or endorsed by VMware or Broadcom.

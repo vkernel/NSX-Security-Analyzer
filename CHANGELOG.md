@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Adopt Apache License 2.0 with project attribution and container license metadata.
+
 Initial standalone repository for NSX Security Analyzer.
 
 - Read-only NSX Policy collector and standalone CLI reporting.

@@ -98,8 +98,9 @@ This is an initial standalone repository; no versioned release or support SLA is
 currently declared. Validate the application against your NSX deployment before
 operational adoption.
 
-A license has **not yet been selected**. Public repository availability does not
-grant an open-source license. No license file is included pending the owner's decision.
+NSX Security Analyzer is licensed under the [Apache License 2.0](LICENSE).
+See [NOTICE](NOTICE) for project attribution. Third-party dependencies retain their
+own licenses; the project license does not replace their terms.
 
 This is an independent project and is not affiliated with or endorsed by VMware
 or Broadcom.
