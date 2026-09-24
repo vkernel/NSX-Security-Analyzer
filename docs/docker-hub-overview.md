@@ -5,6 +5,10 @@ collections, PostgreSQL snapshot history and firewall activity analysis.
 
 **[Source code and documentation on GitHub](https://github.com/vkernel/NSX-Security-Analyzer)**
 
+The web GUI is the only product interface. Configure environments, schedule
+collections and review database-backed reports in the browser. No standalone CLI
+or file-based report import/export workflow is included; table CSV export remains available.
+
 ## Features
 
 - Groups, services, distributed firewall policies, rules, tags and scopes.
@@ -23,11 +27,11 @@ not part of this image.
 
 Linux **AMD64** and **ARM64** are included in each published multi-platform tag.
 
-- `597cbcb`: pinned application image built from Git commit `597cbcb`.
+- `e260cc5`: pinned application image built from Git commit `e260cc5`.
 - `latest`: mutable tag for the currently published application image.
 
 ```sh
-docker pull vkernel/nsx-security-analyzer:597cbcb
+docker pull vkernel/nsx-security-analyzer:e260cc5
 ```
 
 ## Quick start with Docker Compose
@@ -59,7 +63,7 @@ docker compose -f compose.yaml -f compose.hub.yaml exec web python manage.py cre
 ```
 
 Open **http://localhost:8000**. Add an environment in Administration or explore
-**Environments → Add testing data**. The Compose override defaults to `597cbcb`;
+**Environments → Add testing data**. The Compose override defaults to `e260cc5`;
 set `NSX_IMAGE_TAG=latest` in `.env` to follow the latest tag instead.
 
 ## Configuration and data

@@ -28,7 +28,7 @@ python3 -c 'import secrets; print(secrets.token_hex(32))'
 
 Edit `.env` and set `DJANGO_SECRET_KEY` and `POSTGRES_PASSWORD` to those values.
 Keep `DJANGO_SECRET_KEY` stable and include it in your secure deployment backups.
-The default pinned image is `597cbcb`. To select another published tag, add
+The default pinned image is `e260cc5`. To select another published tag, add
 `NSX_IMAGE_TAG=<tag>` to `.env`. `NSX_IMAGE_TAG=latest` follows the mutable latest tag.
 
 ```sh
@@ -59,6 +59,14 @@ docker compose -f compose.yaml -f compose.hub.yaml -f compose.remote.yaml exec w
 Keep these same file arguments for subsequent commands. The bundled database is
 not started in remote mode. Do not enable its `bundled-db` profile.
 
+## Upgrading from legacy CLI-based installations
+
+The application no longer includes the standalone collector CLI or manager-file
+importer. Existing database snapshots remain readable. Environments using legacy
+credential variables must have a username and password saved in **Edit environment**
+before collection resumes. Source deployments should use this repository's updated
+Compose files; the worker no longer loads `.nsx.env`.
+
 ## Verify and maintain
 
 ```sh
@@ -82,7 +90,7 @@ See [operations](operations.md) for backup and recovery guidance.
 
 ## Tags and source
 
-- `597cbcb`: image built from Git commit `597cbcb`.
+- `e260cc5`: image built from Git commit `e260cc5`.
 - `latest`: currently published application image; may change on future releases.
 - [Docker Hub tags](https://hub.docker.com/r/vkernel/nsx-security-analyzer/tags)
 - [Source repository](https://github.com/vkernel/NSX-Security-Analyzer)
