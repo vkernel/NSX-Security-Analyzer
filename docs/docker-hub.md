@@ -28,7 +28,7 @@ python3 -c 'import secrets; print(secrets.token_hex(32))'
 
 Edit `.env` and set `DJANGO_SECRET_KEY` and `POSTGRES_PASSWORD` to those values.
 Keep `DJANGO_SECRET_KEY` stable and include it in your secure deployment backups.
-The default pinned image is `021a065`. To select another published tag, add
+The default pinned image is `597cbcb`. To select another published tag, add
 `NSX_IMAGE_TAG=<tag>` to `.env`. `NSX_IMAGE_TAG=latest` follows the mutable latest tag.
 
 ```sh
@@ -82,7 +82,7 @@ See [operations](operations.md) for backup and recovery guidance.
 
 ## Tags and source
 
-- `021a065`: image built from Git commit `021a065`.
+- `597cbcb`: image built from Git commit `597cbcb`.
 - `latest`: currently published application image; may change on future releases.
 - [Docker Hub tags](https://hub.docker.com/r/vkernel/nsx-security-analyzer/tags)
 - [Source repository](https://github.com/vkernel/NSX-Security-Analyzer)

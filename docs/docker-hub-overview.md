@@ -23,11 +23,11 @@ not part of this image.
 
 Linux **AMD64** and **ARM64** are included in each published multi-platform tag.
 
-- `021a065`: pinned application image built from Git commit `021a065`.
+- `597cbcb`: pinned application image built from Git commit `597cbcb`.
 - `latest`: mutable tag for the currently published application image.
 
 ```sh
-docker pull vkernel/nsx-security-analyzer:021a065
+docker pull vkernel/nsx-security-analyzer:597cbcb
 ```
 
 ## Quick start with Docker Compose
@@ -59,7 +59,7 @@ docker compose -f compose.yaml -f compose.hub.yaml exec web python manage.py cre
 ```
 
 Open **http://localhost:8000**. Add an environment in Administration or explore
-**Environments → Add testing data**. The Compose override defaults to `021a065`;
+**Environments → Add testing data**. The Compose override defaults to `597cbcb`;
 set `NSX_IMAGE_TAG=latest` in `.env` to follow the latest tag instead.
 
 ## Configuration and data
