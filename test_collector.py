@@ -521,7 +521,7 @@ examples.forEach((_,index) => {
                 client = Mock()
                 client.get.return_value = {"results": []}
                 self.assertEqual(nsx.membership(client, group)[0], "unknown")
-                client.get.return_value = {"results": ["10.0.0.1"]}
+                client.get.return_value = {"results": ["192.0.2.1"]}
                 self.assertEqual(nsx.membership(client, group)[0], "nonempty")
         client = Mock()
         client.get.return_value = {"results": []}
