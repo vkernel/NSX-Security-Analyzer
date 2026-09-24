@@ -1,6 +1,6 @@
 # Prebuilt images: use with compose.yaml (Docker Compose 2.24.4+).
 x-hub-image: &hub-image
-  image: vkernel/nsx-security-analyzer:${NSX_IMAGE_TAG:-06e589c}
+  image: vkernel/nsx-security-analyzer:${NSX_IMAGE_TAG:-0.1.0}
   build: !reset null
 
 services:

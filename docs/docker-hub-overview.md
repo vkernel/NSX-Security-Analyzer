@@ -27,11 +27,11 @@ not part of this image.
 
 Linux **AMD64** and **ARM64** are included in each published multi-platform tag.
 
-- `06e589c`: pinned application image built from Git commit `06e589c`.
+- `0.1.0`: pinned application image built from Git commit `30fc764`.
 - `latest`: mutable tag for the currently published application image.
 
 ```sh
-docker pull vkernel/nsx-security-analyzer:06e589c
+docker pull vkernel/nsx-security-analyzer:0.1.0
 ```
 
 ## Complete installation from Docker Hub
@@ -79,6 +79,8 @@ For native Windows PowerShell, remote PostgreSQL or upgrades, follow the
 
 Create synthetic test data from **Environments → Add environment → Create demo environment**.
 Delete an environment from **Edit environment → Delete environment**, with explicit confirmation.
+
+The sidebar displays **v0.1.0** and the build identifier. Administration also shows the build date.
 
 ## Configuration and data
 

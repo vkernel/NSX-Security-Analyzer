@@ -50,3 +50,13 @@ model changes. Preserve read-only NSX collection, unknown-state handling, creden
 redaction, CSRF protection and access checks. Avoid broad unrelated formatting.
 Use `requirements.lock` for reproducible installs and keep dependency ranges in
 `requirements.txt` consistent when updating dependencies.
+
+## Release identity
+
+Increment `VERSION` in `webapp/inventory/version.py` and the Dockerfile's
+`org.opencontainers.image.version` label for each release. Build from a clean,
+committed checkout with `--build-arg APP_REVISION=<full Git commit>` and
+`--build-arg APP_BUILD_DATE=<UTC ISO-8601 timestamp>`. Publish a matching immutable
+version tag and update installation defaults. Do not reuse a version tag for
+different application code. The default `source` build identifier is for local
+development; published images must include the actual revision and date.
