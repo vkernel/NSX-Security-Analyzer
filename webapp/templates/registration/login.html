@@ -1,0 +1,3 @@
+{% extends 'base.html' %}{% block title %}Sign in · NSX Security Analyzer{% endblock %}
+{% block content %}<div class="login-card"><span class="brand-icon">N</span><p class="eyebrow">NSX SECURITY ANALYZER</p><h1>Your infrastructure,<br>in view.</h1><p class="lead">Sign in to review environments, audit history and security evidence.</p>
+<form method="post">{% csrf_token %}{{ form.as_p }}{% if next %}<input type="hidden" name="next" value="{{ next }}">{% endif %}<button class="button primary full-width" type="submit">Sign in →</button></form><p class="muted small">Access is managed by your workspace administrator.</p></div>{% endblock %}

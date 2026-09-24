@@ -1,0 +1,18 @@
+# Optional override: docker compose -f compose.yaml -f compose.remote.yaml up --build -d
+# Requires Docker Compose 2.24.4+. The bundled database is not started in this mode.
+x-remote-database: &remote-database
+  POSTGRES_HOST: ${POSTGRES_HOST:?Set POSTGRES_HOST to the external database hostname}
+  POSTGRES_SSLMODE: ${POSTGRES_SSLMODE:-verify-full}
+
+services:
+  db:
+    profiles: [bundled-db]
+  migrate:
+    depends_on: !reset {}
+    environment: *remote-database
+  web:
+    environment: *remote-database
+  worker:
+    environment: *remote-database
+  scheduler:
+    environment: *remote-database

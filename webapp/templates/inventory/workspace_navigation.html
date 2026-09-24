@@ -1,0 +1,9 @@
+{% with current=request.resolver_match.url_name %}
+<nav class="workspace-navigation" aria-label="Main navigation">
+<a href="{% url 'dashboard' %}" data-primary="overview" {% if current == 'dashboard' %}aria-current="page"{% endif %}>{% include 'inventory/nav_icon.html' with icon='overview' %}Overview</a>
+<a href="{% url 'environment-directory' %}" data-primary="environments" {% if current == 'environment-directory' or current == 'environment' %}aria-current="page"{% endif %}>{% include 'inventory/nav_icon.html' with icon='environments' %}Environments</a>
+<a href="{% url 'workspace-section' 'inventory' %}{% if selected_environment %}?environment={{ selected_environment.pk }}{% endif %}" data-primary="inventory">{% include 'inventory/nav_icon.html' with icon='inventory' %}Inventory</a>
+<a href="{% url 'workspace-section' 'firewall' %}{% if selected_environment %}?environment={{ selected_environment.pk }}{% endif %}" data-primary="firewall" {% if current == 'rule-history' %}aria-current="page"{% endif %}>{% include 'inventory/nav_icon.html' with icon='firewall' %}Firewall</a>
+<a href="{% url 'all-collections' %}" data-primary="collections" {% if current == 'all-collections' or current == 'collection-history' %}aria-current="page"{% endif %}>{% include 'inventory/nav_icon.html' with icon='collections' %}Collections</a>
+{% if user.is_staff %}<a href="{% url 'administration' %}" data-primary="administration" {% if current == 'administration' or current == 'environment-new' or current == 'environment-edit' or current == 'retention-settings' or current == 'workspace-policy' or request.resolver_match.namespace == 'admin' %}aria-current="page"{% endif %}>{% include 'inventory/nav_icon.html' with icon='administration' %}Administration</a>{% endif %}
+</nav>{% endwith %}

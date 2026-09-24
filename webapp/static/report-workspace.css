@@ -1,0 +1,32 @@
+/* A single workspace shell for reports rendered from database snapshots. */
+.snapshot-page{background:var(--canvas);font:14px/1.65 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+.snapshot-page .workspace-main{margin-left:244px;max-width:none;padding:32px 40px}
+.snapshot-page .workspace-sidebar{z-index:5}
+.snapshot-page .workspace-sidebar .brand{color:#fff}
+.snapshot-page .workspace-sidebar .brand strong{color:inherit}
+.snapshot-page .nav-label{margin-top:26px}
+.snapshot-page .report-navigation{padding-bottom:20px}
+.snapshot-page .report-navigation .menu-category{margin:4px 0}
+.snapshot-page .report-navigation summary{list-style:none;cursor:pointer;display:flex;align-items:center;gap:8px;padding:10px 12px;font-size:13px;color:#c7d8e4;border-radius:8px}
+.snapshot-page .report-navigation summary::-webkit-details-marker{display:none}
+.snapshot-page .report-navigation summary::before{content:'›';font-size:18px;line-height:1}
+.snapshot-page .report-navigation details[open]>summary::before{transform:rotate(90deg)}
+.snapshot-page .report-navigation summary:hover{background:#294558;color:#fff}
+.snapshot-page .report-navigation .submenu{margin-left:14px;padding-left:5px;border-left:1px solid #355064}
+.snapshot-page .report-navigation .submenu a{padding:8px 10px;font-size:12px;gap:8px}
+.snapshot-page .report-navigation a span{font-size:11px;color:#a8c7d6;font-variant-numeric:tabular-nums}
+.snapshot-page .sidebar-note{display:none}
+.snapshot-page .account{margin-top:auto}
+.snapshot-page .report-toolbar{padding-bottom:20px;border-bottom:1px solid var(--line)}
+.snapshot-page .report-toolbar .eyebrow{color:var(--teal)}
+.snapshot-page .report-toolbar .pill{margin-top:12px}
+.snapshot-page .report-content>p.muted{font-size:12px;margin:0 0 22px}
+.snapshot-page .report-content section{margin:18px 0}
+/* Navigation focuses panels; keep focus rings on their interactive controls only. */
+.snapshot-page .report-content [data-panel]:focus{outline:none}
+.snapshot-page .report-content .inventory-shortcuts{margin-top:0}
+.snapshot-page .report-content .table-tools input{display:initial}
+.snapshot-page .report-content td small{display:initial}
+.snapshot-page .report-content td .path{display:block}
+@media(max-width:1150px){.snapshot-page .workspace-main{padding:28px 24px}}
+@media(max-width:800px){.snapshot-page .workspace-main{margin-left:0;padding:24px 18px}.snapshot-page .report-navigation{display:block;max-height:280px;overflow:auto}.snapshot-page .report-nav-label{display:block;margin-top:20px}.snapshot-page .report-navigation .submenu{display:block}.snapshot-page .workspace-sidebar{position:relative}.snapshot-page .report-toolbar{gap:16px}}

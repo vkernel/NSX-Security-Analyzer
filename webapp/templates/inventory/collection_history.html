@@ -1,0 +1,5 @@
+{% extends 'base.html' %}{% block title %}Collection history · NSX Security Analyzer{% endblock %}{% block content %}
+<a class="breadcrumb" href="{% url 'environment' environment.pk %}">← {{ environment.name }}</a><div class="page-heading"><div><p class="eyebrow">COLLECTION HISTORY</p><h1>{{ environment.name }}</h1><p class="lead">{{ jobs.paginator.count }} collections · {{ jobs.paginator.per_page }} per page</p></div></div>
+{% include 'inventory/jobs.html' %}
+<div class="pagination">{% if jobs.has_previous %}<a href="?page={{ jobs.previous_page_number }}">← Previous</a>{% endif %}<span>Page {{ jobs.number }} of {{ jobs.paginator.num_pages }}</span>{% if jobs.has_next %}<a href="?page={{ jobs.next_page_number }}">Next →</a>{% endif %}</div>
+{% endblock %}

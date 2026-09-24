@@ -1,0 +1,18 @@
+/* Account-level density applies to workspace, report and administration tables. */
+.display-compact table td,.display-compact table tbody th{padding:8px 12px;font-size:12px}
+.display-compact .environment-card,.display-compact .card,.display-compact .snapshot-chart{padding:16px}
+.display-compact .report-content section{padding:18px 22px}
+.display-compact .table-tools{padding:10px;gap:8px}
+.display-compact .workspace-sidebar nav a{padding-top:8px;padding-bottom:8px}
+/* Personal appearance and accessibility settings. */
+body{min-height:100vh;background:var(--canvas);color:var(--ink)}
+body.text-large{font-size:17px}body.text-large :is(td,th,input,select,button,.table-tools label,.workspace-sidebar nav a,.muted,.notes,.path){font-size:15px}
+body.high-contrast{--ink:#061b2c;--muted:#253c50;--teal:#00565c;--line:#708294}
+body.high-contrast :is(input,select,button,table,.form-card,.environment-card){border-width:2px}
+body.high-contrast .workspace-sidebar :is(a,summary,small,.nav-label){color:#fff}
+body.reduced-motion *,body.reduced-motion *::before,body.reduced-motion *::after{animation:none!important;transition:none!important;scroll-behavior:auto!important}
+@media(prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important;scroll-behavior:auto!important}}
+.notification-center{margin:18px 0;color:#c7d8e4;font-size:12px}.notification-center>summary{cursor:pointer;font-weight:600;padding:10px}.notification-center ul{list-style:none;padding:0;max-height:330px;overflow:auto}.notification-center li{padding:10px;border-top:1px solid #355064}.notification-center li.unread{border-left:3px solid #4fd2ae;background:#294558}.notification-center a{color:#c7edf0}.notification-center small{display:block;margin-top:6px;color:#c7d8e4}.notification-center .button{font-size:11px;padding:6px 10px}.notification-center p{padding:0 10px}
+.column-layout{margin:12px 0;padding:12px 16px;background:var(--canvas);border:1px solid var(--line);border-radius:8px}.column-layout>summary{cursor:pointer;color:var(--teal);font-weight:600}.column-layout>div{max-width:650px;display:grid;gap:8px;margin:14px 0}.column-choice{display:flex;align-items:center;gap:8px}.column-choice label{display:flex;align-items:center;gap:10px;flex:1}.column-layout small{display:block;color:var(--muted);margin:8px 0}.column-choice button{min-width:40px}.freshness{font-size:12px}.table-widget th[hidden],.table-widget td[hidden]{display:none!important}
+
+/* Theme colors and states are defined centrally in design-system.css. */

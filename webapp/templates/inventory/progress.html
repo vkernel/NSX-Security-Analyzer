@@ -1,0 +1,5 @@
+{% load workspace_time %}{% if job.status == 'queued' or job.status == 'running' %}{% with progress=job.progress %}<div class="job-progress {{ job.status }}" title="Completed audit phases, not an estimate of time remaining">
+<div class="progress-caption"><span data-progress-stage>{{ progress.stage }}</span><strong data-progress-percent>{{ progress.percent }}%</strong></div>
+<progress value="{{ progress.completed }}" max="{{ progress.total }}" aria-label="Collection progress for {{ job.environment.name }}" aria-valuetext="{{ progress.stage }}; {{ progress.completed }} of {{ progress.total }} phases complete">{{ progress.percent }}%</progress>
+<small data-progress-detail>{{ progress.completed }} of {{ progress.total }} phases complete</small></div>{% endwith %}
+{% else %}<div class="collection-outcome"><strong>{{ job.get_status_display }}</strong><small>Finished: {% user_time job.finished_at %}</small>{% if job.started_at and job.finished_at %}<small>Duration: {{ job.started_at|timesince:job.finished_at }}</small>{% endif %}</div>{% endif %}

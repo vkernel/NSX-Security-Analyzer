@@ -1,0 +1,79 @@
+/* Adapt built-in access-management widgets to the shared application tokens. */
+body.workspace-admin[data-theme]{--primary:var(--action);--secondary:var(--app-surface-soft);--accent:var(--ink);--header-link-color:var(--ink);--breadcrumbs-fg:var(--ink);font:14px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+.workspace-admin #content{padding:0;width:100%;min-width:0}
+.workspace-admin .access-navigation{display:flex;gap:8px;margin:0 0 20px;flex-wrap:wrap}
+.workspace-admin .access-navigation a{padding:9px 16px;border-radius:7px;border:1px solid var(--line);color:var(--muted);background:var(--app-surface);font-weight:600}
+.workspace-admin .access-navigation a:hover{background:var(--hover);text-decoration:none}
+.workspace-admin .access-navigation a[aria-current]{background:var(--info-bg);border-color:var(--app-accent);color:var(--teal)}
+.workspace-admin .object-tools{float:none;display:flex;justify-content:flex-end;gap:8px;margin:0 0 16px;padding:0}
+.workspace-admin .object-tools li{float:none;padding:0;height:auto;list-style:none}
+body.workspace-admin .object-tools a{display:inline-flex;align-items:center;min-height:40px;padding:8px 16px;border:1px solid var(--line);border-radius:7px;background:var(--app-surface);color:var(--ink);font:600 14px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;letter-spacing:0;text-transform:none}
+body.workspace-admin .object-tools a.addlink{background:var(--action);color:#fff;border-color:var(--action)}
+body.workspace-admin .object-tools a:hover{background:var(--hover);text-decoration:none}
+body.workspace-admin .object-tools a.addlink:hover{background:var(--action-hover)}
+body.workspace-admin #changelist{align-items:stretch;gap:20px;background:transparent;border:0;min-height:0;overflow:visible}
+.workspace-admin .changelist-form-container{background:var(--app-surface);border:1px solid var(--line);border-radius:9px;overflow:hidden;align-self:flex-start}
+body.workspace-admin #toolbar{padding:16px;margin:0;border:0;border-bottom:1px solid var(--line);background:var(--app-surface)}
+.workspace-admin #toolbar form{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.workspace-admin #toolbar #searchbar{width:min(420px,100%);height:40px;padding:8px 12px;font-size:14px;border-radius:7px;background:var(--app-surface-soft);flex:1;min-width:120px}
+.workspace-admin #toolbar form input[type=submit]{width:auto;min-height:40px;padding:8px 16px;border:1px solid var(--action);box-shadow:none;background:var(--action);color:#fff;font-size:14px;cursor:pointer}
+.workspace-admin #toolbar form input[type=submit]:hover{background:var(--action-hover)}
+.workspace-admin #changelist .actions{display:flex;align-items:center;flex-wrap:wrap;gap:12px;padding:12px 16px;background:var(--app-surface-soft);border:0;border-bottom:1px solid var(--line)}
+.workspace-admin #changelist .actions label{display:flex;align-items:center;gap:8px;font-size:13px}
+.workspace-admin #changelist .actions select{display:inline-block;width:auto;max-width:100%;min-height:40px}
+.workspace-admin #changelist .actions :is(.button,button){min-height:40px;padding:8px 14px;font-size:13px;box-shadow:none}
+.workspace-admin #changelist .actions span{font-size:12px;color:var(--muted)}
+.workspace-admin #changelist table{table-layout:auto;min-width:600px}
+.workspace-admin #changelist table :is(th,td){font-size:14px;line-height:1.5;padding:14px 12px;border-color:var(--line);font-weight:400}
+.workspace-admin #changelist table thead th{background:var(--app-surface-soft);color:var(--muted);font-size:13px;font-weight:600;text-transform:none;letter-spacing:0;padding:0}
+.workspace-admin #changelist table thead th .text :is(a,span){padding:12px;color:var(--muted)}
+.workspace-admin #changelist table tbody th{background:transparent;font-weight:600;text-transform:none;letter-spacing:0}
+.workspace-admin #changelist .action-checkbox-column{width:36px;padding:12px}
+.workspace-admin #changelist tbody tr.selected{background:var(--info-bg)}
+.workspace-admin #changelist-filter{flex:0 0 220px;margin:0;padding:16px;align-self:flex-start;border:1px solid var(--line);border-radius:9px}
+.workspace-admin #changelist-filter h2{font-size:16px;font-weight:600;text-transform:none;letter-spacing:0;padding:0;margin:0 0 16px}
+.workspace-admin #changelist-filter h3,.workspace-admin #changelist-filter details summary{font-size:13px;font-weight:600;padding:8px 0;color:var(--ink)}
+.workspace-admin #changelist-filter ul{padding:0;margin:4px 0 14px}
+.workspace-admin #changelist-filter li{list-style:none;padding:0;margin:3px 0;border:0}
+.workspace-admin #changelist-filter li a{display:block;padding:7px 10px;border-radius:6px;color:var(--muted);font-size:13px}
+.workspace-admin #changelist-filter li a:hover{background:var(--hover);text-decoration:none}
+.workspace-admin #changelist-filter li.selected a{background:var(--info-bg);color:var(--teal);font-weight:600;box-shadow:inset 3px 0 var(--app-accent)}
+.workspace-admin #changelist .paginator{padding:16px;font-size:13px;border:0;border-top:1px solid var(--line);margin:0}
+.workspace-admin .paginator a{padding:6px 10px;border-radius:5px;background:var(--app-surface-soft);color:var(--teal)}
+.workspace-admin fieldset.module{border:1px solid var(--line);border-radius:9px;margin:0 0 20px;padding:0;background:var(--app-surface);overflow:hidden}
+body.workspace-admin fieldset.module h2{padding:16px 20px;font-size:16px;font-weight:600;background:var(--app-surface-soft);color:var(--ink);border-bottom:1px solid var(--line);margin:0}
+.workspace-admin .form-row{padding:18px 20px;border-color:var(--line);font-size:14px}
+.workspace-admin .aligned label{font-size:13px;color:var(--ink);font-weight:600}
+.workspace-admin .aligned :is(input:not([type=checkbox]):not([type=radio]),textarea){max-width:600px}
+.workspace-admin .aligned .help,.workspace-admin .aligned .helptext{font-size:12px;line-height:1.6;color:var(--muted);overflow-wrap:anywhere}
+.workspace-admin .aligned :is(.selector,.related-widget-wrapper){min-width:0;max-width:100%}
+.workspace-admin .selector{width:100%;gap:12px}
+.workspace-admin :is(.selector-available,.selector-chosen){min-width:0;flex:1}
+body.workspace-admin :is(.selector-available-title,.selector-chosen-title,.selector .selector-filter,.selector .list-footer-display){background:var(--app-surface-soft);color:var(--ink);border-color:var(--line);padding:12px}
+body.workspace-admin .selector :is(label,.helptext){color:var(--ink)}
+.workspace-admin .selector select{height:220px;min-height:220px;border-radius:0;width:100%;max-width:none;padding:8px;font-size:13px;background:var(--app-surface);color:var(--ink)}
+.workspace-admin .selector .selector-filter input{min-width:0;min-height:36px;font-size:13px}
+.workspace-admin .selector .selector-chooser{background:transparent;align-self:center;padding:4px;margin:0}
+.workspace-admin .selector :is(.selector-add,.selector-remove){border:1px solid var(--line);border-radius:5px;background:var(--app-surface-soft);text-indent:0;font-size:0;display:grid;place-items:center;width:32px;height:36px;margin:6px 0}
+.workspace-admin .selector-add::after{content:'→';font-size:18px;color:var(--teal)}
+.workspace-admin .selector-remove::after{content:'←';font-size:18px;color:var(--teal)}
+.workspace-admin .selector :is(.selector-chooseall,.selector-clearall){background-image:none;padding:8px 10px;color:var(--teal);font-size:12px}
+body.workspace-admin .submit-row{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:18px 20px;margin:24px 0;border:1px solid var(--line);border-radius:9px;background:var(--app-surface)}
+body.workspace-admin .submit-row input{width:auto;min-height:40px;margin:0;padding:8px 16px;text-transform:none;font-size:14px;background:var(--app-surface);color:var(--ink);border:1px solid var(--line);cursor:pointer}
+body.workspace-admin .submit-row input.default{background:var(--action);color:#fff;border-color:var(--action)}
+body.workspace-admin .submit-row input:hover{background:var(--hover)}
+body.workspace-admin .submit-row input.default:hover{background:var(--action-hover)}
+body.workspace-admin .submit-row a.deletelink{height:auto;min-height:40px;display:inline-flex;align-items:center;padding:8px 14px;border-radius:7px;background:var(--error-bg);color:var(--error-text)}
+.workspace-admin .submit-row .deletelink-box{margin-left:auto}
+body.workspace-admin input[type=radio]{display:inline-block;width:16px;height:16px;min-height:0;padding:0;accent-color:var(--action)}
+body.workspace-admin.text-large #content :is(label,td,th,input,select,summary,.help,.helptext){font-size:16px}
+@media(max-width:1100px){.workspace-admin #changelist{flex-direction:column}.workspace-admin #changelist-filter{width:100%;flex:auto;box-sizing:border-box}.workspace-admin .changelist-form-container{width:100%}}
+@media(max-width:800px){.workspace-admin .aligned .flex-container{flex-wrap:wrap}.workspace-admin .aligned label{width:auto;min-width:0;float:none}.workspace-admin .aligned .help,.workspace-admin .aligned .helptext{margin-left:0;padding-left:0}.workspace-admin .selector{flex-direction:column}.workspace-admin .selector-chooser{display:flex;gap:12px}.workspace-admin .selector-add::after{content:'↓'}.workspace-admin .selector-remove::after{content:'↑'}.workspace-admin .selector :is(.selector-available,.selector-chosen){width:100%}.workspace-admin .form-row{padding:16px}.workspace-admin .submit-row input{white-space:normal}.workspace-admin #toolbar form input[type=submit]{min-height:44px}}
+/* Keep framework widget internals aligned with application-wide control rules. */
+.workspace-admin #toolbar form>div{display:flex;align-items:center;gap:10px;flex-wrap:wrap;width:100%}
+.workspace-admin #toolbar form>div>label{margin:0;display:flex;align-items:center}
+body.workspace-admin[data-theme] .selector button.selector-add,body.workspace-admin[data-theme] .selector button.selector-remove{font-size:0;padding:0;min-width:36px;width:36px;height:36px;overflow:hidden;flex-shrink:0}
+body.workspace-admin .selector .selector-chooser{width:44px;min-width:44px;flex:0 0 44px;box-sizing:border-box}
+body.workspace-admin .selector .selector-chooser li{padding:0;list-style:none}
+body.workspace-admin #content h1{font-weight:650}
+@media(max-width:800px){body.workspace-admin .selector .selector-chooser{width:auto;flex-basis:auto}}

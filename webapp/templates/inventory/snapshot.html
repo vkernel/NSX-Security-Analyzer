@@ -1,0 +1,13 @@
+{% extends 'base.html' %}{% load workspace_time %}{% load static %}
+{% block title %}{{ snapshot.environment.name }} report · NSX Security Analyzer{% endblock %}
+{% block body_class %}snapshot-page{% endblock %}
+{% block report_styles %}<style>{{ report.styles|safe }}</style>{% endblock %}
+{% block extra_head %}<link rel="stylesheet" href="{% static 'report-workspace.css' %}">{% endblock %}
+
+{% block content %}
+<a class="breadcrumb" href="{% url 'environment' snapshot.environment_id %}">← {{ snapshot.environment.name }} / History</a>
+<div class="report-toolbar"><div><p class="eyebrow">{% if is_latest %}LATEST SNAPSHOT{% else %}HISTORICAL SNAPSHOT{% endif %}</p><h1>{{ snapshot.environment.name }}</h1><p class="muted">{% user_time snapshot.generated_at %}{% if snapshot.testing %} · Testing sample{% endif %}{% if snapshot.imported %} · Imported{% endif %}</p><a class="pill {% if snapshot.needs_review %}review{% else %}success{% endif %}" href="#coverage">{% if snapshot.testing %}Testing sample{% elif snapshot.needs_review %}Coverage: incomplete checks{% else %}Coverage: complete{% endif %}</a></div><div class="snapshot-select"><label for="snapshot-switcher">Snapshot</label><select id="snapshot-switcher">{% for item in history %}<option value="{% url 'snapshot' item.pk %}" {% if item.pk == snapshot.pk %}selected{% endif %}>{% user_time item.generated_at plain=True %}{% if item.testing %} · Testing{% endif %}</option>{% endfor %}</select></div></div>
+
+<nav class="page-tabs report-section-tabs" aria-label="Report pages"></nav><div class="report-view-selector"></div><div class="report-content">{{ report.content|safe }}</div>
+{% endblock %}
+{% block scripts %}{{ report.scripts|safe }}{% endblock %}

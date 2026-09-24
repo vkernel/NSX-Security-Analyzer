@@ -1,0 +1,43 @@
+name: Tests
+on:
+  push:
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_DB: nsx
+          POSTGRES_USER: nsx
+          POSTGRES_PASSWORD: ci-only-password
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U nsx -d nsx"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      DJANGO_SECRET_KEY: isolated-ci-only-secret
+      POSTGRES_DB: nsx
+      POSTGRES_USER: nsx
+      POSTGRES_PASSWORD: ci-only-password
+      POSTGRES_HOST: localhost
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: webapp/requirements.lock
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: pip install -r webapp/requirements.lock
+      - run: python -m unittest discover -s . -p test_nsx_inventory.py
+      - run: python webapp/manage.py test inventory
+      - run: python webapp/manage.py check
+      - run: python webapp/manage.py makemigrations --check --dry-run
+      - run: python webapp/manage.py collectstatic --noinput

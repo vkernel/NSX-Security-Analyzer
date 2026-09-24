@@ -1,0 +1,12 @@
+{% load collection_errors %}{% with explanation=job.error|collection_error %}
+<details class="collection-error-details">
+  <summary>{{ explanation.title }}<span class="error-disclosure-hint">View details</span></summary>
+  <div class="collection-error-body">
+    <p>{{ explanation.summary }}</p>
+    <p><strong>What to check</strong><br>{{ explanation.action }}</p>
+    <p class="muted">Earlier saved snapshots remain available. A failed collection does not refresh the environment data.</p>
+    <strong>Technical details</strong>
+    <pre>{{ job.error|default:'No additional error detail was recorded.' }}</pre>
+  </div>
+</details>
+{% endwith %}

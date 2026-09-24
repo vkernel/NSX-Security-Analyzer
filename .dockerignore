@@ -1,0 +1,12 @@
+*
+!nsx-inventory.py
+!webapp/
+!webapp/**
+webapp/.env
+webapp/.nsx.env
+webapp/.admin-credentials
+webapp/.venv
+webapp/**/__pycache__
+webapp/*.sqlite3
+webapp/staticfiles
+webapp/test-artifacts

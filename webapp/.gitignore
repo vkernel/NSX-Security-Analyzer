@@ -1,0 +1,8 @@
+.env
+.nsx.env
+.admin-credentials
+.venv/
+__pycache__/
+*.sqlite3
+staticfiles/
+test-artifacts/

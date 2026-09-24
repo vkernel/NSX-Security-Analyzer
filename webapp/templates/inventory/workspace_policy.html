@@ -1,0 +1,5 @@
+{% extends 'base.html' %}{% block title %}Collection policies · NSX Security Analyzer{% endblock %}{% block content %}
+<a class="breadcrumb" href="{% url 'administration' %}">← Administration</a>
+<div class="page-heading"><div><p class="eyebrow">SHARED POLICIES</p><h1>Freshness &amp; notifications</h1><p class="lead">Configure stale-data warnings and in-app collection notifications for everyone.</p></div></div>
+<div class="form-card"><form method="post">{% csrf_token %}{{ form.non_field_errors }}<div class="form-grid">{% for field in form %}{% include 'inventory/settings_field.html' %}{% endfor %}</div><div class="form-actions"><button class="button primary">Save policy</button></div></form></div>
+<p class="muted">Notifications show the 50 most recent matching collection results from the last 30 days. Read status is personal. New coverage issues compare full collections against the previous full snapshot; existing issues do not trigger repeated coverage alerts. Legacy snapshots establish a baseline on the next collection. Collection schedules remain in each environment's settings.</p>{% endblock %}
