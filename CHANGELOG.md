@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.1
+
+- Restart paginated NSX search up to twice when returned totals are inconsistent.
+- Discard incomplete attempts and preserve the previous snapshot if retries fail.
+- Explain inventory changes and search indexing delays in collection error guidance.
+
 ## 0.2.0
 
 - Add snapshot comparison for rules, groups, services and membership evidence.

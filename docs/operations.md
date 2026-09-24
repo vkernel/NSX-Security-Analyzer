@@ -71,3 +71,16 @@ Transfer deployment secrets through your secure local process (never Git), prese
 the existing database volume or remote connection settings, and use the maintenance
 steps above to recreate services from this checkout. Existing source files and
 running services are not moved merely by cloning this repository.
+
+## Inventory changes during collection
+
+If NSX search returns a different number of objects from its advertised total,
+the collector retries the search from page one after 2 and then 4 seconds. Each
+failed attempt is discarded. After three unsuccessful attempts the collection
+fails rather than publishing a partial snapshot; previous reports remain intact.
+Authentication errors and unrelated pagination failures are not retried by this
+mechanism. Search metadata records `inventory_retries` for successful collections.
+Concurrent policy/object changes and eventual search indexing can cause this
+condition. If it persists, allow changes and indexing to settle before collecting
+again. Successful pagination does not guarantee a transactional point-in-time
+snapshot of NSX. No counters or configuration are modified.

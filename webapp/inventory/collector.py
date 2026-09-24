@@ -62,6 +62,10 @@ class AuditError(Exception):
         self.status_code = status_code
 
 
+class InventoryChanged(AuditError):
+    """A paginated inventory did not match its advertised total."""
+
+
 class NoRedirect(HTTPRedirectHandler):
     def redirect_request(self, req, fp, code, msg, headers, newurl):
         # Never forward credentials to a redirected endpoint.
@@ -185,7 +189,7 @@ class NSXClient:
             cursor = page.get("cursor")
             if not cursor:
                 if expected is not None and total != expected:
-                    raise AuditError("GET {}: incomplete/changing inventory ({}/{})".format(
+                    raise InventoryChanged("GET {}: incomplete/changing inventory ({}/{})".format(
                         path, total, expected))
                 return
             if cursor in seen:
@@ -963,19 +967,32 @@ REFERENCE_SEARCH_TYPES = (
 
 
 def search_configuration(client):
-    """Retry HTTP 400 with alternate syntax, without hiding access or paging failures."""
+    """Retry changing search inventories from page one; never accept partial results."""
     rejected = []
+    inventory_retries = 0
     queries = ("resource_type:*", "*", " OR ".join(
         "resource_type:" + kind for kind in REFERENCE_SEARCH_TYPES))
     for index, query in enumerate(queries):
         try:
             # Start each alternative from page one, discarding any partial attempt.
-            resources = list(client.items("/search/query", {"query": query}))
+            attempts = 1 if getattr(client, "testing", False) is True else 3
+            for attempt in range(attempts):
+                try:
+                    resources = list(client.items("/search/query", {"query": query}))
+                    break
+                except InventoryChanged as exc:
+                    if attempt == attempts - 1:
+                        raise InventoryChanged("NSX search inventory remained incomplete/changing after {} attempt(s). {}".format(attempts, exc)) from exc
+                    inventory_retries += 1
+                    delay = 2 ** (attempt + 1)
+                    LOG.warning("NSX search inventory changed during pagination; restarting from page one in %ss (attempt %d/%d).",
+                                delay, attempt + 2, attempts)
+                    time.sleep(delay)
             if any(not isinstance(obj, dict) for obj in resources):
                 raise AuditError("Search returned a non-object result")
             return resources, {"query": query, "mode": "explicit_types" if index == 2 else "all_types",
                                "resource_types": list(REFERENCE_SEARCH_TYPES) if index == 2 else [],
-                               "rejected_queries": rejected}
+                               "rejected_queries": rejected, "inventory_retries": inventory_retries}
         except AuditError as exc:
             if exc.status_code != 400:
                 raise

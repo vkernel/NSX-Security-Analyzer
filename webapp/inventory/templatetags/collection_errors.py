@@ -8,6 +8,10 @@ register = template.Library()
 @register.filter
 def collection_error(value):
     message = str(value or '').lower()
+    if 'incomplete/changing' in message:
+        return {'title': 'NSX inventory changed during collection',
+                'summary': 'The number of objects returned by NSX did not match its reported inventory total. Changes during collection or search indexing delays can cause this.',
+                'action': 'Allow policy and object changes to finish and the NSX search index to settle, then run the collection again. If it keeps happening without changes, check NSX search health.'}
     if any(term in message for term in ('name or service not known', 'temporary failure in name resolution',
                                         'nodename nor servname', 'getaddrinfo failed')):
         return {'title': 'NSX Manager address could not be resolved',

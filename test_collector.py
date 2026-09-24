@@ -962,6 +962,39 @@ examples.forEach((_,index) => {
                 nsx.search_configuration(client)
             self.assertEqual(client.items.call_count, 1)
 
+    @patch.object(nsx.time, "sleep")
+    def test_changing_search_restarts_and_discards_partial_pages(self, sleep):
+        client = self.client_with_pages([
+            {"results": [{"path": "/old"}], "result_count": 2, "cursor": "old-cursor"},
+            {"results": [{"path": "/extra"}, {"path": "/third"}]},
+            {"results": [{"path": "/fresh"}], "result_count": 1},
+        ])
+        calls = []
+        get = client.get
+        client.get = lambda path, params: (calls.append(dict(params)), get(path, params))[1]
+        resources, coverage = nsx.search_configuration(client)
+        self.assertEqual(resources, [{"path": "/fresh"}])
+        self.assertNotIn("cursor", calls[2])
+        self.assertEqual(coverage["inventory_retries"], 1)
+        sleep.assert_called_once_with(2)
+
+    @patch.object(nsx.time, "sleep")
+    def test_changing_search_has_bounded_retries_and_never_returns_partial_data(self, sleep):
+        client = self.client_with_pages([{"results": [{"path": "/partial"}], "result_count": 2}] * 3)
+        with self.assertRaisesRegex(nsx.InventoryChanged, "after 3 attempt"):
+            nsx.search_configuration(client)
+        self.assertEqual(client.get.call_count, 3)
+        self.assertEqual([call.args[0] for call in sleep.call_args_list], [2, 4])
+
+    @patch.object(nsx.time, "sleep")
+    def test_testing_search_does_not_retry_inventory_errors(self, sleep):
+        client = Mock(testing=True)
+        client.items.side_effect = nsx.InventoryChanged("incomplete/changing")
+        with self.assertRaises(nsx.InventoryChanged):
+            nsx.search_configuration(client)
+        self.assertEqual(client.items.call_count, 1)
+        sleep.assert_not_called()
+
     def test_search_failure_never_becomes_empty_inventory(self):
         client = Mock()
         client.items.side_effect = nsx.AuditError("query rejected", 400)

@@ -6,7 +6,7 @@ from .templatetags.collection_errors import collection_error
 
 class CollectionErrorTests(SimpleTestCase):
     def test_known_failures_have_specific_guidance(self):
-        cases = [('[Errno -2] Name or service not known', 'address could not be resolved'),
+        cases = [('GET /search/query: incomplete/changing inventory (19511/19509)', 'inventory changed'), ('[Errno -2] Name or service not known', 'address could not be resolved'),
                  ('HTTP 401 Unauthorized', 'sign-in failed'),
                  ('HTTP 403 Forbidden', 'access was denied'),
                  ('certificate verify failed', 'certificate could not be verified'),
@@ -17,7 +17,7 @@ class CollectionErrorTests(SimpleTestCase):
         for raw, expected in cases:
             with self.subTest(raw=raw):
                 self.assertIn(expected, collection_error(raw)['title'])
-        self.assertIn('VPN', collection_error(cases[0][0])['action'])
+        self.assertIn('VPN', collection_error('[Errno -2] Name or service not known')['action'])
 
     def test_technical_details_are_escaped_and_collapsed(self):
         raw = 'GET /infra/domains: <urlopen error [Errno -2] Name or service not known><script>alert(1)</script>'
