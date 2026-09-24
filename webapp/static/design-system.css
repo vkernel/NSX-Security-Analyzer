@@ -144,3 +144,8 @@ body[data-theme] .switcher-options button:hover{background:var(--hover)}
 body[data-theme] .switcher-options button[aria-current]{background:var(--info-bg);color:var(--teal);font-weight:600}
 .switcher-panel p{padding:12px;color:var(--muted);font-size:13px}
 @media(max-width:480px){.environment-switcher .workspace-switcher{width:145px}.snapshot-select .workspace-switcher{width:100%}}
+
+/* Destructive actions remain visually distinct from primary navigation. */
+body[data-theme] .button.destructive{background:#b42318;color:#fff;border-color:#b42318}
+body[data-theme] .button.destructive:hover:not(:disabled):not([aria-disabled=true]){background:#912018;border-color:#912018;color:#fff}
+body[data-theme] .button.destructive:focus-visible{outline:3px solid #b42318;outline-offset:3px}

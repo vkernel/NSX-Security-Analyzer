@@ -9,7 +9,7 @@ from django.core.paginator import Paginator
 from django.db import transaction
 from django.http import HttpResponse, HttpResponseForbidden, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
-from django.views.decorators.http import require_GET, require_POST
+from django.views.decorators.http import require_GET, require_POST, require_http_methods
 from django.views.decorators.debug import sensitive_post_parameters
 
 from .forms import EnvironmentForm, PreferencesForm
@@ -92,6 +92,33 @@ def environment_edit(request, pk=None):
                 messages.success(request, "Environment saved.")
                 return redirect("environment", pk=environment.pk)
     return render(request, "inventory/environment_form.html", {"form": form, "environment": environment})
+
+
+@staff_required
+@require_http_methods(["GET", "POST"])
+def environment_delete(request, pk):
+    with transaction.atomic():
+        environment = get_object_or_404(Environment.objects.select_for_update(), pk=pk)
+        active = environment.jobs.filter(status__in=["queued", "running"]).exists()
+        error = ""
+        if request.method == "POST":
+            if active:
+                error = "Wait for queued or running collections to finish before deleting this environment."
+            elif request.POST.get("confirmation", "") != environment.slug:
+                error = "Enter the environment ID exactly to confirm deletion."
+            else:
+                name = environment.name
+                environment.snapshots.all().delete()
+                environment.jobs.all().delete()
+                environment.delete()
+                if str(request.session.get("selected_environment")) == str(pk):
+                    request.session.pop("selected_environment", None)
+                messages.success(request, f"Deleted {name} and its saved collection history.")
+                return redirect("environment-directory")
+        return render(request, "inventory/environment_delete.html", {
+            "environment": environment, "active": active, "error": error,
+            "snapshot_count": environment.snapshots.count(), "job_count": environment.jobs.count(),
+        }, status=400 if error else 200)
 
 
 @staff_required

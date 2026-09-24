@@ -81,7 +81,7 @@ docker compose -f compose.yaml -f compose.hub.yaml exec web python manage.py cre
 
 Open **http://localhost:8000** and sign in. Add a manager under Administration,
 enter its credentials, upload its trusted CA if needed, and choose a sync interval.
-Use **Environments → Add testing data** to explore a synthetic inventory first.
+Use **Environments → Add environment → Create demo environment** to explore a synthetic inventory first.
 
 The default port binds to loopback. For shared access, configure an HTTPS reverse
 proxy as described in [application configuration](../webapp/README.md#https-deployment).

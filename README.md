@@ -71,7 +71,7 @@ docker compose exec web python manage.py createsuperuser
 Open **http://localhost:8000** and sign in. In **Administration**, add an
 environment with its NSX Manager address, username and password. Upload a CA
 certificate if required and select a sync interval. You can also run a collection
-from the environment page. For a preview, choose **Environments → Add testing data**.
+from the environment page. For a preview, choose **Environments → Add environment → Create demo environment**.
 
 Keep `DJANGO_SECRET_KEY` stable: it is used to protect saved manager credentials.
 The default service listens on loopback. Use an HTTPS reverse proxy for shared access.

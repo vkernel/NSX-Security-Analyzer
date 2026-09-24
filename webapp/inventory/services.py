@@ -22,7 +22,9 @@ def engine():
 
 def enqueue(environment, user, testing=False):
     with transaction.atomic():
-        environment = Environment.objects.select_for_update().get(pk=environment.pk)
+        environment = Environment.objects.select_for_update().filter(pk=environment.pk).first()
+        if environment is None:
+            raise ValidationError("This environment has been deleted.")
         if not environment.enabled:
             raise ValidationError("This environment is paused. Enable it before collecting.")
         if environment.jobs.filter(status__in=["queued", "running"]).exists():
@@ -40,7 +42,9 @@ def schedule_due():
         Q(next_sync_at__lte=now) | Q(next_sync_at__isnull=True)).values_list("pk", flat=True)
     for pk in list(candidates):
         with transaction.atomic():
-            environment = Environment.objects.select_for_update().get(pk=pk)
+            environment = Environment.objects.select_for_update().filter(pk=pk).first()
+            if environment is None:
+                continue  # Deleted after the scheduler read its candidate list.
             if not environment.enabled or not environment.sync_interval_minutes:
                 continue
             if environment.next_sync_at and environment.next_sync_at > now:

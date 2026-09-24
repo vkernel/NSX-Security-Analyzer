@@ -20,6 +20,7 @@ urlpatterns = [
     path("api/jobs/", views.api_jobs, name="api-jobs"),
     path("environments/new/", views.environment_edit, name="environment-new"),
     path("environments/<int:pk>/", views.environment_detail, name="environment"),
+    path("environments/<int:pk>/delete/", views.environment_delete, name="environment-delete"),
     path("environments/<int:pk>/edit/", views.environment_edit, name="environment-edit"),
     path("environments/<int:pk>/collect/", views.collect, name="collect"),
     path("environments/testing-data/", views.testing_data, name="testing-data"),
