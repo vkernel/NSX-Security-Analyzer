@@ -48,7 +48,7 @@
     document.addEventListener('click',event=>{document.querySelectorAll('.topbar-actions details[open],.search-options[open],.column-layout[open],.table-filter-menu[open]').forEach(details=>{if(!event.composedPath().includes(details))details.open=false;});});
     const switcher=document.getElementById('environment-switcher');
     switcher?.addEventListener('change',()=>{
-      if(!switcher.value)return;let section='environment';const hash=location.hash.slice(1);
+      if(!switcher.value)return;const analysisPage=location.pathname.match(/^\/environments\/\d+\/(compare|coverage|findings)(?:\/|$)/);if(analysisPage){location.href='/environments/'+encodeURIComponent(switcher.value)+'/'+analysisPage[1]+'/';return;}let section='environment';const hash=location.hash.slice(1);
       if(document.body.classList.contains('snapshot-page'))section=/polic|rule|statistics|dfw/.test(hash)?'rules':/service/.test(hash)?'services':/tag/.test(hash)?'tags':/guide|coverage/.test(hash)?'help':'inventory';
       else if(location.pathname.includes('rule-history'))section='activity';else if(location.pathname.includes('collections'))section='collections';
       location.href='/workspace/'+section+'/?environment='+encodeURIComponent(switcher.value)+(hash?'&panel='+encodeURIComponent(hash):'');

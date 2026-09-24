@@ -1,7 +1,7 @@
 {% extends 'base.html' %}{% block title %}Delete environment · NSX Security Analyzer{% endblock %}{% block content %}
 <a class="breadcrumb" href="{% url 'environment-edit' environment.pk %}">← Environment settings</a>
 <div class="page-heading"><div><h1>Delete {{ environment.name }}?</h1><p class="lead">This permanently removes the environment from this application.</p></div></div>
-<div class="form-card"><p>Deleting <strong>{{ environment.name }}</strong> removes its saved credentials, certificates, <strong>{{ snapshot_count }} snapshot{{ snapshot_count|pluralize }}</strong> and <strong>{{ job_count }} collection record{{ job_count|pluralize }}</strong>. Its automatic collection schedule is removed too.</p>
+<div class="form-card"><p>Deleting <strong>{{ environment.name }}</strong> removes its saved credentials, certificates, <strong>{{ snapshot_count }} snapshot{{ snapshot_count|pluralize }}</strong> and <strong>{{ job_count }} collection record{{ job_count|pluralize }}</strong>. Its automatic collection schedule and all finding reviews and notes are removed too.</p>
 <p>This cannot be undone. Nothing is deleted or changed on the NSX Manager.</p>
 {% if error %}<p class="notice" role="alert">{{ error }}</p>{% endif %}
 {% if active %}<p class="notice">A collection is queued or running. Wait for it to finish before deleting this environment.</p>{% endif %}

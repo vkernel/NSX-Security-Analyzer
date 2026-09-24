@@ -1,0 +1,10 @@
+{% extends 'base.html' %}{% load workspace_time %}{% block content %}
+<a class="breadcrumb" href="{% url 'findings' environment.pk %}">← Finding reviews · {{ environment.name }}</a>
+<div class="page-heading"><div><p class="eyebrow">{{ label }}</p><h1>{{ finding.name }}</h1><p class="host">{{ finding.path }}</p></div></div>{% include 'inventory/history_navigation.html' %}
+<p>{{ finding.get_status_display }} · {% if finding.present %}Observed in the latest full snapshot{% else %}Not observed in the latest full snapshot; resolution is unconfirmed{% endif %}</p>
+<p>First observed: {% user_time finding.first_seen %} · Last observed: {% user_time finding.last_seen %}</p>
+{% if finding.snapshot %}<p><a href="{% url 'snapshot' finding.snapshot.pk %}">Open latest evaluated snapshot</a></p>{% else %}<p>The source snapshot was removed by retention; saved review evidence remains available below.</p>{% endif %}
+{% if user.is_staff %}<form method="post" class="form-card">{% csrf_token %}{{ form.non_field_errors }}{{ form.revision }}<div class="form-grid">{% include 'inventory/settings_field.html' with field=form.status %}{% include 'inventory/settings_field.html' with field=form.owner %}{% include 'inventory/settings_field.html' with field=form.review_date %}</div>{% include 'inventory/settings_field.html' with field=form.note %}<div class="form-actions"><button class="button primary">Save review</button></div></form>{% else %}<p>Owner: {{ finding.owner|default:'Unassigned' }} · Review date: {{ finding.review_date|default:'Not set' }}. Staff access is required to change reviews.</p>{% endif %}
+<details class="form-card"><summary>Saved finding evidence</summary><pre class="review-evidence">{{ evidence }}</pre></details>
+<h2>Review history</h2><div class="table-scroll"><table><thead><tr><th>When</th><th>Who</th><th>Update</th></tr></thead><tbody>{% for event in page %}<tr><td>{% user_time event.created_at %}</td><td>{{ event.actor|default:'System' }}</td><td>{{ event.message|linebreaksbr }}</td></tr>{% endfor %}</tbody></table></div>{% include 'inventory/history_pagination.html' %}
+{% endblock %}

@@ -593,6 +593,8 @@ def audit_dfw(client, domains, workers=4, testing=False):
                        "category": record["category"], "action": rule.get("action", "Unspecified"),
                        "disabled": bool(rule.get("disabled")),
                        "unique_id": rule.get("unique_id"), "created_at": rule.get("_create_time"),
+                       "configuration": {"rule": {k: v for k, v in rule.items() if not k.startswith("_")},
+                           "policy": {k: policy.get(k) for k in ("scope", "category", "sequence_number", "stateful")}},
                        "configuration_fingerprint": hashlib.sha256(json.dumps(
                            {"rule": {k: v for k, v in rule.items() if not k.startswith("_")},
                             "policy": {k: policy.get(k) for k in ("scope", "category", "sequence_number", "stateful")}},
@@ -1096,6 +1098,9 @@ def audit(client, workers=4, testing=False, progress=None):
                     row["membership_definition"] = group_definition(obj)
             row["inventory_type"] = "Group" if is_group else "Built-in service" if reasons else "Custom service"
             row["audit_exclusions"] = reasons
+            row["configuration"] = {k: v for k, v in obj.items() if not k.startswith("_")}
+            row["unique_id"] = obj.get("unique_id")
+            row["created_at"] = obj.get("_create_time")
             inventory[key].append(row)
     phases["membership_and_references"] = round(time.perf_counter() - phase, 2)
     limitations = "Search is eventually consistent; non-indexed and RBAC-hidden references may be absent."

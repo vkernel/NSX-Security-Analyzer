@@ -14,6 +14,7 @@ The collector sends GET requests to NSX; it does not change rules or reset count
 - Inspect membership definitions, configuration references and collection coverage.
 - Schedule collections per environment, with progress tracking and readable errors.
 - Retain snapshots in PostgreSQL and review firewall activity across observations.
+- Compare snapshots, assign finding owners and reviews, and inspect observation gaps.
 - Search tables with AND/OR or regex, apply column filters, and export matching rows as CSV.
 - Manage users, retention, sync policies, display preferences and notifications.
 - Explore synthetic data in a separate demo environment without connecting to NSX.
@@ -77,6 +78,8 @@ Keep `DJANGO_SECRET_KEY` stable: it is used to protect saved manager credentials
 The default service listens on loopback. Use an HTTPS reverse proxy for shared access.
 
 ## Documentation
+
+- [Snapshot comparison, finding reviews and coverage](docs/history-and-review.md)
 
 | Guide | Contents |
 | --- | --- |

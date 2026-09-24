@@ -151,3 +151,9 @@ body[data-theme] .button.destructive:hover:not(:disabled):not([aria-disabled=tru
 body[data-theme] .button.destructive:focus-visible{outline:3px solid #b42318;outline-offset:3px}
 
 .workspace-sidebar .application-version{display:block;color:#b8c9d8;font-size:11px;margin:10px 10px 0;overflow-wrap:anywhere}
+
+.history-navigation{display:flex;flex-wrap:wrap;gap:8px 20px;border-bottom:1px solid var(--line);margin:0 0 24px;padding:0 0 12px}
+.history-navigation a{padding:8px 2px;color:var(--muted)}
+.history-navigation a[aria-current=page]{color:var(--teal);border-bottom:2px solid var(--teal);font-weight:600}
+.comparison-change{padding:12px 0;border-bottom:1px solid var(--line)}
+.comparison-change pre,.review-evidence{white-space:pre-wrap;overflow-wrap:anywhere;max-height:360px;overflow:auto;background:var(--app-surface-soft);padding:12px;border-radius:6px;font-size:12px}

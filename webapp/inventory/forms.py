@@ -131,3 +131,34 @@ class WorkspacePolicyForm(forms.ModelForm):
         fields = ['stale_hours', 'notify_failed', 'notify_completed', 'notify_coverage']
         labels = {'stale_hours': 'Stale data after (hours)', 'notify_failed': 'Notify about failed collections', 'notify_completed': 'Notify about completed audits', 'notify_coverage': 'Notify about new coverage issues'}
         help_texts = {'stale_hours': 'Measured from the latest successful full collection. Imported and testing snapshots do not refresh this clock. Paused environments are shown separately.'}
+
+
+class SnapshotComparisonForm(forms.Form):
+    before = forms.ModelChoiceField(queryset=None, label='Earlier snapshot')
+    after = forms.ModelChoiceField(queryset=None, label='Later snapshot')
+
+    def __init__(self, *args, environment, **kwargs):
+        super().__init__(*args, **kwargs)
+        for field in self.fields.values():
+            field.queryset = environment.snapshots.filter(testing=False, imported=False).defer('report', 'html')
+            field.label_from_instance = lambda snapshot: snapshot.generated_at.strftime('%Y-%m-%d %H:%M:%S UTC') + ' · ' + str(snapshot.pk)[:8]
+
+    def clean(self):
+        data = super().clean()
+        before, after = data.get('before'), data.get('after')
+        if before and after and (before.pk == after.pk or before.generated_at >= after.generated_at):
+            raise forms.ValidationError('Choose two distinct snapshots, with the earlier snapshot first.')
+        return data
+
+
+class FindingReviewForm(forms.Form):
+    status = forms.ChoiceField(choices=[('open', 'Open'), ('acknowledged', 'Acknowledged')])
+    owner = forms.ModelChoiceField(queryset=None, required=False)
+    review_date = forms.DateField(required=False, widget=forms.DateInput(attrs={'type': 'date'}))
+    note = forms.CharField(required=False, max_length=5000, widget=forms.Textarea(attrs={'rows': 4}), label='Add a note')
+    revision = forms.IntegerField(widget=forms.HiddenInput)
+
+    def __init__(self, *args, **kwargs):
+        from django.contrib.auth import get_user_model
+        super().__init__(*args, **kwargs)
+        self.fields['owner'].queryset = get_user_model().objects.filter(is_active=True).order_by('username')

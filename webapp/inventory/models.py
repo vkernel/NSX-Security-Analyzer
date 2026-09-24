@@ -153,3 +153,35 @@ class WorkspacePolicy(models.Model):
     notify_failed = models.BooleanField(default=True)
     notify_completed = models.BooleanField(default=True)
     notify_coverage = models.BooleanField(default=True)
+
+
+class Finding(models.Model):
+    environment = models.ForeignKey(Environment, on_delete=models.CASCADE, related_name='findings')
+    kind = models.CharField(max_length=40)
+    path = models.TextField()
+    name = models.CharField(max_length=255)
+    status = models.CharField(max_length=20, default='open', choices=[('open', 'Open'), ('acknowledged', 'Acknowledged')])
+    owner = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL)
+    review_date = models.DateField(null=True, blank=True)
+    present = models.BooleanField(default=True)
+    fingerprint = models.CharField(max_length=64)
+    evidence = models.JSONField(default=dict)
+    first_seen = models.DateTimeField()
+    last_seen = models.DateTimeField()
+    evaluated_at = models.DateTimeField()
+    snapshot = models.ForeignKey(Snapshot, null=True, on_delete=models.SET_NULL)
+    revision = models.PositiveIntegerField(default=0)
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=['environment', 'kind', 'path'], name='unique_environment_finding')]
+        ordering = ['status', 'name', 'pk']
+
+
+class FindingEvent(models.Model):
+    finding = models.ForeignKey(Finding, on_delete=models.CASCADE, related_name='events')
+    actor = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, on_delete=models.SET_NULL)
+    created_at = models.DateTimeField(auto_now_add=True)
+    message = models.TextField()
+
+    class Meta:
+        ordering = ['-created_at', '-pk']

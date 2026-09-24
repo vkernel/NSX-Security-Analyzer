@@ -1,0 +1,6 @@
+<nav class="history-navigation" aria-label="Environment analysis">
+<a href="{% url 'environment' environment.pk %}">Snapshots</a>
+<a href="{% url 'snapshot-comparison' environment.pk %}" {% if request.resolver_match.url_name == 'snapshot-comparison' %}aria-current="page"{% endif %}>Compare snapshots</a>
+<a href="{% url 'findings' environment.pk %}" {% if request.resolver_match.url_name == 'findings' or request.resolver_match.url_name == 'finding-detail' %}aria-current="page"{% endif %}>Finding reviews</a>
+<a href="{% url 'collection-coverage' environment.pk %}" {% if request.resolver_match.url_name == 'collection-coverage' %}aria-current="page"{% endif %}>Collection coverage</a>
+</nav>

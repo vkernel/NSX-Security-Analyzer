@@ -14,7 +14,7 @@ def display_preferences(request):
     environments = list(Environment.objects.all()) if request.user.is_authenticated else []
     selected_id = request.session.get('selected_environment')
     match = request.resolver_match
-    if match and match.kwargs.get('pk') and match.url_name in ('environment','environment-edit','collection-history','rule-history'):
+    if match and match.kwargs.get('pk') and match.url_name in ('environment','environment-edit','collection-history','rule-history','snapshot-comparison','collection-coverage','findings','finding-detail'):
         selected_id = match.kwargs['pk']
     selected = next((env for env in environments if env.pk == selected_id), None)
     if selected is None:

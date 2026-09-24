@@ -195,6 +195,8 @@ def execute_job(job_id):
                 return  # Expired jobs cannot publish a late result.
             snapshot.job = current
             snapshot.save()
+            from .findings import synchronize
+            synchronize(job.environment_id)
             current.status = "succeeded"
             current.finished_at = timezone.now()
             current.progress_completed = 7

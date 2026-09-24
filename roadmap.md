@@ -1,7 +1,7 @@
 # NSX Security Analyzer roadmap
 
 The proposed direction is explainable security recommendations backed by
-configuration history and observed traffic. This roadmap describes planned work,
+configuration history and observed traffic. Priority 1 is implemented in version 0.2.0; later phases describe planned work,
 not currently available functionality or committed release dates. Priorities may
 change after compatibility testing and feedback.
 
@@ -19,7 +19,7 @@ change after compatibility testing and feedback.
 | 3 | Change and traffic alerts | Notify on new communication paths, broad ALLOW rules, unexpected policy changes or missing exporters. |
 | Parallel | Enterprise access and accountability | Keycloak/OIDC, environment-scoped permissions and an audit trail of application changes. |
 
-## Phase 1: History and review foundations
+## Phase 1: History and review foundations — delivered in 0.2.0
 
 - Compare two saved snapshots and explain configuration changes.
 - Track findings through ownership, notes, review dates and acknowledgement.
@@ -28,6 +28,9 @@ change after compatibility testing and feedback.
 - Preserve unknown states rather than interpreting missing evidence as zero activity.
 
 These capabilities establish the context needed to interpret future traffic data.
+See [History and review](docs/history-and-review.md) for usage and limitations.
+Membership comparison covers definitions and checked status, not resolved member
+list changes. Legacy fields and incomplete coverage remain explicitly unknown.
 
 ## Phase 2: DFW IPFIX proof of concept
 
