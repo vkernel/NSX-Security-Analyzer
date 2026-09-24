@@ -28,11 +28,11 @@ not part of this image.
 
 Linux **AMD64** and **ARM64** are included in each published multi-platform tag.
 
-- `0.2.0`: pinned application image built from Git commit `6f8c634`.
+- `0.2.1`: pinned application image built from Git commit `60f3de6`.
 - `latest`: mutable tag for the currently published application image.
 
 ```sh
-docker pull vkernel/nsx-security-analyzer:0.2.0
+docker pull vkernel/nsx-security-analyzer:0.2.1
 ```
 
 ## Complete installation from Docker Hub
@@ -81,12 +81,12 @@ For native Windows PowerShell, remote PostgreSQL or upgrades, follow the
 Create synthetic test data from **Environments → Add environment → Create demo environment**.
 Delete an environment from **Edit environment → Delete environment**, with explicit confirmation.
 
-The sidebar displays **v0.2.0** and the build identifier. Administration also shows the build date.
+The sidebar displays **v0.2.1** and the build identifier. Administration also shows the build date.
 
-## Upgrading to 0.2.0
+## Upgrading to 0.2.1
 
 Back up your database and `.env`, and let active collections finish. Set
-`NSX_IMAGE_TAG=0.2.0` in `.env`, then run from the deployment directory:
+`NSX_IMAGE_TAG=0.2.1` in `.env`, then run from the deployment directory:
 
 ```sh
 docker compose pull
