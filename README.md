@@ -21,7 +21,14 @@ The collector sends GET requests to NSX; it does not change rules or reset count
 The workspace supports bundled or customer-managed PostgreSQL. A standalone
 standard-library Python collector is also included.
 
-## Quick start
+## Installation
+
+**Recommended: [install the prebuilt Docker Hub image](docs/docker-hub.md)** — no local build required.
+Images are available for AMD64 and ARM64 at [Docker Hub](https://hub.docker.com/r/vkernel/nsx-security-analyzer).
+
+The instructions below build the application from source.
+
+## Quick start from source
 
 Requirements: Docker with Docker Compose and access to your NSX Manager's HTTPS
 Policy API. The remote-database override requires Compose 2.24.4 or later.
@@ -58,6 +65,7 @@ The default service listens on loopback. Use an HTTPS reverse proxy for shared a
 
 | Guide | Contents |
 | --- | --- |
+| [Docker Hub installation](docs/docker-hub.md) | Prebuilt images, Compose setup and upgrades |
 | [Installation and configuration](webapp/README.md) | Docker, external PostgreSQL, TLS, users, scheduling and settings |
 | [Operations](docs/operations.md) | Upgrades, backups, recovery and troubleshooting |
 | [Architecture](docs/architecture.md) | Components, storage and collection flow |

@@ -5,7 +5,12 @@ stores environments, audit jobs and snapshots. A separate worker collects invent
 web requests never wait for an NSX audit to finish. The CLI remains available and
 uses the same collector and report renderer.
 
-## Run with Docker Desktop
+## Install from Docker Hub
+
+For prebuilt AMD64/ARM64 images, follow [Docker Hub installation](../docs/docker-hub.md).
+Use `compose.hub.yaml` alongside `compose.yaml` to pull images instead of building.
+
+## Run from source with Docker Desktop
 
 From this directory:
 
