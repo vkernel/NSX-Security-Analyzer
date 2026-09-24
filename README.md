@@ -65,6 +65,7 @@ The default service listens on loopback. Use an HTTPS reverse proxy for shared a
 | [Contributing](CONTRIBUTING.md) | Development setup, tests and pull requests |
 | [Security](SECURITY.md) | Reporting vulnerabilities and deployment boundaries |
 | [Support](SUPPORT.md) | Bug reports and useful diagnostics |
+| [Roadmap](roadmap.md) | Planned history, IPFIX traffic analysis and enterprise capabilities |
 | [Changelog](CHANGELOG.md) | Project changes |
 
 ## Scope and interpretation
