@@ -34,37 +34,48 @@ Linux **AMD64** and **ARM64** are included in each published multi-platform tag.
 docker pull vkernel/nsx-security-analyzer:e260cc5
 ```
 
-## Quick start with Docker Compose
+## Complete installation from Docker Hub
 
-Docker Compose **2.24.4+** is required. Use the repository's deployment files to
-start the web application, worker, scheduler and PostgreSQL together. Pulling or
-running the application image alone does not start the complete stack.
+Docker Hub / Docker Desktop's **Run** button starts only one container. It does
+not install PostgreSQL or the collection services. Use the complete-stack installer
+below instead. Docker Desktop will then show all services together as
+`nsx-security-analyzer`.
 
-```sh
-git clone https://github.com/vkernel/NSX-Security-Analyzer.git
-cd NSX-Security-Analyzer/webapp
-cp .env.example .env
-chmod 600 .env
-```
-
-Set `DJANGO_SECRET_KEY` and `POSTGRES_PASSWORD` in `.env` to different random values.
-Generate each value with:
+For a **new installation** on macOS, Linux, or Windows with WSL, start Docker and
+run these commands in an interactive terminal (Docker Compose v2 and curl required):
 
 ```sh
-python3 -c 'import secrets; print(secrets.token_hex(32))'
+curl -fSL https://raw.githubusercontent.com/vkernel/NSX-Security-Analyzer/main/deploy/install.sh -o install-nsx.sh
+sh install-nsx.sh
 ```
 
-Then start the prebuilt images and create your administrator account:
+The installer downloads prebuilt application and PostgreSQL images, generates
+private secrets, initializes the database, starts the web application, collection
+worker and scheduler, waits for the website, and prompts for an administrator
+account. No Git, host Python installation, or application build is required.
+Open **http://localhost:8000** when it finishes.
+
+Deployment files and secrets are saved in `./nsx-security-analyzer/`. An optional
+first argument selects a different directory. Existing installation containers or
+volumes are detected and left untouched; use the upgrade procedure for those.
+Do not delete the generated `.env`: it protects saved manager credentials.
+
+If setup stops after creating the directory, preserve it and resume there:
 
 ```sh
-docker compose -f compose.yaml -f compose.hub.yaml pull
-docker compose -f compose.yaml -f compose.hub.yaml up -d --no-build
-docker compose -f compose.yaml -f compose.hub.yaml exec web python manage.py createsuperuser
+cd nsx-security-analyzer
+docker compose up -d
+docker compose logs --tail=100 db migrate web worker scheduler
+docker compose exec web python manage.py createsuperuser
 ```
 
-Open **http://localhost:8000**. Add an environment in Administration or explore
-**Environments → Add testing data**. The Compose override defaults to `e260cc5`;
-set `NSX_IMAGE_TAG=latest` in `.env` to follow the latest tag instead.
+Resume only after `.env` contains both generated secrets; if download or secret
+generation failed, resolve that failure first. The installer does not overwrite an
+existing directory. A port conflict on 8000 can be resolved by changing `WEB_PORT`
+in `.env` and running `docker compose up -d` again.
+
+For native Windows PowerShell, remote PostgreSQL or upgrades, follow the
+[manual installation guide](https://github.com/vkernel/NSX-Security-Analyzer/blob/main/docs/docker-hub.md).
 
 ## Configuration and data
 

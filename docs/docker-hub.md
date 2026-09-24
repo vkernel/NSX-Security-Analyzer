@@ -5,7 +5,49 @@ Linux AMD64 or ARM64 automatically. The Compose stack runs the web service,
 worker, scheduler and migrations using the same image, with PostgreSQL separately.
 A single `docker run` command does not start the complete application.
 
-## Requirements
+## Complete installation from Docker Hub
+
+Docker Hub / Docker Desktop's **Run** button starts only one container. It does
+not install PostgreSQL or the collection services. Use the complete-stack installer
+below instead. Docker Desktop will then show all services together as
+`nsx-security-analyzer`.
+
+For a **new installation** on macOS, Linux, or Windows with WSL, start Docker and
+run these commands in an interactive terminal (Docker Compose v2 and curl required):
+
+```sh
+curl -fSL https://raw.githubusercontent.com/vkernel/NSX-Security-Analyzer/main/deploy/install.sh -o install-nsx.sh
+sh install-nsx.sh
+```
+
+The installer downloads prebuilt application and PostgreSQL images, generates
+private secrets, initializes the database, starts the web application, collection
+worker and scheduler, waits for the website, and prompts for an administrator
+account. No Git, host Python installation, or application build is required.
+Open **http://localhost:8000** when it finishes.
+
+Deployment files and secrets are saved in `./nsx-security-analyzer/`. An optional
+first argument selects a different directory. Existing installation containers or
+volumes are detected and left untouched; use the upgrade procedure for those.
+Do not delete the generated `.env`: it protects saved manager credentials.
+
+If setup stops after creating the directory, preserve it and resume there:
+
+```sh
+cd nsx-security-analyzer
+docker compose up -d
+docker compose logs --tail=100 db migrate web worker scheduler
+docker compose exec web python manage.py createsuperuser
+```
+
+Resume only after `.env` contains both generated secrets; if download or secret
+generation failed, resolve that failure first. The installer does not overwrite an
+existing directory. A port conflict on 8000 can be resolved by changing `WEB_PORT`
+in `.env` and running `docker compose up -d` again.
+
+For native Windows PowerShell, use the manual Compose installation below.
+
+## Manual installation requirements
 
 - Docker with Compose **2.24.4 or newer** (the override uses `!reset`).
 - HTTPS connectivity from the worker to your NSX Managers.
@@ -99,3 +141,15 @@ Existing source-built deployments use the same Compose project name and volume.
 Do not launch a second copy unintentionally. Use the maintenance procedure to
 switch the existing deployment to the published image. Changing between build
 and image installation does not itself require deleting or importing data.
+
+## Startup failures
+
+`Worker failed to boot` is the final Gunicorn message, not the root cause. Check
+the preceding error with `docker compose logs --tail=100 web`. A missing
+`DJANGO_SECRET_KEY` means the image was started without required configuration.
+The complete installer creates this configuration automatically. Database errors
+require checking `db` and `migrate` logs as well. Pulling the image or pressing Run
+alone does not create this application's dependencies.
+
+The standalone [deployment Compose file](../deploy/compose.yaml) can also be used
+with your own `.env`; it requires neither a source checkout nor the Hub override.
