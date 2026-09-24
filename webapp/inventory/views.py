@@ -99,7 +99,7 @@ def environment_edit(request, pk=None):
 def collect(request, pk):
     environment = get_object_or_404(Environment, pk=pk)
     try:
-        enqueue(environment, request.user, testing=request.POST.get("testing") == "1")
+        enqueue(environment, request.user)
         messages.success(request, "Audit queued. The worker will collect a new snapshot.")
     except ValidationError as exc:
         messages.error(request, " ".join(exc.messages))
@@ -124,7 +124,7 @@ def snapshot_detail(request, pk):
     if not any(item.pk == snapshot.pk for item in history):
         history.append(snapshot)
     # JSONField maps to PostgreSQL JSONB; render from the immutable database snapshot.
-    report = engine().render_html_report(snapshot.report, workspace=True)
+    report = engine().render_html_report(snapshot.report)
     response = render(request, "inventory/snapshot.html", {
         "snapshot": snapshot, "environment": snapshot.environment, "history": history, "report": report, "is_latest": bool(history and history[0].pk == snapshot.pk)})
     response["Cache-Control"] = "private, no-store"

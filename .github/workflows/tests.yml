@@ -36,7 +36,7 @@ jobs:
         with:
           node-version: '22'
       - run: pip install -r webapp/requirements.lock
-      - run: python -m unittest discover -s . -p test_nsx_inventory.py
+      - run: python -m unittest discover -s . -p test_collector.py
       - run: python webapp/manage.py test inventory
       - run: python webapp/manage.py check
       - run: python webapp/manage.py makemigrations --check --dry-run

@@ -18,8 +18,8 @@ The collector sends GET requests to NSX; it does not change rules or reset count
 - Manage users, retention, sync policies, display preferences and notifications.
 - Explore synthetic data in a separate demo environment without connecting to NSX.
 
-The workspace supports bundled or customer-managed PostgreSQL. A standalone
-standard-library Python collector is also included.
+The web application supports bundled or customer-managed PostgreSQL. Configure
+environments, schedule collections and explore reports through the web interface.
 
 ## Installation
 
@@ -69,7 +69,6 @@ The default service listens on loopback. Use an HTTPS reverse proxy for shared a
 | [Installation and configuration](webapp/README.md) | Docker, external PostgreSQL, TLS, users, scheduling and settings |
 | [Operations](docs/operations.md) | Upgrades, backups, recovery and troubleshooting |
 | [Architecture](docs/architecture.md) | Components, storage and collection flow |
-| [CLI reference](docs/cli.md) | Standalone collection and offline HTML reports |
 | [Contributing](CONTRIBUTING.md) | Development setup, tests and pull requests |
 | [Security](SECURITY.md) | Reporting vulnerabilities and deployment boundaries |
 | [Support](SUPPORT.md) | Bug reports and useful diagnostics |

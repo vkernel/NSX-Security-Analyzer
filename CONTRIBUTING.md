@@ -29,7 +29,7 @@ Docker PostgreSQL setup to validate concurrent collection behavior.
 ## Validation
 
 ```sh
-python3 -m unittest discover -s . -p test_nsx_inventory.py
+python3 -m unittest discover -s . -p test_collector.py
 python webapp/manage.py test inventory
 python webapp/manage.py check
 python webapp/manage.py makemigrations --check --dry-run

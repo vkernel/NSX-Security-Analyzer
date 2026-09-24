@@ -15,6 +15,7 @@ from django.urls import reverse
 from django.utils import timezone
 
 from .models import AuditJob, Environment, Snapshot, manager_origin
+from .credentials import encrypt_password
 from .services import claim_job, engine, enqueue, execute_job, expire_jobs, prepare_snapshot, update_progress, fail_job, schedule_due
 
 
@@ -37,7 +38,7 @@ class WorkspaceTests(TestCase):
         cls.operator = get_user_model().objects.create_user("operator", password="local-tests-only", is_staff=True)
         cls.viewer = get_user_model().objects.create_user("viewer", password="local-tests-only")
         cls.environment = Environment.objects.create(slug="east", name="East Datacenter",
-            manager="https://east.example", username_env="NSX_USERNAME_EAST", password_env="NSX_PASSWORD_EAST")
+            manager="https://east.example", username="reader", password_ciphertext=encrypt_password("private-secret"))
 
     def setUp(self):
         self.client.force_login(self.operator)
@@ -75,8 +76,8 @@ class WorkspaceTests(TestCase):
         url = reverse("collect", args=[self.environment.pk])
         self.assertEqual(self.client.post(url, {"testing": "1"}).status_code, 302)
         job = AuditJob.objects.get()
-        self.assertTrue(job.testing)
-        self.assertEqual(job.config["password_env"], "NSX_PASSWORD_EAST")
+        self.assertFalse(job.testing)
+        self.assertTrue(job.config["password_ciphertext"])
         self.client.post(url)
         self.assertEqual(AuditJob.objects.count(), 1)
         with self.assertRaises(IntegrityError), transaction.atomic():
@@ -237,9 +238,11 @@ class WorkspaceTests(TestCase):
         self.assertNotIn("private-secret", json.dumps(snapshot.report))
 
     def test_missing_credentials_fail_without_prompt_or_network(self):
+        self.environment.password_ciphertext = ""
+        self.environment.save()
         job = enqueue(self.environment, self.operator)
         claim_job()
-        with patch.dict(os.environ, {}, clear=True), patch.object(engine(), "NSXClient") as client:
+        with patch.dict(os.environ, {"NSX_USERNAME_EAST":"reader", "NSX_PASSWORD_EAST":"ignored-legacy-password"}), patch.object(engine(), "NSXClient") as client:
             execute_job(job.pk)
         client.assert_not_called()
         job.refresh_from_db()
@@ -379,6 +382,7 @@ class WorkspaceTests(TestCase):
         self.assertEqual(decrypt_password(replacement.save().password_ciphertext), " new password ")
 
     def test_password_required_without_saved_credentials(self):
+        self.environment.password_ciphertext = ""
         from .forms import EnvironmentForm
         data = self.credential_form_data(password="")
         for instance in [None, self.environment]:
@@ -425,7 +429,7 @@ class WorkerTransactionTests(TransactionTestCase):
     def setUp(self):
         self.operator = get_user_model().objects.create_user("worker-test", password="local-tests-only", is_staff=True)
         self.environment = Environment.objects.create(slug="worker-east", name="Worker East",
-            manager="https://east.example", username_env="NSX_USERNAME_EAST", password_env="NSX_PASSWORD_EAST")
+            manager="https://east.example", username="reader", password_ciphertext=encrypt_password("private-secret"))
 
     def test_worker_timeout_marks_failed(self):
         from subprocess import TimeoutExpired

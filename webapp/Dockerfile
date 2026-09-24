@@ -6,7 +6,6 @@ WORKDIR /app/webapp
 COPY webapp/requirements.lock ./requirements.lock
 RUN pip install --no-cache-dir -r requirements.lock
 COPY LICENSE NOTICE /app/
-COPY nsx-inventory.py /app/nsx-inventory.py
 COPY webapp/ /app/webapp/
 RUN DJANGO_SECRET_KEY=build-only-static-files python manage.py collectstatic --noinput \
     && groupadd --gid 10001 nsx && useradd --uid 10001 --gid nsx --no-create-home nsx

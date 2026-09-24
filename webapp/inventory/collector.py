@@ -1,41 +1,23 @@
-#!/usr/bin/env python3
-"""NSX Security Analyzer — read-only NSX Policy audit (Python 3.9+, standard library only).
+"""Read-only NSX collection and report rendering for the web application.
 
-Usage:
-    python3 nsx-inventory.py --manager nsx.example.com --username admin
-    python3 nsx-inventory.py --manager nsx.example.com --json report.json
-    python3 nsx-inventory.py --from-report report.json --html preview.html
-
-Credentials: nsx_username (default: admin) and nsx_password environment variables.
-If nsx_password is unset, the password is prompted interactively without echo.
-Scope: Local Manager /infra groups, services and DFW, not NSX-V, legacy Manager
-objects, Global Manager, or project inventories. Requires read access across
-Policy inventory and search. Unused means no reference found in visible indexed
-Policy configuration, including disabled rules and nested groups/services;
-it does not mean zero traffic or that the object can safely be deleted.
-DFW rule activity is checked separately using current NSX counters, without a
-known observation start or reset time. Empty DFW policies contain no rules.
-Search is eventually consistent and may omit non-indexed or inaccessible data.
+Invoked by the background worker; configuration and results belong to the database.
+Requires read access across Local Manager /infra Policy inventory and search.
+Missing references and zero counters are review evidence, not deletion approval.
 """
 
-import argparse
 import base64
-import getpass
 import hashlib
 import json
 import logging
-import os
 import re
 import ssl
 import sys
 import threading
-import tempfile
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import ThreadPoolExecutor
 import time
 from collections import Counter
 from html import escape
 from datetime import datetime, timezone, timedelta
-from pathlib import Path
 from urllib.error import HTTPError, URLError
 from urllib.parse import quote, urlencode, urlsplit
 from urllib.request import HTTPRedirectHandler, Request, build_opener, HTTPSHandler
@@ -1002,7 +984,7 @@ def search_configuration(client):
 
 
 def audit(client, workers=4, testing=False, progress=None):
-    # Optional phase notifications for the web worker; CLI callers need no callback.
+    # Phase notifications for the background worker.
     progress = progress or (lambda completed, stage: None)
     if testing:
         client.testing = True
@@ -1144,86 +1126,6 @@ def audit(client, workers=4, testing=False, progress=None):
             "indexed_objects_scanned": len(resources), "objects": rows, "dfw": dfw}
 
 
-def print_summary(report):
-    """Keep the default console output bounded regardless of inventory size."""
-    rows = report["objects"]
-    dfw = report.get("dfw", {})
-    rules = dfw.get("rules", [])
-    print("\n" + ("Testing sample completed; not a full audit." if report.get("testing") else
-                    "Inventory checks finished; some checks need review." if needs_review(report) else
-                    "Inventory checks finished."))
-    print("Scanned: {:,} groups, {:,} custom services, {:,} DFW policies, {:,} DFW rules.".format(
-        report["groups_scanned"], report["custom_services_scanned"], len(dfw.get("policies", [])), len(rules)))
-    for label, count in (
-        ("Unused group candidates", sum(r["kind"] == "group" and r["usage"] == "unused_candidate" for r in rows)),
-        ("Empty groups", sum(r["membership"] == "empty" for r in rows)),
-        ("Unused custom service candidates", sum(r["kind"] == "custom_service" and r["usage"] == "unused_candidate" for r in rows)),
-        ("Group membership needs review", sum(r["membership"] == "unknown" for r in rows)),
-        ("Empty DFW policies", sum(p["status"] == "empty" for p in dfw.get("policies", []))),
-        ("Enabled DFW rules with zero recorded hits", sum(r["hit_status"] == "zero_hits" and not r["disabled"] for r in rules)),
-        ("Disabled DFW rules", sum(r["disabled"] for r in rules)),
-        ("DFW statistics need review", sum(r["hit_status"] == "unknown" for r in rules)),
-    ):
-        print("  {}: {:,}".format(label, count))
-    if "tags" in report:
-        counts = Counter(r["status"] for r in report["tags"]["objects"])
-        print("Tags: " + ", ".join("{}: {:,}".format(label, counts[key]) for key, label in TAG_STATUSES.items()))
-    print("Review the HTML report for findings, incomplete checks, and evidence. Candidates are not deletion approvals.")
-
-
-def print_report(report, show_references=False):
-    print(performance_description(report))
-    if "tags" in report:
-        print("\nTags: " + ", ".join("{}: {:,}".format(label, sum(r["status"] == status for r in report["tags"]["objects"]))
-              for status, label in TAG_STATUSES.items()))
-        for error in report["tags"]["errors"]:
-            print("Tag inventory needs review: " + error)
-    print("Scanned {:,} groups and {:,} custom services.".format(
-        report["groups_scanned"], report["custom_services_scanned"]))
-    print("Excluded {:,} default/system groups.".format(report["system_groups_excluded"]))
-    selections = (
-        ("Unused group candidates", lambda r: r["kind"] == "group" and r["usage"] == "unused_candidate"),
-        ("Empty groups", lambda r: r["membership"] == "empty"),
-        ("Unused custom service candidates", lambda r: r["kind"] == "custom_service" and r["usage"] == "unused_candidate"),
-        ("Groups with unknown membership", lambda r: r["membership"] == "unknown"),
-    )
-    for title, select in selections:
-        selected = [row for row in report["objects"] if select(row)]
-        print("\n{} ({:,})".format(title, len(selected)))
-        for row in selected:
-            print("  {} | {} | {} | {}".format(
-                row["name"], row["path"], row["usage"], row["membership"]))
-            for note in row["notes"]:
-                print("    " + note)
-    print("\n" + report["usage_definition"] + ".")
-    print(report["limitations"])
-    dfw = report.get("dfw", {"policies": [], "rules": [], "errors": []})
-    for title, selected in (
-        ("Empty DFW policies", [p for p in dfw["policies"] if p["status"] == "empty"]),
-        ("Enabled DFW rules with zero recorded hits", [r for r in dfw["rules"]
-                                                     if r["hit_status"] == "zero_hits" and not r["disabled"]]),
-        ("Disabled DFW rules", [r for r in dfw["rules"] if r["disabled"]]),
-        ("DFW rules with unknown statistics", [r for r in dfw["rules"] if r["hit_status"] == "unknown"]),
-    ):
-        print("\n{} ({:,})".format(title, len(selected)))
-        for row in selected:
-            print("  {} | {}{}".format(row["name"], row["path"], " | " + rule_id_text(row) if rule_id_text(row) else ""))
-            for note in row["notes"]:
-                print("    " + note)
-    for error in dfw["errors"]:
-        print("DFW inventory incomplete: " + error)
-    print(DFW_COUNTER_NOTE)
-    if show_references:
-        print("\nReference evidence for objects classified as used:")
-        for row in report["objects"]:
-            if row["usage"] == "referenced":
-                print("  {} | {}{}".format(row["name"], row["path"], " | " + rule_id_text(row) if rule_id_text(row) else ""))
-                details = {r["path"]: r for r in row.get("reference_details", [])}
-                for source in row["referenced_by"]:
-                    identity = rule_id_text(details.get(source, {}))
-                    print("    Referenced by: " + source + (" | " + identity if identity else ""))
-
-
 def display_number(value):
     """Group quantities for display without changing stored values or identifiers."""
     return format(value, ",") if type(value) in (int, float) else str(value)
@@ -1251,7 +1153,7 @@ def performance_description(report):
                 display_number(http.get("requests", "—")), display_number(http.get("retries", 0)),
                 display_number(performance.get("elapsed_seconds", "—")), concurrency["initial"],
                 concurrency["peak"], concurrency["final"], concurrency["maximum"])
-    return ("TESTING SAMPLE — " if report.get("testing") else "") + ("Saved audit retrieval (offline rendering): " if report.get("rendered_from_saved_report") else "Fresh retrieval: ") + "{} HTTP requests, {} retries; {} seconds, {} workers.".format(
+    return ("TESTING SAMPLE — " if report.get("testing") else "") + ("Previously imported snapshot: " if report.get("rendered_from_saved_report") else "Fresh retrieval: ") + "{} HTTP requests, {} retries; {} seconds, {} workers.".format(
         display_number(http.get("requests", "—")), display_number(http.get("retries", 0)),
         display_number(performance.get("elapsed_seconds", "—")), display_number(performance.get("workers", "—")))
 
@@ -1380,7 +1282,7 @@ def feature_guide():
     """Standalone help for report readers; no connection or external assets needed."""
     content = '''<section data-panel id="feature-guide" tabindex="-1">
 <div class="section-eyebrow">Help &amp; coverage</div><h2>Report user guide</h2>
-<p>Use this guide to understand what the report checks, how to explore its results and what each finding means. This HTML file is a saved snapshot. Opening it or filtering it does not modify NSX.</p>
+<p>Use this guide to understand what the report checks, how to explore its results and what each finding means. This report displays a saved database snapshot. Opening it or filtering it does not modify NSX.</p>
 
 <h3>Navigation and report information</h3>
 <p>Expand sidebar categories to reveal their pages. The highlighted link identifies your current page. Cards and chart legends open related report pages. Sidebar counts describe the whole category, while table counts reflect your current filters.</p>
@@ -1444,7 +1346,7 @@ def feature_guide():
 
 <h3>Evidence popups, copying and coverage limits</h3>
 <p>View evidence and View details open a dialog. Expand its sections for more information. JSON blocks have line numbers, syntax highlighting and Copy buttons. Close the dialog with Close, Escape or a click outside it. Copying copies text only; it does not execute anything.</p>
-<p>This standalone report requires JavaScript for interactive tables and uses no external assets. The companion JSON contains the saved audit data. To refresh data, run a new audit; offline regeneration only rebuilds the presentation from the saved snapshot.</p>
+<p>Interactive tables display the audit data saved in the workspace database. Choose a different snapshot to review earlier results, or run a new collection to refresh the inventory.</p>
 <p><a href="#coverage">Audit scope &amp; exclusions</a> describes Local Manager /infra coverage and collection errors. NSX-V, legacy Manager objects, Global Manager and project inventories are outside scope. The dedicated firewall audit covers DFW; gateway/other firewall rules may still appear as configuration-reference evidence.</p>
 <p>Policy search is eventually consistent and may omit non-indexed or inaccessible objects. A compatibility search can be limited to listed resource types. Findings depend on the audited account's visibility. Empty tables or missing references do not by themselves prove absence across the environment. Review coverage and evidence before deciding on cleanup or policy changes.</p>
 </section>'''
@@ -1517,7 +1419,7 @@ dialog :is(button,input,select):focus-visible{outline:2px solid var(--teal);outl
 """
 
 
-def render_html_report(report, workspace=False):
+def _render_report(report, *, fragments):
     """Build a self-contained report; escape all inventory values."""
     def safe(value):
         return escape(display_number(value), quote=True)
@@ -1862,10 +1764,10 @@ table{min-width:760px}th{line-height:1.5}td{padding:15px 14px}.path{line-height:
 <p><strong>Scope:</strong> ''' + safe(report["scope"]) + '''. ''' + safe(report["indexed_objects_scanned"]) + ''' indexed objects scanned.</p>
 <p><strong>Coverage:</strong> ''' + safe(report["limitations"]) + ''' Disabled rules and nested configuration references count as usage; realization records and self-references do not.</p>
 <p><strong>Exclusions:</strong> Default/system-owned groups, DefaultMaliciousIpGroup, and built-in/system-owned services are omitted from findings.</p></section>
-<footer>NSX Security Analyzer report · Standalone file, no external assets required.</footer>
+<footer>NSX Security Analyzer · Saved database snapshot.</footer>
 </main><dialog id="detail-dialog" aria-labelledby="detail-title">
 <div class="dialog-heading"><h2 id="detail-title">Details</h2><button type="button" id="close-details" autofocus>Close</button></div>
-<div id="detail-body"></div></dialog><noscript><p>This report requires JavaScript to display tables. Enable JavaScript or use the accompanying JSON report.</p></noscript>
+<div id="detail-body"></div></dialog><noscript><p>This report requires JavaScript to display tables. Enable JavaScript to explore this snapshot.</p></noscript>
 <script type="application/json" id="report-rows">''' + json.dumps({"rows": row_pool, "tag_evidence": {key: value for key, value in tags.items() if key != "objects"}}, ensure_ascii=False, separators=(',', ':')).replace('<', '\\u003c') + '''</script><script>
 (() => {
   if (window.self !== window.top) document.body.classList.add('embedded-report');
@@ -1985,7 +1887,7 @@ table{min-width:760px}th{line-height:1.5}td{padding:15px 14px}.path{line-height:
       try {
         await navigator.clipboard.writeText(value);
       } catch (_) {
-        // Support standalone file reports where Clipboard API is unavailable.
+        // Support browsers where the Clipboard API is unavailable.
         const input = document.createElement('textarea');
         input.value = value;
         input.style.cssText = 'position:fixed;opacity:0;top:0;left:0';
@@ -2489,7 +2391,7 @@ table{min-width:760px}th{line-height:1.5}td{padding:15px 14px}.path{line-height:
 })();
 </script></body></html>'''
 
-    if workspace:
+    if fragments:
         # Split only our generated shell, never stored or user-provided HTML.
         styles = document.split("<style>", 1)[1].split("</style>", 1)[0]
         body = document.split("</nav></aside><main>", 1)[1]
@@ -2497,10 +2399,8 @@ table{min-width:760px}th{line-height:1.5}td{padding:15px 14px}.path{line-height:
         # The workspace supplies the environment heading, timestamp and status.
         content = content.split("</header>", 1)[1]
         content = content.rsplit("<footer>", 1)[0]
-        content = content.replace("This HTML file is a saved snapshot.",
+        content = content.replace("This report displays a saved database snapshot.",
                                   "This report displays a saved database snapshot.")
-        content = content.replace("This standalone report requires JavaScript for interactive tables and uses no external assets. The companion JSON contains the saved audit data. To refresh data, run a new audit; offline regeneration only rebuilds the presentation from the saved snapshot.",
-                                  "Interactive tables display the audit data saved in the workspace database. Choose a different snapshot to review earlier results, or run a new collection to refresh the inventory.")
         scripts = scripts.removesuffix("</body></html>")
         scripts = scripts.replace(".sidebar nav a", ".report-navigation a")
         content = content.replace("Filters are kept while navigating within the open report but are not saved when you reload it.",
@@ -2519,349 +2419,7 @@ table{min-width:760px}th{line-height:1.5}td{padding:15px 14px}.path{line-height:
     return document
 
 
-def atomic_write(path, content):
-    """Replace a report only after its complete contents have been written."""
-    path = Path(path)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    temporary = None
-    try:
-        with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8", dir=path.parent,
-                                         prefix=".nsx-", delete=False) as output:
-            temporary = Path(output.name)
-            output.write(content)
-        temporary.replace(path)
-    finally:
-        if temporary and temporary.exists():
-            temporary.unlink()
 
-
-def render_report_index(entries):
-    """Local-file report switcher; load only the selected standalone report."""
-    options, links = [], []
-    for entry in entries:
-        name = escape(entry["name"])
-        status = escape(entry["status"])
-        href = entry.get("html")
-        if href:
-            url = escape(quote(href, safe="/"), quote=True)
-            options.append('<option value="{}">{} — {}</option>'.format(url, name, status))
-            links.append('<li><a href="{}" target="_blank" rel="noopener">{}</a> — {} · {}</li>'.format(
-                url, name, status, escape(display_timestamp(entry.get("generated_at", "")))))
-        else:
-            links.append('<li>{} — {}</li>'.format(name, status))
-        if entry.get("error"):
-            links[-1] = links[-1].replace('</li>', '<p class="collection-error">' + escape(entry["error"]) + '</p></li>')
-    return '''<!doctype html><html lang="en"><head><meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1"><title>NSX reports</title>
-<style>
-:root{color-scheme:light;font:14px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:#203249;background:#f5f7fa}
-*{box-sizing:border-box}body{margin:0;height:100vh;height:100dvh;display:flex;flex-direction:column;overflow:hidden}
-.workspace-bar{display:flex;align-items:center;gap:24px;padding:12px 24px;background:#fff;border-bottom:1px solid #dfe6ee;flex-shrink:0}
-.workspace-brand{width:216px;flex-shrink:0;font-weight:700;font-size:14px;letter-spacing:.2px}.workspace-brand small{display:block;font-size:10px;letter-spacing:1.5px;text-transform:uppercase;color:#607086;font-weight:600}
-.environment{display:flex;align-items:center;gap:12px;min-width:0}.environment label{font-size:12px;font-weight:600;color:#52647a}
-select,button,a{font:inherit}select,button{border:1px solid #ccd8e2;border-radius:8px;background:#fff;color:#203249;padding:9px 12px;min-height:40px}select{max-width:440px;min-width:220px;text-overflow:ellipsis}button{cursor:pointer}button:hover{background:#edf6f7}a{color:#087e83}
-.workspace-actions{margin-left:auto;display:flex;align-items:center;gap:18px}.workspace-actions a{font-size:12px;text-decoration:none;white-space:nowrap}
-iframe{display:block;width:100%;flex:1;min-height:0;border:0;background:#f5f7fa}[hidden]{display:none!important}
-:focus-visible{outline:3px solid #60b9c1;outline-offset:3px}
-dialog{width:min(680px,calc(100vw - 32px));max-height:85vh;overflow:auto;border:1px solid #dfe6ee;border-radius:16px;padding:28px;color:#203249;box-shadow:0 24px 80px #142c4330}dialog::backdrop{background:#142c4380}.dialog-heading{display:flex;justify-content:space-between;align-items:center;gap:16px}h1{font-size:22px;margin:0}dialog p{color:#52647a}ul{list-style:none;padding:0;margin:20px 0 0}li{padding:16px 0;border-top:1px solid #e3e9f0;overflow-wrap:anywhere}li a{font-weight:600}.empty{padding:40px;text-align:center;color:#52647a}
-@media(max-width:800px){.workspace-bar{gap:12px;flex-wrap:wrap;padding:12px 16px}.workspace-brand{width:auto}.workspace-brand small{display:none}.environment{order:3;width:100%}.environment select{flex:1;min-width:0;max-width:none}.workspace-actions{gap:10px}.workspace-actions button{font-size:12px}}
-''' + DIALOG_STYLES + '''</style></head><body>
-<header class="workspace-bar"><div class="workspace-brand">NSX Security Analyzer<small>Environment workspace</small></div>
-<div class="environment"><label for="report-select">Environment</label><select id="report-select">''' + ''.join(options) + '''</select></div>
-<div class="workspace-actions"><a id="open-report" target="_blank" rel="noopener" hidden>Open report ↗</a><button type="button" id="show-results" aria-haspopup="dialog">Collection results</button></div></header>
-<p id="empty-reports" class="empty" hidden>No reports are available from this run. Open Collection results for details.</p>
-<iframe id="report-frame" title="Selected NSX report" hidden></iframe>
-<dialog id="collection-results" aria-labelledby="results-title"><div class="dialog-heading"><h2 id="results-title">Collection results</h2><button id="close-results" type="button" autofocus>Close</button></div>
-<p>Each environment has its own audit snapshot. Failed collections do not refresh an earlier report.</p><ul>''' + ''.join(links) + '''</ul></dialog>
-<noscript><p>JavaScript is disabled. Open a standalone report:</p><ul>''' + ''.join(links) + '''</ul></noscript><script>
-const select=document.getElementById('report-select'), frame=document.getElementById('report-frame');
-const openReport=document.getElementById('open-report'), results=document.getElementById('collection-results');
-function switchReport(){
-  const available=Boolean(select.value);
-  frame.hidden=!available;openReport.hidden=!available;select.disabled=!select.options.length;
-  document.getElementById('empty-reports').hidden=available;
-  if(available){frame.src=select.value;openReport.href=select.value;frame.title=select.selectedOptions[0].textContent;}
-}
-select.addEventListener('change',switchReport);switchReport();
-document.getElementById('show-results').addEventListener('click',()=>results.showModal());
-document.getElementById('close-results').addEventListener('click',()=>results.close());
-results.addEventListener('close',()=>document.getElementById('show-results').focus());
-</script></body></html>'''
-
-
-def load_manager_targets(path, default_username):
-    """Use stable explicit IDs for output paths and environment names for passwords."""
-    data = json.loads(path.read_text(encoding="utf-8"))
-    if not isinstance(data, dict) or not isinstance(data.get("managers"), list) or not data["managers"]:
-        raise AuditError("Managers file must contain a nonempty managers array")
-    targets, ids, origins = [], set(), set()
-    for item in data["managers"]:
-        if not isinstance(item, dict) or set(item) - {"id", "name", "manager", "username", "username_env", "password_env"}:
-            raise AuditError("Each manager accepts only id, name, manager, username, username_env and password_env")
-        if "username" in item and "username_env" in item:
-            raise AuditError("Specify username_env or legacy username, not both")
-        identity, manager = item.get("id"), item.get("manager")
-        if not isinstance(identity, str) or not re.fullmatch(r"[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}", identity):
-            raise AuditError("Each manager needs an id of 1–64 letters, digits, underscores or hyphens")
-        if not isinstance(manager, str):
-            raise AuditError("Each manager needs a manager hostname or HTTPS origin")
-        parsed = urlsplit(manager if "://" in manager else "https://" + manager)
-        if (parsed.scheme != "https" or not parsed.hostname or parsed.username or parsed.password
-                or parsed.path not in ("", "/") or parsed.query or parsed.fragment):
-            raise AuditError("Each manager must be an HTTPS hostname or origin URL")
-        origin = (parsed.hostname.casefold(), parsed.port or 443)
-        if identity.casefold() in ids or origin in origins:
-            raise AuditError("Manager IDs and manager origins must be unique")
-        ids.add(identity.casefold())
-        origins.add(origin)
-        target = dict(item, username=item.get("username", default_username),
-                      name=item.get("name", identity),
-                      username_env=item.get("username_env", "NSX_USERNAME_" + identity.upper().replace("-", "_")),
-                      password_env=item.get("password_env", "NSX_PASSWORD_" + identity.upper().replace("-", "_")))
-        if any(not isinstance(target[k], str) or not target[k] for k in ("name", "username", "username_env", "password_env")):
-            raise AuditError("Manager name, username and credential environment names must be nonempty strings")
-        if "username" in item:
-            target["username_env"] = None  # Preserve existing configuration files.
-        targets.append(target)
-    return targets
-
-
-def audit_managers(args):
-    targets = load_manager_targets(args.managers_file, args.username)
-    usernames, passwords, secrets = {}, {}, []
-    # Prompt on the main thread, once per credential environment variable.
-    for target in targets:
-        username_key = target["username_env"]
-        if username_key:
-            if username_key not in usernames:
-                username = os.getenv(username_key)
-                if username is None:
-                    username = input("NSX username for {} ({}): ".format(target["name"], username_key))
-                if not username.strip():
-                    raise AuditError("Username environment variable {} must not be empty".format(username_key))
-                usernames[username_key] = username
-            target["username"] = usernames[username_key]
-        key = target["password_env"]
-        if key not in passwords:
-            passwords[key] = os.getenv(key)
-            if passwords[key] is None:
-                passwords[key] = getpass.getpass("NSX password for {} ({}): ".format(target["name"], key))
-        password = passwords[key]
-        secrets.extend((password, base64.b64encode((target["username"] + ":" + password).encode()).decode()))
-    for handler in LOG.handlers:
-        handler.setFormatter(DiagnosticFormatter(secrets, debug=args.debug))
-    destination = args.output_dir or Path("nsx-reports-testing" if args.testing else "nsx-reports")
-    destination.mkdir(parents=True, exist_ok=True)
-    def saved_entry(target):
-        entry = {"name": target["name"], "status": "Not collected in this run"}
-        folder = destination / target["id"]
-        if (folder / "report.html").is_file():
-            entry.update(html=target["id"] + "/report.html",
-                         status="Saved report; refresh pending", generated_at="Timestamp unavailable")
-            try:
-                saved = json.loads((folder / "report.json").read_text(encoding="utf-8"))
-                manager = target["manager"]
-                origin = urlsplit(manager if "://" in manager else "https://" + manager)
-                old_origin = urlsplit("https://" + saved.get("manager", ""))
-                if (origin.hostname, origin.port or 443) != (old_origin.hostname, old_origin.port or 443):
-                    return {"name": target["name"], "status": "Saved report belongs to another manager"}
-                entry["generated_at"] = saved.get("generated_at", "Timestamp unavailable")
-            except (OSError, ValueError, AttributeError, TypeError):
-                pass  # A standalone HTML report can still be opened without JSON.
-        return entry
-
-    entries = [saved_entry(t) for t in targets]
-    atomic_write(destination / "index.html", render_report_index(entries))
-
-    def collect(index):
-        target = targets[index]
-        entry = dict(entries[index])
-        stage = "Collection"
-        try:
-            folder = destination / target["id"]
-            previous_path = folder / "report.json"
-            previous = None
-            if previous_path.exists():
-                try:
-                    previous = json.loads(previous_path.read_text(encoding="utf-8"))
-                    if not isinstance(previous, dict):
-                        raise ValueError("Expected report object")
-                except (OSError, ValueError):
-                    LOG.warning("[%s] Previous history could not be read; collecting fresh data", target["id"])
-                    previous = None
-            LOG.info("[%s] Starting manager audit", target["id"])
-            client = NSXClient(target["manager"], target["username"], passwords[target["password_env"]],
-                               args.timeout, args.ca_bundle, args.insecure, retries=args.retries)
-            report = audit(client, workers=args.workers, testing=True) if args.testing else audit(client, workers=args.workers)
-            report["manager"] = urlsplit(client.base_url).netloc
-            retain_hit_history(report, previous)
-            stage = "Report generation"
-            review = needs_review(report)
-            html = render_html_report(report).replace('<main>',
-                '<main><p class="portal-return"><a href="../index.html" target="_top">← All NSX Manager reports</a></p>', 1)
-            serialized = json.dumps(report, ensure_ascii=False, separators=(',', ':')) + "\n"
-            stage = "Report saving"
-            atomic_write(folder / "report.html", html)
-            entry.update(html=target["id"] + "/report.html", generated_at=report["generated_at"])
-            atomic_write(previous_path, serialized)
-            entry.update(html=target["id"] + "/report.html", generated_at=report["generated_at"],
-                         status="Testing sample" if args.testing else "Needs review" if review else "Collected")
-            LOG.info("[%s] Saved report: %s", target["id"], folder / "report.html")
-            return index, entry, 2 if review else 0
-        except Exception as exc:
-            entry["status"] = stage + (" failed; saved report available" if entry.get("html") else " failed; no available report")
-            detail = str(exc)
-            for secret in sorted(set(secrets), key=len, reverse=True):
-                if secret:
-                    detail = detail.replace(secret, "[REDACTED]")
-            entry["error"] = detail[:1500]
-            LOG.error("[%s] Collection failed: %s; continuing other managers", target["id"], exc, exc_info=args.debug)
-            return index, entry, 1
-
-    codes = []
-    with ThreadPoolExecutor(max_workers=1 if args.testing else args.manager_workers) as pool:
-        for future in as_completed([pool.submit(collect, index) for index in range(len(targets))]):
-            index, entry, code = future.result()
-            entries[index] = entry
-            codes.append(code)
-            atomic_write(destination / "index.html", render_report_index(entries))
-    print("\nReport index: {}".format((destination / "index.html").resolve()))
-    return 1 if 1 in codes else 2 if 2 in codes else 0
-
-
-def main(argv=None):
-    parser = argparse.ArgumentParser(description=__doc__,
-                                     formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--from-report", type=Path, metavar="FILE",
-                        help="Offline: regenerate from saved JSON, or HTML with a same-name companion JSON; no NSX requests")
-    managers = parser.add_mutually_exclusive_group()
-    managers.add_argument("--manager", default=os.getenv("NSX_MANAGER"), help="NSX Manager hostname/HTTPS origin")
-    managers.add_argument("--managers-file", type=Path, help="JSON configuration for multiple NSX Manager environments")
-    parser.add_argument("--output-dir", type=Path, help="Multi-manager report directory (default: nsx-reports)")
-    parser.add_argument("--manager-workers", type=int, default=2, help="Concurrent managers, 1–4 (default: 2)")
-    parser.add_argument("--username", default=os.getenv("nsx_username", "admin"))
-    parser.add_argument("--json", type=Path, metavar="FILE",
-                        help="JSON report path (default: alongside HTML with a .json extension)")
-    parser.add_argument("--previous-report", type=Path, metavar="FILE",
-                        help="Earlier JSON audit for hit history (default: existing output JSON)")
-    parser.add_argument("--html", type=Path, metavar="FILE", default=None,
-                        help="HTML report path (default: nsx-inventory-report.html, or nsx-inventory-testing.html with --testing)")
-    parser.add_argument("--debug", action="store_true",
-                        help="Show all diagnostic logs, request timing, pagination and failure tracebacks")
-    parser.add_argument("--show-references", action="store_true",
-                        help="Show why groups/custom services are classified as referenced")
-    parser.add_argument("--timeout", type=int, default=30, help="Per-request timeout in seconds (default: 30)")
-    parser.add_argument("--testing", action="store_true", help="Minimal sample: one record per list, no pagination/retries, one worker; not a full audit")
-    parser.add_argument("--workers", type=int, default=4, help="Concurrent checks, 1–16 (default: 4)")
-    parser.add_argument("--retries", type=int, default=2, help="Retries for HTTP 429/502/503/504, 0–5 (default: 2)")
-    tls = parser.add_mutually_exclusive_group()
-    tls.add_argument("--ca-bundle", help="CA certificate PEM file")
-    tls.add_argument("--insecure", action="store_true", help="Disable TLS certificate validation")
-    args = parser.parse_args(argv)
-    configure_logging(args.debug)
-    if not args.manager and not args.from_report and not args.managers_file:
-        parser.error("--manager or NSX_MANAGER is required")
-    if args.timeout <= 0:
-        parser.error("--timeout must be positive")
-    if not 1 <= args.workers <= 16 or not 0 <= args.retries <= 5:
-        parser.error("--workers must be 1–16 and --retries must be 0–5")
-    if args.from_report and (args.testing or args.previous_report):
-        parser.error("--from-report cannot be combined with --testing or --previous-report")
-    if not 1 <= args.manager_workers <= 4:
-        parser.error("--manager-workers must be 1–4")
-    if args.output_dir and not args.managers_file:
-        parser.error("--output-dir requires --managers-file")
-    if args.managers_file:
-        if args.from_report or args.html or args.json or args.previous_report:
-            parser.error("--managers-file uses --output-dir; cannot combine with --from-report, --html, --json or --previous-report")
-        try:
-            return audit_managers(args)
-        except (AuditError, OSError, ValueError, EOFError) as exc:
-            LOG.error("Multi-manager audit failed: %s", exc, exc_info=args.debug)
-            return 1
-        except KeyboardInterrupt:
-            LOG.warning("Audit interrupted.")
-            return 130
-    source_path = None
-    if args.from_report:
-        source_path = (args.from_report.with_suffix(".json")
-                       if args.from_report.suffix.lower() in {".html", ".htm"} else args.from_report)
-        args.html = args.html or args.from_report.with_suffix(".html")
-        json_path = args.json  # Preserve the source JSON unless output is explicitly requested.
-        if args.html.resolve() == source_path.resolve():
-            parser.error("HTML output must not overwrite the source JSON")
-        if (args.json and args.from_report.suffix.lower() in {".html", ".htm"}
-                and args.json.resolve() == args.from_report.resolve()):
-            parser.error("JSON output must not overwrite the source HTML")
-    else:
-        args.html = args.html or Path("nsx-inventory-testing.html" if args.testing else "nsx-inventory-report.html")
-        json_path = args.json if args.json is not None else args.html.with_suffix(".json")
-    if json_path and json_path.resolve() == args.html.resolve():
-        parser.error("HTML and JSON reports must use different file paths")
-    try:
-        if source_path:
-            if not source_path.exists() and source_path != args.from_report:
-                raise AuditError("Offline HTML regeneration requires its companion JSON: {}. "
-                                 "Use --from-report with the actual JSON path if it was saved elsewhere.".format(source_path))
-            report = json.loads(source_path.read_text(encoding="utf-8"))
-            required = {"objects", "generated_at", "groups_scanned", "custom_services_scanned",
-                        "system_groups_excluded", "indexed_objects_scanned", "scope",
-                        "usage_definition", "limitations"}
-            if not isinstance(report, dict) or required - report.keys() or not isinstance(report["objects"], list):
-                raise AuditError("Source must be an NSX Security Analyzer JSON report with inventory and audit metadata")
-            report["rendered_from_saved_report"] = True
-            LOG.info("Using saved inventory from %s (audit timestamp: %s); no NSX requests", source_path, report["generated_at"])
-        else:
-            previous_path = args.previous_report or json_path
-            previous_report = None
-            if args.previous_report or previous_path.exists():
-                previous_report = json.loads(previous_path.read_text(encoding="utf-8"))
-                if not isinstance(previous_report, dict):
-                    raise AuditError("Previous report must be a JSON object")
-            password = os.getenv("nsx_password")
-            if password is None:
-                password = getpass.getpass("NSX password: ")
-            token = base64.b64encode((args.username + ":" + password).encode()).decode()
-            for handler in LOG.handlers:
-                handler.setFormatter(DiagnosticFormatter((password, token), debug=args.debug))
-            LOG.info("Starting %s audit: workers=%d timeout=%ss retries=%d",
-                     "testing" if args.testing else "full", 1 if args.testing else args.workers,
-                     args.timeout, 0 if args.testing else args.retries)
-            if args.insecure:
-                LOG.warning("TLS certificate validation disabled.")
-            client = NSXClient(args.manager, args.username, password, args.timeout,
-                               args.ca_bundle, args.insecure)
-            client.retries = args.retries
-            report = audit(client, workers=args.workers, testing=True) if args.testing else audit(client, workers=args.workers)
-            report["manager"] = urlsplit(client.base_url).netloc
-            retain_hit_history(report, previous_report)
-        # Discard obsolete analysis when exporting a legacy saved report.
-        report.pop("naming", None)
-        LOG.info("Report data: %s", performance_description(report))
-        if args.debug or args.show_references:
-            print_report(report, args.show_references)
-        else:
-            print_summary(report)
-        LOG.info("Writing HTML report: %s", args.html)
-        args.html.write_text(render_html_report(report), encoding="utf-8")
-        print("\nHTML report: {}".format(args.html.resolve()))
-        if json_path:
-            LOG.info("Writing JSON report: %s", json_path)
-            with json_path.open("w", encoding="utf-8") as output:
-                json.dump(report, output, ensure_ascii=False, separators=(',', ':'))
-                output.write("\n")
-            print("\nJSON report: {}".format(json_path.resolve()))
-        return 2 if needs_review(report) else 0
-    except (AuditError, OSError, ValueError, EOFError) as exc:
-        LOG.error("Audit failed: %s", exc, exc_info=args.debug)
-        return 1
-    except Exception:
-        LOG.error("Unexpected audit failure. Run with --debug for diagnostic details.", exc_info=args.debug)
-        return 1
-    except KeyboardInterrupt:
-        LOG.warning("Audit interrupted.")
-        return 130
-
-
-if __name__ == "__main__":
-    sys.exit(main())
+def render_html_report(report):
+    """Return fragments for the integrated, database-backed report viewer."""
+    return _render_report(report, fragments=True)

@@ -1,8 +1,6 @@
-"""The web adapter calls the existing read-only collector without changing its CLI."""
+"""Database-backed collection jobs and read-only NSX worker integration."""
 import base64
-import importlib.util
 import json
-import os
 from datetime import datetime, timedelta
 from functools import lru_cache
 
@@ -18,10 +16,8 @@ from .concurrency import adapt_requests
 
 @lru_cache(maxsize=1)
 def engine():
-    spec = importlib.util.spec_from_file_location("nsx_audit_engine", settings.AUDIT_ENGINE_PATH)
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
+    from . import collector
+    return collector
 
 
 def enqueue(environment, user, testing=False):
@@ -158,13 +154,8 @@ def execute_job(job_id):
 
     try:
         config = job.config
-        if config.get("password_ciphertext"):
-            username = config["username"]
-            password = decrypt_password(config["password_ciphertext"])
-        else:
-            # Compatibility for existing environments and jobs created before saved passwords.
-            username = os.environ.get(config["username_env"]) if config.get("username_env") else config["username"]
-            password = os.environ.get(config.get("password_env", ""))
+        username = config.get("username")
+        password = decrypt_password(config["password_ciphertext"]) if config.get("password_ciphertext") else None
         if password:
             secrets.append(password)
         if not username or not password:

@@ -60,9 +60,6 @@ services:
     <<: *app
     restart: unless-stopped
     command: ["python", "manage.py", "audit_worker"]
-    env_file:
-      - path: .nsx.env
-        required: false
     depends_on:
       migrate:
         condition: service_completed_successfully

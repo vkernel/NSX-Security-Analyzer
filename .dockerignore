@@ -1,7 +1,6 @@
 *
 !LICENSE
 !NOTICE
-!nsx-inventory.py
 !webapp/
 !webapp/**
 webapp/.env

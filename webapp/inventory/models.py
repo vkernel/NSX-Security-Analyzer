@@ -59,7 +59,7 @@ class Environment(models.Model):
 
     def collection_config(self):
         return {key: getattr(self, key) for key in (
-            "manager", "username", "username_env", "password_env", "password_ciphertext", "ca_bundle", "ca_certificate", "insecure",
+            "manager", "username", "password_ciphertext", "ca_bundle", "ca_certificate", "insecure",
             "workers", "timeout", "retries")}
 
 

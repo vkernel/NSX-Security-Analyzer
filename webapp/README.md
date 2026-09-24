@@ -1,9 +1,9 @@
 # NSX Security Analyzer workspace
 
-A Django frontend and backend for the existing read-only NSX collector. PostgreSQL
+A web application for read-only NSX security analysis. PostgreSQL
 stores environments, audit jobs and snapshots. A separate worker collects inventory;
-web requests never wait for an NSX audit to finish. The CLI remains available and
-uses the same collector and report renderer.
+web requests never wait for an NSX audit to finish. All environment configuration, collections and report exploration are managed through
+the web interface.
 
 ## Install from Docker Hub
 
@@ -148,34 +148,18 @@ There is no iframe or saved HTML dependency. HTML and JSON download routes have
 been removed; table CSV exports remain available. The legacy HTML column is retained
 for existing installations, but is never read by the viewer and remains empty for
 new snapshots. All existing data and history are preserved.
-The standalone CLI continues to support its own file reports independently.
+Reports are rendered from database snapshots inside the web application.
 
-
-## Import existing manager configuration
-
-The original `managers.example.json` format is supported by a management command:
-
-```sh
-docker compose cp ../managers.example.json web:/tmp/managers.json
-docker compose exec web python manage.py import_managers /tmp/managers.json
-```
-
-Use your actual managers file instead of the example. This command adds new
-environments atomically and refuses to overwrite existing IDs. It does not
-contact NSX or import passwords. Open each imported environment and enter its
-username and password in the workspace. Existing environments are edited there.
-A manager origin cannot change after snapshots exist; add a new environment for
-a different manager. Configuration is frozen into each queued job.
 
 ## Users and access
 
 The initial superuser manages users through Administration. Active users can read
 all environments and snapshots in this shared workspace. Staff users
-can also configure environments, import reports and request audits. Per-environment
+can also configure environments and request audits. Per-environment
 tenant isolation is not implemented. Mutations require login, staff access and CSRF
 validation. Logout uses POST. There is no public registration.
 
-Audit responses and imports are rendered by the existing escaping renderer.
+Saved audit responses are rendered with inventory values escaped.
 Integrated report pages use a content security policy. NSX passwords and Basic authorization tokens are redacted from collection
 errors and saved audit values. Inventory reports themselves can contain sensitive
 configuration, so keep database backups and CSV exports appropriately protected.
@@ -227,11 +211,10 @@ docker compose logs --tail=100 web
 docker compose restart worker
 ```
 
-Older configurations using credential variable names and already queued jobs remain
-compatible. Their optional `.nsx.env` file is still read by workers. Saving direct
-credentials in Edit environment switches that environment to encrypted storage;
-new installations do not need `.nsx.env`. After source changes, use
-`docker compose up --build -d` to rebuild the image.
+Enter manager credentials through Add/Edit environment. If upgrading an old
+installation that used environment-variable credentials, enter and save its username
+and password in Edit environment before resuming collection. Existing snapshots are
+preserved. After source changes, rebuild with `docker compose up --build -d`.
 
 For a custom NSX certificate authority, use **CA certificate file** in Add/Edit
 environment to upload a PEM certificate or bundle (up to 1 MB; `.pem`, `.crt` or
@@ -262,7 +245,7 @@ chmod 600 nsx-workspace.dump
 
 For a planned restore into an empty database, stop web, worker and scheduler first, restore
 with `pg_restore`, and run migrations before resuming them. Keep `.env` (including the credential encryption secret) separately; database
-backups do not include it. Retain `.nsx.env` only if using legacy variable-based credentials. Automatic retention cleanup is disabled by default; administrators can enable it
+backups do not include it. Automatic retention cleanup is disabled by default; administrators can enable it
 under Administration → Data retention policies.
 
 ## HTTPS deployment
@@ -293,7 +276,7 @@ a separate temporary test database:
 docker compose exec web python manage.py test inventory
 docker compose exec web python manage.py check
 docker compose exec web python manage.py makemigrations --check --dry-run
-python3 -m unittest discover -s .. -p test_nsx_inventory.py
+python3 -m unittest discover -s .. -p test_collector.py
 ```
 
 Tests cover authorization, CSRF, duplicate jobs, demo data, database-backed report rendering,
@@ -370,7 +353,7 @@ Retry backoff holds no request slot. Small inventories naturally use fewer slots
 
 Saved performance metadata records initial, peak and final limits and adjustments.
 Testing collections still use one worker. Legacy environment worker values are
-retained but ignored by web collections; standalone CLI `--workers` is unchanged.
+retained for database compatibility but ignored by collections.
 This adjusts request concurrency per audit, not the number of Docker containers.
 
 ## Website preferences and history pagination

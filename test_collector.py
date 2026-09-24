@@ -1,6 +1,5 @@
-"""Offline behavior checks: python3 -m unittest discover -s python/nsx-inventory -v."""
+"""Offline checks for the web application collection engine."""
 
-import importlib.util
 import json
 from pathlib import Path
 import unittest
@@ -11,176 +10,25 @@ import subprocess
 from html.parser import HTMLParser
 from unittest.mock import Mock, patch
 
-spec = importlib.util.spec_from_file_location(
-    "nsx_inventory", Path(__file__).with_name("nsx-inventory.py"))
-nsx = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(nsx)
+from webapp.inventory import collector as nsx
+
+
+def rendered_document(report):
+    """Inspect the internal generated document in offline renderer tests."""
+    return nsx._render_report(report, fragments=False)
 
 
 class InventoryTests(unittest.TestCase):
-    def test_manager_username_defaults_and_prompt(self):
-        with tempfile.TemporaryDirectory() as directory:
-            config = Path(directory) / 'managers.json'
-            config.write_text(json.dumps({'managers': [
-                {'id': 'east-site', 'manager': 'east.example'}]}))
-            target = nsx.load_manager_targets(config, 'admin')[0]
-            self.assertEqual(target['username_env'], 'NSX_USERNAME_EAST_SITE')
-            with patch.dict('os.environ', {}, clear=True), \
-                    patch('builtins.input', return_value='prompt-user') as prompt, \
-                    patch.object(nsx.getpass, 'getpass', return_value='prompt-password'), \
-                    patch.object(nsx, 'NSXClient', side_effect=nsx.AuditError('offline')) as client, \
-                    patch('sys.stdout', new_callable=io.StringIO):
-                self.assertEqual(nsx.main(['--managers-file', str(config), '--output-dir',
-                                          str(Path(directory) / 'reports')]), 1)
-            prompt.assert_called_once()
-            self.assertEqual(client.call_args.args[1:3], ('prompt-user', 'prompt-password'))
-            with patch.dict('os.environ', {'NSX_USERNAME_EAST_SITE': ''}, clear=True), \
-                    patch.object(nsx, 'NSXClient') as client:
-                self.assertEqual(nsx.main(['--managers-file', str(config)]), 1)
-                client.assert_not_called()
+    def test_web_renderer_returns_fragments_without_cli_entrypoint(self):
+        self.assertFalse(hasattr(nsx, "main"))
+        self.assertFalse(hasattr(nsx, "load_manager_targets"))
+        self.assertFalse(hasattr(nsx, "atomic_write"))
 
-    def test_multi_manager_reports_isolate_credentials_history_and_failures(self):
-        with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
-            config = root / 'managers.json'
-            config.write_text(json.dumps({'managers': [
-                {'id': 'east', 'name': 'East <NSX>', 'manager': 'east.example',
-                 'username_env': 'EAST_USER', 'password_env': 'EAST_SECRET'},
-                {'id': 'west', 'manager': 'west.example',
-                 'username_env': 'WEST_USER', 'password_env': 'WEST_SECRET'}]}))
-            output = root / 'reports'
-            old = dict(manager='east.example', dfw={'rules': []}, generated_at='old')
-            nsx.atomic_write(output / 'east' / 'report.json', json.dumps(old))
-            nsx.atomic_write(output / 'west' / 'report.html', 'old west report')
-            nsx.atomic_write(output / 'west' / 'report.json', json.dumps(
-                dict(manager='west.example', generated_at='2026-09-20T10:00:00+00:00')))
 
-            def client(manager, username, password, *args, **kwargs):
-                self.assertEqual((username, password),
-                                 ('east-user', 'east-password') if manager == 'east.example'
-                                 else ('west-user', 'west-password'))
-                return Mock(base_url='https://' + manager + '/policy/api/v1')
 
-            def audit(client, **kwargs):
-                if 'west.example' in client.base_url:
-                    raise nsx.AuditError('unreachable <endpoint> west-password')
-                return dict(objects=[], dfw=dict(rules=[], policies=[], errors=[]),
-                            generated_at='2026-09-21T12:00:00+00:00',
-                            groups_scanned=0, custom_services_scanned=0, system_groups_excluded=0,
-                            indexed_objects_scanned=0, scope='test', usage_definition='test', limitations='test')
 
-            with patch.dict('os.environ', {'EAST_USER': 'east-user', 'WEST_USER': 'west-user',
-                                          'EAST_SECRET': 'east-password', 'WEST_SECRET': 'west-password'}), \
-                    patch.object(nsx, 'NSXClient', side_effect=client), \
-                    patch.object(nsx, 'audit', side_effect=audit), \
-                    patch.object(nsx, 'retain_hit_history', wraps=nsx.retain_hit_history) as history, \
-                    patch('sys.stdout', new_callable=io.StringIO):
-                code = nsx.main(['--managers-file', str(config), '--output-dir', str(output)])
-            self.assertEqual(code, 1)
-            self.assertEqual(history.call_args.args[1], old)
-            self.assertEqual(json.loads((output / 'east/report.json').read_text())['manager'], 'east.example')
-            self.assertIn('../index.html', (output / 'east/report.html').read_text())
-            self.assertEqual((output / 'west/report.html').read_text(), 'old west report')
-            index = (output / 'index.html').read_text()
-            self.assertIn('east/report.html', index)
-            self.assertIn('west/report.html', index)
-            self.assertIn('Collection failed', index)
-            self.assertIn('saved report available', index)
-            self.assertIn('20 Sep 2026 · 10:00 UTC', index)
-            self.assertIn('unreachable &lt;endpoint&gt; [REDACTED]', index)
-            self.assertIn('East &lt;NSX&gt;', index)
-            for path in output.rglob('*'):
-                if path.is_file():
-                    self.assertNotIn('east-password', path.read_text())
-                    self.assertNotIn('west-password', path.read_text())
 
-    def test_manager_configuration_rejects_collisions_and_unsafe_paths(self):
-        with tempfile.TemporaryDirectory() as directory:
-            config = Path(directory) / 'managers.json'
-            for entries in ([{'id': '../escape', 'manager': 'east.example'}],
-                            [{'id': 'east', 'manager': 'east.example'},
-                             {'id': 'EAST', 'manager': 'west.example'}],
-                            [{'id': 'east', 'manager': 'east.example'},
-                             {'id': 'west', 'manager': 'https://EAST.example:443/'}],
-                            [{'id': 'east', 'manager': 'east.example', 'password': 'secret'}],
-                            [{'id': 'east', 'manager': 'east.example', 'username_env': ''}],
-                            [{'id': 'east', 'manager': 'east.example', 'username': 'admin',
-                              'username_env': 'EAST_USER'}]):
-                config.write_text(json.dumps({'managers': entries}))
-                with self.assertRaises(nsx.AuditError):
-                    nsx.load_manager_targets(config, 'admin')
 
-    def test_saved_html_remains_selectable_after_json_write_failure(self):
-        with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
-            config = root / 'managers.json'
-            config.write_text(json.dumps({'managers': [
-                {'id': 'east', 'manager': 'east.example', 'username': 'admin'}]}))
-            report = dict(objects=[], generated_at='2026-09-21T12:00:00+00:00')
-            write = nsx.atomic_write
-
-            def fail_json(path, content):
-                if path.name == 'report.json':
-                    raise OSError('Disk full')
-                write(path, content)
-
-            with patch.dict('os.environ', {'NSX_PASSWORD_EAST': 'secret'}), \
-                    patch.object(nsx, 'NSXClient', return_value=Mock(base_url='https://east.example/policy/api/v1')), \
-                    patch.object(nsx, 'audit', return_value=report), \
-                    patch.object(nsx, 'render_html_report', return_value='<main>Saved report</main>'), \
-                    patch.object(nsx, 'atomic_write', side_effect=fail_json), \
-                    patch('sys.stdout', new_callable=io.StringIO):
-                code = nsx.main(['--managers-file', str(config), '--output-dir', str(root / 'reports')])
-            self.assertEqual(code, 1)
-            index = (root / 'reports/index.html').read_text()
-            self.assertIn('east/report.html', index)
-            self.assertIn('Report saving failed; saved report available', index)
-            self.assertIn('Disk full', index)
-            self.assertTrue((root / 'reports/east/report.html').is_file())
-
-    def test_report_index_switcher_is_valid_javascript_and_escapes_labels(self):
-        html = nsx.render_report_index([{'name': '<script>bad</script>', 'status': 'Collected',
-                                        'html': 'east/report.html'}])
-        self.assertIn('&lt;script&gt;bad&lt;/script&gt;', html)
-        self.assertIn('east/report.html', html)
-        if shutil.which('node'):
-            script = html.split('<script>', 1)[1].split('</script>', 1)[0]
-            subprocess.run(['node', '--check'], input=script, text=True, check=True, capture_output=True)
-
-    @unittest.skipUnless(shutil.which('node'), 'Node.js required for workspace checks')
-    def test_workspace_switcher_and_collection_dialog(self):
-        html = nsx.render_report_index([])
-        script = html.split('<script>', 1)[1].split('</script>', 1)[0]
-        setup = '''
-const assert=require('node:assert/strict');
-const elements={};
-for(const id of ['report-select','report-frame','open-report','collection-results','empty-reports','show-results','close-results']) {
-  elements[id]={value:'',options:[],selectedOptions:[],events:{},
-    addEventListener(event,fn){this.events[event]=fn;},
-    showModal(){this.open=true;},close(){this.open=false;this.events.close();},focus(){this.focused=true;}};
-}
-const document={getElementById:id=>elements[id]};
-'''
-        checks = '''
-assert.equal(elements['empty-reports'].hidden,false);
-assert.equal(elements['report-frame'].hidden,true);
-assert.equal(elements['report-select'].disabled,true);
-for(const name of ['east','west']) {
-  const picker=elements['report-select'];
-  picker.value=name+'/report.html';picker.options=[{}];picker.selectedOptions=[{textContent:name}];
-  picker.events.change();
-  assert.equal(elements['report-frame'].src,name+'/report.html');
-  assert.equal(elements['open-report'].href,name+'/report.html');
-  assert.equal(elements['report-frame'].hidden,false);
-  assert.equal(elements['report-frame'].title,name);
-}
-elements['show-results'].events.click();
-assert.equal(elements['collection-results'].open,true);
-elements['close-results'].events.click();
-assert.equal(elements['collection-results'].open,false);
-assert.equal(elements['show-results'].focused,true);
-'''
-        subprocess.run(['node'], input=setup+script+checks, text=True, check=True, capture_output=True)
 
     def test_readable_timestamp_keeps_timezone_explicit(self):
         self.assertEqual(nsx.display_timestamp('2026-09-21T16:44:26.840467+02:00'),
@@ -192,7 +40,7 @@ assert.equal(elements['show-results'].focused,true);
         report = dict(objects=[], generated_at='test', groups_scanned=0,
                       custom_services_scanned=0, system_groups_excluded=0,
                       indexed_objects_scanned=0, scope='test', usage_definition='test', limitations='test')
-        html = nsx.render_html_report(report)
+        html = rendered_document(report)
         script = html.split('</script><script>', 1)[1].split('</script>', 1)[0]
         csv = script[script.index('  function csvContent'):script.index('  function downloadCsv')]
         handler = script[script.index("    exportButton.addEventListener('click'"):script.index('    tools.append(exportButton)')]
@@ -228,7 +76,7 @@ invalid=true; click(); assert.equal(downloads.length,1);
                       generated_at='test', groups_scanned=0, custom_services_scanned=0,
                       system_groups_excluded=0, indexed_objects_scanned=0,
                       scope='test', usage_definition='test', limitations='test')
-        html = nsx.render_html_report(report)
+        html = rendered_document(report)
         self.assertIn('href="#dfw-scope-rules">Applied to DFW <span>2</span>', html)
         panel = html.split('id="dfw-scope-rules"', 1)[1].split('</section>', 1)[0]
         indices = panel.split('data-rows="', 1)[1].split('"', 1)[0].split(',')
@@ -237,7 +85,7 @@ invalid=true; click(); assert.equal(downloads.length,1);
                          {'/rules/0', '/rules/1'})
         self.assertIn('class="search-evidence"', panel)
         report['dfw']['rules'] = rules[2:]
-        empty_html = nsx.render_html_report(report)
+        empty_html = rendered_document(report)
         self.assertIn('href="#dfw-scope-rules">Applied to DFW <span>0</span>', empty_html)
 
     def test_rules_with_empty_groups_include_only_confirmed_direct_references(self):
@@ -259,7 +107,7 @@ invalid=true; click(); assert.equal(downloads.length,1);
                       dfw=dict(rules=rules, policies=[], errors=[]), generated_at='test',
                       groups_scanned=3, custom_services_scanned=0, system_groups_excluded=0,
                       indexed_objects_scanned=3, scope='test', usage_definition='test', limitations='test')
-        html = nsx.render_html_report(report)
+        html = rendered_document(report)
         self.assertIn('href="#empty-group-rules">Empty groups <span>1</span>', html)
         panel = html.split('id="empty-group-rules"', 1)[1].split('</section>', 1)[0]
         self.assertIn('class="search-evidence"', panel)
@@ -289,60 +137,11 @@ invalid=true; click(); assert.equal(downloads.length,1);
         report = dict(objects=[], dfw=dict(policies=[], rules=[], errors=[]), generated_at="test",
                       groups_scanned=0, custom_services_scanned=0, system_groups_excluded=0,
                       indexed_objects_scanned=0, scope="test", usage_definition="test", limitations="test")
-        rendered = nsx.render_html_report(report)
+        rendered = rendered_document(report)
         self.assertIn('href="#dfw-overview">Overview</a>', rendered)
         self.assertEqual(rendered.count('id="dfw-overview"'), 1)
 
 
-    @unittest.skipUnless(shutil.which("node"), "Node.js required for counter display check")
-    def test_large_quantities_are_formatted_without_changing_identifiers_or_data(self):
-        self.assertEqual(nsx.display_number(1234567), "1,234,567")
-        self.assertEqual(nsx.display_number(12345.67), "12,345.67")
-        self.assertEqual(nsx.display_number("1234567"), "1234567")
-        report = dict(objects=[], generated_at="test", groups_scanned=10000,
-                      custom_services_scanned=1000, system_groups_excluded=0,
-                      indexed_objects_scanned=1000000, scope="test", usage_definition="test",
-                      limitations="test")
-        html = nsx.render_html_report(report)
-        self.assertIn("10,000 groups and 1,000 custom services", html)
-        self.assertIn("1,000,000 indexed objects", html)
-        with patch("sys.stdout", new_callable=io.StringIO) as output:
-            nsx.print_summary(report)
-        self.assertIn("10,000 groups, 1,000 custom services", output.getvalue())
-        chart = nsx.overview_charts([{"usage": "referenced"}] * 1000, [], [])
-        self.assertIn("Referenced: 1,000", chart)
-        self.assertIn('class="chart-total">1,000', chart)
-        script = html.split("</script><script>", 1)[1].split("</script>", 1)[0]
-        formatter = script[script.index("  const numberFormat"):script.index("  const types")]
-        identity = script[script.index("  function ruleIdentity"):script.index("  function tagConditions")]
-        render = script[script.index("  function renderRow"):script.index("  function searchable")]
-        checks = """
-const assert = require('node:assert/strict');
-const badge = esc, code = esc, notes = () => '', popup = (title,body) => body;
-const row = {name:'Rule 10000',path:'/rules/10000',rule_id:10000,policy_rule_id:'10000',
- hit_count:1234567,statistics:[{enforcement_point:'default',hit_count:1234567,byte_count:9876543210}],
- last_positive_observation:{observed_at:'2026-09-01',hit_count:10000000}};
-const rowPool = [{view:'dfw',data:row}];
-const compact = renderRow(0);
-assert.ok(compact.includes('data-evidence-row="0"'));
-assert.ok(!compact.includes('9,876,543,210'));
-const rendered = renderRow(0, true);
-for (const text of ['1,234,567 hit(s)','9,876,543,210','10,000,000 hit(s)',
-                    'Rule ID: 10000','Policy rule path: ','/rules/10000','Rule 10000']) {
- assert.ok(rendered.includes(text), text);
-}
-assert.ok(rendered.includes('data-copy-path="/rules/10000"'));
-assert.ok(rendered.includes('…/rules/10000</button>'));
-assert.ok(!rendered.includes('<code class="path">/rules/10000</code>'));
-const special = ruleIdentity({...row,path:'/infra/long/policy/rules/a"<b>'});
-assert.ok(special.includes('data-copy-path="/infra/long/policy/rules/a&quot;&lt;b&gt;"'));
-assert.equal(row.hit_count,1234567);
-assert.equal(number(0),'0');
-assert.equal(number(12345.67),'12,345.67');
-assert.equal(number('Unavailable'),'Unavailable');
-"""
-        subprocess.run(["node"], input=formatter + identity + render + checks,
-                       text=True, check=True, capture_output=True)
 
     def test_overview_charts_count_disjoint_categories_and_empty_samples(self):
         groups = [{"usage": value} for value in
@@ -594,7 +393,7 @@ examples.forEach((_,index) => {
                       custom_services_scanned=0, system_groups_excluded=0,
                       indexed_objects_scanned=0, scope="test", usage_definition="test", limitations="test",
                       naming={"obsolete": "saved naming data must not affect HTML rendering"})
-        html = nsx.render_html_report(report)
+        html = rendered_document(report)
         for text in ('href="#naming', 'id="naming', 'id="group-naming', 'Naming conventions',
                      'refreshGroupNaming', 'family-search', 'naming_rules'):
             self.assertNotIn(text, html)
@@ -674,22 +473,7 @@ examples.forEach((_,index) => {
             nsx.LOG.setLevel(original_level)
             nsx.LOG.propagate = original_propagate
 
-    def test_verbose_option_removed(self):
-        with patch("sys.stderr", new_callable=io.StringIO) as output, self.assertRaises(SystemExit) as raised:
-            nsx.main(["--manager", "example.com", "--verbose"])
-        self.assertEqual(raised.exception.code, 2)
-        self.assertIn("unrecognized arguments", output.getvalue())
 
-    def test_summary_omits_individual_findings(self):
-        report = {"objects": [{"kind": "group", "name": "private-name", "path": "/private/path",
-                               "usage": "unused_candidate", "membership": "empty"}],
-                  "groups_scanned": 1, "custom_services_scanned": 0}
-        with patch("sys.stdout", new_callable=io.StringIO) as output:
-            nsx.print_summary(report)
-        self.assertIn("Unused group candidates: 1", output.getvalue())
-        self.assertIn("Empty groups: 1", output.getvalue())
-        self.assertNotIn("private-name", output.getvalue())
-        self.assertNotIn("/private/path", output.getvalue())
 
     def test_debug_requests_do_not_log_headers_params_or_response_bodies(self):
         client = nsx.NSXClient("example.com", "admin", "secret-password", retries=1)
@@ -769,7 +553,7 @@ examples.forEach((_,index) => {
             self.assertEqual(row["audit_exclusions"], [])
         self.assertEqual(report["objects"][0]["referenced_by"], [antrea["path"]])
         self.assertEqual(client.get.call_count, 12)
-        html = nsx.render_html_report(report)
+        html = rendered_document(report)
         self.assertNotIn('Antrea / container groups excluded', html)
         self.assertIn('class="sort-key"', html)
         self.assertIn('Reference count', html)
@@ -804,7 +588,7 @@ examples.forEach((_,index) => {
         self.assertTrue(all(r["usage"] == "unknown" for r in report["objects"]))
         self.assertEqual(report["dfw"]["policies"][0]["status"], "unknown")
         self.assertEqual(report["dfw"]["rules"][0]["hit_status"], "unknown")
-        self.assertIn("Testing sample — not a full audit", nsx.render_html_report(report))
+        self.assertIn("Testing sample — not a full audit", rendered_document(report))
 
     def test_repeated_reads_always_fetch_fresh_data(self):
         client = self.client_with_pages([{"results": [1]}, {"results": [2]}])
@@ -955,74 +739,8 @@ examples.forEach((_,index) => {
         self.assertEqual(peak, 2)
         self.assertEqual([p["path"] for p in report["policies"]], [p["path"] for p in policies])
 
-    def test_offline_render_never_connects_and_preserves_snapshot(self):
-        report = dict(objects=[], generated_at="2026-09-01T00:00:00+00:00",
-                      manager="saved.example.com", groups_scanned=0, custom_services_scanned=0,
-                      system_groups_excluded=0, indexed_objects_scanned=0,
-                      scope="Local Manager", usage_definition="Test", limitations="Test",
-                      dfw={"rules": [], "policies": [], "errors": []},
-                      naming={"mode": "configured", "rules": {"group": {"pattern": "SG_.*"}}})
-        with tempfile.TemporaryDirectory() as directory, \
-                patch.object(nsx, "NSXClient") as client, \
-                patch.object(nsx, "audit") as audit, \
-                patch.object(nsx.getpass, "getpass") as password, \
-                patch("sys.stdout", new_callable=io.StringIO):
-            source = Path(directory) / "saved.json"
-            html = source.with_suffix(".html")
-            original = nsx.json.dumps(report)
-            source.write_text(original)
-            self.assertEqual(nsx.main(["--from-report", str(source)]), 0)
-            self.assertEqual(source.read_text(), original)
-            self.assertIn("Saved audit retrieval", html.read_text())
-            self.assertIn(report["generated_at"], html.read_text())
-            self.assertIn("saved.example.com", html.read_text())
-            self.assertEqual(nsx.main(["--from-report", str(html), "--json", str(source)]), 0)
-            updated = nsx.json.loads(source.read_text())
-            self.assertEqual(updated["generated_at"], report["generated_at"])
-            self.assertEqual(updated["dfw"], report["dfw"])
-            self.assertNotIn("naming", updated)
-            client.assert_not_called()
-            audit.assert_not_called()
-            password.assert_not_called()
 
-    def test_offline_missing_companion_or_invalid_report_does_not_overwrite_html(self):
-        with tempfile.TemporaryDirectory() as directory, patch.object(nsx, "NSXClient") as client, \
-                patch.object(nsx, "configure_logging"):
-            html = Path(directory) / "saved.html"
-            html.write_text("existing report")
-            with self.assertLogs(nsx.LOG, level="ERROR") as logs:
-                self.assertEqual(nsx.main(["--from-report", str(html)]), 1)
-            self.assertIn("companion JSON", " ".join(logs.output))
-            html.with_suffix(".json").write_text("{}")
-            with self.assertLogs(nsx.LOG, level="ERROR"):
-                self.assertEqual(nsx.main(["--from-report", str(html)]), 1)
-            self.assertEqual(html.read_text(), "existing report")
-            client.assert_not_called()
 
-    def test_main_writes_json_alongside_html_or_at_explicit_path(self):
-        for explicit in (False, True):
-            with self.subTest(explicit=explicit), tempfile.TemporaryDirectory() as directory:
-                html_path = Path(directory) / "review.html"
-                json_path = Path(directory) / ("custom.json" if explicit else "review.json")
-                report = {"objects": [], "dfw": {"policies": [], "rules": [], "errors": []}}
-                args = ["--manager", "nsx.example.com", "--html", str(html_path)]
-                if explicit:
-                    args += ["--json", str(json_path)]
-                with patch.dict(nsx.os.environ, {"nsx_password": "dummy"}), \
-                        patch.object(nsx, "NSXClient") as client, \
-                        patch.object(nsx, "audit", return_value=report), \
-                        patch.object(nsx, "print_report"), \
-                        patch.object(nsx, "print_summary"), \
-                        patch.object(nsx, "render_html_report", return_value="<!doctype html>"), \
-                        patch("sys.stdout", new_callable=io.StringIO) as output:
-                    client.return_value.base_url = "https://nsx.example.com/policy/api/v1"
-                    self.assertEqual(nsx.main(args), 0)
-                    self.assertIn(str(json_path.resolve()), output.getvalue())
-                self.assertEqual(html_path.read_text(), "<!doctype html>")
-                data = nsx.json.loads(json_path.read_text())
-                self.assertEqual(data["manager"], "nsx.example.com")
-                self.assertNotIn("naming", data)
-                self.assertNotIn("dummy", json_path.read_text())
 
     def test_tags_usage_categories_scope_and_evidence(self):
         client = Mock()
@@ -1273,7 +991,7 @@ examples.forEach((_,index) => {
                   "objects": [{"kind": "group", "name": '<script>alert("x")</script>',
                                "path": "/infra/groups/a&b", "usage": "unused_candidate",
                                "membership": "empty", "referenced_by": [], "notes": ["<error>"]}]}
-        html = nsx.render_html_report(report)
+        html = rendered_document(report)
         self.assertNotIn('<script>alert("x")</script>', html)
         self.assertIn(r"\u003cscript>", html)
         self.assertIn(r"\u003cerror>", html)
@@ -1283,7 +1001,7 @@ examples.forEach((_,index) => {
         HTMLParser().feed(html)
         report["objects"][0].update(usage="referenced", membership="unknown",
                                      referenced_by=["/infra/rules/<rule>"])
-        html = nsx.render_html_report(report)
+        html = rendered_document(report)
         self.assertIn("Some checks need review", html)
         self.assertIn(r"/infra/rules/\u003crule>", html)
         stored_rows = nsx.json.loads(html.split('id="report-rows">', 1)[1].split('</script>', 1)[0])
@@ -1292,7 +1010,7 @@ examples.forEach((_,index) => {
         self.assertEqual(sum(row["view"] == "inventory" for row in stored_rows["rows"]), 1)
         self.assertNotIn("<tbody><tr>", html)
         report["objects"] = []
-        self.assertIn("0 unique object(s) to review", nsx.render_html_report(report))
+        self.assertIn("0 unique object(s) to review", rendered_document(report))
         self.assertIn('aria-label="Report sections"', html)
         self.assertIn('data-panel id="zero-hit-rules"', html)
         self.assertIn('class="previous"', html)
@@ -1358,7 +1076,7 @@ examples.forEach((_,index) => {
                   "groups_scanned": 0, "custom_services_scanned": 0, "system_groups_excluded": 0,
                   "indexed_objects_scanned": 0, "scope": "/infra", "usage_definition": "No references",
                   "limitations": "Snapshot"}
-        html = nsx.render_html_report(report)
+        html = rendered_document(report)
         self.assertIn("DFW inventory incomplete", html)
         self.assertIn("Counter &amp; rule details", html)
         self.assertIn('"disabled":true', html)
@@ -1483,71 +1201,6 @@ examples.forEach((_,index) => {
         with self.assertRaises(nsx.AuditError):
             list(client.items("/search/query"))
 
-    def test_audit_excludes_builtins_and_keeps_nested_references(self):
-        domain = {"path": "/infra/domains/default"}
-        custom = {"path": "/infra/services/custom", "is_default": False}
-        builtin = {"path": "/infra/services/HTTP", "is_default": True}
-        system = {"path": "/infra/services/system", "_system_owned": True}
-        rule = {"path": domain["path"] + "/gateway-policies/p/rules/r",
-                "resource_type": "Rule", "id": "r", "rule_id": 0,
-                "display_name": "Allow web", "services": [custom["path"]]}
-        default_group = {"path": domain["path"] + "/groups/default", "is_default": True}
-        malicious_group = {"path": domain["path"] + "/groups/DefaultMaliciousIpGroup"}
-        named_malicious_group = {
-            "id": "8e1b9eab-0000-4000-8000-000000000001",
-            "path": domain["path"] + "/groups/8e1b9eab-0000-4000-8000-000000000001",
-            "display_name": "DefaultMaliciousIpGroup",
-            "is_default": False, "_system_owned": False,
-        }
-        system_group = {"path": domain["path"] + "/groups/system", "_system_owned": True,
-                        "expression": [{"paths": [self.group["path"]]}]}
-        client = Mock()
-        groups = [self.group, default_group, malicious_group, named_malicious_group, system_group]
-        inventory = groups + [custom, builtin, system, rule]
-        client.items.side_effect = lambda path, *args: iter({
-            "/infra/tags": [], "/infra/realized-state/virtual-machines": [],
-            "/infra/domains": [domain], domain["path"] + "/groups": groups,
-            domain["path"] + "/security-policies": [],
-            "/infra/services": [custom, builtin, system], "/search/query": inventory,
-        }[path])
-        client.get.return_value = {"results": []}
-        progress = Mock()
-        report = nsx.audit(client, progress=progress)
-        self.assertEqual([call.args[0] for call in progress.call_args_list], list(range(5)))
-        self.assertEqual(report["custom_services_scanned"], 1)
-        self.assertEqual(report["groups_scanned"], 1)
-        self.assertEqual(report["system_groups_excluded"], 4)
-        self.assertEqual(len(report["objects"]), 2)
-        self.assertEqual(len(report["inventory"]["groups"]), 5)
-        self.assertEqual(len(report["inventory"]["services"]), 3)
-        all_rows = report["inventory"]["groups"] + report["inventory"]["services"]
-        by_path = {r["path"]: r for r in all_rows}
-        self.assertEqual(by_path[builtin["path"]]["inventory_type"], "Built-in service")
-        for obj in (builtin, system, default_group, malicious_group, named_malicious_group, system_group):
-            self.assertEqual(by_path[obj["path"]]["usage"], "not_assessed")
-            self.assertTrue(by_path[obj["path"]]["audit_exclusions"])
-        html = nsx.render_html_report(report)
-        self.assertIn('id="all-groups"', html)
-        self.assertIn('id="all-services"', html)
-        self.assertLess(html.index('href="#all-groups"'), html.index('href="#unused-groups"'))
-        self.assertLess(html.index('href="#all-services"'), html.index('href="#unused-services"'))
-        payload = nsx.json.loads(html.split('id="report-rows">', 1)[1].split('</script>', 1)[0])
-        self.assertEqual(sum(r["view"] == "inventory" for r in payload["rows"]), 8)
-        self.assertEqual(len({r["data"]["path"] for r in payload["rows"] if r["view"] == "inventory"}), 8)
-
-        self.assertEqual(client.get.call_count, 4)
-        self.assertEqual(report["objects"][0]["usage"], "referenced")
-        self.assertEqual(report["objects"][0]["referenced_by"], [system_group["path"]])
-        self.assertEqual(report["objects"][1]["usage"], "referenced")
-        self.assertEqual(report["objects"][1]["referenced_by"], [rule["path"]])
-        self.assertEqual(report["objects"][1]["reference_details"], [{
-            "path": rule["path"], "name": "Allow web", "rule_id": 0, "policy_rule_id": "r"}])
-        with patch("sys.stdout", new_callable=io.StringIO) as output:
-            nsx.print_report(report, show_references=True)
-        self.assertIn("Rule ID: 0 | Policy rule ID: r", output.getvalue())
-        inventory.remove(self.group)
-        with self.assertRaises(nsx.AuditError):
-            nsx.audit(client)
 
 
 if __name__ == "__main__":
