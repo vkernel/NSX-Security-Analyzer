@@ -8,6 +8,8 @@ the web interface.
 ## Install from Docker Hub
 
 For prebuilt AMD64/ARM64 images, follow [Docker Hub installation](../docs/docker-hub.md).
+
+**Deploy the supplied Compose stack, not just the image with Docker Desktop’s Run button.** The application requires PostgreSQL, database migrations, a web container, a collection worker and a scheduler. The provided Compose file deploys these dependencies automatically; environment variables alone do not start additional containers.
 Use `compose.hub.yaml` alongside `compose.yaml` to pull images instead of building.
 
 ## Run from source with Docker Desktop
