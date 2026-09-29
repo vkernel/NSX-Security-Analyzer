@@ -29,22 +29,31 @@ environments, schedule collections and explore reports through the web interface
 **Recommended: [install the complete Docker Compose stack from Docker Hub](docs/docker-hub.md)** — no source checkout, local build or install.sh required.
 Images are available for AMD64 and ARM64 at [Docker Hub](https://hub.docker.com/r/vkernel/nsx-security-analyzer).
 
-The instructions below build the application from source.
+## Required application services
 
-## Install the complete product
+**Pulling the Docker Hub image and clicking Run starts only the web container. Even with all environment variables set, it does not deploy the other containers needed for the application to work.**
 
-With Docker running (macOS, Linux or WSL):
+Use the provided **`compose.yaml` together with `.env`**. Docker Compose automatically deploys and connects these services; you do not need to install each dependency separately:
+
+| Service | Purpose | Expected state |
+| --- | --- | --- |
+| `db` | PostgreSQL stores accounts, environments and snapshots | Running |
+| `migrate` | Initializes or upgrades the database schema | Exited (0) after success |
+| `web` | Serves the application interface | Running |
+| `worker` | Processes collection tasks | Running |
+| `scheduler` | Queues automatic collections | Running |
+
+From the directory containing `compose.yaml` and your configured `.env`, run:
 
 ```sh
-curl -fSL https://raw.githubusercontent.com/vkernel/NSX-Security-Analyzer/main/deploy/install.sh -o install-nsx.sh
-sh install-nsx.sh
+docker compose pull
+docker compose up -d
+docker compose ps -a
 ```
 
-This pulls the Docker Hub images, generates secrets, starts PostgreSQL, migrations,
-the web application, worker and scheduler, then prompts for an administrator.
-Open **http://localhost:8000**. Docker Hub's single-image Run button does not install
-these dependencies. See the [installation guide](docs/docker-hub.md) for manual
-setup, native Windows, recovery and upgrades. Existing installations are preserved.
+Docker Desktop will show the services grouped under `nsx-security-analyzer`. A single randomly named container created with Run is not the complete deployment. Adding environment variables or restarting that container will not create the missing services. No `install.sh` is required for the Compose deployment.
+
+For a new installation, follow the [Docker Hub setup instructions](docs/docker-hub.md) to download the Compose file, configure secrets and create your administrator account. The source-build alternative is below.
 
 ## Quick start from source
 

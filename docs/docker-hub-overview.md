@@ -21,6 +21,30 @@ this image alone does not start the complete product.
 - [Configuration example](https://raw.githubusercontent.com/vkernel/NSX-Security-Analyzer/v0.3.1/deploy/.env.example)
 - [Source code](https://github.com/vkernel/NSX-Security-Analyzer)
 
+## Required application services
+
+**Pulling the Docker Hub image and clicking Run starts only the web container. Even with all environment variables set, it does not deploy the other containers needed for the application to work.**
+
+Use the provided **`compose.yaml` together with `.env`**. Docker Compose automatically deploys and connects these services; you do not need to install each dependency separately:
+
+| Service | Purpose | Expected state |
+| --- | --- | --- |
+| `db` | PostgreSQL stores accounts, environments and snapshots | Running |
+| `migrate` | Initializes or upgrades the database schema | Exited (0) after success |
+| `web` | Serves the application interface | Running |
+| `worker` | Processes collection tasks | Running |
+| `scheduler` | Queues automatic collections | Running |
+
+From the directory containing `compose.yaml` and your configured `.env`, run:
+
+```sh
+docker compose pull
+docker compose up -d
+docker compose ps -a
+```
+
+Docker Desktop will show the services grouped under `nsx-security-analyzer`. A single randomly named container created with Run is not the complete deployment. Adding environment variables or restarting that container will not create the missing services. No `install.sh` is required for the Compose deployment.
+
 ## Required configuration
 
 Create `.env` **in the same directory as the downloaded `compose.yaml`**.
