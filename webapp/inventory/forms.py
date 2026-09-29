@@ -83,7 +83,7 @@ class EnvironmentForm(forms.ModelForm):
                   "ca_upload", "remove_ca", "insecure", "timeout", "retries", "enabled", "sync_interval_minutes"]
         labels = {"sync_interval_minutes": "Automatic sync", "slug": "Environment ID", "manager": "NSX Manager",
                   "insecure": "Disable TLS certificate validation"}
-        help_texts = {"insecure": "Leave unchecked to verify the manager using your uploaded CA or the system trust store.", "sync_interval_minutes": "Full inventory syncs run automatically at this interval. The first sync runs after one interval. Paused environments do not sync.", "slug": "A stable identifier, for example east-datacenter."}
+        help_texts = {"insecure": "Leave unchecked to verify the manager using the saved approved certificate or the system trust store.", "sync_interval_minutes": "Full inventory syncs run automatically at this interval. The first sync runs after one interval. Paused environments do not sync.", "slug": "A stable identifier, for example east-datacenter."}
 
 
 class PreferencesForm(forms.ModelForm):

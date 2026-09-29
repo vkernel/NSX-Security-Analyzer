@@ -4,6 +4,8 @@ A read-only NSX Policy inventory and security review workspace. Collect inventor
 from multiple NSX Managers, explore firewall rules and reference evidence, and
 compare saved snapshots in a PostgreSQL-backed web application.
 
+**Optional IPFIX setup:** the staff-only configuration wizard can write NSX IPFIX settings after an explicit change preview and approval. Inventory collection remains read-only. See [IPFIX setup](docs/ipfix-poc.md).
+
 **Findings are review candidates, not deletion approvals or proof of historical non-use.**
 The collector sends GET requests to NSX; it does not change rules or reset counters.
 
@@ -24,7 +26,7 @@ environments, schedule collections and explore reports through the web interface
 
 ## Installation
 
-**Recommended: [install the prebuilt Docker Hub image](docs/docker-hub.md)** — no local build required.
+**Recommended: [install the complete Docker Compose stack from Docker Hub](docs/docker-hub.md)** — no source checkout, local build or install.sh required.
 Images are available for AMD64 and ARM64 at [Docker Hub](https://hub.docker.com/r/vkernel/nsx-security-analyzer).
 
 The instructions below build the application from source.
@@ -79,6 +81,8 @@ The default service listens on loopback. Use an HTTPS reverse proxy for shared a
 
 ## Documentation
 
+- [IPFIX pilot requirements](docs/ipfix-poc.md)
+- [Collection performance and diagnostics](docs/collection-performance.md)
 - [Snapshot comparison, finding reviews and coverage](docs/history-and-review.md)
 
 | Guide | Contents |
@@ -121,3 +125,10 @@ own licenses; the project license does not replace their terms.
 
 This is an independent project and is not affiliated with or endorsed by VMware
 or Broadcom.
+
+## Kubernetes conversion
+
+Use the [standalone conversion Compose file](deploy/kubernetes/compose.yaml) with
+an online converter or Kompose. See [conversion instructions and required Kubernetes
+configuration](deploy/kubernetes/README.md). This is a conversion baseline, not a
+validated Kubernetes production deployment.

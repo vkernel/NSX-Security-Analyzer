@@ -185,3 +185,41 @@ class FindingEvent(models.Model):
 
     class Meta:
         ordering = ['-created_at', '-pk']
+
+
+class IPFIXExporter(models.Model):
+    environment = models.ForeignKey(Environment, on_delete=models.CASCADE, related_name='ipfix_exporters')
+    address = models.GenericIPAddressField(unique=True, help_text='Exporter source IP as seen by the Docker receiver. One environment per address on this listener.')
+    enabled = models.BooleanField(default=True)
+    last_received = models.DateTimeField(null=True, blank=True)
+    messages = models.PositiveBigIntegerField(default=0)
+    malformed = models.PositiveBigIntegerField(default=0)
+    data_sets = models.PositiveBigIntegerField(default=0)
+    templates = models.JSONField(default=list, blank=True)
+
+    class Meta:
+        ordering = ['address']
+
+
+class IPFIXReceiver(models.Model):
+    """Single optional receiver per deployment; no raw traffic is persisted."""
+    enabled = models.BooleanField(default=False)
+    heartbeat = models.DateTimeField(null=True, blank=True)
+    diagnostics = models.JSONField(default=list)
+    queue_drops = models.PositiveBigIntegerField(default=0)
+    socket_drops = models.PositiveBigIntegerField(default=0)
+    socket_drop_monitoring = models.BooleanField(default=False)
+    rejected = models.PositiveBigIntegerField(default=0)
+    received = models.PositiveBigIntegerField(default=0)
+
+
+class IPFIXSetup(models.Model):
+    """Explicitly approved setup plan and durable per-operation outcome."""
+    environment = models.ForeignKey(Environment, on_delete=models.CASCADE)
+    actor = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, on_delete=models.SET_NULL)
+    created_at = models.DateTimeField(auto_now_add=True)
+    applied_at = models.DateTimeField(null=True, blank=True)
+    status = models.CharField(max_length=20, default='preview')
+    plan = models.JSONField(default=dict)
+    outcomes = models.JSONField(default=list)
+    error = models.TextField(blank=True)

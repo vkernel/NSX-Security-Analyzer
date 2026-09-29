@@ -13,14 +13,14 @@ import re
 import ssl
 import sys
 import threading
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, wait, FIRST_COMPLETED
 import time
-from collections import Counter
+from collections import Counter, deque
 from html import escape
 from datetime import datetime, timezone, timedelta
-from urllib.error import HTTPError, URLError
+import urllib3
 from urllib.parse import quote, urlencode, urlsplit
-from urllib.request import HTTPRedirectHandler, Request, build_opener, HTTPSHandler
+from urllib.request import getproxies, proxy_bypass
 
 
 LOG = logging.getLogger("nsx_inventory")
@@ -66,12 +66,6 @@ class InventoryChanged(AuditError):
     """A paginated inventory did not match its advertised total."""
 
 
-class NoRedirect(HTTPRedirectHandler):
-    def redirect_request(self, req, fp, code, msg, headers, newurl):
-        # Never forward credentials to a redirected endpoint.
-        return None
-
-
 class NSXClient:
     def __init__(self, manager, username, password, timeout=30, ca_bundle=None,
                  insecure=False, retries=2, ca_data=None):
@@ -84,28 +78,40 @@ class NSXClient:
         self.base_url = manager.rstrip("/") + "/policy/api/v1"
         self.timeout = timeout
         context = ssl.create_default_context(cafile=ca_bundle, cadata=ca_data)
+        if ca_data:
+            # Explicitly approved environment certificates may be leaf certificates.
+            # Keep chain signatures, validity and hostname checks enabled.
+            context.verify_flags |= ssl.VERIFY_X509_PARTIAL_CHAIN
         if insecure:
             context.check_hostname = False
             context.verify_mode = ssl.CERT_NONE
-        self.opener = build_opener(NoRedirect(), HTTPSHandler(context=context))
+        # A shared, bounded pool reuses TLS connections across collection workers.
+        options = dict(ssl_context=context, maxsize=16, block=True, num_pools=1)
+        proxy = getproxies().get("https") if not proxy_bypass(parsed.netloc) else None
+        self.http = urllib3.ProxyManager(proxy, **options) if proxy else urllib3.PoolManager(**options)
+        self.bulk_timeout = min(timeout, 8)
         token = base64.b64encode((username + ":" + password).encode()).decode()
         self.headers = {"Authorization": "Basic " + token, "Accept": "application/json"}
         self.retries = retries
         self.testing = False
         self.context = context
-        self.local = threading.local()
-        self.local.opener = self.opener
         self.metrics_lock = threading.Lock()
         self.metrics = {"requests": 0, "retries": 0}
 
+    def close(self):
+        self.http.clear()
+
     def get(self, path, params=None):
-        for attempt in range(getattr(self, "retries", 0) + 1):
+        bulk = path.endswith("/statistics") and "/rules/" not in path
+        retries = 0 if bulk else getattr(self, "retries", 0)
+        for attempt in range(retries + 1):
             if hasattr(self, "metrics_lock"):
                 with self.metrics_lock:
                     self.metrics["requests"] += 1
                     self.metrics["retries"] += int(attempt > 0)
             started = time.perf_counter()
-            LOG.debug("GET %s attempt=%d timeout=%ss", path, attempt + 1, getattr(self, "timeout", "default"))
+            LOG.debug("GET %s attempt=%d timeout=%ss", path, attempt + 1,
+                      getattr(self, "bulk_timeout", 8) if bulk else getattr(self, "timeout", "default"))
             try:
                 data = self._get(path, params)
                 LOG.debug("GET %s completed in %.3fs", path, time.perf_counter() - started)
@@ -113,7 +119,7 @@ class NSXClient:
             except AuditError as exc:
                 LOG.debug("GET %s failed status=%s elapsed=%.3fs", path, exc.status_code,
                           time.perf_counter() - started)
-                if exc.status_code not in (429, 502, 503, 504) or attempt == self.retries:
+                if exc.status_code not in (429, 502, 503, 504) or attempt == retries:
                     raise
                 delay = min(2 ** attempt, 8)
                 LOG.warning("GET %s returned HTTP %s; retry %d/%d in %ss",
@@ -124,30 +130,24 @@ class NSXClient:
         url = self.base_url + quote(path, safe="/")
         if params:
             url += "?" + urlencode(params)
+        timeout = self.bulk_timeout if path.endswith("/statistics") and "/rules/" not in path else self.timeout
         try:
-            request = Request(url, headers=self.headers, method="GET")
-            opener = self.opener
-            if hasattr(self, "local"):
-                if not hasattr(self.local, "opener"):
-                    self.local.opener = build_opener(NoRedirect(), HTTPSHandler(context=self.context))
-                opener = self.local.opener
-            with opener.open(request, timeout=self.timeout) as response:
-                data = json.load(response)
-        except HTTPError as exc:
-            detail = ""
-            try:
-                payload = json.loads(exc.read(16384))
-                if isinstance(payload, dict):
-                    detail = "; ".join("{}={}".format(k, payload[k]) for k in
-                                       ("error_code", "module_name", "error_message", "details") if k in payload)
-                    detail = " ".join(detail.split())[:1500]
-            except (ValueError, OSError):
-                pass
-            message = "GET {}: HTTP {} {}".format(path, exc.code, exc.reason)
-            if detail:
-                message += " — " + detail
-            raise AuditError(message, status_code=exc.code) from exc
-        except (URLError, OSError, ValueError) as exc:
+            response = self.http.request("GET", url, headers=self.headers, redirect=False,
+                retries=False, timeout=urllib3.Timeout(connect=timeout, read=timeout), pool_timeout=timeout)
+            if not 200 <= response.status < 300:
+                detail = ""
+                try:
+                    payload = json.loads(response.data[:16384])
+                    if isinstance(payload, dict):
+                        detail = "; ".join("{}={}".format(k, payload[k]) for k in
+                            ("error_code", "module_name", "error_message", "details") if k in payload)
+                        detail = " ".join(detail.split())[:1500]
+                except (ValueError, UnicodeError):
+                    pass
+                raise AuditError("GET {}: HTTP {} {}{}".format(path, response.status, response.reason,
+                    " — " + detail if detail else ""), status_code=response.status)
+            data = json.loads(response.data)
+        except (urllib3.exceptions.HTTPError, OSError, ValueError) as exc:
             raise AuditError("GET {}: {}".format(path, exc)) from exc
         if not isinstance(data, dict):
             raise AuditError("GET {}: expected a JSON object".format(path))
@@ -362,6 +362,12 @@ DFW_COUNTER_NOTE = (
 )
 
 
+def unsupported_statistics():
+    return {"hit_status": "not_supported", "hit_count": None, "statistics": [],
+            "statistics_checked_at": None, "statistics_source": "unsupported",
+            "notes": ["NSX does not support statistics for Ethernet (Layer-2) rules; activity is not assessed."]}
+
+
 def rule_statistics(client, rule, entries=None):
     """Accept explicit counters only; absent/error/incomplete results are unknown."""
     result = {"hit_status": "unknown", "hit_count": None, "statistics": [], "notes": [],
@@ -401,6 +407,11 @@ def rule_statistics(client, rule, entries=None):
             result["notes"].append("Other traffic counters are positive despite zero hit_count.")
     except AuditError as exc:
         result["notes"].append(str(exc))
+        cause = exc.__cause__
+        result["statistics_error_kind"] = ("timeout" if isinstance(cause, (TimeoutError, urllib3.exceptions.TimeoutError))
+                                           else "http" if exc.status_code else "unavailable")
+        if exc.status_code == 400 and "500209" in str(exc) and "Ethernet" in str(exc):
+            result = unsupported_statistics()
     return result
 
 
@@ -453,7 +464,7 @@ def retain_hit_history(report, previous=None):
 
 
 def statistics_backoff(previous, manager):
-    """Reuse only short-lived endpoint failures, never old counters or findings."""
+    """Restore endpoint failure history from PostgreSQL snapshots, never counters."""
     if not previous or previous.get("testing") or previous.get("manager") != manager:
         return {}
     backoff = {}
@@ -469,8 +480,10 @@ def statistics_backoff(previous, manager):
             else:
                 retry = datetime.fromisoformat(previous["generated_at"].replace("Z", "+00:00")) + timedelta(minutes=30)
             now = datetime.now(timezone.utc)
-            if retry.tzinfo is not None and now < retry <= now + timedelta(minutes=30):
-                backoff[policy] = {"reason": reason, "retry_at": retry.isoformat()}
+            if retry.tzinfo is not None and retry <= now + timedelta(hours=24):
+                failures = rule.get("statistics_bulk_failures", 1)
+                failures = min(10, max(1, failures)) if type(failures) is int else 1
+                backoff[policy] = {"reason": reason, "retry_at": retry.isoformat(), "failures": failures}
         except (KeyError, ValueError, TypeError, AttributeError):
             continue
     return backoff
@@ -491,6 +504,7 @@ def policy_statistics(client, policy, rules, defer_fallback=False):
     retry_at = None
     backoff = getattr(client, "statistics_backoff", {})
     cached = backoff.get(policy["path"]) if isinstance(backoff, dict) else None
+    failures = cached.get("failures", 1) if cached else 0
     if cached:
         try:
             if datetime.fromisoformat(cached["retry_at"]) <= datetime.now(timezone.utc):
@@ -504,8 +518,11 @@ def policy_statistics(client, policy, rules, defer_fallback=False):
         else:
             try:
                 entries = list(client.items(policy["path"] + "/statistics", page_size=None))
-            except AuditError:
-                retry_at = (datetime.now(timezone.utc) + timedelta(minutes=30)).isoformat()
+            except AuditError as exc:
+                failures = min(failures + 1, 10)
+                base_hours = 6 if exc.status_code in (400, 404, 405, 501) else 1
+                hours = min(24, base_hours * 2 ** (failures - 1))
+                retry_at = (datetime.now(timezone.utc) + timedelta(hours=hours)).isoformat()
                 raise
         for entry in entries:
             if not isinstance(entry, dict) or any(entry.get(k) for k in ("error", "error_code", "error_message")):
@@ -547,6 +564,7 @@ def policy_statistics(client, policy, rules, defer_fallback=False):
             result["statistics_source"] = "rule"
             result["statistics_fallback_reason"] = reason
             if retry_at:
+                result["statistics_bulk_failures"] = failures
                 result["statistics_bulk_retry_at"] = retry_at
                 result["statistics_bulk_skipped"] = bool(cached)
         else:
@@ -612,6 +630,8 @@ def audit_dfw(client, domains, workers=4, testing=False):
     def check(job):
         policy, policy_rules = job
         LOG.debug("Checking DFW policy statistics: %s", policy["path"])
+        if policy.get("category") == "Ethernet":
+            return {rule["path"]: unsupported_statistics() for rule in policy_rules}
         if testing:
             results = {}
             for rule in policy_rules:
@@ -621,25 +641,77 @@ def audit_dfw(client, domains, workers=4, testing=False):
                 results[rule["path"]] = result
             return results
         return policy_statistics(client, policy, policy_rules, defer_fallback=True)
-    with ThreadPoolExecutor(max_workers=workers) as pool:
-        statistics = {}
-        for result in pool.map(check, jobs):
-            statistics.update(result)
-        # All rule fallbacks share this bounded executor, including rules in one large policy.
-        pending = [rule for _, policy_rules in jobs for rule in policy_rules
-                   if statistics[rule["path"]].get("_pending_statistics")]
-        def fallback(rule):
-            result = rule_statistics(client, rule)
-            result["statistics_source"] = "rule"
-            result.update({key: value for key, value in statistics[rule["path"]].items()
-                           if key.startswith("statistics_")})
-            return rule["path"], result
-        for path, result in pool.map(fallback, pending):
-            statistics[path] = result
+    statistics = {}
+    diagnostics = {"bulk_policies": 0, "bulk_successes": 0, "bulk_skipped": 0,
+                   "fallback_rules": 0, "fallback_reasons": {}, "timeout_retries": 0,
+                   "timeout_recoveries": 0, "unsupported_rules": 0}
+    def fallback(rule, metadata):
+        result = rule_statistics(client, rule)
+        result.update({key: value for key, value in metadata.items() if key.startswith("statistics_")})
+        return {rule["path"]: result}
+
+    # Submit only bounded work; prioritize newly discovered fallbacks over more
+    # bulk probes. No worker waits on another future in the same executor.
+    queue = deque((check, (job,), job[1]) for job in jobs)
+    statistics_workers = min(workers, 2)
+    diagnostics["statistics_workers"] = statistics_workers
+    with ThreadPoolExecutor(max_workers=statistics_workers) as pool:
+        active = {}
+        while queue or active:
+            while queue and len(active) < statistics_workers:
+                # Never occupy both statistics slots with optional bulk probes.
+                # Pick available fallback work instead of blocking a pool thread.
+                bulk_active = any(value is not None for value in active.values())
+                candidate = next((i for i, task in enumerate(queue)
+                                  if task[2] is None or not bulk_active), None)
+                if candidate is None:
+                    break
+                function, args, policy_rules = queue[candidate]
+                del queue[candidate]
+                active[pool.submit(function, *args)] = policy_rules
+            done, _ = wait(active, return_when=FIRST_COMPLETED)
+            for future in done:
+                policy_rules = active.pop(future)
+                result = future.result()
+                statistics.update(result)
+                unsupported = sum(r.get("hit_status") == "not_supported" for r in result.values())
+                diagnostics["unsupported_rules"] += unsupported
+                if policy_rules and not testing and unsupported != len(policy_rules):
+                    diagnostics["bulk_policies"] += 1
+                    skipped = any(r.get("statistics_bulk_skipped") for r in result.values())
+                    diagnostics["bulk_skipped"] += int(skipped)
+                    diagnostics["bulk_successes"] += int(all(r.get("statistics_source") == "policy" for r in result.values()))
+                    for rule in reversed(policy_rules):
+                        metadata = result[rule["path"]]
+                        if metadata.get("_pending_statistics"):
+                            diagnostics["fallback_rules"] += 1
+                            reason = metadata.get("statistics_fallback_reason", "Unknown")
+                            # Aggregate categories only, never object paths or server response bodies.
+                            category = "cooldown" if skipped else "http_error" if "HTTP " in reason else "timeout" if "timed out" in reason.lower() else "incomplete_or_unavailable"
+                            reasons = diagnostics["fallback_reasons"]
+                            reasons[category] = reasons.get(category, 0) + 1
+                            queue.appendleft((fallback, (rule, metadata), None))
+    # Retry only transport timeouts, after all first-pass statistics have finished.
+    # This avoids overlapping recovery requests and preserves first-attempt evidence.
+    retry_rules = [r for r in rules if statistics[r["path"]].get("statistics_error_kind") == "timeout"]
+    if retry_rules and not testing:
+        time.sleep(2)
+        for rule in retry_rules:
+            previous = statistics[rule["path"]]
+            recovered = rule_statistics(client, rule)
+            for key in ("statistics_source", "statistics_fallback_reason", "statistics_bulk_failures",
+                        "statistics_bulk_retry_at", "statistics_bulk_skipped"):
+                if key in previous:
+                    recovered[key] = previous[key]
+            recovered["statistics_retry"] = {"attempts": 1, "initial_notes": previous["notes"],
+                "initial_checked_at": previous["statistics_checked_at"]}
+            statistics[rule["path"]] = recovered
+            diagnostics["timeout_retries"] += 1
+            diagnostics["timeout_recoveries"] += int(recovered["hit_status"] in {"zero_hits", "traffic_recorded"})
     for row in rules:
         row.update(statistics[row["path"]])
     return {"policies": policies, "rules": rules, "errors": errors,
-            "counter_note": DFW_COUNTER_NOTE}, configuration
+            "counter_note": DFW_COUNTER_NOTE, "collection_diagnostics": diagnostics}, configuration
 
 
 TAG_STATUSES = {"both": "VMs and groups", "vm_only": "VM use",
@@ -1038,22 +1110,36 @@ def audit(client, workers=4, testing=False, progress=None):
     if testing:
         custom = custom[:1]
     phases["inventory"] = round(time.perf_counter() - phase, 2)
-    phase = time.perf_counter()
-    LOG.info("Scanning indexed Policy configuration references...")
-    progress(1, "Scanning configuration references")
-    resources, search_coverage = search_configuration(client)
-    # A stale/empty index must not turn the entire inventory into unused objects.
-    indexed_paths = {obj.get("path") for obj in resources}
-    missing = {obj["path"] for obj in all_groups + services} - indexed_paths
-    if missing and not testing:
-        raise AuditError("Search index is missing {} inventory objects; retry after indexing".format(
-            len(missing)))
-    LOG.info("Reading DFW policies, rules and hit statistics...")
-    progress(2, "Checking firewall rules and counters")
-    phases["search"] = round(time.perf_counter() - phase, 2)
-    phase = time.perf_counter()
-    dfw, dfw_configuration = audit_dfw(client, domains, workers, testing=testing)
-    phases["dfw"] = round(time.perf_counter() - phase, 2)
+    combined_started = time.perf_counter()
+    progress(1, "Scanning references and collecting firewall counters")
+    def read_search():
+        started = time.perf_counter()
+        resources, coverage = search_configuration(client)
+        # Validate the full index before accepting any audit results.
+        missing = {obj["path"] for obj in all_groups + services} - {obj.get("path") for obj in resources}
+        if missing and not testing:
+            raise AuditError("Search index is missing {} inventory objects; retry after indexing".format(len(missing)))
+        return resources, coverage, round(time.perf_counter() - started, 2)
+
+    def read_dfw():
+        started = time.perf_counter()
+        result, configuration = audit_dfw(client, domains, workers, testing=testing)
+        return result, configuration, round(time.perf_counter() - started, 2)
+
+    # Both tasks use the same client's adaptive request limiter. Keep diagnostic
+    # samples and single-worker calls sequential; worker callbacks stay on this thread.
+    with ThreadPoolExecutor(max_workers=1 if testing or workers == 1 else 2) as pool:
+        search_future = pool.submit(read_search)
+        dfw_future = pool.submit(read_dfw)
+        try:
+            resources, search_coverage, phases["search"] = search_future.result()
+            progress(2, "Completing firewall rules and counters")
+            dfw, dfw_configuration, phases["dfw"] = dfw_future.result()
+        except BaseException:
+            search_future.cancel()
+            dfw_future.cancel()
+            raise
+    phases["search_and_dfw"] = round(time.perf_counter() - combined_started, 2)
     phase = time.perf_counter()
     LOG.info("Checking membership for %d groups...", len(groups))
     progress(3, "Checking group membership and references")
@@ -1200,8 +1286,9 @@ def overview_charts(groups, services, rules, testing=False):
          [("Traffic recorded", activity["traffic_recorded"], "#087f8c", "dfw-rules"),
           ("Zero recorded hits", activity["zero_hits"], "#b76b13", "zero-hit-rules"),
           ("Disabled", activity["disabled"], "#8493a6", "disabled-rules"),
+          ("Not supported", activity["not_supported"], "#8493a6", "dfw-rules"),
           ("Unknown", len(rules) - sum(activity[k] for k in
-           ("traffic_recorded", "zero_hits", "disabled")), "#7955b2", "unknown-statistics")]),
+           ("traffic_recorded", "zero_hits", "disabled", "not_supported")), "#7955b2", "unknown-statistics")]),
     ]
     output = '<div class="overview-charts" aria-label="Inventory snapshot charts">'
     for index, (title, description, slices) in enumerate(charts):
@@ -1274,7 +1361,7 @@ def dfw_overview(dfw, testing=False):
         ("Disabled rules", len(rules) - len(enabled), "disabled-rules"),
         ("Enabled rules recording traffic", sum(r.get("hit_status") == "traffic_recorded" for r in enabled), "dfw-rules"),
         ("Enabled rules with zero recorded hits", sum(r.get("hit_status") == "zero_hits" for r in enabled), "zero-hit-rules"),
-        ("Enabled rules with unknown activity", sum(r.get("hit_status") not in {"traffic_recorded", "zero_hits"} for r in enabled), "unknown-statistics"),
+        ("Enabled rules with unknown activity", sum(r.get("hit_status") not in {"traffic_recorded", "zero_hits", "not_supported"} for r in enabled), "unknown-statistics"),
         ("Empty policies", sum(p.get("status") == "empty" for p in policies), "empty-policies"),
     ]
     html += '<div class="cards">' + ''.join('<a class="card" href="#{}"><span>{}</span><b>{:,}</b><small>Open related rules or policies →</small></a>'.format(anchor, label, count) for label, count, anchor in cards) + '</div>'
@@ -1349,6 +1436,7 @@ def feature_guide():
 <ul>
 <li><strong>Traffic recorded:</strong> at least one returned hit, packet, byte or session counter is positive. Other positive counters can establish activity even when hit_count is zero.</li>
 <li><strong>Zero recorded hits:</strong> returned counters contain no positive activity. This is a review candidate, not proof the rule has never been used.</li>
+<li><strong>Not supported:</strong> NSX does not provide counters for Ethernet (Layer-2) rules. These rules are not zero-hit candidates.</li>
 <li><strong>Unknown:</strong> statistics were missing, invalid, incomplete or unavailable, or classification was withheld for testing.</li>
 <li><strong>Disabled:</strong> the rule is configured as disabled. It may retain historical counters and still reference groups/services.</li>
 </ul>
@@ -1804,7 +1892,7 @@ table{min-width:760px}th{line-height:1.5}td{padding:15px 14px}.path{line-height:
   const types = {group:'Groups',custom_service:'Custom services',dfw_policy:'DFW policies',dfw_rule:'DFW rules'};
   const labels = {referenced:['green','Referenced'],unused_candidate:['amber','Unused candidate'],empty:['amber','Empty'],
     nonempty:['green','Has members'],unknown:['purple','Unknown'],not_applicable:['gray','Not applicable'],not_assessed:['gray','Not assessed'],
-    zero_hits:['amber','Zero recorded hits'],traffic_recorded:['green','Traffic recorded'],has_rules:['green','Has rules']};
+    not_supported:['gray','Not supported'],zero_hits:['amber','Zero recorded hits'],traffic_recorded:['green','Traffic recorded'],has_rules:['green','Has rules']};
   const badge = status => {
     const [color,label] = labels[status] || ['gray',status];
     return '<span class="badge '+color+'">'+esc(label)+'</span>';
@@ -1977,7 +2065,7 @@ table{min-width:760px}th{line-height:1.5}td{padding:15px 14px}.path{line-height:
       } else {
         context=esc(r.policy_name)+'<code class="path">'+esc(r.policy_path)+'</code>';
         status=badge(r.hit_status)+'<br><small>'+(r.disabled?'Disabled':'Enabled')+' · '+esc(r.action)+'</small>';
-        count=r.hit_count===null?'Unknown':number(r.hit_count)+' hit(s)';
+        count=r.hit_status==='not_supported'?'Not supported':r.hit_count===null?'Unknown':number(r.hit_count)+' hit(s)';
         if (includeEvidence) {
         evidence='<details><summary>Counter &amp; rule details</summary><p>Checked: '+(globalThis.workspaceTime ? globalThis.workspaceTime(r.statistics_checked_at) : esc(r.statistics_checked_at))+'</p>';
         for (const sample of r.statistics) {
@@ -1986,6 +2074,7 @@ table{min-width:760px}th{line-height:1.5}td{padding:15px 14px}.path{line-height:
         for (const [label,key] of [['Sources','source_groups'],['Destinations','destination_groups'],['Services','services'],['Applied to','scope']]) {
           evidence+='<p><strong>'+label+'</strong><br>'+code((r[key] || []).join(', ') || 'Not specified')+'</p>';
         }
+        if (r.statistics_retry) evidence+='<p><strong>Timeout recovery</strong><br>One sequential recovery attempt after the first pass. Initial check: '+esc(r.statistics_retry.initial_checked_at)+'</p>'+notes(r.statistics_retry.initial_notes);
         evidence+='</details>'+notes(r.notes);
         if (r.empty_group_references?.length) {
           evidence+='<h3>Confirmed empty group references</h3><ul>'+r.empty_group_references.map(group=>

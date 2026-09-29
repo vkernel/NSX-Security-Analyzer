@@ -5,6 +5,8 @@ stores environments, audit jobs and snapshots. A separate worker collects invent
 web requests never wait for an NSX audit to finish. All environment configuration, collections and report exploration are managed through
 the web interface.
 
+**Optional IPFIX setup:** the staff-only configuration wizard can write NSX IPFIX settings after an explicit change preview and approval. Inventory collection remains read-only. See [IPFIX setup](../docs/ipfix-poc.md).
+
 ## Install from Docker Hub
 
 For prebuilt AMD64/ARM64 images, follow [Docker Hub installation](../docs/docker-hub.md).
@@ -216,16 +218,18 @@ installation that used environment-variable credentials, enter and save its user
 and password in Edit environment before resuming collection. Existing snapshots are
 preserved. After source changes, rebuild with `docker compose up --build -d`.
 
-For a custom NSX certificate authority, use **CA certificate file** in Add/Edit
-environment to upload a PEM certificate or bundle (up to 1 MB; `.pem`, `.crt` or
-`.cer` containing PEM data). Files containing private keys or invalid certificate
-data are rejected. The certificate and its filename are stored in PostgreSQL;
-workers load the saved certificate directly into their TLS context without file
-mounts. Each queued job retains the certificate selected when it was queued.
+In Add/Edit environment, select **Retrieve Manager certificate** under
+**Certificates & security**. Retrieval performs a credential-free TLS handshake.
+Compare its SHA-256 fingerprint with a trusted independent source, confirm trust,
+and save the environment. The approved certificate is stored in PostgreSQL and
+used by collection workers with hostname and validity checks still enabled.
+Each queued job retains the certificate selected when it was queued.
 
-Leave the upload empty to keep the current certificate, upload a new file to
-replace it, or select **Remove saved CA certificate** to return to the system
-trust store. Legacy worker paths continue working until replaced or removed.
+Existing certificates are preserved unless replaced or removed. After Manager
+certificate rotation, retrieve and approve the replacement. Select **Remove saved
+CA certificate** to return to the system trust store. A Manager's presented server
+certificate is trusted specifically for that environment, rather than installed as
+a system-wide CA. Legacy certificate configurations remain supported.
 TLS verification is enabled by default; leave **Disable TLS certificate validation**
 unchecked to use certificate verification. Database server CA configuration remains
 separate from the NSX environment certificate.
@@ -467,3 +471,10 @@ local tabs for environments, access, retention and collection policies. Remember
 menus now preserves report search-option and column-popover expansion state;
 primary navigation no longer requires nested menus. Existing snapshots, retention
 settings, account permissions and collection behavior remain unchanged.
+
+## Kubernetes conversion
+
+The main Docker service definitions are explicit. For online conversion, use
+[`deploy/kubernetes/compose.yaml`](../deploy/kubernetes/compose.yaml), which omits
+Docker-only startup/build/profile features and contains no deployment credentials.
+Follow the [Kubernetes conversion guide](../deploy/kubernetes/README.md) before deployment.

@@ -44,7 +44,8 @@ class CAUploadTests(TestCase):
         self.assertEqual(environment.ca_filename, 'company-ca.pem')
         response = self.client.get(reverse('environment-edit', args=[environment.pk]))
         self.assertContains(response, 'multipart/form-data')
-        self.assertContains(response, 'type="file"')
+        self.assertNotContains(response, 'type="file"')
+        self.assertContains(response, 'Retrieve Manager certificate')
         self.assertContains(response, 'company-ca.pem')
         self.assertNotContains(response, 'name="ca_bundle"')
         form = EnvironmentForm(self.data(), instance=environment)
@@ -90,3 +91,44 @@ class CAUploadTests(TestCase):
         self.client.force_login(viewer)
         self.assertEqual(self.client.post(reverse('environment-new'), {**self.data(), 'ca_upload': self.upload()}).status_code, 403)
         self.assertFalse(Environment.objects.exists())
+
+    def certificate_preview(self, server='east.example', age=0):
+        import time
+        session = self.client.session
+        session['environment_certificate_new'] = {'created': time.time()-age, 'server': server,
+            'origin': [server, 443], 'pem': self.pem.decode(), 'certificates': []}
+        session.save()
+
+    def test_retrieved_certificate_requires_confirmation(self):
+        self.client.force_login(self.operator)
+        self.certificate_preview()
+        response = self.client.post(reverse('environment-new'), self.data())
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(Environment.objects.get().ca_certificate, '')
+
+    def test_retrieved_certificate_saved_with_environment(self):
+        self.client.force_login(self.operator)
+        self.certificate_preview()
+        response = self.client.post(reverse('environment-new'), self.data(trust_retrieved='on'))
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(Environment.objects.get().ca_certificate, self.pem.decode())
+        self.assertNotIn('environment_certificate_new', self.client.session)
+
+    def test_expired_wrong_origin_and_insecure_confirmation_rejected(self):
+        self.client.force_login(self.operator)
+        for server, age, extra in [('other.example',0,{}), ('east.example',601,{}), ('east.example',0,{'insecure':True})]:
+            self.certificate_preview(server,age)
+            response = self.client.post(reverse('environment-new'), self.data(trust_retrieved='on', **extra))
+            self.assertEqual(response.status_code, 200)
+            self.assertFalse(Environment.objects.exists())
+
+    @patch('inventory.ipfix.certificates.retrieve_manager')
+    def test_retrieval_does_not_save_environment_or_credentials(self, retrieve):
+        retrieve.return_value = {'pem': self.pem.decode(), 'certificates': []}
+        self.client.force_login(self.operator)
+        response = self.client.post(reverse('environment-new'), self.data(action='retrieve_certificate'))
+        self.assertEqual(response.status_code, 200)
+        retrieve.assert_called_once_with('east.example')
+        self.assertFalse(Environment.objects.exists())
+        self.assertNotIn('test-password', str(dict(self.client.session)))
+        self.assertNotContains(response, 'test-password')

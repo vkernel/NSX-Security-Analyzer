@@ -32,7 +32,17 @@ See [History and review](docs/history-and-review.md) for usage and limitations.
 Membership comparison covers definitions and checked status, not resolved member
 list changes. Legacy fields and incomplete coverage remain explicitly unknown.
 
-## Phase 2: DFW IPFIX proof of concept
+## Phase 2: DFW IPFIX proof of concept — started on development
+
+The initial template inspector, optional Docker UDP receiver, metadata persistence
+and GUI exporter mapping/status are implemented on development. Stateful flow
+decoding, flow storage and traffic exploration are not yet available.
+See [IPFIX pilot requirements and acceptance gates](docs/ipfix-poc.md).
+
+Development update: bounded source diagnostics, independent UDP intake, drop counters
+and setup-readiness evidence are implemented. An isolated GoFlow2 synthetic test
+preserves a custom enterprise field. Actual NSX delivery, decoder compatibility,
+flow persistence and the traffic explorer remain open acceptance gates.
 
 Start with NSX Distributed Firewall IPFIX rather than attempting broad NetFlow
 support immediately. NSX provides firewall IPFIX profiles and collector
@@ -56,7 +66,8 @@ does not authorize the application to change NSX configuration automatically.
 
 The first traffic release should provide:
 
-- An optional collector service, deployed separately from the web application.
+- An optional Docker Compose collector container on the existing Docker host,
+  running separately from the web application; no additional Linux VM required.
 - Time-filtered source/destination, protocol and port searches.
 - Bytes and packets where provided by exported records.
 - First and last **observed** activity.

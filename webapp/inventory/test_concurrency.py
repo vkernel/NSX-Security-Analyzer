@@ -98,3 +98,41 @@ class AdaptiveRequestTests(SimpleTestCase):
             self.success(duration=.1)
         self.assertEqual(self.control.limit, 3)
         self.assertAlmostEqual(self.control.latencies['rule_statistics']['baseline'], 12)
+
+    def test_diagnostics_include_failures_and_bounded_latency_samples(self):
+        for _ in range(600):
+            self.success(duration=1)
+        error = RuntimeError('Busy')
+        error.status_code = 503
+        started = self.control.acquire()
+        self.now += 5
+        self.control.release(started, error)
+        endpoint = self.control.summary()['endpoints']['other']
+        self.assertEqual(endpoint['failed_requests'], 1)
+        self.assertEqual(endpoint['failures_by_status'], {'503': 1})
+        self.assertEqual(endpoint['successful_requests'], 600)
+        self.assertEqual(endpoint['latency_sample_count'], 512)
+        self.assertEqual(endpoint['p95_seconds'], 1)
+        self.assertEqual(endpoint['max_seconds'], 5)
+
+    def test_optional_bulk_timeout_preserves_limit_but_throttle_does_not(self):
+        error = RuntimeError('bulk read timed out')
+        error.__cause__ = TimeoutError('timed out')
+        self.control.successes = 4
+        started = self.control.acquire()
+        self.control.release(started, error, 'policy_statistics')
+        self.assertEqual(self.control.limit, 2)
+        self.assertEqual(self.control.successes, 4)
+        self.assertEqual(self.control.summary()['endpoints']['policy_statistics']['failed_requests'], 1)
+        error = RuntimeError('throttled')
+        error.status_code = 429
+        started = self.control.acquire()
+        self.control.release(started, error, 'policy_statistics')
+        self.assertEqual(self.control.limit, 1)
+
+    def test_rule_timeout_still_reduces_shared_limit(self):
+        error = RuntimeError('read timed out')
+        error.__cause__ = TimeoutError('timed out')
+        started = self.control.acquire()
+        self.control.release(started, error, 'rule_statistics')
+        self.assertEqual(self.control.limit, 1)
