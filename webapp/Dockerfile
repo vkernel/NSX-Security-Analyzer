@@ -8,10 +8,11 @@ RUN pip install --no-cache-dir -r requirements.lock
 COPY LICENSE NOTICE /app/
 COPY webapp/ /app/webapp/
 RUN DJANGO_SECRET_KEY=build-only-static-files python manage.py collectstatic --noinput \
-    && groupadd --gid 10001 nsx && useradd --uid 10001 --gid nsx --no-create-home nsx
+    && groupadd --gid 10001 nsx && useradd --uid 10001 --gid nsx --create-home --home-dir /home/nsx nsx \
+    && chmod 700 /home/nsx
 ARG APP_REVISION=source
 ARG APP_BUILD_DATE=unknown
-LABEL org.opencontainers.image.version="0.2.1"
+LABEL org.opencontainers.image.version="0.3.1"
 LABEL org.opencontainers.image.revision=$APP_REVISION
 LABEL org.opencontainers.image.created=$APP_BUILD_DATE
 RUN python -c 'import json, os; from pathlib import Path; Path("inventory/_build.json").write_text(json.dumps({"revision": os.environ["APP_REVISION"], "built_at": os.environ["APP_BUILD_DATE"]}))'

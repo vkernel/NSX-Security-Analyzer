@@ -1,3 +1,4 @@
+# Kubernetes converter input: kubernetes/compose.yaml (see its README).
 # Complete Docker Hub installation; no source checkout or build required.
 name: nsx-security-analyzer
 

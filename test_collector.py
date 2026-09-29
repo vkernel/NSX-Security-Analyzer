@@ -19,6 +19,242 @@ def rendered_document(report):
 
 
 class InventoryTests(unittest.TestCase):
+    def test_search_and_dfw_overlap_and_search_failure_discards_audit(self):
+        import threading
+        for fails in (False, True):
+            dfw_started = threading.Event()
+            client = Mock()
+            client.items.return_value = []
+            def search(_):
+                self.assertTrue(dfw_started.wait(2))
+                if fails: raise nsx.AuditError('incomplete search')
+                return [], {'mode':'all_types'}
+            def dfw(*args, **kwargs):
+                dfw_started.set()
+                return {'rules':[], 'policies':[], 'errors':[]}, []
+            with patch.object(nsx, 'search_configuration', side_effect=search), patch.object(nsx, 'audit_dfw', side_effect=dfw):
+                if fails:
+                    with self.assertRaisesRegex(nsx.AuditError, 'incomplete search'):
+                        nsx.audit(client, workers=2)
+                else:
+                    report=nsx.audit(client, workers=2)
+                    self.assertIn('search_and_dfw', report['performance']['phases_seconds'])
+                    self.assertEqual(report['objects'], [])
+
+    def test_only_one_bulk_probe_runs_at_a_time(self):
+        import threading
+        import time
+        lock=threading.Lock()
+        active=0
+        peak=0
+        client=Mock()
+        client.statistics_backoff={}
+        def items(path, **kwargs):
+            nonlocal active, peak
+            if path=='/d/security-policies': return [{'path':'/p1'},{'path':'/p2'},{'path':'/p3'}]
+            if path.endswith('/rules'): return [{'path':path+'/a','id':'a'}]
+            with lock:
+                active+=1
+                peak=max(peak,active)
+            time.sleep(.01)
+            with lock: active-=1
+            return [{'rule':'a','hit_count':0}]
+        client.items.side_effect=items
+        result,_=nsx.audit_dfw(client,[{'path':'/d'}],workers=8)
+        self.assertEqual(peak,1)
+        self.assertEqual(len(result['rules']),3)
+        self.assertTrue(all(r['hit_status']=='zero_hits' for r in result['rules']))
+
+    def test_ethernet_rules_skip_all_statistics_requests(self):
+        client = Mock()
+        client.items.side_effect = [[{"path": "/p", "category": "Ethernet"}], [{"path": "/p/rules/a"}]]
+        dfw, _ = nsx.audit_dfw(client, [{"path": "/d"}])
+        self.assertEqual(client.items.call_count, 2)
+        self.assertEqual(dfw['rules'][0]['hit_status'], 'not_supported')
+        self.assertIsNone(dfw['rules'][0]['hit_count'])
+        self.assertEqual(dfw['collection_diagnostics']['unsupported_rules'], 1)
+        self.assertEqual(dfw['collection_diagnostics']['bulk_policies'], 0)
+
+    def test_timeout_recovery_is_single_sequential_pass(self):
+        import threading
+        lock = threading.Lock()
+        calls = {}
+        active = 0
+        maximum_retry_active = 0
+        client = Mock()
+        client.statistics_backoff = {}
+        def items(path, **kwargs):
+            nonlocal active, maximum_retry_active
+            if path == '/d/security-policies': return [{'path': '/p'}]
+            if path == '/p/rules': return [{'path': '/p/rules/a'}, {'path': '/p/rules/b'}]
+            if path == '/p/statistics': raise nsx.AuditError('bulk unavailable')
+            with lock:
+                calls[path] = calls.get(path, 0) + 1
+                attempt = calls[path]
+            if attempt == 1:
+                try: raise TimeoutError('read timed out')
+                except TimeoutError as exc: raise nsx.AuditError('GET '+path+': timed out') from exc
+            with lock:
+                self.assertEqual(set(calls), {'/p/rules/a/statistics', '/p/rules/b/statistics'})
+                active += 1
+                maximum_retry_active = max(active, maximum_retry_active)
+            with lock: active -= 1
+            if '/a/' in path: return [{'hit_count': 4}]
+            try: raise TimeoutError('read timed out')
+            except TimeoutError as exc: raise nsx.AuditError('GET '+path+': timed out') from exc
+        client.items.side_effect = items
+        with patch.object(nsx.time, 'sleep') as sleep:
+            dfw, _ = nsx.audit_dfw(client, [{'path': '/d'}], workers=2)
+        sleep.assert_called_once_with(2)
+        self.assertEqual(list(calls.values()), [2, 2])
+        self.assertEqual(maximum_retry_active, 1)
+        self.assertEqual([r['hit_status'] for r in dfw['rules']], ['traffic_recorded','unknown'])
+        self.assertEqual(dfw['collection_diagnostics']['timeout_recoveries'], 1)
+        self.assertEqual(dfw['collection_diagnostics']['timeout_retries'], 2)
+        self.assertEqual(dfw['rules'][0]['statistics_retry']['attempts'], 1)
+        self.assertNotIn('statistics_error_kind', dfw['rules'][0])
+
+    def test_http_failure_is_not_timeout_retry_and_l2_error_is_unsupported(self):
+        client=Mock()
+        client.items.side_effect=nsx.AuditError('HTTP 400 error_code=500209 Ethernet',400)
+        result=nsx.rule_statistics(client, {'path':'/p/rules/a'})
+        self.assertEqual(result['hit_status'],'not_supported')
+        client.items.side_effect=nsx.AuditError('HTTP 400',400)
+        result=nsx.rule_statistics(client, {'path':'/p/rules/a'})
+        self.assertEqual(result['statistics_error_kind'],'http')
+        self.assertEqual(result['hit_status'],'unknown')
+
+    def test_https_pool_reuses_connection_and_validates_uploaded_ca(self):
+        import threading
+        import ipaddress
+        from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+        from cryptography import x509
+        from cryptography.x509.oid import NameOID
+        from cryptography.hazmat.primitives import hashes, serialization
+        from cryptography.hazmat.primitives.asymmetric import rsa
+        key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+        name = x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, "localhost")])
+        now = nsx.datetime.now(nsx.timezone.utc)
+        cert = (x509.CertificateBuilder().subject_name(name).issuer_name(name).public_key(key.public_key())
+                .serial_number(x509.random_serial_number()).not_valid_before(now - nsx.timedelta(minutes=1))
+                .not_valid_after(now + nsx.timedelta(days=1))
+                .add_extension(x509.BasicConstraints(ca=True, path_length=None), critical=True)
+                .add_extension(x509.SubjectAlternativeName([x509.IPAddress(ipaddress.ip_address("127.0.0.1"))]), critical=False)
+                .sign(key, hashes.SHA256()))
+        pem = cert.public_bytes(serialization.Encoding.PEM)
+        ports = []
+        class Handler(BaseHTTPRequestHandler):
+            protocol_version = "HTTP/1.1"
+            def do_GET(self):
+                ports.append(self.client_address[1])
+                body = b'{"results": []}'
+                self.send_response(200)
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+            def log_message(self, *args):
+                pass
+        with tempfile.TemporaryDirectory() as directory:
+            cert_path, key_path = Path(directory)/"cert.pem", Path(directory)/"key.pem"
+            cert_path.write_bytes(pem)
+            key_path.write_bytes(key.private_bytes(serialization.Encoding.PEM, serialization.PrivateFormat.PKCS8, serialization.NoEncryption()))
+            server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+            context = nsx.ssl.SSLContext(nsx.ssl.PROTOCOL_TLS_SERVER)
+            context.load_cert_chain(cert_path, key_path)
+            server.socket = context.wrap_socket(server.socket, server_side=True)
+            thread = threading.Thread(target=server.serve_forever, daemon=True)
+            thread.start()
+            manager = "127.0.0.1:" + str(server.server_port)
+            with patch.object(nsx, "proxy_bypass", return_value=True):
+                trusted = nsx.NSXClient(manager, "test", "test", ca_data=pem.decode(), retries=0)
+                untrusted = nsx.NSXClient(manager, "test", "test", retries=0)
+            try:
+                trusted.get("/infra/domains")
+                trusted.get("/infra/services")
+                self.assertEqual(len(ports), 2)
+                self.assertEqual(ports[0], ports[1], "Requests did not reuse the TLS connection")
+                with self.assertRaises(nsx.AuditError):
+                    untrusted.get("/infra/domains")
+            finally:
+                trusted.close()
+                untrusted.close()
+                server.shutdown()
+                server.server_close()
+                thread.join(2)
+
+    def test_bulk_cooldown_grows_and_skips_without_reusing_counters(self):
+        client = Mock()
+        client.statistics_backoff = {}
+        rule = {"id": "a", "path": "/p/rules/a"}
+        def items(path, **kw):
+            if path == "/p/statistics":
+                raise nsx.AuditError("GET /p/statistics: HTTP 500", 500)
+            return [{"hit_count": 7}]
+        client.items.side_effect = items
+        for failures in range(1, 4):
+            result = nsx.policy_statistics(client, {"path": "/p"}, [rule])[rule["path"]]
+            self.assertEqual(result["statistics_bulk_failures"], failures)
+            retry = nsx.datetime.fromisoformat(result["statistics_bulk_retry_at"])
+            self.assertGreater((retry - nsx.datetime.now(nsx.timezone.utc)).total_seconds(), 3600 * 2 ** (failures - 1) - 5)
+            previous = {"manager": "example", "generated_at": nsx.datetime.now(nsx.timezone.utc).isoformat(),
+                        "dfw": {"rules": [dict(result, policy_path="/p")]}}
+            client.statistics_backoff = nsx.statistics_backoff(previous, "example")
+            client.items.reset_mock()
+            skipped = nsx.policy_statistics(client, {"path": "/p"}, [rule])[rule["path"]]
+            self.assertTrue(skipped["statistics_bulk_skipped"])
+            self.assertEqual(skipped["hit_count"], 7)
+            client.items.assert_called_once_with("/p/rules/a/statistics", page_size=None)
+            client.statistics_backoff["/p"]["retry_at"] = (nsx.datetime.now(nsx.timezone.utc) - nsx.timedelta(seconds=1)).isoformat()
+
+    def test_fallback_starts_before_other_bulk_finishes(self):
+        import threading
+        fallback_started = threading.Event()
+        client = Mock()
+        client.statistics_backoff = {}
+        def items(path, **kw):
+            if path == "/d/security-policies":
+                return [{"path": "/p1"}, {"path": "/p2"}]
+            if path.endswith("/rules"):
+                return [{"path": path + "/a", "id": "a"}]
+            if path == "/p1/statistics":
+                raise nsx.AuditError("unavailable")
+            if path == "/p2/statistics":
+                self.assertTrue(fallback_started.wait(2), "Fallback waited behind slow bulk request")
+                return [{"rule": "a", "hit_count": 0}]
+            fallback_started.set()
+            return [{"hit_count": 9}]
+        client.items.side_effect = items
+        report, _ = nsx.audit_dfw(client, [{"path": "/d"}], workers=2)
+        self.assertEqual([r["hit_count"] for r in report["rules"]], [9, 0])
+        self.assertEqual(report["collection_diagnostics"]["fallback_rules"], 1)
+
+    def test_pool_requests_preserve_redirect_and_timeout_safety(self):
+        client = nsx.NSXClient("example.com", "admin", "dummy", timeout=30)
+        client.http.clear()
+        client.http = Mock()
+        client.http.request.return_value = Mock(status=200, data=b'{"results": []}')
+        client.get("/p/statistics")
+        options = client.http.request.call_args.kwargs
+        self.assertFalse(options["redirect"])
+        self.assertFalse(options["retries"])
+        self.assertEqual(options["timeout"].read_timeout, 8)
+        client.get("/p/rules/a/statistics")
+        self.assertEqual(client.http.request.call_args.kwargs["timeout"].read_timeout, 30)
+        client.http.request.return_value = Mock(status=302, reason="Found", data=b'')
+        with self.assertRaises(nsx.AuditError) as caught:
+            client.get("/infra/domains")
+        self.assertEqual(caught.exception.status_code, 302)
+        client.close()
+        client.http.clear.assert_called_once()
+
+    def test_bulk_http_failures_do_not_retry_before_fallback(self):
+        client = nsx.NSXClient("example.com", "admin", "dummy", retries=2)
+        client._get = Mock(side_effect=nsx.AuditError("busy", 503))
+        with self.assertRaises(nsx.AuditError):
+            client.get("/p/statistics")
+        self.assertEqual(client._get.call_count, 1)
+        client.close()
+
     def test_web_renderer_returns_fragments_without_cli_entrypoint(self):
         self.assertFalse(hasattr(nsx, "main"))
         self.assertFalse(hasattr(nsx, "load_manager_targets"))
@@ -152,7 +388,7 @@ invalid=true; click(); assert.equal(downloads.length,1);
                  {"disabled": False, "hit_status": "unknown"}]
         html = nsx.overview_charts(groups, [], rules, testing=True)
         self.assertIn("Referenced: 1; Unused candidates: 1; Unknown: 1; Not assessed: 1", html)
-        self.assertIn("Traffic recorded: 1; Zero recorded hits: 1; Disabled: 1; Unknown: 1", html)
+        self.assertIn("Traffic recorded: 1; Zero recorded hits: 1; Disabled: 1; Not supported: 0; Unknown: 1", html)
         self.assertEqual(html.count('role="img"'), 2)
         self.assertEqual(html.count('25.0%'), 16)  # Segment titles and visible legends.
         self.assertIn("No objects inventoried", html)
@@ -677,7 +913,7 @@ examples.forEach((_,index) => {
         self.assertEqual(nsx.statistics_backoff(previous, "different.example"), {})
         self.assertEqual(nsx.statistics_backoff(dict(previous, testing=True), "nsx.example"), {})
         rule["statistics_bulk_retry_at"] = (now - nsx.timedelta(seconds=1)).isoformat()
-        self.assertEqual(nsx.statistics_backoff(previous, "nsx.example"), {})
+        self.assertIn("/p", nsx.statistics_backoff(previous, "nsx.example"))
         client.statistics_backoff["/p"]["retry_at"] = rule["statistics_bulk_retry_at"]
         client.items.reset_mock()
         client.items.return_value = [{"rule": "a", "hit_count": 12}]
@@ -717,8 +953,7 @@ examples.forEach((_,index) => {
             self.assertEqual(nsx.policy_statistics(client, {"path": "/p"}, [rule])[rule["path"]]["hit_status"], "unknown")
             self.assertEqual(client.items.call_count, 2)
 
-    def test_policy_checks_run_with_bounded_concurrency(self):
-        barrier = nsx.threading.Barrier(2)
+    def test_policy_checks_preserve_order_with_single_bulk_probe(self):
         lock = nsx.threading.Lock()
         active = peak = 0
         policies = [{"path": "/p/" + str(i)} for i in range(4)]
@@ -729,14 +964,13 @@ examples.forEach((_,index) => {
             with lock:
                 active += 1
                 peak = max(peak, active)
-            barrier.wait(timeout=3)
             with lock:
                 active -= 1
             return {}
         with patch.object(nsx, "objects", side_effect=inventory), \
                 patch.object(nsx, "policy_statistics", side_effect=statistics):
             report, _ = nsx.audit_dfw(Mock(), [{"path": "/d"}], workers=2)
-        self.assertEqual(peak, 2)
+        self.assertEqual(peak, 1)
         self.assertEqual([p["path"] for p in report["policies"]], [p["path"] for p in policies])
 
 
@@ -1007,9 +1241,10 @@ examples.forEach((_,index) => {
         client.base_url = "https://nsx.example.com/policy/api/v1"
         client.timeout = 30
         client.headers = {}
-        client.opener = Mock()
+        client.http = Mock()
+        client.bulk_timeout = 8
         body = io.BytesIO(b'{"error_code":60508,"module_name":"search","error_message":"Invalid resource type"}')
-        client.opener.open.side_effect = nsx.HTTPError(client.base_url, 400, "Bad Request", {}, body)
+        client.http.request.return_value = Mock(status=400, reason="Bad Request", data=body.read())
         with self.assertRaises(nsx.AuditError) as caught:
             client.get("/search/query", {"query": "resource_type:*"})
         self.assertEqual(caught.exception.status_code, 400)

@@ -1,6 +1,9 @@
 """Bound concurrent NSX requests using observed latency and backpressure."""
+from collections import Counter, deque
+import math
 import threading
 import time
+import urllib3
 
 
 class AdaptiveRequests:
@@ -30,12 +33,23 @@ class AdaptiveRequests:
         elapsed = self.clock() - started
         with self.condition:
             self.active -= 1
-            overloaded = error is not None and getattr(error, 'status_code', None) in (None, 429, 502, 503, 504)
+            # An optional bulk endpoint's read timeout is not by itself evidence
+            # of manager-wide overload. Explicit backpressure still applies.
+            cause = getattr(error, "__cause__", None)
+            optional_timeout = (endpoint == "policy_statistics" and
+                                isinstance(cause, (TimeoutError, urllib3.exceptions.ReadTimeoutError)))
+            overloaded = (error is not None and not optional_timeout and
+                          getattr(error, 'status_code', None) in (None, 429, 502, 503, 504))
             # Compare like endpoints. Statistics can be naturally slow without
             # indicating overload; one slow response must not serialize the audit.
             state = self.latencies.setdefault(endpoint, {"samples": 0, "baseline": elapsed,
-                                                         "slow_streak": 0, "seconds": 0.0})
+                                                         "slow_streak": 0, "seconds": 0.0, "failures": Counter(),
+                                                         "durations": deque(maxlen=512), "maximum": 0.0})
             state["seconds"] += elapsed
+            state["durations"].append(elapsed)
+            state["maximum"] = max(state["maximum"], elapsed)
+            if error is not None:
+                state["failures"][str(getattr(error, "status_code", None) or "transport_or_decode")] += 1
             degraded = False
             if error is None:
                 slow = state["samples"] >= 4 and elapsed > max(state["baseline"] * 2, state["baseline"] + 2)
@@ -62,7 +76,7 @@ class AdaptiveRequests:
                     self.increases += 1
                     self.successes = 0
                     self.contended = False
-            else:
+            elif not optional_timeout:
                 self.successes = 0
             self.condition.notify_all()
 
@@ -72,6 +86,11 @@ class AdaptiveRequests:
                     'final': self.limit, 'maximum': self.maximum,
                     'increases': self.increases, 'decreases': self.decreases,
                     'endpoints': {key: {'successful_requests': value['samples'],
+                                        'failed_requests': sum(value['failures'].values()),
+                                        'failures_by_status': dict(value['failures']),
+                                        'latency_sample_count': len(value['durations']),
+                                        'p95_seconds': round(sorted(value['durations'])[math.ceil(len(value['durations']) * .95) - 1], 3),
+                                        'max_seconds': round(value['maximum'], 3),
                                         'request_seconds': round(value['seconds'], 3),
                                         'baseline_seconds': round(value['baseline'], 3)}
                                   for key, value in self.latencies.items()}}

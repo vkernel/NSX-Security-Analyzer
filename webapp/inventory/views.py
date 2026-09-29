@@ -78,7 +78,42 @@ def environment_detail(request, pk):
 @sensitive_post_parameters("password")
 def environment_edit(request, pk=None):
     environment = get_object_or_404(Environment, pk=pk) if pk else None
+    import time
+    from .ipfix.certificates import retrieve_manager
+    from .ipfix.vcenter import origin, DiscoveryError
+    preview_key = 'environment_certificate_' + str(pk or 'new')
+    ca_preview = request.session.get(preview_key)
+    if ca_preview and time.time() - ca_preview['created'] > 600:
+        request.session.pop(preview_key, None)
+        ca_preview = None
+    retrieving = request.method == 'POST' and request.POST.get('action') == 'retrieve_certificate'
     form = EnvironmentForm(request.POST or None, request.FILES or None, instance=environment)
+    if retrieving:
+        request.session.pop(preview_key, None)
+        ca_preview = None
+        server = request.POST.get('manager', '').strip()
+        try:
+            if not server or len(server) > 255:
+                raise DiscoveryError('Enter the NSX Manager HTTPS hostname first.')
+            ca_preview = dict(retrieve_manager(server), server=server, origin=list(origin(server)), created=time.time())
+            request.session[preview_key] = ca_preview
+        except DiscoveryError as exc:
+            messages.error(request, str(exc))
+        # Preserve ordinary fields, but never echo a submitted password.
+        initial = {key: value for key, value in request.POST.items() if key in form.fields and key != 'password'}
+        for key in ('enabled', 'insecure', 'remove_ca'):
+            initial[key] = request.POST.get(key) == 'on'
+        form = EnvironmentForm(instance=environment, initial=initial)
+        return render(request, 'inventory/environment_form.html', {'form': form, 'environment': environment, 'ca_preview': ca_preview})
+    if request.method == 'POST' and request.POST.get('trust_retrieved') == 'on':
+        form.is_valid()
+        try:
+            if not ca_preview or list(origin(request.POST.get('manager', ''))) != ca_preview['origin']:
+                raise DiscoveryError('Certificate preview expired or belongs to another Manager. Retrieve it again.')
+            if form.cleaned_data.get('insecure') or form.cleaned_data.get('remove_ca') or form.cleaned_data.get('ca_upload'):
+                raise DiscoveryError('To trust the retrieved certificate, keep TLS verification enabled and do not select certificate removal or upload a replacement.')
+        except DiscoveryError as exc:
+            form.add_error(None, str(exc))
     if request.method == "POST" and form.is_valid():
         # Prevent origin changes from mixing manager inventories under one history.
         with transaction.atomic():
@@ -88,10 +123,16 @@ def environment_edit(request, pk=None):
             elif current and current.manager != form.cleaned_data["manager"] and current.snapshots.exists():
                 form.add_error("manager", "Create a new environment for a different manager to preserve history.")
             else:
-                environment = form.save()
+                environment = form.save(commit=False)
+                if request.POST.get('trust_retrieved') == 'on':
+                    environment.ca_certificate = ca_preview['pem']
+                    environment.ca_filename = 'Retrieved Manager certificate'
+                    environment.ca_bundle = ''
+                environment.save()
+                request.session.pop(preview_key, None)
                 messages.success(request, "Environment saved.")
                 return redirect("environment", pk=environment.pk)
-    return render(request, "inventory/environment_form.html", {"form": form, "environment": environment})
+    return render(request, "inventory/environment_form.html", {"form": form, "environment": environment, "ca_preview": ca_preview})
 
 
 @staff_required

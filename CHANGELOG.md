@@ -1,5 +1,48 @@
 # Changelog
 
+## 0.3.1
+
+- Create a private home directory owned by the non-root application user so Gunicorn can initialize its control socket without a permission error.
+
+
+## 0.3.0
+
+- Expand Docker Compose service definitions and add a standalone, credential-free Kubernetes conversion template with a deployment checklist.
+
+
+- Add bounded, expiring IPFIX source diagnostics, separate UDP intake and queue/socket-drop counters.
+- Add read-only export-readiness evidence and refresh to the setup review.
+- Add an isolated, digest-pinned GoFlow2 synthetic compatibility harness; real NSX decoding remains unverified.
+
+
+- Add explicit existing/new IPFIX profile selection, named profiles, priority review and optional group activation for existing profiles.
+
+- Add an explicitly approved IPFIX setup wizard with revision checks, preserved collector destinations, persistent outcomes and delivery verification.
+
+- Replace setup certificate uploads with reviewed retrieval, add persistent environment certificate trust, and align certificate forms with application styling.
+
+- Retrieve vCenter CA bundles during discovery setup with explicit fingerprint review and scoped trust.
+
+- Discover ESXi management IPv4 exporters through a verified, read-only vCenter connection; preview and select mappings without storing credentials.
+
+- Start the IPFIX proof of concept with optional Docker UDP reception.
+- Add staff-only exporter/environment mapping, heartbeat and bounded template previews.
+- Add migration 0012 for metadata; no raw traffic or decoded flows are retained.
+
+## 0.2.2-dev
+
+- Overlap search and DFW collection while retaining index completeness checks.
+- Serialize optional bulk probes and isolate their read timeouts from global backpressure.
+
+- Mark Layer-2 rule statistics as unsupported and skip their requests.
+- Retry timed-out rule statistics once in a delayed sequential recovery pass.
+
+- Reuse HTTPS connections with uploaded-CA validation and redirect protection.
+- Persist increasing policy-statistics cooldowns, probe for recovery, and always retrieve fresh rule counters.
+- Start rule fallbacks as policies finish, within the shared adaptive request limit.
+- Bound optional bulk request timeouts independently of rule collection.
+- Save endpoint failures and latency diagnostics and expose them in snapshot details.
+
 ## 0.2.1
 
 - Restart paginated NSX search up to twice when returned totals are inconsistent.

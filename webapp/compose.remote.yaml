@@ -16,3 +16,5 @@ services:
     environment: *remote-database
   scheduler:
     environment: *remote-database
+  ipfix:
+    environment: *remote-database

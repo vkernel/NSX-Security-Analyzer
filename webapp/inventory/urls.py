@@ -1,7 +1,12 @@
 from django.urls import path
-from . import views, history_views
+from . import views, history_views, ipfix_views, ipfix_setup_views
 
 urlpatterns = [
+    path("administration/ipfix/sources/", ipfix_views.settings, name="ipfix-sources"),
+    path("administration/ipfix/setup/", ipfix_setup_views.setup, name="ipfix-setup"),
+    path("administration/ipfix/setup/<int:pk>/", ipfix_setup_views.review, name="ipfix-setup-review"),
+    path("administration/ipfix/vcenter/", ipfix_views.vcenter_discovery, name="ipfix-vcenter"),
+    path("administration/ipfix/", ipfix_views.settings, name="ipfix-settings"),
     path('environments/<int:pk>/compare/', history_views.comparison, name='snapshot-comparison'),
     path('environments/<int:pk>/coverage/', history_views.coverage, name='collection-coverage'),
     path('environments/<int:pk>/findings/', history_views.findings, name='findings'),

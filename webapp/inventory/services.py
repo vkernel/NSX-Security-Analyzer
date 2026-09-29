@@ -178,8 +178,11 @@ def execute_job(job_id):
         client.statistics_backoff = audit.statistics_backoff(previous.report if previous else None,
                                                              urlsplit(client.base_url).netloc)
         concurrency = None if job.testing else adapt_requests(client)
-        report = audit.audit(client, workers=1 if job.testing else concurrency.maximum, testing=job.testing,
-                             progress=lambda completed, stage: update_progress(job.pk, completed, stage))
+        try:
+            report = audit.audit(client, workers=1 if job.testing else concurrency.maximum, testing=job.testing,
+                                 progress=lambda completed, stage: update_progress(job.pk, completed, stage))
+        finally:
+            client.close()
         if concurrency:
             report.setdefault("performance", {})["concurrency"] = concurrency.summary()
             report["performance"]["workers"] = concurrency.peak
