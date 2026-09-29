@@ -26,13 +26,13 @@ if [ -f "$script_directory/compose.yaml" ]; then
   cp "$script_directory/compose.yaml" "$destination/compose.yaml"
 else
   command -v curl >/dev/null 2>&1 || { echo 'curl is required to download the deployment file.' >&2; exit 1; }
-  curl --fail --show-error --location https://raw.githubusercontent.com/vkernel/NSX-Security-Analyzer/v0.3.0/deploy/compose.yaml -o "$destination/compose.yaml"
+  curl --fail --show-error --location https://raw.githubusercontent.com/vkernel/NSX-Security-Analyzer/v0.3.1/deploy/compose.yaml -o "$destination/compose.yaml"
 fi
 cd "$destination"
 echo 'Downloading the application image and generating private installation secrets…'
-docker pull vkernel/nsx-security-analyzer:0.3.0
+docker pull vkernel/nsx-security-analyzer:0.3.1
 # Generate secrets in a temporary container; no host Python installation is needed.
-docker run --rm --network none --entrypoint python vkernel/nsx-security-analyzer:0.3.0 -c 'import secrets; print("DJANGO_SECRET_KEY="+secrets.token_hex(32)); print("POSTGRES_PASSWORD="+secrets.token_hex(32)); print("WEB_PORT=8000")' > .env
+docker run --rm --network none --entrypoint python vkernel/nsx-security-analyzer:0.3.1 -c 'import secrets; print("DJANGO_SECRET_KEY="+secrets.token_hex(32)); print("POSTGRES_PASSWORD="+secrets.token_hex(32)); print("WEB_PORT=8000")' > .env
 chmod 600 .env
 docker compose pull
 docker compose up -d

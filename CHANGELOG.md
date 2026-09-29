@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.3.1
+
+- Create a private home directory owned by the non-root application user so Gunicorn can initialize its control socket without a permission error.
+
+
 ## 0.3.0
 
 - Expand Docker Compose service definitions and add a standalone, credential-free Kubernetes conversion template with a deployment checklist.

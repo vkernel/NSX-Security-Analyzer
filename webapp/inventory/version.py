@@ -2,7 +2,7 @@
 import json
 from pathlib import Path
 
-VERSION = "0.3.0"
+VERSION = "0.3.1"
 metadata = Path(__file__).with_name("_build.json")
 BUILD = json.loads(metadata.read_text()) if metadata.exists() else {"revision": "source", "built_at": "Not recorded"}
 

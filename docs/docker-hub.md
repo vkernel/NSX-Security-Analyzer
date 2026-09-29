@@ -1,6 +1,6 @@
 # Install the complete Docker Hub stack
 
-Release **0.3.0** runs PostgreSQL, database migrations, web, collection worker and
+Release **0.3.1** runs PostgreSQL, database migrations, web, collection worker and
 scheduler using Docker Compose. No Git checkout, host Python, local build or
 `install.sh` is required. Docker Hub's Run button starts a single container and
 cannot provision this stack by itself. IPFIX is experimental and not started by
@@ -20,11 +20,11 @@ Use a new directory. Do not overwrite an existing installation's `.env`.
 ```sh
 mkdir nsx-security-analyzer
 cd nsx-security-analyzer
-curl -fSL https://raw.githubusercontent.com/vkernel/NSX-Security-Analyzer/v0.3.0/deploy/compose.yaml -o compose.yaml
+curl -fSL https://raw.githubusercontent.com/vkernel/NSX-Security-Analyzer/v0.3.1/deploy/compose.yaml -o compose.yaml
 
-docker pull vkernel/nsx-security-analyzer:0.3.0
+docker pull vkernel/nsx-security-analyzer:0.3.1
 umask 077
-docker run --rm --network none --entrypoint python vkernel/nsx-security-analyzer:0.3.0 -c 'import secrets; print("DJANGO_SECRET_KEY="+secrets.token_hex(32)); print("POSTGRES_PASSWORD="+secrets.token_hex(32)); print("WEB_PORT=8000")' > .env
+docker run --rm --network none --entrypoint python vkernel/nsx-security-analyzer:0.3.1 -c 'import secrets; print("DJANGO_SECRET_KEY="+secrets.token_hex(32)); print("POSTGRES_PASSWORD="+secrets.token_hex(32)); print("WEB_PORT=8000")' > .env
 
 docker compose pull
 docker compose up -d
@@ -56,7 +56,7 @@ Change `WEB_PORT` in `.env` if port 8000 is already used.
 
 Back up PostgreSQL and `.env`, and wait for active collections to finish. Preserve
 the project name and existing database volume. In your existing deployment directory,
-set `NSX_IMAGE_TAG=0.3.0` in `.env`, then:
+set `NSX_IMAGE_TAG=0.3.1` in `.env`, then:
 
 ```sh
 docker compose pull
@@ -92,12 +92,12 @@ docker compose logs --tail=100 db migrate web worker scheduler
 or failed migrations must be resolved before the application can run. The base
 image does not initialize its dependencies when run alone.
 
-The sidebar and Administration show version **0.3.0**, source revision and build
-time. The `0.3.0` tag pins this release; `latest` is mutable. Source and Compose
-files are pinned by Git tag `v0.3.0`.
+The sidebar and Administration show version **0.3.1**, source revision and build
+time. The `0.3.1` tag pins this release; `latest` is mutable. Source and Compose
+files are pinned by Git tag `v0.3.1`.
 
 - [Docker Hub](https://hub.docker.com/r/vkernel/nsx-security-analyzer)
-- [Release source](https://github.com/vkernel/NSX-Security-Analyzer/tree/v0.3.0)
+- [Release source](https://github.com/vkernel/NSX-Security-Analyzer/tree/v0.3.1)
 - [Compose file](../deploy/compose.yaml)
 - [Operations and backups](operations.md)
 - [Kubernetes conversion](../deploy/kubernetes/README.md)
