@@ -203,3 +203,44 @@ class AuditEvent(models.Model):
 
     class Meta:
         ordering = ['-created_at', '-id']
+
+
+class SnapshotPresentation(models.Model):
+    snapshot = models.OneToOneField(Snapshot, on_delete=models.CASCADE, primary_key=True, related_name='presentation')
+    shell = models.JSONField()
+    tag_evidence = models.JSONField(default=dict)
+
+
+class SnapshotPanel(models.Model):
+    snapshot = models.ForeignKey(Snapshot, on_delete=models.CASCADE)
+    slug = models.CharField(max_length=80)
+    html = models.TextField()
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=['snapshot', 'slug'], name='snapshot_panel_unique')]
+
+
+class SnapshotRecord(models.Model):
+    snapshot = models.ForeignKey(Snapshot, on_delete=models.CASCADE)
+    ordinal = models.PositiveIntegerField()
+    view = models.CharField(max_length=20)
+    name = models.TextField()
+    sort_name = models.TextField()
+    compact = models.JSONField()
+    data = models.JSONField()
+    columns = models.JSONField()
+    sort_values = models.JSONField()
+    search_basic = models.TextField()
+    search_evidence = models.TextField()
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=['snapshot', 'ordinal'], name='snapshot_record_unique')]
+        indexes = [models.Index(fields=['snapshot', 'sort_name'], name='snapshot_record_name')]
+
+
+class SnapshotRecordPanel(models.Model):
+    record = models.ForeignKey(SnapshotRecord, on_delete=models.CASCADE, related_name='panels')
+    panel = models.ForeignKey(SnapshotPanel, on_delete=models.CASCADE, related_name='members')
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=['panel', 'record'], name='snapshot_panel_record_unique')]

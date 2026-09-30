@@ -18,11 +18,15 @@ spec:
       terminationGracePeriodSeconds: 60
       containers:
         - name: web
-          image: vkernel/nsx-security-analyzer:0.4.0
+          image: vkernel/nsx-security-analyzer:0.5.0
           imagePullPolicy: IfNotPresent
+          env:
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef: {name: nsx-postgress-app, key: password}
           envFrom:
             - configMapRef: {name: nsx-config}
-            - secretRef: {name: nsx-secrets}
+            - secretRef: {name: nsx-django}
           securityContext:
             runAsNonRoot: true
             runAsUser: 10001
@@ -71,11 +75,15 @@ spec:
       terminationGracePeriodSeconds: 60
       containers:
         - name: worker
-          image: vkernel/nsx-security-analyzer:0.4.0
+          image: vkernel/nsx-security-analyzer:0.5.0
           imagePullPolicy: IfNotPresent
+          env:
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef: {name: nsx-postgress-app, key: password}
           envFrom:
             - configMapRef: {name: nsx-config}
-            - secretRef: {name: nsx-secrets}
+            - secretRef: {name: nsx-django}
           securityContext:
             runAsNonRoot: true
             runAsUser: 10001
@@ -108,11 +116,15 @@ spec:
       terminationGracePeriodSeconds: 60
       containers:
         - name: scheduler
-          image: vkernel/nsx-security-analyzer:0.4.0
+          image: vkernel/nsx-security-analyzer:0.5.0
           imagePullPolicy: IfNotPresent
+          env:
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef: {name: nsx-postgress-app, key: password}
           envFrom:
             - configMapRef: {name: nsx-config}
-            - secretRef: {name: nsx-secrets}
+            - secretRef: {name: nsx-django}
           securityContext:
             runAsNonRoot: true
             runAsUser: 10001

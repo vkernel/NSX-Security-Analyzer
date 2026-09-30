@@ -4,7 +4,7 @@ Use the supplied `manifests/` files. You do **not** need an online converter.
 These files deploy the database, a one-time migration Job, the website, a collection
 worker and a scheduler. They expose the website inside the cluster only.
 
-The manifests use **0.4.0** for migrations, web, worker and scheduler. Database
+The manifests use **0.5.0** for migrations, web, worker and scheduler. Database
 initialization automatically provisions the initial administrator.
 
 ## 1. Before you start
@@ -41,24 +41,69 @@ All commands below explicitly use this namespace; no default-context change is n
 Open `manifests/config.yaml` in your editor. For the bundled database, keep
 `POSTGRES_HOST: "db"`, database `nsx` and user `nsx`.
 
-Create a private file called `secrets.env` **in this directory**, containing:
+The application imports settings from `nsx-config` and the Django key from the
+dedicated `nsx-django` Secret using `envFrom`. The existing database Secret uses
+an explicit mapping because its key is named `password`, not `POSTGRES_PASSWORD`:
 
-```dotenv
-DJANGO_SECRET_KEY=replace-with-a-long-random-secret
-POSTGRES_PASSWORD=replace-with-a-different-long-random-secret
-```
+| Application variable | Secret name | Key |
+| --- | --- | --- |
+| `DJANGO_SECRET_KEY` | `nsx-django` | `DJANGO_SECRET_KEY` |
+| `POSTGRES_PASSWORD` | `nsx-postgress-app` | `password` |
 
-Use two independent random strings of at least 32 characters from your password
-manager. Do not include quotes. This file is Git-ignored. Keep it with your backups;
-changing the Django key prevents decryption of saved NSX credentials.
+These settings appear in `manifests/migrate.yaml` and all three
+Deployments in `manifests/application.yaml`. The optional bundled database uses
+the same password mapping. Change the Secret name/key there if yours differ.
+The spelling `nsx-postgress-app` matches the example existing Secret exactly.
+
+**Existing database Secret:** reuse it. Do not overwrite it, regenerate its password,
+or copy its password into a new file. The Secret must exist in the **same namespace
+as the application pods**, even if the database Service is in another namespace.
+Have your platform administrator synchronize it into the application namespace if needed.
+
+For a **new installation**, generate the Django key and create its dedicated Secret
+with OpenSSL and kubectl:
 
 ```sh
-chmod 600 secrets.env
-kubectl -n nsx-security-analyzer create secret generic nsx-secrets --from-env-file=secrets.env
+kubectl create secret generic nsx-django \
+  --from-literal=DJANGO_SECRET_KEY="$(openssl rand -base64 50)" \
+  -n nsx-security-analyzer
+```
+
+This generates a random key without needing a local `secrets.env` file. The key
+name must be exactly `DJANGO_SECRET_KEY` for the `envFrom` import to work.
+Keep this Secret dedicated to the Django key; unrelated database keys are not
+imported from the database Secret.
+
+Skip creation if `nsx-django` already exists. Preserve the key with your database
+backups and **do not regenerate it on upgrades**: changing it prevents decryption
+of saved NSX credentials. If an existing installation used a differently named
+Secret, copy its original Django key through your platform's secret-management
+process or retain that Secret name in all four workload references.
+
+Apply the application settings:
+
+```sh
 kubectl -n nsx-security-analyzer apply -f manifests/config.yaml
 ```
 
-Do not run secret creation again on upgrades or regenerate secrets for an existing database.
+### New bundled database only: create its password Secret
+
+Skip this section when using an existing database Secret. For a new bundled
+PostgreSQL installation, create a private `database-secret.env` file containing:
+
+```dotenv
+password=replace-with-a-different-long-random-secret
+```
+
+Then create the Secret referenced by the manifests:
+
+```sh
+chmod 600 database-secret.env
+kubectl -n nsx-security-analyzer create secret generic nsx-postgress-app --from-env-file=database-secret.env
+```
+
+Use a different random value from the Django key. Keep this file with your backups.
+Changing this Secret later does not change the password inside PostgreSQL.
 
 ### If PostgreSQL already exists
 
@@ -76,8 +121,26 @@ Before applying `config.yaml`, set:
 | `POSTGRES_USER` | Its database login |
 | `POSTGRES_SSLMODE` | `verify-full` for a TLS-enabled server |
 
-Use that login's actual password in `secrets.env`. Ensure the database permits
-connections from the application pods. `localhost` would refer to the application
+Reference that login's existing password Secret in all four application containers:
+
+```yaml
+env:
+  - name: POSTGRES_PASSWORD
+    valueFrom:
+      secretKeyRef: {name: nsx-postgress-app, key: password}
+envFrom:
+  - configMapRef: {name: nsx-config}
+  - secretRef: {name: nsx-django}
+```
+
+`envFrom` imports keys under their original names; it does not rename `password`
+to `POSTGRES_PASSWORD`. A Secret with multiple keys works, but explicit mappings
+select only the database values this application needs. Use `envFrom` for the
+ConfigMap and the dedicated Django Secret, not for the database Secret. If the database username is also stored in
+that Secret, add an explicit `POSTGRES_USER` mapping to its actual username key.
+Explicit `env` entries take precedence over ConfigMap values imported by `envFrom`.
+
+Ensure the database permits connections from the application pods. `localhost` would refer to the application
 pod, not your PostgreSQL service. Network policies must allow DNS and the database port.
 
 For a private database CA, create a trust ConfigMap:
@@ -228,7 +291,7 @@ kubectl -n nsx-security-analyzer rollout status deployment/web --timeout=180s
 ```
 
 A completed Job does not rerun automatically, so deleting/recreating it is intentional.
-Do not delete the PVC or namespace during upgrades. A ConfigMap change requires
+Do not delete the PVC or namespace during upgrades. A ConfigMap or Secret change requires
 pod replacement; scale-to-zero above ensures new pods read it. Reverting an image
 does not reverse database migrations; keep the pre-upgrade backup.
 
@@ -265,5 +328,22 @@ platform. Validate them with your cluster's policies before use. No live Kuberne
 cluster validation has been performed for this change. Docker operation alone does
 not validate Kubernetes storage, admission policies or networking.
 
-References: [Kubernetes workloads](https://kubernetes.io/docs/concepts/workloads/),
+References: [Secret environment mappings](https://kubernetes.io/docs/tasks/inject-data-application/distribute-credentials-secure/),
+[Kubernetes workloads](https://kubernetes.io/docs/concepts/workloads/),
 [persistent storage example](https://kubernetes.io/docs/tasks/run-application/run-single-instance-stateful-application/).
+
+### Preparing older snapshots for faster report pages
+
+When upgrading to a build containing migration `0018_snapshot_presentation`, finish
+the migration Job and application rollout first. Then run:
+
+```sh
+kubectl -n nsx-security-analyzer exec deployment/web -- python manage.py index_snapshots
+```
+
+This prepares saved report sections and table records from PostgreSQL, without
+contacting NSX. It skips snapshots already prepared and can be rerun safely after
+an interruption. New collections do this automatically. Original snapshots remain
+intact; older reports keep working while preparation is pending. See
+[report performance](../../docs/collection-performance.md#report-navigation) for
+search, pagination, storage, and export behavior.

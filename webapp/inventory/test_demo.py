@@ -25,7 +25,9 @@ class DemoTests(TestCase):
             self.assertFalse(snapshot.environment.enabled)
             self.assertEqual(snapshot.environment.sync_interval_minutes, 0)
             self.assertEqual(AuditJob.objects.count(), 0)
-            self.assertContains(self.client.get(reverse('snapshot', args=[snapshot.pk])), 'Demo web servers')
+            self.assertContains(self.client.get(reverse('snapshot', args=[snapshot.pk])), 'data-lazy-panel')
+            data = self.client.get(reverse('snapshot-data', args=[snapshot.pk]), {'panel':'all-groups'}).json()
+            self.assertIn('Demo web servers', [row['data']['name'] for row in data['rows']])
         self.assertEqual(self.client.post(f'/environments/{original.pk}/import/').status_code, 404)
         self.assertNotContains(self.client.get(reverse('environment', args=[original.pk])), 'Import JSON')
 

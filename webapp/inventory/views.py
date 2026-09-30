@@ -205,9 +205,15 @@ def snapshot_detail(request, pk):
     if not any(item.pk == snapshot.pk for item in history):
         history.append(snapshot)
     # JSONField maps to PostgreSQL JSONB; render from the immutable database snapshot.
-    report = engine().render_html_report(snapshot.report)
+    from .report_cache import presentation
+    from .models import SnapshotPresentation
+    indexed = SnapshotPresentation.objects.filter(snapshot=snapshot).values_list("shell", flat=True).first()
+    if indexed is not None:
+        report, report_diagnostics = indexed, indexed.get("diagnostics", {})
+    else:
+        report, report_diagnostics = presentation(snapshot, engine().render_html_report)
     response = render(request, "inventory/snapshot.html", {
-        "snapshot": snapshot, "environment": snapshot.environment, "history": history, "report": report, "is_latest": bool(history and history[0].pk == snapshot.pk)})
+        "snapshot": snapshot, "environment": snapshot.environment, "history": history, "report": report, "report_diagnostics": report_diagnostics, "is_latest": bool(history and history[0].pk == snapshot.pk)})
     response["Cache-Control"] = "private, no-store"
     response["Content-Security-Policy"] = (
         "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; "

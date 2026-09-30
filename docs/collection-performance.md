@@ -35,3 +35,52 @@ Statistics tasks are capped at two concurrent workers in addition to the shared 
 Search and DFW collection run concurrently after initial inventory, through the same adaptive request limiter. Testing and single-worker calls stay sequential. Search completeness failures still discard the audit; no partial snapshot is accepted. Individual `search` and `dfw` phase times overlap and must not be added together. `search_and_dfw` records their combined wall time.
 
 Only one optional policy-statistics task is scheduled at a time. Remaining statistics capacity can serve rule fallbacks. A bulk read timeout is recorded and enters cooldown without reducing the manager-wide concurrency limit. Rule timeouts, connection failures, and explicit HTTP backpressure (including 429/503) still reduce the limit. No NSX-side configuration or service restart is performed.
+
+## Report navigation
+
+On an open snapshot, Inventory and Firewall switch sections without fetching the
+report again. The selected snapshot stays fixed while navigating its sections; use
+the snapshot selector or reopen Inventory from another page to load a newer snapshot.
+
+New snapshots prepare their report presentation during collection, in the same
+transaction as snapshot publication. PostgreSQL retains the original JSONB report
+and stores separate summary panels, table records, and evidence. This uses additional
+database storage and adds an `index_snapshot` phase to collection diagnostics, but
+removes full report parsing and rendering from the first page request.
+
+The first response contains the inventory and firewall summaries. Other sections
+load when selected. Tables retrieve 25, 50, or 100 records at a time; search, column
+filters, and sorting run across the selected section in PostgreSQL. Evidence is
+requested only when its dialog opens. CSV exports stream **all matching records**
+in the current sort order, including evidence as JSON in the final column. A CSV
+export is not limited to the visible page.
+
+Plain-text search supports AND / OR and quoted phrases. Indexed reports use
+PostgreSQL regular expressions, whose syntax can differ from JavaScript regexes in
+older reports. Search and export database statements have a 15-second limit; a very
+complex expression may need to be simplified. Column value suggestions return at
+most 100 distinct values. Name sorting is case-insensitive text ordering.
+
+All report endpoints require authentication, check snapshot existence, and return
+private, non-cacheable responses. The queryable presentation is shared across web
+pods through PostgreSQL; no Redis or per-pod warm-up is required. Snapshot retention
+also deletes these associated records. NSX is never queried while browsing a report.
+
+### Existing snapshots
+
+After upgrading to a build that includes migration `0018_snapshot_presentation`,
+run migrations through the normal deployment process, then prepare older snapshots:
+
+```sh
+# Docker Compose: run from the folder containing compose.yaml and .env.
+docker compose exec web python manage.py index_snapshots
+
+# Kubernetes: use the namespace and web Deployment from your installation.
+kubectl -n nsx-security-analyzer exec deployment/web -- python manage.py index_snapshots
+```
+
+The command reads one saved snapshot at a time, commits each index atomically, and
+skips snapshots already indexed. It can be restarted after interruption. Allow it
+to finish before measuring cold-page performance for older snapshots. Until indexed,
+older snapshots remain readable through the previous renderer and its bounded
+per-process cache. Newly collected snapshots are indexed automatically.

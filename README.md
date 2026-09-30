@@ -41,7 +41,7 @@ also start PostgreSQL, database migrations, the worker and the scheduler.** The
 provided deployment files include these components. The migration container exits
 successfully after initialization; this is expected.
 
-Release **0.4.0** includes automatic initial admin creation, structured logging
+Release **0.5.0** includes automatic initial admin creation, structured logging
 and audit diagnostics, and native Kubernetes deployment manifests.
 
 ## Quick start from source
@@ -71,7 +71,7 @@ docker compose up --build -d
 On a fresh source deployment, database initialization creates username **`admin`**
 with password **`NSXSecurityA!`**. Change this password after signing in through
 **Administration → Users & access**. Existing administrators are left unchanged.
-No manual account-creation command is needed with release **0.4.0**.
+No manual account-creation command is needed with release **0.5.0**.
 
 Open **http://localhost:8000** and sign in. In **Administration**, add an
 environment with its NSX Manager address, username and password. Retrieve and review its certificate if required and select a sync interval. You can also run a collection

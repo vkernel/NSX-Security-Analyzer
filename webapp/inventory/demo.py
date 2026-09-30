@@ -50,4 +50,6 @@ def create_demo_environment():
     snapshot = prepare_snapshot(environment, report)
     snapshot.summary['synthetic'] = True
     snapshot.save()
+    from .snapshot_index import build
+    build(snapshot, snapshot._rendered)
     return environment

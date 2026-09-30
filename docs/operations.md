@@ -19,7 +19,7 @@ a database also restores its accounts and migration history. Keep one migration
 job per deployment and wait for it before starting application pods. This works
 with bundled and external PostgreSQL; it does not provision a PostgreSQL login.
 
-No manual account-creation command is needed with release **0.4.0**.
+No manual account-creation command is needed with release **0.5.0**.
 
 ## Routine checks
 
@@ -95,7 +95,7 @@ snapshot of NSX. No counters or configuration are modified.
 
 ## Logging, audit trail and collection diagnostics
 
-These features are included in release **0.4.0**. Pull and recreate application
+These features are included in release **0.5.0**. Pull and recreate application
 containers when upgrading; restarting an older image does not update its code.
 
 Application and Gunicorn logs use JSON on stdout/stderr with UTC timestamps,

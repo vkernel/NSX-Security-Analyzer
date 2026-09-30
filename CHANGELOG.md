@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.5.0 — 2026-09-30
+
+- Load inventory and firewall summaries without reading or rendering the full snapshot on each first visit.
+- Prepare queryable snapshot records in PostgreSQL; load sections and evidence on demand with server-side pagination, search and sorting.
+- Export all matching records to CSV, including evidence, independently of the visible page.
+- Add migration `0018_snapshot_presentation` and the restartable `index_snapshots` command for existing snapshots. Original JSONB reports remain intact.
+- Keep Inventory and Firewall navigation within the selected snapshot.
+- Document separate Kubernetes Django and PostgreSQL secrets, including mapping an existing secret’s `password` key.
+
+Upgrade: back up PostgreSQL, preserve `DJANGO_SECRET_KEY`, run migrations, restart application services, then run `python manage.py index_snapshots`. New collections prepare their indexes automatically.
+
 ## 0.4.0 — 2026-09-30
 
 - Add structured container logging, collection heartbeats, sanitized failure diagnostics and persistent administration audit events.

@@ -129,7 +129,7 @@ def prepare_snapshot(environment, report, imported=False):
         if imported:
             report["rendered_from_saved_report"] = True
         audit = engine()
-        audit.render_html_report(report)  # Validate renderable data before publishing.
+        rendered = audit.render_html_report(report)  # Prepared once for the queryable presentation.
         review = bool(audit.needs_review(report))
         dfw = report.get("dfw", {})
         summary = {"groups": report["groups_scanned"], "services": report["custom_services_scanned"],
@@ -146,8 +146,10 @@ def prepare_snapshot(environment, report, imported=False):
         json.dumps(report, allow_nan=False)
     except (ValueError, TypeError, KeyError, AttributeError, RecursionError) as exc:
         raise ValidationError("The saved report contains invalid or unsupported audit data.") from exc
-    return Snapshot(environment=environment, report=report, summary=summary,
+    snapshot = Snapshot(environment=environment, report=report, summary=summary,
                     generated_at=stamp, testing=bool(report.get("testing")), needs_review=review, imported=imported)
+    snapshot._rendered = rendered
+    return snapshot
 
 
 def execute_job(job_id):
@@ -224,6 +226,9 @@ def execute_job(job_id):
             snapshot.job = current
             with phase(job.pk, "write_snapshot"):
                 snapshot.save()
+            from .snapshot_index import build
+            with phase(job.pk, "index_snapshot"):
+                build(snapshot, snapshot._rendered)
             from .findings import synchronize
             with phase(job.pk, "synchronize_findings"):
                 synchronize(job.environment_id)

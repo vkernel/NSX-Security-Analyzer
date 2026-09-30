@@ -1,2 +1,3 @@
 # Local input for the Kubernetes Secret; never publish real credentials.
 secrets.env
+database-secret.env

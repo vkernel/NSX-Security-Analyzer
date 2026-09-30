@@ -1907,11 +1907,30 @@ table{min-width:760px}th{line-height:1.5}td{padding:15px 14px}.path{line-height:
   const detailTitle = document.getElementById('detail-title');
   const detailBody = document.getElementById('detail-body');
   let detailTrigger;
-  document.querySelector('main').addEventListener('click', event => {
+  document.querySelector('main').addEventListener('click', async event => {
     const button = event.target.closest('.detail-button');
     if (!button) return;
     detailTrigger = button;
     detailTitle.textContent = button.dataset.title;
+    if (payload.remote && (button.dataset.tagRow !== undefined || button.dataset.evidenceRow !== undefined || button.dataset.tagCoverage)) {
+      detailBody.textContent = 'Loading evidence…';
+      dialog.showModal();
+      const token = {}; dialog.reportRequest = token;
+      try {
+        const result = await window.reportData(payload, {op:button.dataset.tagCoverage ? 'tag-coverage' : 'detail', id:button.dataset.tagRow ?? button.dataset.evidenceRow});
+        if (!dialog.open || dialog.reportRequest !== token) return;
+        if (result.data) rowPool[result.id] = result;
+        if (result.tag_evidence) {
+          for (const [key,value] of Object.entries(result.tag_evidence)) {
+            if (['conditions','condition_sets','firewall_rules'].includes(key)) payload.tag_evidence[key] = Object.assign(payload.tag_evidence[key] || {},value);
+            else payload.tag_evidence[key] = value;
+          }
+        }
+      } catch (error) {
+        if (dialog.open && dialog.reportRequest === token) detailBody.textContent = error.message + ' Close this dialog and try again.';
+        return;
+      }
+    }
     if (button.dataset.tagRow !== undefined) detailBody.innerHTML = tagEvidence(rowPool[Number(button.dataset.tagRow)].data);
     else if (button.dataset.tagCoverage) detailBody.innerHTML = '<pre>'+esc(JSON.stringify({unsupported:tagConditions(payload.tag_evidence.unsupported_conditions),unmatched:tagConditions(payload.tag_evidence.unmatched_conditions)},null,2))+'</pre>';
     else if (button.dataset.evidenceRow !== undefined) {
@@ -1921,7 +1940,7 @@ table{min-width:760px}th{line-height:1.5}td{padding:15px 14px}.path{line-height:
     } else detailBody.innerHTML = button.parentElement.querySelector('.detail-content').innerHTML;
     enhanceDetails();
     window.workspaceEvidence?.(detailBody, detailTitle, rowPool[Number(button.dataset.evidenceRow ?? button.dataset.tagRow)]?.data);
-    dialog.showModal();
+    if (!dialog.open) dialog.showModal();
     dialog.scrollTop = 0;
   });
   document.getElementById('close-details').addEventListener('click', () => dialog.close());
@@ -1930,6 +1949,7 @@ table{min-width:760px}th{line-height:1.5}td{padding:15px 14px}.path{line-height:
     if (event.target === dialog && (event.clientX < rect.left || event.clientX > rect.right || event.clientY < rect.top || event.clientY > rect.bottom)) dialog.close();
   });
   dialog.addEventListener('close', () => {
+    dialog.reportRequest = null;
     detailBody.replaceChildren();
     if (detailTrigger?.isConnected) detailTrigger.focus({preventScroll:true});
   });
@@ -2054,7 +2074,7 @@ table{min-width:760px}th{line-height:1.5}td{padding:15px 14px}.path{line-height:
           + '<p>Configured criteria; these are not resolved members. The full definition preserves AND/OR logic.</p>'
           + notes(definition.criteria) + '<pre><code>'+esc(JSON.stringify(definition.definition,null,2))+'</code></pre></details>';
       }
-      cells = [object,esc(r.inventory_type || (r.kind==='group'?'Group':'Custom service')),badge(r.usage),membership,rowPopup(r.name+' — Evidence & notes',evidence+notes(r.notes),'View evidence'+(r.notes?.length?' & notes':''))];
+      cells = [object,esc(r.inventory_type || (r.kind==='group'?'Group':'Custom service')),badge(r.usage),membership,rowPopup(r.name+' — Evidence & notes',evidence+notes(r.notes),'View evidence'+((r.notes?.length || r.notes_count)?' & notes':''))];
     } else {
       let context,status,count,evidence;
       if ('rule_count' in r) {
@@ -2130,6 +2150,7 @@ table{min-width:760px}th{line-height:1.5}td{padding:15px 14px}.path{line-height:
         else if (controllers.has(widget)) controllers.get(widget).unmount();
       });
     });
+    if (selected.dataset.lazyPanel) loadPanel(selected);
     links.forEach(a => {
       if (a.hash === '#' + selected.id) {
         a.setAttribute('aria-current', 'page');
@@ -2142,6 +2163,26 @@ table{min-width:760px}th{line-height:1.5}td{padding:15px 14px}.path{line-height:
       } else a.removeAttribute('aria-current');
     });
     if (focus) { selected.focus({preventScroll:true}); window.scrollTo(0, 0); }
+  }
+  async function loadPanel(panel) {
+    if (panel.dataset.loading) return;
+    panel.dataset.loading = 'true';
+    try {
+      const result = await window.reportData(payload, {op:'section',panel:panel.id});
+      const template = document.createElement('template'); template.innerHTML = result.html;
+      panel.replaceChildren(...template.content.firstElementChild.childNodes);
+      delete panel.dataset.lazyPanel;
+      initializeHelp(); initializeStaticTables(panel);
+      document.dispatchEvent(new Event('report-section-loaded'));
+      if (!panel.hidden) panel.querySelectorAll('.table-widget').forEach(widget => tableController(widget).refresh());
+    } catch (error) {
+      const status = panel.querySelector('[role=status]');
+      if (status) {
+        status.textContent = error.message + ' ';
+        const retry = document.createElement('button'); retry.textContent = 'Retry'; retry.type = 'button';
+        retry.addEventListener('click', () => loadPanel(panel)); status.append(retry);
+      }
+    } finally { delete panel.dataset.loading; }
   }
   window.addEventListener('hashchange', () => navigate(true));
   function tableSearchMatcher(text, syntax, mode) {
@@ -2241,11 +2282,16 @@ table{min-width:760px}th{line-height:1.5}td{padding:15px 14px}.path{line-height:
         editor.querySelector('h2').textContent='Filter '+captions[index];
         const input=editor.querySelector('input'), mode=editor.querySelector('select');
         input.value=filters.get(index)?.text || ''; mode.value=filters.get(index)?.mode || 'contains';
-        const values=getValues();
+        const values=getValues.remote ? null : getValues();
         const choices=editor.querySelector('.column-values');
         const valueStatus=editor.querySelector('.column-values-status');
-        function populateValues() {
-          const options=columnValueOptions(values,index,input.value);
+        let valueRequest = 0;
+        async function populateValues() {
+          const version = ++valueRequest;
+          let options;
+          try { options = getValues.remote ? await getValues(index,input.value) : columnValueOptions(values,index,input.value); }
+          catch (error) { if (version === valueRequest) valueStatus.textContent=error.message; return; }
+          if (version !== valueRequest) return;
           choices.replaceChildren();
           options.slice(0,100).forEach(({value,count}) => {
             const option=new Option(value+' ('+number(count)+')',value);
@@ -2322,6 +2368,11 @@ table{min-width:760px}th{line-height:1.5}td{padding:15px 14px}.path{line-height:
   }
   function tableController(widget) {
     if (controllers.has(widget)) return controllers.get(widget);
+    if (payload.remote) {
+      const controller = window.createRemoteReportController(widget, {payload,rowPool,renderRow,columnFilters});
+      controllers.set(widget, controller);
+      return controller;
+    }
     const tools = widget.querySelector('.table-tools');
     let ids = widget.dataset.rows.split(',').filter(Boolean).map(Number);
     const tbody = widget.querySelector('tbody');
@@ -2476,15 +2527,22 @@ table{min-width:760px}th{line-height:1.5}td{padding:15px 14px}.path{line-height:
     window.workspaceTables?.(widget, {filters:columnState});
     return controller;
   }
-  document.querySelectorAll('main table').forEach(table => {
+  function initializeStaticTables(root) {
+  root.querySelectorAll('table').forEach(table => {
     if(table.closest('.table-widget') || !table.tHead) return;
+    if (table.dataset.reportEnhanced) return; table.dataset.reportEnhanced='true';
     addStaticExport(table);
     const rows=Array.from(table.tBodies[0].rows);
     const values=rows.map(row => Array.from(row.cells,cell => cell.textContent));
     const filters=columnFilters(table,() => rows.forEach((row,index) => {row.hidden=!matchesColumnFilters(values[index],filters);}), () => values.filter((_,index) => !rows[index].hidden));
   });
+  }
+  initializeStaticTables(document.querySelector('main'));
+  function initializeHelp() {
   const helpTopics=Array.from(document.querySelectorAll('[data-guide-topic]'));
   const helpSearch=document.getElementById('guide-search');
+  if (!helpSearch || helpSearch.dataset.initialized) return;
+  helpSearch.dataset.initialized='true';
   function filterHelp() {
     const term=helpSearch.value.trim().toLocaleLowerCase();
     helpTopics.forEach(topic => {
@@ -2498,6 +2556,8 @@ table{min-width:760px}th{line-height:1.5}td{padding:15px 14px}.path{line-height:
   document.getElementById('guide-expand').addEventListener('click',()=>helpTopics.filter(topic=>!topic.hidden).forEach(topic=>topic.open=true));
   document.getElementById('guide-collapse').addEventListener('click',()=>helpTopics.forEach(topic=>topic.open=false));
   filterHelp();
+  }
+  initializeHelp();
   navigate(false);
 })();
 </script></body></html>'''
