@@ -97,6 +97,9 @@ def finding_detail(request, pk, finding_id):
                 finding.owner, finding.status, finding.review_date = data['owner'], data['status'], data['review_date']
                 finding.revision += 1
                 finding.save()
+                from .audit_events import record
+                record('finding.reviewed', 'Finding', finding.pk, details={'status': finding.status,
+                       'owner_id': finding.owner_id, 'review_date': str(finding.review_date or '')})
                 message = f'Status: {finding.get_status_display()}; owner: {finding.owner or "Unassigned"}; review date: {finding.review_date or "Not set"}.'
                 if data['note']:
                     message += '\n' + data['note']

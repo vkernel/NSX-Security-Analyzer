@@ -17,9 +17,11 @@ export DJANGO_SECRET_KEY="$(python3 -c 'import secrets; print(secrets.token_hex(
 export NSX_SQLITE_PATH="$PWD/webapp/development.sqlite3"
 export DJANGO_DEBUG=1
 python webapp/manage.py migrate
-python webapp/manage.py createsuperuser
 python webapp/manage.py runserver
 ```
+
+A fresh database creates `admin` / `NSXSecurityA!` once. Change the password after
+signing in. Existing administrators are preserved.
 
 For collections, run `python webapp/manage.py audit_worker` in another terminal
 with the same environment. Run `python webapp/manage.py sync_scheduler` for

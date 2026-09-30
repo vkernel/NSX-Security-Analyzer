@@ -15,9 +15,9 @@ supported-version matrix yet.
 
 - All signed-in users can read all environments. Staff can manage environments and collections; superusers manage accounts and permissions.
 - Use an NSX account with the required read permissions. Collection uses GET requests.
-- Keep TLS verification enabled and upload trusted CA certificates as needed.
+- Keep TLS verification enabled. Review retrieved Manager certificate fingerprints before trusting them.
 - Protect `.env`, database backups and `DJANGO_SECRET_KEY`. Saved manager passwords use authenticated encryption derived from this secret.
-- The database contains sensitive inventory, uploaded CA certificates, configuration and encrypted credentials. Limit access and encrypt backups at rest.
+- The database contains sensitive inventory, trusted CA certificates, configuration and encrypted credentials. Limit access and encrypt backups at rest.
 - Put shared deployments behind HTTPS and apply login rate limiting at the proxy. Trust forwarded headers only from a proxy you control.
 - Do not commit real reports, database dumps, private keys or local credential files.
 - Demo data is synthetic and collection is disabled for newly created demo environments.

@@ -37,6 +37,8 @@ services:
       POSTGRES_SSLROOTCERT: ${POSTGRES_SSLROOTCERT:-}
       POSTGRES_CONNECT_TIMEOUT: ${POSTGRES_CONNECT_TIMEOUT:-10}
       NSX_AUDIT_TIMEOUT: ${NSX_AUDIT_TIMEOUT:-3600}
+      NSX_LOG_FORMAT: ${NSX_LOG_FORMAT:-json}
+      NSX_AUDIT_LOG_RETENTION_DAYS: ${NSX_AUDIT_LOG_RETENTION_DAYS:-0}
     command: ["python", "manage.py", "migrate", "--noinput"]
     depends_on:
       db:
@@ -62,6 +64,8 @@ services:
       POSTGRES_SSLROOTCERT: ${POSTGRES_SSLROOTCERT:-}
       POSTGRES_CONNECT_TIMEOUT: ${POSTGRES_CONNECT_TIMEOUT:-10}
       NSX_AUDIT_TIMEOUT: ${NSX_AUDIT_TIMEOUT:-3600}
+      NSX_LOG_FORMAT: ${NSX_LOG_FORMAT:-json}
+      NSX_AUDIT_LOG_RETENTION_DAYS: ${NSX_AUDIT_LOG_RETENTION_DAYS:-0}
     restart: unless-stopped
     ports:
       - "127.0.0.1:${WEB_PORT:-8000}:8000"
@@ -94,6 +98,8 @@ services:
       POSTGRES_SSLROOTCERT: ${POSTGRES_SSLROOTCERT:-}
       POSTGRES_CONNECT_TIMEOUT: ${POSTGRES_CONNECT_TIMEOUT:-10}
       NSX_AUDIT_TIMEOUT: ${NSX_AUDIT_TIMEOUT:-3600}
+      NSX_LOG_FORMAT: ${NSX_LOG_FORMAT:-json}
+      NSX_AUDIT_LOG_RETENTION_DAYS: ${NSX_AUDIT_LOG_RETENTION_DAYS:-0}
     restart: unless-stopped
     command: ["python", "manage.py", "audit_worker"]
     depends_on:
@@ -121,49 +127,13 @@ services:
       POSTGRES_SSLROOTCERT: ${POSTGRES_SSLROOTCERT:-}
       POSTGRES_CONNECT_TIMEOUT: ${POSTGRES_CONNECT_TIMEOUT:-10}
       NSX_AUDIT_TIMEOUT: ${NSX_AUDIT_TIMEOUT:-3600}
+      NSX_LOG_FORMAT: ${NSX_LOG_FORMAT:-json}
+      NSX_AUDIT_LOG_RETENTION_DAYS: ${NSX_AUDIT_LOG_RETENTION_DAYS:-0}
     restart: unless-stopped
     command: ["python", "manage.py", "sync_scheduler"]
     depends_on:
       migrate:
         condition: service_completed_successfully
-
-  ipfix:
-    image: nsx-security-analyzer:local
-    build:
-      context: ..
-      dockerfile: webapp/Dockerfile
-    init: true
-    environment:
-      DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY:?Set DJANGO_SECRET_KEY in .env}
-      DJANGO_ALLOWED_HOSTS: ${DJANGO_ALLOWED_HOSTS:-localhost,127.0.0.1,[::1]}
-      DJANGO_CSRF_TRUSTED_ORIGINS: ${DJANGO_CSRF_TRUSTED_ORIGINS:-}
-      DJANGO_HTTPS: ${DJANGO_HTTPS:-0}
-      DJANGO_TRUST_PROXY: ${DJANGO_TRUST_PROXY:-0}
-      POSTGRES_DB: ${POSTGRES_DB:-nsx}
-      POSTGRES_USER: ${POSTGRES_USER:-nsx}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
-      POSTGRES_HOST: ${POSTGRES_HOST:-db}
-      POSTGRES_PORT: ${POSTGRES_PORT:-5432}
-      POSTGRES_SSLMODE: ${POSTGRES_SSLMODE:-prefer}
-      POSTGRES_SSLROOTCERT: ${POSTGRES_SSLROOTCERT:-}
-      POSTGRES_CONNECT_TIMEOUT: ${POSTGRES_CONNECT_TIMEOUT:-10}
-      NSX_AUDIT_TIMEOUT: ${NSX_AUDIT_TIMEOUT:-3600}
-    profiles: [ipfix]
-    restart: unless-stopped
-    command: ["python", "manage.py", "ipfix_receiver"]
-    ports:
-      - "${IPFIX_BIND_ADDRESS:-0.0.0.0}:${IPFIX_PORT:-2055}:2055/udp"
-    cpus: 2
-    mem_limit: 512m
-    depends_on:
-      migrate:
-        condition: service_completed_successfully
-    healthcheck:
-      test: ["CMD", "python", "-c", "import pathlib,time; p=pathlib.Path('/tmp/ipfix-heartbeat'); assert p.exists() and time.time()-p.stat().st_mtime<30"]
-      interval: 15s
-      timeout: 5s
-      start_period: 15s
-      retries: 3
 
 volumes:
   postgres-data:

@@ -1,126 +1,269 @@
-# Compose to Kubernetes conversion
+# Install on Kubernetes
 
-Use **[compose.yaml](compose.yaml)** in this directory as input to an online
-Compose-to-Kubernetes converter. It is a standalone conversion template, not the
-Docker installer configuration. It deliberately uses plain service definitions:
-no YAML anchors, extension fields, custom tags, build context, profiles, local
-files, variable interpolation, host-IP bindings or Compose startup conditions.
+Use the supplied `manifests/` files. You do **not** need an online converter.
+These files deploy the database, a one-time migration Job, the website, a collection
+worker and a scheduler. They expose the website inside the cluster only.
 
-Includes PostgreSQL, migrations, web, collection worker and scheduler. IPFIX is
-on hold and omitted from this conversion baseline. Nothing here changes an
-existing Docker deployment.
+The manifests use **0.4.0** for migrations, web, worker and scheduler. Database
+initialization automatically provisions the initial administrator.
 
-## Convert locally
+## 1. Before you start
 
-From the repository root, with Kompose installed:
+You need:
+
+- A Kubernetes cluster and `kubectl` configured for it. Your platform administrator
+  can supply access. Check `kubectl config current-context` before making changes.
+- Permission to create a namespace, Secrets, workloads, Services and storage.
+- A default StorageClass for the bundled database, or an existing PostgreSQL database.
+- Cluster access to Docker Hub, DNS, and your NSX Managers on HTTPS port 443.
+- Git and a terminal. Commands below use macOS/Linux/WSL shell syntax.
+
+The memory settings are starting values, not sizing guarantees: allow up to 2 GiB
+for each application pod and 1 GiB for PostgreSQL. Large inventories may need more.
+The bundled database is a single instance, not a highly available database service.
+Ask your platform administrator to review storage, backups and resources for production.
+
+Download the source and enter this folder:
 
 ```sh
-mkdir -p test-artifacts/kubernetes
-kompose -f deploy/kubernetes/compose.yaml convert --out test-artifacts/kubernetes/generated.yaml
+git clone https://github.com/vkernel/NSX-Security-Analyzer.git
+cd NSX-Security-Analyzer/deploy/kubernetes
+kubectl config current-context
+kubectl create namespace nsx-security-analyzer
 ```
 
-Validated using Kompose **1.38.0**. Expected output:
+If you already have a checkout, use its `deploy/kubernetes` folder. For a fresh
+installation the namespace should be empty. Stop and review if it already exists.
+All commands below explicitly use this namespace; no default-context change is needed.
 
-- Services: `db` (5432/TCP), `web` (8000/TCP).
-- Deployments: `db`, `web`, `worker`, `scheduler`.
-- One-shot migration Pod: `migrate` (`restartPolicy: OnFailure`).
-- PersistentVolumeClaim: `postgres-data`.
+## 2. Configure the database and secrets
 
-Messages about no Service being created for migration/worker/scheduler are normal:
-these processes have no listening ports. The workload objects must still appear.
-Kompose may warn that `version` is obsolete; it remains for older converters.
-A volume-directory inspection warning can occur; check that the output still
-contains the PVC and that the database mounts it.
+Open `manifests/config.yaml` in your editor. For the bundled database, keep
+`POSTGRES_HOST: "db"`, database `nsx` and user `nsx`.
 
-## Complete the generated manifests before deploying
+Create a private file called `secrets.env` **in this directory**, containing:
 
-Conversion does not make a complete, production-ready Kubernetes deployment.
-Review the following in the generated YAML:
+```dotenv
+DJANGO_SECRET_KEY=replace-with-a-long-random-secret
+POSTGRES_PASSWORD=replace-with-a-different-long-random-secret
+```
 
-1. **Image:** replace `nsx-security-analyzer:local` with a registry image built from
-   this branch, or load that exact development image into your local cluster.
-   Use the same image version for migration, web, worker and scheduler. Kubernetes
-   cannot use an arbitrary image from Docker Desktop's image store automatically.
-2. **Secrets:** the template intentionally leaves `DJANGO_SECRET_KEY` and
-   `POSTGRES_PASSWORD` empty. Replace them with `valueFrom.secretKeyRef` references
-   to a Kubernetes Secret. Every app process needs the same persistent Django key;
-   the database password must match its role. Keep existing key/password values
-   when migrating existing data. Do not paste your `.env` or resolved production
-   Compose configuration into an online converter.
-3. **Storage:** select a StorageClass and sufficient PVC capacity. For the bundled
-   PostgreSQL container, set `PGDATA=/var/lib/postgresql/data/pgdata` to avoid
-   initializing in the root of a provisioned filesystem. Keep one database replica
-   and a Recreate strategy, or use an externally managed PostgreSQL instance.
-   For external PostgreSQL, remove the database Deployment/Service/PVC and configure
-   database host and TLS trust consistently in every app workload.
-4. **Startup:** create the database and wait for readiness, then run migrations to
-   completion, then start web/worker/scheduler. Prefer changing the generated
-   migration Pod into a `batch/v1` Job with a bounded retry policy. Repeat migrations
-   for each application upgrade; a previously completed Pod will not rerun just
-   because you apply the same manifest. Do not run migrations in every app replica.
-5. **Access:** configure allowed hosts, trusted CSRF origins and HTTPS/proxy settings
-   for your hostname. Keep the database Service internal. Add a web Ingress or
-   port-forward; no public endpoint is created by this template.
-6. **Operations:** add resource requests/limits and appropriate startup/readiness/
-   liveness probes. Keep one scheduler initially. Create the initial admin account
-   inside the deployed web workload using `python manage.py createsuperuser`.
+Use two independent random strings of at least 32 characters from your password
+manager. Do not include quotes. This file is Git-ignored. Keep it with your backups;
+changing the Django key prevents decryption of saved NSX credentials.
 
-Example secret reference in an app container (create this Secret separately):
+```sh
+chmod 600 secrets.env
+kubectl -n nsx-security-analyzer create secret generic nsx-secrets --from-env-file=secrets.env
+kubectl -n nsx-security-analyzer apply -f manifests/config.yaml
+```
+
+Do not run secret creation again on upgrades or regenerate secrets for an existing database.
+
+### If PostgreSQL already exists
+
+Ask your database administrator to create an **empty, dedicated database** and a
+login that owns its schema and can create/alter tables and indexes. The application
+does not create the database or PostgreSQL login. It does not need database superuser rights.
+
+Before applying `config.yaml`, set:
+
+| Field | Example / meaning |
+| --- | --- |
+| `POSTGRES_HOST` | `postgres.database.svc.cluster.local` — the database Service DNS name |
+| `POSTGRES_PORT` | `5432` |
+| `POSTGRES_DB` | Name of the dedicated database |
+| `POSTGRES_USER` | Its database login |
+| `POSTGRES_SSLMODE` | `verify-full` for a TLS-enabled server |
+
+Use that login's actual password in `secrets.env`. Ensure the database permits
+connections from the application pods. `localhost` would refer to the application
+pod, not your PostgreSQL service. Network policies must allow DNS and the database port.
+
+For a private database CA, create a trust ConfigMap:
+
+```sh
+kubectl -n nsx-security-analyzer create configmap postgres-ca --from-file=ca.crt=/path/to/ca.pem
+```
+
+Add `POSTGRES_SSLROOTCERT: "/etc/postgres-ca/ca.crt"` to `config.yaml`. In **both**
+`migrate.yaml` and **each** Deployment in `application.yaml`, add this under
+`spec.template.spec` (beside `containers`):
 
 ```yaml
-env:
-  - name: DJANGO_SECRET_KEY
-    valueFrom:
-      secretKeyRef:
-        name: nsx-analyzer-secrets
-        key: django-secret-key
-  - name: POSTGRES_PASSWORD
-    valueFrom:
-      secretKeyRef:
-        name: nsx-analyzer-secrets
-        key: postgres-password
+volumes:
+  - name: postgres-ca
+    configMap:
+      name: postgres-ca
 ```
 
-The database container only needs the password reference, not the Django key.
+Add this to each corresponding container (beside `envFrom`):
 
-After preparing the manifests, validate against your chosen cluster with
-`kubectl apply --dry-run=server -f <prepared-manifests>` before applying them.
-No Kubernetes cluster deployment was performed as part of the conversion change.
+```yaml
+volumeMounts:
+  - name: postgres-ca
+    mountPath: /etc/postgres-ca
+    readOnly: true
+```
 
-## Docker use
+The hostname must match the server certificate. Apply the edited connection settings
+with `kubectl -n nsx-security-analyzer apply -f manifests/config.yaml` before
+continuing. Skip step 3 for external PostgreSQL.
+Selecting a different database does not copy existing snapshots; moving data requires
+backup/restore and the original Django key. Migrations in step 4 create or update
+application tables in the selected database.
 
-Continue using `webapp/compose.yaml` for source-based Docker development and
-`deploy/compose.yaml` for the Docker Hub installer. Their shared YAML merge blocks
-have been expanded into explicit definitions; startup ordering, optional IPFIX,
-local port binding and credential requirements remain unchanged. The Hub and remote
-database overrides are Docker-specific and are not online-converter inputs.
-
-References: [Kompose conversion](https://kompose.io/conversion/),
-[Kompose user guide](https://kompose.io/user-guide/).
-
-## Isolated Docker test
-
-The Docker-specific `compose.docker-test.yaml` override makes the conversion
-baseline runnable locally, with ordered startup and web access on
-**http://localhost:8001**. It uses the existing `nsx-security-analyzer:local` image.
-The project name below gives it a separate database volume and network. IPFIX
-is not started. The existing application on port 8000 is unaffected.
-
-From the repository root:
+## 3. Start bundled PostgreSQL (skip for an existing database)
 
 ```sh
-docker compose -p nsxa-k8s-test --env-file deploy/kubernetes/.env.docker-test \
-  -f deploy/kubernetes/compose.yaml -f deploy/kubernetes/compose.docker-test.yaml up -d
+kubectl -n nsx-security-analyzer apply -f manifests/database.yaml
+kubectl -n nsx-security-analyzer rollout status deployment/db --timeout=180s
 ```
 
-The initial test setup generated a private, Git-ignored `.env.docker-test` in this
-directory containing independent database and Django secrets. The test admin login
-is stored in the private, Git-ignored `.admin-credentials` file alongside it.
-Do not replace the test secrets while keeping its database volume.
-On another machine, create those secrets and create an admin with Django's
-`createsuperuser` command in this test stack's web container.
+Wait for success before continuing. If the pod is Pending, check
+`kubectl -n nsx-security-analyzer get pvc`. The requested disk is 10 GiB. If your
+cluster has no default StorageClass, add `storageClassName: YOUR_CLASS` under the
+PVC's `spec` in `database.yaml`, using the class your administrator provides.
 
-Use the same project, environment-file and Compose-file options with `ps`, `logs`
-or `down`. `down` stops this test stack while retaining its database volume.
-Do not add `-v` unless you intend to delete the test database.
-This verifies Docker operation only; it is not a Kubernetes cluster validation.
+## 4. Initialize the application database
+
+```sh
+kubectl -n nsx-security-analyzer apply -f manifests/migrate.yaml
+kubectl -n nsx-security-analyzer wait --for=condition=complete job/migrate --timeout=900s
+kubectl -n nsx-security-analyzer logs job/migrate
+```
+
+Continue only if the Job completes successfully. A Completed migration pod is normal;
+it initializes the database and then exits. On failure, see troubleshooting below.
+
+## 5. Start the application
+
+```sh
+kubectl -n nsx-security-analyzer apply -f manifests/application.yaml
+kubectl -n nsx-security-analyzer rollout status deployment/web --timeout=180s
+kubectl -n nsx-security-analyzer rollout status deployment/worker --timeout=180s
+kubectl -n nsx-security-analyzer rollout status deployment/scheduler --timeout=180s
+kubectl -n nsx-security-analyzer get pods
+```
+
+Database initialization creates the initial administrator automatically:
+
+- **Username:** `admin`
+- **Password:** `NSXSecurityA!`
+
+No manual account-creation command is needed. Change the password through
+**Administration → Users & access** after signing in. Provisioning runs once per
+database and skips existing `admin` accounts or superusers. Existing passwords are
+never replaced, and deleting the initial account does not recreate it.
+
+## 6. Open the website
+
+```sh
+kubectl -n nsx-security-analyzer port-forward service/web 8000:8000
+```
+
+Keep this terminal open and browse to **http://localhost:8000**. If local port 8000
+is in use, use `8001:8000` and browse to port 8001. Press Ctrl+C to stop forwarding;
+the application keeps running in Kubernetes.
+
+Add your first environment through Administration, enter its NSX credentials and
+retrieve/review the certificate if needed. Choose a sync interval or start a collection.
+The worker needs network access to NSX; browser access alone does not establish that.
+
+For shared access, ask your platform administrator to expose Service `web:8000`
+through an HTTPS Ingress. Set the public hostname in `DJANGO_ALLOWED_HOSTS`, its full
+`https://` origin in `DJANGO_CSRF_TRUSTED_ORIGINS`, and `DJANGO_HTTPS` to `1`.
+Set `DJANGO_TRUST_PROXY` to `1` only with a trusted proxy that sets/overwrites
+`X-Forwarded-Proto`. Reapply the ConfigMap and restart all application Deployments
+so they read the new settings. Do not expose PostgreSQL publicly.
+
+## Troubleshooting
+
+```sh
+kubectl -n nsx-security-analyzer get pods,pvc,jobs
+kubectl -n nsx-security-analyzer get events --sort-by=.metadata.creationTimestamp
+kubectl -n nsx-security-analyzer logs deployment/worker --tail=100 -f
+kubectl -n nsx-security-analyzer logs deployment/web --tail=100
+kubectl -n nsx-security-analyzer logs deployment/scheduler --tail=100
+kubectl -n nsx-security-analyzer logs job/migrate --all-containers=true
+```
+
+Use `kubectl -n nsx-security-analyzer describe pod POD_NAME` for startup, scheduling
+or memory issues; `logs POD_NAME --previous` retrieves the previous container's logs
+if it restarted. Replace `POD_NAME` with a name from `get pods`.
+
+| Symptom | Check |
+| --- | --- |
+| ImagePullBackOff | Image tag exists, registry credentials if private, outbound registry access |
+| Pending | PVC StorageClass/capacity, cluster resources and scheduling events |
+| Migration failed | Database host, credentials, schema permissions and TLS trust |
+| Website returns 400 | Browser hostname is included in allowed hosts |
+| CSRF failure | Trusted origin matches the HTTPS URL and proxy configuration |
+| Collection stays queued | Worker is running and uses the same database and Django key |
+| Collection stops at Saving snapshot | Worker logs, memory termination events and database latency/locks |
+
+Do not share Secrets or `.env` files in bug reports. See [operations](../../docs/operations.md)
+for the expanded logs available in newer source builds.
+
+## Upgrades
+
+Back up the database and keep the original secret. Wait for collections to finish.
+Set the **same published image tag** in `migrate.yaml` and all three containers in
+`application.yaml`. Then, from this directory:
+
+```sh
+kubectl -n nsx-security-analyzer scale deployment/web deployment/worker deployment/scheduler --replicas=0
+kubectl -n nsx-security-analyzer delete job migrate --ignore-not-found
+kubectl -n nsx-security-analyzer apply -f manifests/config.yaml
+kubectl -n nsx-security-analyzer apply -f manifests/migrate.yaml
+kubectl -n nsx-security-analyzer wait --for=condition=complete job/migrate --timeout=900s
+```
+
+Only after success:
+
+```sh
+kubectl -n nsx-security-analyzer apply -f manifests/application.yaml
+kubectl -n nsx-security-analyzer scale deployment/web deployment/worker deployment/scheduler --replicas=1
+kubectl -n nsx-security-analyzer rollout status deployment/web --timeout=180s
+```
+
+A completed Job does not rerun automatically, so deleting/recreating it is intentional.
+Do not delete the PVC or namespace during upgrades. A ConfigMap change requires
+pod replacement; scale-to-zero above ensures new pods read it. Reverting an image
+does not reverse database migrations; keep the pre-upgrade backup.
+
+## Use a newer source build
+
+Build the checkout and publish a unique tag to a registry your cluster can reach:
+
+```sh
+# From the repository root; replace YOUR_ACCOUNT and YOUR_TAG.
+docker build -f webapp/Dockerfile -t YOUR_ACCOUNT/nsx-security-analyzer:YOUR_TAG .
+docker push YOUR_ACCOUNT/nsx-security-analyzer:YOUR_TAG
+```
+
+Use that image in all four application/migration containers. For mixed CPU clusters,
+publish a multi-platform image or target the node architecture. A local Docker image
+is not automatically available in a remote cluster. Private registries need an
+`imagePullSecrets` entry supplied by your platform administrator.
+
+## File reference and validation limits
+
+- `manifests/config.yaml`: non-secret connection and application settings.
+- `manifests/database.yaml`: optional bundled PostgreSQL with persistent storage.
+- `manifests/migrate.yaml`: one-time schema initialization/upgrade Job.
+- `manifests/application.yaml`: web, worker, scheduler and internal web Service.
+- `compose.yaml`: optional converter input for users who still need Kompose or an
+  online converter. It is not the installation path above; converted output needs
+  Secret references, storage, startup ordering and probes added manually.
+
+The nine resources were checked against the Kubernetes 1.32 schema with
+`kubeconform -strict -summary -kubernetes-version 1.32.0 manifests/`.
+
+These manifests are a single-instance starting point, not a managed production
+platform. Validate them with your cluster's policies before use. No live Kubernetes
+cluster validation has been performed for this change. Docker operation alone does
+not validate Kubernetes storage, admission policies or networking.
+
+References: [Kubernetes workloads](https://kubernetes.io/docs/concepts/workloads/),
+[persistent storage example](https://kubernetes.io/docs/tasks/run-application/run-single-instance-stateful-application/).

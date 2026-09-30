@@ -18,7 +18,7 @@ services:
       timeout: 5s
       retries: 20
   migrate:
-    image: vkernel/nsx-security-analyzer:${NSX_IMAGE_TAG:-0.3.1}
+    image: vkernel/nsx-security-analyzer:${NSX_IMAGE_TAG:-0.4.0}
     init: true
     environment:
       DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY:?Set DJANGO_SECRET_KEY in .env}
@@ -35,12 +35,14 @@ services:
       POSTGRES_SSLROOTCERT: ${POSTGRES_SSLROOTCERT:-}
       POSTGRES_CONNECT_TIMEOUT: ${POSTGRES_CONNECT_TIMEOUT:-10}
       NSX_AUDIT_TIMEOUT: ${NSX_AUDIT_TIMEOUT:-3600}
+      NSX_LOG_FORMAT: ${NSX_LOG_FORMAT:-json}
+      NSX_AUDIT_LOG_RETENTION_DAYS: ${NSX_AUDIT_LOG_RETENTION_DAYS:-0}
     command: ["python", "manage.py", "migrate", "--noinput"]
     depends_on:
       db:
         condition: service_healthy
   web:
-    image: vkernel/nsx-security-analyzer:${NSX_IMAGE_TAG:-0.3.1}
+    image: vkernel/nsx-security-analyzer:${NSX_IMAGE_TAG:-0.4.0}
     init: true
     environment:
       DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY:?Set DJANGO_SECRET_KEY in .env}
@@ -57,6 +59,8 @@ services:
       POSTGRES_SSLROOTCERT: ${POSTGRES_SSLROOTCERT:-}
       POSTGRES_CONNECT_TIMEOUT: ${POSTGRES_CONNECT_TIMEOUT:-10}
       NSX_AUDIT_TIMEOUT: ${NSX_AUDIT_TIMEOUT:-3600}
+      NSX_LOG_FORMAT: ${NSX_LOG_FORMAT:-json}
+      NSX_AUDIT_LOG_RETENTION_DAYS: ${NSX_AUDIT_LOG_RETENTION_DAYS:-0}
     restart: unless-stopped
     ports:
       - "127.0.0.1:${WEB_PORT:-8000}:8000"
@@ -69,7 +73,7 @@ services:
       timeout: 5s
       retries: 3
   worker:
-    image: vkernel/nsx-security-analyzer:${NSX_IMAGE_TAG:-0.3.1}
+    image: vkernel/nsx-security-analyzer:${NSX_IMAGE_TAG:-0.4.0}
     init: true
     environment:
       DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY:?Set DJANGO_SECRET_KEY in .env}
@@ -86,6 +90,8 @@ services:
       POSTGRES_SSLROOTCERT: ${POSTGRES_SSLROOTCERT:-}
       POSTGRES_CONNECT_TIMEOUT: ${POSTGRES_CONNECT_TIMEOUT:-10}
       NSX_AUDIT_TIMEOUT: ${NSX_AUDIT_TIMEOUT:-3600}
+      NSX_LOG_FORMAT: ${NSX_LOG_FORMAT:-json}
+      NSX_AUDIT_LOG_RETENTION_DAYS: ${NSX_AUDIT_LOG_RETENTION_DAYS:-0}
     restart: unless-stopped
     command: ["python", "manage.py", "audit_worker"]
     depends_on:
@@ -93,7 +99,7 @@ services:
         condition: service_completed_successfully
 
   scheduler:
-    image: vkernel/nsx-security-analyzer:${NSX_IMAGE_TAG:-0.3.1}
+    image: vkernel/nsx-security-analyzer:${NSX_IMAGE_TAG:-0.4.0}
     init: true
     environment:
       DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY:?Set DJANGO_SECRET_KEY in .env}
@@ -110,6 +116,8 @@ services:
       POSTGRES_SSLROOTCERT: ${POSTGRES_SSLROOTCERT:-}
       POSTGRES_CONNECT_TIMEOUT: ${POSTGRES_CONNECT_TIMEOUT:-10}
       NSX_AUDIT_TIMEOUT: ${NSX_AUDIT_TIMEOUT:-3600}
+      NSX_LOG_FORMAT: ${NSX_LOG_FORMAT:-json}
+      NSX_AUDIT_LOG_RETENTION_DAYS: ${NSX_AUDIT_LOG_RETENTION_DAYS:-0}
     restart: unless-stopped
     command: ["python", "manage.py", "sync_scheduler"]
     depends_on:

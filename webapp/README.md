@@ -5,25 +5,28 @@ stores environments, audit jobs and snapshots. A separate worker collects invent
 web requests never wait for an NSX audit to finish. All environment configuration, collections and report exploration are managed through
 the web interface.
 
-**Optional IPFIX setup:** the staff-only configuration wizard can write NSX IPFIX settings after an explicit change preview and approval. Inventory collection remains read-only. See [IPFIX setup](../docs/ipfix-poc.md).
 
 ## Install from Docker Hub
 
 For prebuilt AMD64/ARM64 images, follow [Docker Hub installation](../docs/docker-hub.md).
 
 **Deploy the supplied Compose stack, not just the image with Docker Desktop’s Run button.** The application requires PostgreSQL, database migrations, a web container, a collection worker and a scheduler. The provided Compose file deploys these dependencies automatically; environment variables alone do not start additional containers.
-Use `compose.hub.yaml` alongside `compose.yaml` to pull images instead of building.
+Use `deploy/compose.yaml` for a new prebuilt installation. The `compose.hub.yaml`
+override remains for existing installations that already use it.
 
 ## Run from source with Docker Desktop
 
-From this directory:
+Start Docker Desktop (or Docker Engine) first. From the repository root run
+`cd webapp`, then use this directory for all commands below. Only copy the example
+on a **new** installation; keep an existing `.env` unchanged.
+
 
 ```sh
 cp .env.example .env
 chmod 600 .env
 ```
 
-Set `DJANGO_SECRET_KEY` and `POSTGRES_PASSWORD` in `.env` to **different** random
+Open `.env` in a text editor. Set `DJANGO_SECRET_KEY` and `POSTGRES_PASSWORD` to **different** random
 values. Generate each with:
 
 ```sh
@@ -38,10 +41,18 @@ The local `.env` file is excluded from Git and the Docker build context.
 
 ```sh
 docker compose up --build -d
-docker compose exec web python manage.py createsuperuser
+docker compose ps -a
 ```
 
-Open **http://localhost:8000** and sign in. The service binds to loopback by default.
+On a fresh source deployment, database initialization creates username **`admin`**
+with password **`NSXSecurityA!`**. Change this password after signing in through
+**Administration → Users & access**. Existing administrators are left unchanged.
+No manual account-creation command is needed with release **0.4.0**.
+
+Wait for `web` and `db` to be healthy, `worker` and `scheduler` to be running,
+and `migrate` to show Exited (0). Open **http://localhost:8000** and sign in.
+The service binds to loopback by default. If startup fails, run
+`docker compose logs --tail=100 db migrate web worker scheduler`.
 Compose waits for PostgreSQL health checks and successful database migrations
 before starting the web process and worker. Static assets are built into the image.
 
@@ -77,7 +88,6 @@ Start with the remote override (Docker Compose 2.24.4 or later):
 
 ```sh
 docker compose -f compose.yaml -f compose.remote.yaml up --build -d
-docker compose -f compose.yaml -f compose.remote.yaml exec web python manage.py createsuperuser
 ```
 
 Use both `-f` flags for subsequent commands in remote mode. The override disables
@@ -135,7 +145,7 @@ migration between databases.
 2. Enter the NSX Manager username and password directly. Password input is masked.
    When editing, leave Password blank to keep the saved password, or enter a new
    password to replace it. Saved passwords are never displayed.
-3. Run a testing sample to check connectivity, or run a full audit. Status updates
+3. Retrieve and review the Manager certificate if needed, then run a collection. Status updates
    automatically while you keep the dashboard or environment page open.
 4. Open the saved snapshot. All existing report functions remain available:
    AND/OR and regex search, evidence search toggle, column filters, sorting,
@@ -238,7 +248,7 @@ separate from the NSX environment certificate.
 
 ## Persistent data and backups
 
-The `postgres-data` volume holds accounts, configuration, jobs, audit JSON and uploaded CA certificates (plus legacy rendered HTML). A regular `docker compose down` keeps it. `down -v` deletes that volume.
+The `postgres-data` volume holds accounts, configuration, jobs, audit JSON and trusted CA certificates (plus legacy rendered HTML). A regular `docker compose down` keeps it. `down -v` deletes that volume.
 Manager passwords and the copies in queued job configurations are encrypted in
 PostgreSQL; they are not stored as plaintext. Preserve `DJANGO_SECRET_KEY` when
 moving or restoring databases. Replacing that secret makes saved passwords

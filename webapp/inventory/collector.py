@@ -114,10 +114,10 @@ class NSXClient:
                       getattr(self, "bulk_timeout", 8) if bulk else getattr(self, "timeout", "default"))
             try:
                 data = self._get(path, params)
-                LOG.debug("GET %s completed in %.3fs", path, time.perf_counter() - started)
+                LOG.debug("GET %s completed in %.3fs returned_records=%s", path, time.perf_counter() - started, len(data.get("results", [])) if isinstance(data.get("results"), list) else "n/a")
                 return data
             except AuditError as exc:
-                LOG.debug("GET %s failed status=%s elapsed=%.3fs", path, exc.status_code,
+                LOG.warning("GET %s failed status=%s elapsed=%.3fs", path, exc.status_code,
                           time.perf_counter() - started)
                 if exc.status_code not in (429, 502, 503, 504) or attempt == retries:
                     raise
@@ -719,7 +719,7 @@ TAG_STATUSES = {"both": "VMs and groups", "vm_only": "VM use",
                 "unknown": "Needs review"}
 TAG_NOTE = ("Tags are identified by scope and value. Evidence includes VM assignments, group "
             "conditions, tags attached to groups, and assignments to visible indexed Policy objects "
-            "such as firewall IPFIX profiles and other profiles. Group condition references do not "
+            "such as firewall monitoring profiles and other profiles. Group condition references do not "
             "prove resolved membership. Categories describe observed use, not exclusive assignment "
             "types. No unused-tag conclusion is made. Search coverage, indexing delays and access "
             "restrictions apply; tags absent from every source cannot be discovered.")

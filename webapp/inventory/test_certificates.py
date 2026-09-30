@@ -1,5 +1,3 @@
-import io
-import zipfile
 from datetime import datetime, timedelta, timezone
 from unittest.mock import patch, MagicMock
 from django.test import SimpleTestCase
@@ -7,47 +5,9 @@ from cryptography import x509
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.x509.oid import NameOID
-from .ipfix.certificates import parse_bundle, retrieve
-from .ipfix.vcenter import DiscoveryError
 
 
 class CertificateBootstrapTests(SimpleTestCase):
-    def test_bundle_filters_leaf_certificates_and_deduplicates_ca(self):
-        key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
-        name = x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, 'Synthetic CA')])
-        now = datetime.now(timezone.utc)
-        def certificate(ca):
-            return (x509.CertificateBuilder().subject_name(name).issuer_name(name)
-                .public_key(key.public_key()).serial_number(x509.random_serial_number())
-                .not_valid_before(now - timedelta(days=1)).not_valid_after(now + timedelta(days=1))
-                .add_extension(x509.BasicConstraints(ca=ca, path_length=None), critical=True)
-                .sign(key, hashes.SHA256())).public_bytes(serialization.Encoding.PEM)
-        ca = certificate(True)
-        data = io.BytesIO()
-        with zipfile.ZipFile(data, 'w') as archive:
-            archive.writestr('certs/lin/root.0', ca)
-            archive.writestr('certs/win/root.crt', ca)
-            archive.writestr('leaf.pem', certificate(False))
-            archive.writestr('ignore.r0', b'not a certificate')
-        result = parse_bundle(data.getvalue())
-        self.assertEqual(len(result['certificates']), 1)
-        self.assertEqual(result['pem'], ca.decode())
-        self.assertEqual(len(result['certificates'][0]['fingerprint']), 95)
-
-    def test_invalid_archive_rejected(self):
-        with self.assertRaises(DiscoveryError):
-            parse_bundle(b'not a zip')
-
-    @patch('inventory.ipfix.certificates.build_opener')
-    @patch('inventory.ipfix.certificates.parse_bundle', return_value={})
-    def test_download_has_no_credentials_and_fixed_endpoint(self, parse, build):
-        response = MagicMock()
-        response.read.return_value = b'zip'
-        build.return_value.open.return_value.__enter__.return_value = response
-        retrieve('vc.example.invalid')
-        build.return_value.open.assert_called_once_with('https://vc.example.invalid:443/certs/download.zip', timeout=10)
-        response.read.assert_called_once_with(2 * 1024 * 1024 + 1)
-
     def test_approved_leaf_trust_still_checks_hostname(self):
         import socket
         import ssl

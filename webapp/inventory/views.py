@@ -11,10 +11,12 @@ from django.http import HttpResponse, HttpResponseForbidden, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_GET, require_POST, require_http_methods
 from django.views.decorators.debug import sensitive_post_parameters
+from django.views.decorators.cache import never_cache
 
 from .forms import EnvironmentForm, PreferencesForm
 from .preferences import preferences
 from .models import AuditJob, Environment, Snapshot
+from .audit_events import record
 from .services import enqueue, prepare_snapshot, engine
 
 
@@ -76,11 +78,12 @@ def environment_detail(request, pk):
 
 @staff_required
 @sensitive_post_parameters("password")
+@never_cache
 def environment_edit(request, pk=None):
     environment = get_object_or_404(Environment, pk=pk) if pk else None
     import time
-    from .ipfix.certificates import retrieve_manager
-    from .ipfix.vcenter import origin, DiscoveryError
+    from .certificates import retrieve_manager
+    from .certificates import origin, DiscoveryError
     preview_key = 'environment_certificate_' + str(pk or 'new')
     ca_preview = request.session.get(preview_key)
     if ca_preview and time.time() - ca_preview['created'] > 600:
@@ -97,13 +100,17 @@ def environment_edit(request, pk=None):
                 raise DiscoveryError('Enter the NSX Manager HTTPS hostname first.')
             ca_preview = dict(retrieve_manager(server), server=server, origin=list(origin(server)), created=time.time())
             request.session[preview_key] = ca_preview
+            record('certificate.retrieved_for_review', 'Environment', pk or 'new')
         except DiscoveryError as exc:
+            record('certificate.retrieval_failed', 'Environment', pk or 'new', outcome='failed')
             messages.error(request, str(exc))
-        # Preserve ordinary fields, but never echo a submitted password.
-        initial = {key: value for key, value in request.POST.items() if key in form.fields and key != 'password'}
+        # Keep the submitted draft in the masked input during certificate review.
+        # Never populate it from stored credentials or persist it in the session.
+        initial = {key: value for key, value in request.POST.items() if key in form.fields}
         for key in ('enabled', 'insecure', 'remove_ca'):
             initial[key] = request.POST.get(key) == 'on'
         form = EnvironmentForm(instance=environment, initial=initial)
+        form.fields["password"].widget.render_value = True
         return render(request, 'inventory/environment_form.html', {'form': form, 'environment': environment, 'ca_preview': ca_preview})
     if request.method == 'POST' and request.POST.get('trust_retrieved') == 'on':
         form.is_valid()
@@ -132,6 +139,8 @@ def environment_edit(request, pk=None):
                 request.session.pop(preview_key, None)
                 messages.success(request, "Environment saved.")
                 return redirect("environment", pk=environment.pk)
+    if request.method == 'POST':
+        record('environment.change_rejected', 'Environment', pk or 'new', outcome='failed')
     return render(request, "inventory/environment_form.html", {"form": form, "environment": environment, "ca_preview": ca_preview})
 
 
@@ -156,6 +165,8 @@ def environment_delete(request, pk):
                     request.session.pop("selected_environment", None)
                 messages.success(request, f"Deleted {name} and its saved collection history.")
                 return redirect("environment-directory")
+        if request.method == 'POST' and error:
+            record('environment.delete_rejected', 'Environment', pk, outcome='failed')
         return render(request, "inventory/environment_delete.html", {
             "environment": environment, "active": active, "error": error,
             "snapshot_count": environment.snapshots.count(), "job_count": environment.jobs.count(),
@@ -170,6 +181,8 @@ def collect(request, pk):
         enqueue(environment, request.user)
         messages.success(request, "Audit queued. The worker will collect a new snapshot.")
     except ValidationError as exc:
+        from .audit_events import record
+        record('collection.request_rejected', 'Environment', pk, outcome='failed')
         messages.error(request, " ".join(exc.messages))
     return redirect("environment", pk=pk)
 
@@ -237,7 +250,9 @@ def health(request):
     try:
         with connection.cursor() as cursor:
             cursor.execute("SELECT 1")
-    except Exception:
+    except Exception as exc:
+        from .diagnostics import log_failure
+        log_failure("health", exc)
         return JsonResponse({"status": "unavailable"}, status=503)
     return JsonResponse({"status": "ok"})
 

@@ -2,6 +2,7 @@
 import hashlib
 import json
 from django.db import transaction
+from .diagnostics import LOG
 from .models import Environment, Finding, FindingEvent
 
 LABELS = {'unused': 'Unused object candidate', 'empty_group': 'Empty group',
@@ -39,6 +40,7 @@ def candidates(report):
 @transaction.atomic
 def synchronize(environment_id):
     """Idempotent; serialize reviews/collection against the latest full snapshot."""
+    LOG.info("findings environment_id=%s acquiring environment lock", environment_id)
     environment = Environment.objects.select_for_update().get(pk=environment_id)
     snapshot = environment.snapshots.filter(testing=False, imported=False).first()
     if snapshot is None:
@@ -46,8 +48,13 @@ def synchronize(environment_id):
     existing = {(f.kind, f.path): f for f in environment.findings.all()}
     if existing and all(f.snapshot_id == snapshot.pk for f in existing.values()):
         return
+    LOG.info("findings environment_id=%s existing_count=%s", environment_id, len(existing))
+    processed = 0
     seen = set()
     for kind, path, name, evidence in candidates(snapshot.report):
+        processed += 1
+        if processed % 500 == 0:
+            LOG.info("findings environment_id=%s processed_candidates=%s", environment_id, processed)
         key = (kind, path)
         seen.add(key)
         digest = hashlib.sha256(json.dumps(evidence, sort_keys=True, separators=(',', ':')).encode()).hexdigest()
@@ -77,3 +84,5 @@ def synchronize(environment_id):
             finding.evaluated_at = snapshot.generated_at
             finding.revision += 1
             finding.save()
+
+    LOG.info("findings environment_id=%s synchronized candidates=%s absent=%s", environment_id, processed, len(set(existing)-seen))

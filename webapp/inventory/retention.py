@@ -3,6 +3,8 @@ from datetime import timedelta
 from django.db import transaction
 from django.db.models import Q
 from django.utils import timezone
+from .audit_events import record
+from .diagnostics import phase, LOG
 from .models import Environment, RetentionPolicy
 
 BATCH_SIZE = 1000
@@ -51,10 +53,12 @@ def cleanup_retention(now=None):
             return (0, 0)
         if policy.testing_days and policy.testing_days < 1:
             return (0, 0)
+        LOG.info("retention cleanup started")
         removed_snapshots = removed_jobs = 0
         for pk in Environment.objects.values_list('pk', flat=True):
             environment = Environment.objects.select_for_update().get(pk=pk)
             if environment.jobs.filter(status__in=['queued', 'running']).exists():
+                LOG.info("retention skipped environment_id=%s reason=active_collection", pk)
                 continue
             expired, _ = eligible(environment, policy, now)
             ids = list(expired.values_list('pk', flat=True)[:BATCH_SIZE])
@@ -69,4 +73,5 @@ def cleanup_retention(now=None):
         policy.deleted_snapshots = removed_snapshots
         policy.deleted_collections = removed_jobs
         policy.save(update_fields=['last_run', 'deleted_snapshots', 'deleted_collections'])
+        record('retention.completed', details={'deleted_rows_with_snapshots': removed_snapshots, 'deleted_rows_with_jobs': removed_jobs})
         return removed_snapshots, removed_jobs

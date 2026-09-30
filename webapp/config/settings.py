@@ -10,11 +10,12 @@ CSRF_TRUSTED_ORIGINS = list(filter(None, os.getenv("DJANGO_CSRF_TRUSTED_ORIGINS"
 INSTALLED_APPS = [
     "django.contrib.admin", "django.contrib.auth", "django.contrib.contenttypes",
     "django.contrib.sessions", "django.contrib.messages", "django.contrib.staticfiles",
-    "inventory",
+    "inventory.apps.InventoryConfig",
 ]
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware", "whitenoise.middleware.WhiteNoiseMiddleware",
-    "django.contrib.sessions.middleware.SessionMiddleware", "django.middleware.common.CommonMiddleware",
+    "django.contrib.sessions.middleware.SessionMiddleware",
+    "inventory.request_logging.RequestLoggingMiddleware", "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware", "django.contrib.auth.middleware.AuthenticationMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware", "django.middleware.clickjacking.XFrameOptionsMiddleware",
 ]
@@ -70,3 +71,14 @@ if os.getenv("DJANGO_TRUST_PROXY", "0") == "1":
 DATA_UPLOAD_MAX_MEMORY_SIZE = 50 * 1024 * 1024
 FILE_UPLOAD_MAX_MEMORY_SIZE = 2 * 1024 * 1024
 AUDIT_TIMEOUT = int(os.getenv("NSX_AUDIT_TIMEOUT", "3600"))
+
+# Logs are captured by the container runtime; no file volume is required.
+LOGGING = {
+    "version": 1, "disable_existing_loggers": False,
+    "formatters": {"console": {"()": "inventory.observability.ConsoleFormatter"}},
+    "handlers": {"console": {"class": "logging.StreamHandler", "stream": "ext://sys.stdout", "formatter": "console"}},
+    "loggers": {name: {"handlers": ["console"], "level": "INFO", "propagate": False}
+                for name in ("inventory", "django.request", "django.security")},
+}
+# 0 retains audit events indefinitely; independent of snapshot retention.
+AUDIT_EVENT_RETENTION_DAYS = max(0, int(os.getenv("NSX_AUDIT_LOG_RETENTION_DAYS", "0")))

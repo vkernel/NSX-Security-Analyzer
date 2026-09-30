@@ -3,6 +3,7 @@
 !LICENSE
 !NOTICE
 !webapp/
+!webapp/gunicorn.conf.py
 !webapp/manage.py
 !webapp/requirements.lock
 !webapp/config/

@@ -1,6 +1,6 @@
 # Converter input only. See README.md before deployment.
 # Empty credential fields must become Kubernetes Secret references.
-# Build/push the development image and replace its image name before deployment.
+# Pinned published image; source builds need their own registry tag.
 version: "3.8"
 services:
   db:
@@ -15,7 +15,7 @@ services:
     volumes:
       - postgres-data:/var/lib/postgresql/data
   migrate:
-    image: nsx-security-analyzer:local
+    image: vkernel/nsx-security-analyzer:0.4.0
     restart: on-failure
     command: ["python", "manage.py", "migrate", "--noinput"]
     environment:
@@ -33,9 +33,8 @@ services:
       POSTGRES_CONNECT_TIMEOUT: "10"
       NSX_AUDIT_TIMEOUT: "3600"
   web:
-    image: nsx-security-analyzer:local
+    image: vkernel/nsx-security-analyzer:0.4.0
     restart: always
-    command: ["gunicorn", "config.wsgi:application", "--bind", "0.0.0.0:8000", "--workers", "2", "--timeout", "180", "--access-logfile", "-"]
     environment:
       DJANGO_SECRET_KEY: ""
       DJANGO_ALLOWED_HOSTS: "localhost,127.0.0.1"
@@ -53,7 +52,7 @@ services:
     expose:
       - "8000"
   worker:
-    image: nsx-security-analyzer:local
+    image: vkernel/nsx-security-analyzer:0.4.0
     restart: always
     command: ["python", "manage.py", "audit_worker"]
     environment:
@@ -71,7 +70,7 @@ services:
       POSTGRES_CONNECT_TIMEOUT: "10"
       NSX_AUDIT_TIMEOUT: "3600"
   scheduler:
-    image: nsx-security-analyzer:local
+    image: vkernel/nsx-security-analyzer:0.4.0
     restart: always
     command: ["python", "manage.py", "sync_scheduler"]
     environment:

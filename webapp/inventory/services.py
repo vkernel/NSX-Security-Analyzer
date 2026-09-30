@@ -1,6 +1,7 @@
 """Database-backed collection jobs and read-only NSX worker integration."""
 import base64
 import json
+import time
 from datetime import datetime, timedelta
 from functools import lru_cache
 
@@ -11,6 +12,7 @@ from django.utils import timezone
 
 from .models import AuditJob, Environment, Snapshot, manager_origin
 from .credentials import decrypt_password
+from .diagnostics import LOG, phase, log_failure
 from .concurrency import adapt_requests
 
 
@@ -20,7 +22,7 @@ def engine():
     return collector
 
 
-def enqueue(environment, user, testing=False):
+def enqueue(environment, user, testing=False, debug_until=None):
     with transaction.atomic():
         environment = Environment.objects.select_for_update().filter(pk=environment.pk).first()
         if environment is None:
@@ -30,7 +32,7 @@ def enqueue(environment, user, testing=False):
         if environment.jobs.filter(status__in=["queued", "running"]).exists():
             raise ValidationError("An audit is already queued or running for this environment.")
         return AuditJob.objects.create(environment=environment, requested_by=user,
-                                       testing=testing, config=environment.collection_config())
+                                       testing=testing, debug_until=debug_until, config=environment.collection_config())
 
 
 def schedule_due():
@@ -81,22 +83,32 @@ def claim_job():
 
 def update_progress(job_id, completed, stage):
     """Never move backwards or update a finished/expired job; 100% requires a saved snapshot."""
+    LOG.info("job=%s progress=%s/7 stage=%s", job_id, completed, stage)
     completed = max(0, min(6, completed))
     AuditJob.objects.filter(pk=job_id, status="running", progress_completed__lte=completed).update(
         progress_completed=completed, progress_stage=stage[:150])
 
 
-def fail_job(job_id, message):
-    AuditJob.objects.filter(pk=job_id, status="running").update(
-        status="failed", finished_at=timezone.now(), error=message[:1500])
+def fail_job(job_id, message, diagnostics=None):
+    from .audit_events import record
+    from .observability import safe_data
+    extra = {'diagnostics': safe_data(diagnostics)} if diagnostics is not None else {}
+    changed = AuditJob.objects.filter(pk=job_id, status="running").update(
+        status="failed", finished_at=timezone.now(), error=message[:1500], **extra)
+    if changed:
+        record('collection.failed', 'AuditJob', job_id, outcome='failed',
+               details={'code': (diagnostics or {}).get('error', {}).get('code', 'COLLECTION_FAILED')}, best_effort=True)
 
 
 def expire_jobs():
     # A crashed worker must not leave an environment permanently locked.
     cutoff = timezone.now() - timedelta(seconds=settings.AUDIT_TIMEOUT + 300)
-    return AuditJob.objects.filter(status="running", started_at__lt=cutoff).update(
-        status="failed", finished_at=timezone.now(),
-        error="Worker stopped or the audit exceeded its time limit. You can start a new audit.")
+    ids = list(AuditJob.objects.filter(status="running", started_at__lt=cutoff).values_list('pk', flat=True)[:100])
+    for job_id in ids:
+        LOG.warning("job=%s stale collection expired timeout_seconds=%s grace_seconds=300", job_id, settings.AUDIT_TIMEOUT)
+        fail_job(job_id, "Worker stopped or the audit exceeded its time limit. You can start a new audit.",
+                 {'error': {'code': 'WORKER_STALE', 'message': 'No terminal job state recorded before timeout plus grace period.'}})
+    return len(ids)
 
 
 def prepare_snapshot(environment, report, imported=False):
@@ -142,6 +154,12 @@ def execute_job(job_id):
     job = AuditJob.objects.select_related("environment").get(pk=job_id)
     if job.status != "running":
         return
+    from . import observability, diagnostics as diagnostic_log
+    from .audit_events import record
+    diagnostic_log.TIMELINE.clear()
+    observability.PROCESS_CONTEXT.update(job_id=str(job.pk), environment_id=job.environment_id, service='collector')
+    started = time.monotonic()
+    LOG.info("job=%s environment_id=%s collection started", job.pk, job.environment_id)
     secrets = []
 
     def redact(value):
@@ -166,20 +184,24 @@ def execute_job(job_id):
             raise ValidationError("Credentials are missing or empty. Enter a username and password in Edit environment.")
         secrets.append(base64.b64encode((username + ":" + password).encode()).decode())
         audit = engine()
-        audit.configure_logging()
+        observability.PROCESS_SECRETS = tuple(secrets)
+        audit.configure_logging(debug=bool(job.debug_until and job.debug_until > timezone.now()))
         for handler in audit.LOG.handlers:
-            handler.setFormatter(audit.DiagnosticFormatter(secrets, debug=False))
+            handler.setFormatter(observability.ConsoleFormatter())
+            handler.addFilter(observability.ScopedDebug(job.debug_until))
         client = audit.NSXClient(config["manager"], username, password, timeout=config["timeout"],
                                  ca_bundle=None if config.get("ca_certificate") else config.get("ca_bundle") or None,
                                  ca_data=config.get("ca_certificate") or None, insecure=config["insecure"],
                                  retries=config["retries"])
         from urllib.parse import urlsplit
-        previous = job.environment.snapshots.filter(testing=False).only("report").first()
+        with phase(job.pk, "load_previous_snapshot"):
+            previous = job.environment.snapshots.filter(testing=False).only("report").first()
         client.statistics_backoff = audit.statistics_backoff(previous.report if previous else None,
                                                              urlsplit(client.base_url).netloc)
         concurrency = None if job.testing else adapt_requests(client)
         try:
-            report = audit.audit(client, workers=1 if job.testing else concurrency.maximum, testing=job.testing,
+            with phase(job.pk, "retrieve_nsx_inventory"):
+                report = audit.audit(client, workers=1 if job.testing else concurrency.maximum, testing=job.testing,
                                  progress=lambda completed, stage: update_progress(job.pk, completed, stage))
         finally:
             client.close()
@@ -190,21 +212,41 @@ def execute_job(job_id):
         from urllib.parse import urlsplit
         report["manager"] = urlsplit(client.base_url).netloc
         audit.retain_hit_history(report, previous.report if previous else None)
-        snapshot = prepare_snapshot(job.environment, redact(report))
+        with phase(job.pk, "prepare_snapshot"):
+            snapshot = prepare_snapshot(job.environment, redact(report))
         update_progress(job.pk, 6, "Saving snapshot")
-        with transaction.atomic():
-            current = AuditJob.objects.select_for_update().get(pk=job.pk)
+        with phase(job.pk, "snapshot_transaction"), transaction.atomic():
+            with phase(job.pk, "lock_collection_job"):
+                current = AuditJob.objects.select_for_update().get(pk=job.pk)
             if current.status != "running":
+                LOG.warning("job=%s snapshot discarded status=%s", job.pk, current.status)
                 return  # Expired jobs cannot publish a late result.
             snapshot.job = current
-            snapshot.save()
+            with phase(job.pk, "write_snapshot"):
+                snapshot.save()
             from .findings import synchronize
-            synchronize(job.environment_id)
+            with phase(job.pk, "synchronize_findings"):
+                synchronize(job.environment_id)
             current.status = "succeeded"
             current.finished_at = timezone.now()
             current.progress_completed = 7
             current.progress_stage = "Completed"
-            current.save(update_fields=["status", "finished_at", "progress_completed", "progress_stage"])
+            with phase(job.pk, "mark_collection_completed"):
+                current.save(update_fields=["status", "finished_at", "progress_completed", "progress_stage"])
+            LOG.info("job=%s transaction ready_to_commit", job.pk)
+        LOG.info("job=%s collection committed elapsed_seconds=%.1f", job.pk, time.monotonic() - started)
+        record('collection.completed', 'AuditJob', job.pk,
+               details={'snapshot_id': str(snapshot.pk), 'elapsed_seconds': round(time.monotonic()-started, 3)}, best_effort=True)
+        # Diagnostics are supplemental: a telemetry write failure cannot undo success.
+        try:
+            AuditJob.objects.filter(pk=job.pk, status='succeeded').update(diagnostics={'timeline': diagnostic_log.TIMELINE})
+        except Exception as exc:
+            log_failure(job.pk, exc)
     except Exception as exc:
-        detail = "; ".join(exc.messages) if isinstance(exc, ValidationError) else str(exc)
-        fail_job(job.pk, redact(detail) or "Audit failed. Check the worker configuration.")
+        failure = log_failure(job.pk, exc)
+        detail = failure['chain'][0]['message'] if failure['chain'] else 'Collection failed.'
+        fail_job(job.pk, redact(detail) or "Audit failed. Check the worker configuration.",
+                 {'timeline': diagnostic_log.TIMELINE, 'error': failure})
+    finally:
+        observability.PROCESS_CONTEXT.clear()
+        observability.PROCESS_SECRETS = ()

@@ -29,8 +29,10 @@ class CAUploadTests(TestCase):
         cls.operator = get_user_model().objects.create_user('ca-admin', is_staff=True)
 
     def data(self, **changes):
-        return dict(name='East', slug='east', manager='east.example', username='reader', password='test-password',
-            workers=4, timeout=30, retries=2, enabled=True, sync_interval_minutes=60, **changes)
+        data = dict(name='East', slug='east', manager='east.example', username='reader', password='test-password',
+            workers=4, timeout=30, retries=2, enabled=True, sync_interval_minutes=60)
+        data.update(changes)
+        return data
 
     def upload(self, content=None):
         return SimpleUploadedFile('company-ca.pem', self.pem if content is None else content)
@@ -122,7 +124,7 @@ class CAUploadTests(TestCase):
             self.assertEqual(response.status_code, 200)
             self.assertFalse(Environment.objects.exists())
 
-    @patch('inventory.ipfix.certificates.retrieve_manager')
+    @patch('inventory.certificates.retrieve_manager')
     def test_retrieval_does_not_save_environment_or_credentials(self, retrieve):
         retrieve.return_value = {'pem': self.pem.decode(), 'certificates': []}
         self.client.force_login(self.operator)
@@ -131,4 +133,41 @@ class CAUploadTests(TestCase):
         retrieve.assert_called_once_with('east.example')
         self.assertFalse(Environment.objects.exists())
         self.assertNotIn('test-password', str(dict(self.client.session)))
-        self.assertNotContains(response, 'test-password')
+        self.assertContains(response, 'type="password"')
+        self.assertContains(response, 'value="test-password"')
+        self.assertIn('no-store', response['Cache-Control'])
+        saved = self.client.post(reverse('environment-new'),
+            self.data(password=response.context['form']['password'].value(), trust_retrieved='on'))
+        self.assertEqual(saved.status_code, 302)
+        from .credentials import decrypt_password
+        self.assertEqual(decrypt_password(Environment.objects.get().password_ciphertext), 'test-password')
+
+    @patch('inventory.certificates.retrieve_manager')
+    def test_retrieval_failure_preserves_masked_draft_and_escapes_it(self, retrieve):
+        from .certificates import DiscoveryError
+        retrieve.side_effect = DiscoveryError('Could not retrieve certificate')
+        self.client.force_login(self.operator)
+        password = 'draft-"<>&-password'
+        response = self.client.post(reverse('environment-new'),
+            self.data(action='retrieve_certificate', password=password))
+        self.assertEqual(response.context['form']['password'].value(), password)
+        self.assertContains(response, 'type="password"')
+        self.assertContains(response, 'value="draft-&quot;&lt;&gt;&amp;-password"')
+        self.assertNotIn(password, str(dict(self.client.session)))
+        self.assertFalse(Environment.objects.exists())
+        self.assertIn('no-store', response['Cache-Control'])
+
+    @patch('inventory.certificates.retrieve_manager')
+    def test_edit_retrieval_does_not_reveal_saved_password(self, retrieve):
+        from .credentials import encrypt_password
+        environment = Environment.objects.create(name='Existing', slug='existing',
+            manager='east.example', username='operator',
+            password_ciphertext=encrypt_password('saved-private-password'))
+        retrieve.return_value = {'pem': self.pem.decode(), 'certificates': []}
+        self.client.force_login(self.operator)
+        url = reverse('environment-edit', args=[environment.pk])
+        response = self.client.post(url, self.data(action='retrieve_certificate', password=''))
+        self.assertEqual(response.context['form']['password'].value(), '')
+        self.assertNotContains(response, 'saved-private-password')
+        response = self.client.get(url)
+        self.assertNotContains(response, 'saved-private-password')

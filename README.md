@@ -4,7 +4,6 @@ A read-only NSX Policy inventory and security review workspace. Collect inventor
 from multiple NSX Managers, explore firewall rules and reference evidence, and
 compare saved snapshots in a PostgreSQL-backed web application.
 
-**Optional IPFIX setup:** the staff-only configuration wizard can write NSX IPFIX settings after an explicit change preview and approval. Inventory collection remains read-only. See [IPFIX setup](docs/ipfix-poc.md).
 
 **Findings are review candidates, not deletion approvals or proof of historical non-use.**
 The collector sends GET requests to NSX; it does not change rules or reset counters.
@@ -29,31 +28,21 @@ environments, schedule collections and explore reports through the web interface
 **Recommended: [install the complete Docker Compose stack from Docker Hub](docs/docker-hub.md)** — no source checkout, local build or install.sh required.
 Images are available for AMD64 and ARM64 at [Docker Hub](https://hub.docker.com/r/vkernel/nsx-security-analyzer).
 
-## Required application services
+Choose one installation path:
 
-**Pulling the Docker Hub image and clicking Run starts only the web container. Even with all environment variables set, it does not deploy the other containers needed for the application to work.**
-
-Use the provided **`compose.yaml` together with `.env`**. Docker Compose automatically deploys and connects these services; you do not need to install each dependency separately:
-
-| Service | Purpose | Expected state |
+| Deployment | Guide | When to choose it |
 | --- | --- | --- |
-| `db` | PostgreSQL stores accounts, environments and snapshots | Running |
-| `migrate` | Initializes or upgrades the database schema | Exited (0) after success |
-| `web` | Serves the application interface | Running |
-| `worker` | Processes collection tasks | Running |
-| `scheduler` | Queues automatic collections | Running |
+| Docker Hub + Compose | [Step-by-step installation](docs/docker-hub.md) | Easiest way to run the published release |
+| Docker Compose from source | [Source setup](webapp/README.md#run-from-source-with-docker-desktop) | Test changes not published to Docker Hub yet |
+| Kubernetes | [Step-by-step installation](deploy/kubernetes/README.md) | Run on an existing Kubernetes platform |
 
-From the directory containing `compose.yaml` and your configured `.env`, run:
+Docker Hub's Run button starts a single container. **Compose or Kubernetes must
+also start PostgreSQL, database migrations, the worker and the scheduler.** The
+provided deployment files include these components. The migration container exits
+successfully after initialization; this is expected.
 
-```sh
-docker compose pull
-docker compose up -d
-docker compose ps -a
-```
-
-Docker Desktop will show the services grouped under `nsx-security-analyzer`. A single randomly named container created with Run is not the complete deployment. Adding environment variables or restarting that container will not create the missing services. No `install.sh` is required for the Compose deployment.
-
-For a new installation, follow the [Docker Hub setup instructions](docs/docker-hub.md) to download the Compose file, configure secrets and create your administrator account. The source-build alternative is below.
+Release **0.4.0** includes automatic initial admin creation, structured logging
+and audit diagnostics, and native Kubernetes deployment manifests.
 
 ## Quick start from source
 
@@ -77,12 +66,15 @@ Set `DJANGO_SECRET_KEY` and `POSTGRES_PASSWORD` in `.env`, then start:
 
 ```sh
 docker compose up --build -d
-docker compose exec web python manage.py createsuperuser
 ```
 
+On a fresh source deployment, database initialization creates username **`admin`**
+with password **`NSXSecurityA!`**. Change this password after signing in through
+**Administration → Users & access**. Existing administrators are left unchanged.
+No manual account-creation command is needed with release **0.4.0**.
+
 Open **http://localhost:8000** and sign in. In **Administration**, add an
-environment with its NSX Manager address, username and password. Upload a CA
-certificate if required and select a sync interval. You can also run a collection
+environment with its NSX Manager address, username and password. Retrieve and review its certificate if required and select a sync interval. You can also run a collection
 from the environment page. For a preview, choose **Environments → Add environment → Create demo environment**.
 
 Keep `DJANGO_SECRET_KEY` stable: it is used to protect saved manager credentials.
@@ -90,7 +82,6 @@ The default service listens on loopback. Use an HTTPS reverse proxy for shared a
 
 ## Documentation
 
-- [IPFIX pilot requirements](docs/ipfix-poc.md)
 - [Collection performance and diagnostics](docs/collection-performance.md)
 - [Snapshot comparison, finding reviews and coverage](docs/history-and-review.md)
 
@@ -103,7 +94,7 @@ The default service listens on loopback. Use an HTTPS reverse proxy for shared a
 | [Contributing](CONTRIBUTING.md) | Development setup, tests and pull requests |
 | [Security](SECURITY.md) | Reporting vulnerabilities and deployment boundaries |
 | [Support](SUPPORT.md) | Bug reports and useful diagnostics |
-| [Roadmap](roadmap.md) | Planned history, IPFIX traffic analysis and enterprise capabilities |
+| [Roadmap](roadmap.md) | Planned improvements and deferred features |
 | [Changelog](CHANGELOG.md) | Project changes |
 
 ## Scope and interpretation
@@ -124,9 +115,8 @@ integration are not included in the current codebase.
 
 ## Project status and license
 
-This is an initial standalone repository; no versioned release or support SLA is
-currently declared. Validate the application against your NSX deployment before
-operational adoption.
+Versioned releases are listed on GitHub and Docker Hub. No support SLA is offered.
+Validate the application against your NSX deployment before operational adoption.
 
 NSX Security Analyzer is licensed under the [Apache License 2.0](LICENSE).
 See [NOTICE](NOTICE) for project attribution. Third-party dependencies retain their
@@ -134,10 +124,3 @@ own licenses; the project license does not replace their terms.
 
 This is an independent project and is not affiliated with or endorsed by VMware
 or Broadcom.
-
-## Kubernetes conversion
-
-Use the [standalone conversion Compose file](deploy/kubernetes/compose.yaml) with
-an online converter or Kompose. See [conversion instructions and required Kubernetes
-configuration](deploy/kubernetes/README.md). This is a conversion baseline, not a
-validated Kubernetes production deployment.

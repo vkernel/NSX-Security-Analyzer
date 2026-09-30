@@ -4,4 +4,3 @@ gunicorn>=23,<26
 whitenoise>=6.8,<7
 cryptography>=46,<49
 urllib3>=2.8,<3
-pyvmomi>=9.1.1,<10

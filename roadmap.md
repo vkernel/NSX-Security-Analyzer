@@ -12,7 +12,7 @@ change after compatibility testing and feedback.
 | 1 | Snapshot comparison | Show rules, groups, services and memberships added, removed or changed between collections. |
 | 1 | Finding review workflow | Assign owners, add notes, acknowledge findings, set review dates and reopen findings when evidence changes. |
 | 1 | Collection coverage dashboard | Show gaps, failed checks, stale data and observation windows before drawing conclusions. |
-| 2 | IPFIX collection and traffic explorer | Search observed communications by source, destination, protocol, port and time. |
+| 2 | Traffic analysis (deferred) | Search observed communications by source, destination, protocol, port and time. |
 | 2 | Traffic-to-rule correlation | Inspect a rule's observed communications alongside its configuration history. |
 | 2 | Application dependency map | Show which workloads communicate and which services they use. |
 | 3 | Policy optimization recommendations | Suggest narrower endpoints/services and flag potentially redundant rules with supporting evidence. |
@@ -32,35 +32,11 @@ See [History and review](docs/history-and-review.md) for usage and limitations.
 Membership comparison covers definitions and checked status, not resolved member
 list changes. Legacy fields and incomplete coverage remain explicitly unknown.
 
-## Phase 2: DFW IPFIX proof of concept — started on development
+## Phase 2: Traffic analysis — deferred
 
-The initial template inspector, optional Docker UDP receiver, metadata persistence
-and GUI exporter mapping/status are implemented on development. Stateful flow
-decoding, flow storage and traffic exploration are not yet available.
-See [IPFIX pilot requirements and acceptance gates](docs/ipfix-poc.md).
-
-Development update: bounded source diagnostics, independent UDP intake, drop counters
-and setup-readiness evidence are implemented. An isolated GoFlow2 synthetic test
-preserves a custom enterprise field. Actual NSX delivery, decoder compatibility,
-flow persistence and the traffic explorer remain open acceptance gates.
-
-Start with NSX Distributed Firewall IPFIX rather than attempting broad NetFlow
-support immediately. NSX provides firewall IPFIX profiles and collector
-configuration. Validate the actual export templates, available fields and behavior
-against supported NSX versions before committing to correlation features.
-
-Reference: [Broadcom NSX firewall IPFIX API](https://developer.broadcom.com/xapis/nsx-t-data-center-rest-api/latest/policy_monitoring_ipfix_firewall_ipfix_profiles.html).
-
-The proof of concept should establish:
-
-- Which templates and fields the target NSX versions export.
-- Whether exported rule identity and action support reliable correlation.
-- Sampling behavior, template refresh, exporter restarts and loss indicators.
-- Correct separation of environments with overlapping IP addresses.
-- Sustainable ingestion rates and query performance under representative load.
-
-Keep export configuration separate from read-only analysis. Adding a collector
-does not authorize the application to change NSX configuration automatically.
+Traffic collection and analysis are on hold. The experimental receiver, setup wizard
+and exporter discovery have been removed from the application. Revisit requirements
+and implementation in a future development phase.
 
 ## Phase 3: Traffic explorer and rule correlation
 
@@ -136,7 +112,7 @@ reviewer can understand and verify.
 ## Suggested delivery order
 
 1. Snapshot comparison, review tracking and coverage visibility.
-2. IPFIX proof of concept using actual NSX export templates.
+2. Revisit deferred traffic analysis requirements.
 3. Traffic explorer and evidence-based rule correlation.
 4. Dependency maps, optimization recommendations and targeted alerts.
 

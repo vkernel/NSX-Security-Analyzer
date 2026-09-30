@@ -36,5 +36,13 @@ worker management commands are operational tooling, not alternative product inte
 - `webapp/config/`: application configuration and URL setup.
 - `webapp/inventory/`: models, migrations, jobs, views, forms and tests.
 - `webapp/templates/`, `webapp/static/`: integrated UI.
-- `webapp/compose*.yaml`: bundled and remote PostgreSQL deployment.
+- `webapp/compose*.yaml`: source development and existing Hub/remote overrides.
+- `deploy/compose.yaml`: complete prebuilt Docker Hub stack.
+- `deploy/kubernetes/manifests/`: native Kubernetes installation files.
+- `deploy/kubernetes/compose.yaml`: optional converter template only.
 - `docs/`: product and operating references.
+
+Tests and historical migrations are required project files: tests validate behavior,
+and migration history allows existing databases to upgrade safely. Generated Python
+bytecode is disposable. Private deployment files and backups are ignored by Git
+and excluded from Docker builds; they are not part of the distributed application.

@@ -1,0 +1,137 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: web
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: nsx-web
+  template:
+    metadata:
+      labels:
+        app: nsx-web
+    spec:
+      automountServiceAccountToken: false
+      terminationGracePeriodSeconds: 60
+      containers:
+        - name: web
+          image: vkernel/nsx-security-analyzer:0.4.0
+          imagePullPolicy: IfNotPresent
+          envFrom:
+            - configMapRef: {name: nsx-config}
+            - secretRef: {name: nsx-secrets}
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 10001
+            runAsGroup: 10001
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: [ALL]
+          resources:
+            requests: {cpu: 100m, memory: 256Mi}
+            limits: {memory: 2Gi}
+          ports:
+            - containerPort: 8000
+          startupProbe:
+            httpGet:
+              path: /health/
+              port: 8000
+              httpHeaders: [{name: Host, value: localhost}]
+            periodSeconds: 5
+            timeoutSeconds: 5
+            failureThreshold: 36
+          readinessProbe:
+            httpGet:
+              path: /health/
+              port: 8000
+              httpHeaders: [{name: Host, value: localhost}]
+            periodSeconds: 10
+            timeoutSeconds: 5
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: worker
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: nsx-worker
+  template:
+    metadata:
+      labels:
+        app: nsx-worker
+    spec:
+      automountServiceAccountToken: false
+      terminationGracePeriodSeconds: 60
+      containers:
+        - name: worker
+          image: vkernel/nsx-security-analyzer:0.4.0
+          imagePullPolicy: IfNotPresent
+          envFrom:
+            - configMapRef: {name: nsx-config}
+            - secretRef: {name: nsx-secrets}
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 10001
+            runAsGroup: 10001
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: [ALL]
+          resources:
+            requests: {cpu: 100m, memory: 256Mi}
+            limits: {memory: 2Gi}
+          command: [python, manage.py, audit_worker]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: scheduler
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: nsx-scheduler
+  template:
+    metadata:
+      labels:
+        app: nsx-scheduler
+    spec:
+      automountServiceAccountToken: false
+      terminationGracePeriodSeconds: 60
+      containers:
+        - name: scheduler
+          image: vkernel/nsx-security-analyzer:0.4.0
+          imagePullPolicy: IfNotPresent
+          envFrom:
+            - configMapRef: {name: nsx-config}
+            - secretRef: {name: nsx-secrets}
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 10001
+            runAsGroup: 10001
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: [ALL]
+          resources:
+            requests: {cpu: 100m, memory: 256Mi}
+            limits: {memory: 2Gi}
+          command: [python, manage.py, sync_scheduler]
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: web
+spec:
+  selector:
+    app: nsx-web
+  ports:
+    - port: 8000
+      targetPort: 8000

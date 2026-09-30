@@ -1,4 +1,5 @@
-from django.core.management.base import BaseCommand
+from django.core.management.base import BaseCommand, CommandError
+from inventory.diagnostics import log_failure
 from inventory.services import execute_job
 
 
@@ -9,4 +10,8 @@ class Command(BaseCommand):
         parser.add_argument("job_id")
 
     def handle(self, *args, **options):
-        execute_job(options["job_id"])
+        try:
+            execute_job(options["job_id"])
+        except Exception as exc:
+            log_failure(options['job_id'], exc)
+            raise CommandError('Collector failed; inspect structured diagnostics.') from None

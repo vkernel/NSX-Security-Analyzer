@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.4.0 — 2026-09-30
+
+- Add structured container logging, collection heartbeats, sanitized failure diagnostics and persistent administration audit events.
+- Preserve masked draft passwords during Manager certificate retrieval, including failed attempts.
+
+- Add an ordered Kubernetes deployment guide and native manifests, correct converter image references, and simplify Docker and Kubernetes installation instructions.
+
+- Provision the initial admin account once during database initialization, preserving existing accounts and changed passwords.
+
+- Remove experimental traffic receiver, configuration wizard and exporter discovery from the application. Traffic analysis is deferred.
+- Keep NSX Manager certificate retrieval independent of the removed feature.
+- Preserve historical migrations and archived setup records without exposing them in the application.
+
+
 ## 0.3.1
 
 - Create a private home directory owned by the non-root application user so Gunicorn can initialize its control socket without a permission error.
