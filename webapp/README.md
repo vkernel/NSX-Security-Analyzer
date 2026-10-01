@@ -47,7 +47,7 @@ docker compose ps -a
 On a fresh source deployment, database initialization creates username **`admin`**
 with password **`NSXSecurityA!`**. Change this password after signing in through
 **Administration → Users & access**. Existing administrators are left unchanged.
-No manual account-creation command is needed with release **0.5.1**.
+No manual account-creation command is needed with release **0.5.2**.
 
 Wait for `web` and `db` to be healthy, `worker` and `scheduler` to be running,
 and `migrate` to show Exited (0). Open **http://localhost:8000** and sign in.

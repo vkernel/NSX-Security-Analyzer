@@ -946,9 +946,54 @@ def audit_tags(client, groups, testing=False, resources=(), workers=1):
             "unmatched_conditions": unmatched, "objects": sorted(records.values(), key=lambda r: (r["scope"], r["name"])),
             "errors": sorted(set(errors + vm_errors + group_errors)), "unsupported_conditions": unsupported_ids,
             "vm_inventory_complete": not testing and not vm_errors,
+            "virtual_machines": [{k:v for k,v in vm.items() if k in {"path","id","external_id","display_name","power_state","compute_ids","host_id","source","guest_info","tags"}} for vm in vms if not vm.get("marked_for_delete")],
             "testing": testing, "vms_scanned": len(vms), "groups_scanned": len(groups),
             "note": TAG_NOTE, "statuses": TAG_STATUSES}
 
+
+
+def vm_inventory_rows(report):
+    """Relate saved tag assignments to configuration references, not resolved membership."""
+    tags = report.get("tags", {})
+    by_vm = {}
+    for tag in tags.get("objects", []):
+        for identity, name in tag.get("vms", {}).items():
+            by_vm.setdefault(identity, []).append(tag)
+    raw = tags.get("virtual_machines")
+    if raw is None:
+        raw = [{"path":identity, "display_name":next(t["vms"][identity] for t in related)}
+               for identity, related in by_vm.items()]
+    rules = {r["path"]:r for r in report.get("dfw", {}).get("rules", [])}
+    services = {r["path"]:r.get("name",r["path"]) for r in report.get("inventory", {}).get("services", [])}
+    pool = tags.get("firewall_rules", [])
+    result = []
+    for vm in raw:
+        identity = vm.get("path") or vm.get("external_id") or vm.get("id")
+        if not identity:
+            continue
+        related = by_vm.get(identity, [])
+        groups, refs = {}, {}
+        for tag in related:
+            # Group tags are metadata, so exclude assignment-only relationships.
+            groups.update(tag.get("group_conditions", {}))
+            for ref in tag.get("firewall_references", []):
+                if ref.get("tag_use") != "condition":
+                    continue
+                index = ref.get("rule")
+                if type(index) is not int or not 0 <= index < len(pool):
+                    continue
+                rule = pool[index]
+                full = rules.get(rule["path"], {})
+                key = (rule["path"],ref["via_group"])
+                refs[key] = dict(rule, via_group=ref["via_group"], action=full.get("action", "Unknown"),
+                    services=[{"path":path,"name":services.get(path,path)} for path in full.get("services", [])])
+        row = {"name":vm.get("display_name") or identity, "path":identity,
+               "power_state":vm.get("power_state") or "Not recorded", "tag_count":len(related),
+               "group_count":len(groups), "tags":[{"scope":t.get("scope", ""),"tag":t["name"]} for t in related],
+               "related_groups":[{"path":path,"name":name} for path,name in sorted(groups.items())],
+               "related_rules":list(refs.values()), "vm_details":vm}
+        result.append(row)
+    return sorted(result, key=lambda row:(row["name"].casefold(),row["path"]))
 
 def tag_scopes(tags):
     """Summarize observed scopes, counting each VM/group once per scope."""
@@ -1687,6 +1732,14 @@ def _render_report(report, *, fragments):
         '<a href="#feature-guide">Report user guide</a>'
         '<a href="#coverage">Audit scope &amp; exclusions</a>'
         '<a href="#tags-coverage">Tag coverage</a>')
+    vm_rows = vm_inventory_rows(report)
+    vm_note = ("VM inventory retrieved from NSX." if "virtual_machines" in tags else
+               "Older snapshot: only VMs present in saved tag assignments are available. Run a new collection for full VM inventory.")
+    if not tags.get("vm_inventory_complete"):
+        vm_note += " VM inventory is incomplete or sampled; missing VMs do not indicate deletion."
+    vm_note += " Related groups reference assigned tags; membership is not verified. Services come from related firewall rules, not observed VM traffic."
+    sections += '<section data-panel id="all-vms" tabindex="-1"><h2>VMs <span class="count">'+display_number(len(vm_rows))+'</span></h2><p class="muted">'+safe(vm_note)+'</p>'+table_shell(["VM / identity", "Power state", "Tags", "Related groups", "Relationships & details"],vm_rows,"vms")+'</section>'
+    menu += menu_link("all-vms", "VMs", len(vm_rows))
     sections += feature_guide()
     for anchor, title, items in (("all-groups", "All groups", all_group_rows),
                                   ("all-services", "All services", all_service_rows)):
@@ -1878,7 +1931,7 @@ table{min-width:760px}th{line-height:1.5}td{padding:15px 14px}.path{line-height:
 </main><dialog id="detail-dialog" aria-labelledby="detail-title">
 <div class="dialog-heading"><h2 id="detail-title">Details</h2><button type="button" id="close-details" autofocus>Close</button></div>
 <div id="detail-body"></div></dialog><noscript><p>This report requires JavaScript to display tables. Enable JavaScript to explore this snapshot.</p></noscript>
-<script type="application/json" id="report-rows">''' + json.dumps({"rows": row_pool, "tag_evidence": {key: value for key, value in tags.items() if key != "objects"}}, ensure_ascii=False, separators=(',', ':')).replace('<', '\\u003c') + '''</script><script>
+<script type="application/json" id="report-rows">''' + json.dumps({"rows": row_pool, "tag_evidence": {key: value for key, value in tags.items() if key not in {"objects", "virtual_machines"}}}, ensure_ascii=False, separators=(',', ':')).replace('<', '\\u003c') + '''</script><script>
 (() => {
   if (window.self !== window.top) document.body.classList.add('embedded-report');
   const dataElement = document.getElementById('report-rows');
@@ -2055,7 +2108,11 @@ table{min-width:760px}th{line-height:1.5}td{padding:15px 14px}.path{line-height:
     const {view,data:r} = rowPool[id];
     const object = '<strong>'+esc(r.name)+'</strong>'+((r.audit_exclusions || []).length ? '<br><span class="badge gray">Excluded from findings</span>' : '')+ruleIdentity(r)+(r.policy_rule_id === undefined ? '<code class="path">'+esc(r.path)+'</code>' : '');
     let cells;
-    if (view === 'scopes') {
+    if (view === 'vms') {
+      const links = (items,anchor) => '<ul>'+(items || []).map(item=>'<li><a href="#'+anchor+'">'+esc(item.name || item.tag || item.path)+'</a>'+code(item.path || item.scope || '')+'</li>').join('')+'</ul>';
+      const detail = !includeEvidence ? '' : '<h3>Assigned tags</h3>'+links(r.tags,'tags-all')+'<h3>Groups referencing these tags</h3>'+links(r.related_groups,'all-groups')+'<p>Configuration relationships only; resolved membership and effective policy are not verified.</p><h3>Related rules and configured services</h3>'+(r.related_rules || []).map(rule=>'<details><summary>'+esc(rule.name)+(rule.disabled?' (disabled)':'')+'</summary>'+ruleIdentity(rule)+code(rule.path)+'<p>Via group: '+esc(rule.via_group)+' · Action: '+esc(rule.action)+'</p>'+links(rule.services,'all-services')+'<a href="#dfw-rules">Browse firewall rules</a></details>').join('')+'<details><summary>VM inventory details</summary><pre>'+esc(JSON.stringify(r.vm_details,null,2))+'</pre></details>';
+      cells=[object,esc(r.power_state),esc(number(r.tag_count)),esc(number(r.group_count)),rowPopup(r.name+' — VM relationships',detail)];
+    } else if (view === 'scopes') {
       const detail = !includeEvidence ? '' : '<p>Scope: '+esc(r.scope || '(empty scope)')+'</p><div class="detail-scroll"><table class="detail-table"><thead><tr><th>Tag</th><th>Usage</th><th>VMs</th><th>Groups</th><th>Other resources</th></tr></thead><tbody>'+r.tags.map(tag=>'<tr><td>'+esc(tag.name)+'</td><td>'+esc(({both:'VMs and groups',vm_only:'VM use',group_only:'Group use',other_only:'Other resource use',unknown:'Needs review'})[tag.status] || tag.status)+'</td><td>'+esc(number(tag.vm_count))+'</td><td>'+esc(number(tag.group_count))+'</td><td>'+esc(number(tag.other_count ?? 0))+'</td></tr>').join('')+'</tbody></table></div>';
       cells = [esc(r.name),esc(number(r.tag_count)),esc(number(r.vm_count)),esc(number(r.group_count)),esc(number(r.other_count ?? 0)),rowPopup(r.name+' — Tags in scope',detail,'View tags')];
     } else if (view === 'tags') {
@@ -2391,10 +2448,10 @@ table{min-width:760px}th{line-height:1.5}td{padding:15px 14px}.path{line-height:
     const panelId = widget.closest('[data-panel]').id;
     const view = rowPool[ids[0]]?.view || 'inventory';
     const policyTable = view === 'dfw' && 'rule_count' in (rowPool[ids[0]]?.data || {});
-    const headerKeys = view === 'scopes' ? ['name','tag_count','vm_count','group_count','other_count',null] : view === 'tags' ? ['name','status','vm_count','group_count','other_count',null]
+    const headerKeys = view === 'vms' ? ['name','power_state','tag_count','group_count',null] : view === 'scopes' ? ['name','tag_count','vm_count','group_count','other_count',null] : view === 'tags' ? ['name','status','vm_count','group_count','other_count',null]
       : view === 'inventory' ? ['name','kind','usage','membership',null]
       : ['name',policyTable ? 'category' : 'policy_name',policyTable ? 'status' : 'hit_status',policyTable ? 'rule_count' : 'hit_count',null];
-    const permitted = view === 'scopes' ? ['name','tag_count','vm_count','group_count','other_count'] : view === 'tags' ? ['name','scope','status','vm_count','group_count','other_count'] : view === 'inventory' ? ['name','path','kind','membership','method','references','usage']
+    const permitted = view === 'vms' ? ['name','path','power_state','tag_count','group_count'] : view === 'scopes' ? ['name','tag_count','vm_count','group_count','other_count'] : view === 'tags' ? ['name','scope','status','vm_count','group_count','other_count'] : view === 'inventory' ? ['name','path','kind','membership','method','references','usage']
       : (policyTable ? ['name','path','category','status','rule_count']
         : ['name','path','category','policy_name','hit_status','hit_count','rule_id','policy_rule_id']);
     const extraLabels = {other_count:'Other resource count',tag_count:'Tag count',kind:'Type',category:'Category',policy_name:'Policy',status:'Status',hit_status:'Activity status'};

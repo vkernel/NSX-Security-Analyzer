@@ -2,6 +2,8 @@
 from datetime import timedelta
 from django.utils import timezone
 from .usability import freshness, policy
+from .models import Snapshot, SnapshotRecord, SnapshotPresentation
+from django.db.models import Q
 
 
 def dashboard(environment, days, now=None):
@@ -13,10 +15,27 @@ def dashboard(environment, days, now=None):
     boundaries = [start] + stamps + [now]
     gaps = [{'start': a, 'end': b, 'hours': round((b-a).total_seconds()/3600, 2)}
             for a, b in zip(boundaries, boundaries[1:]) if b-a > threshold]
-    latest = snapshots.filter(generated_at__lte=now).first()
+    latest = snapshots.filter(generated_at__lte=now).only('id','generated_at','needs_review').first()
     issues = []
     if latest:
-        report = latest.report
+        if SnapshotPresentation.objects.filter(snapshot_id=latest.pk).exists():
+            # Select only unknown rows and the fields displayed in this table.
+            rows = SnapshotRecord.objects.filter(snapshot_id=latest.pk).filter(
+                Q(data__membership='unknown') | Q(data__hit_status='unknown') | Q(data__status='unknown'))
+            report = {'objects':[], 'dfw':{'rules':[], 'policies':[]}, 'tags':{'objects':[]}}
+            for row in rows.values('view','data__name','data__notes','data__membership','data__hit_status','data__status'):
+                data = {key.removeprefix('data__'):value for key,value in row.items() if key.startswith('data__')}
+                target = report['objects'] if row['view']=='inventory' else report['tags']['objects'] if row['view']=='tags' else report['dfw']['rules'] if data['hit_status'] else report['dfw']['policies']
+                target.append(data)
+            metadata = Snapshot.objects.filter(pk=latest.pk).values('report__dfw__errors',
+                'report__tags__errors','report__tags__unsupported_conditions','report__search_coverage','report__limitations').get()
+            for area in ('dfw','tags'):
+                report[area]['errors'] = metadata['report__'+area+'__errors'] or []
+            report['tags']['unsupported_conditions'] = metadata['report__tags__unsupported_conditions']
+            report['search_coverage'] = metadata['report__search_coverage'] or {}
+            report['limitations'] = metadata['report__limitations'] or 'Search coverage was not recorded.'
+        else:
+            report = latest.report
         for row in report.get('objects', []):
             if row.get('membership') == 'unknown':
                 issues.append({'area': 'Group membership', 'name': row.get('name'), 'detail': '; '.join(row.get('notes', [])) or 'Membership is unknown.'})

@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.5.2 — 2026-10-01
+
+- Add Inventory → VMs with paginated VM identities, power states, tags and on-demand group, rule and service relationships.
+- Reuse the existing VM inventory request, including untagged VMs; label incomplete and legacy coverage. Relationships do not assert resolved membership or traffic.
+- Batch environment listings and reduce payloads on workspace, collection, notification, coverage and finding pages.
+- Reduce snapshot comparison selector and configuration payloads.
+
+Upgrade: keep the existing database and Django secret, run the standard migration job, update all application services, then run `python manage.py index_snapshots --refresh`. This refreshes prepared report layouts without changing original snapshots. Run a new collection to include previously unsaved VM details and untagged VMs. No new schema migration is required beyond 0.5.1.
+
 ## 0.5.1 — 2026-10-01
 
 - Reduce Inventory and Firewall first-load metadata queries.

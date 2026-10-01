@@ -1,3 +1,4 @@
+from . import page_queries
 import json
 import logging
 from time import perf_counter
@@ -34,30 +35,26 @@ def staff_required(view):
 
 @staff_required
 def administration(request):
-    return render(request, "inventory/administration.html", {"environments": Environment.objects.all()})
+    return render(request, "inventory/administration.html", {"environments": page_queries.environments()})
 
 
 def snapshot_list():
-    return Snapshot.objects.defer("report", "html").select_related("environment")
+    return page_queries.snapshots()
 
 
 @login_required
 def dashboard(request):
     from .usability import freshness, policy
     options = policy()
-    cards = []
-    for environment in Environment.objects.all():
-        latest = snapshot_list().filter(environment=environment).first()
-        active = environment.jobs.filter(status__in=["queued", "running"]).first()
-        cards.append({"environment": environment, "latest": latest, "active": active, "freshness": freshness(environment, options)})
+    cards = page_queries.cards(page_queries.environments(), options)
     from django.utils import timezone
     from datetime import timedelta
     failed_count = AuditJob.objects.filter(status='failed', finished_at__gte=timezone.now()-timedelta(hours=24)).count()
-    jobs = AuditJob.objects.select_related("environment", "snapshot").defer("config", "snapshot__report", "snapshot__html")[:8]
+    jobs = page_queries.jobs()[:8]
     return render(request, "inventory/dashboard.html", {
         "stale_count":sum(card['freshness']['stale'] for card in cards), "failed_count":failed_count,
         "running_count":AuditJob.objects.filter(status='running').count(), "queued_count":AuditJob.objects.filter(status='queued').count(),
-        "new_issue_count":sum(card['latest'].summary.get('new_coverage_issues',0) for card in cards if card['latest']),
+        "new_issue_count":sum((card['latest'].display_summary.get('new_coverage_issues') or 0) for card in cards if card['latest']),
         "cards": cards, "jobs": jobs, "environment_count": len(cards),
         "snapshot_count": Snapshot.objects.count(),
         "active_count": AuditJob.objects.filter(status__in=["queued", "running"]).count(),
@@ -66,15 +63,15 @@ def dashboard(request):
 
 @login_required
 def environment_detail(request, pk):
-    environment = get_object_or_404(Environment, pk=pk)
+    environment = get_object_or_404(page_queries.environments(), pk=pk)
     snapshots = Paginator(snapshot_list().filter(environment=environment), preferences(request).page_size).get_page(request.GET.get("page"))
     from .usability import freshness
     return render(request, "inventory/environment.html", {
         "freshness": freshness(environment),
         "environment": environment, "snapshots": snapshots,
         "latest": snapshot_list().filter(environment=environment).first(),
-        "active": environment.jobs.filter(status__in=["queued", "running"]).first(),
-        "jobs": environment.jobs.select_related("environment", "snapshot").defer("config", "snapshot__report", "snapshot__html")[:10],
+        "active": environment.jobs.filter(status__in=["queued", "running"]).defer("config", "diagnostics").first(),
+        "jobs": page_queries.jobs(environment.jobs.all())[:10],
     })
 
 
@@ -82,7 +79,7 @@ def environment_detail(request, pk):
 @sensitive_post_parameters("password")
 @never_cache
 def environment_edit(request, pk=None):
-    environment = get_object_or_404(Environment, pk=pk) if pk else None
+    environment = get_object_or_404(page_queries.environments(), pk=pk) if pk else None
     import time
     from .certificates import retrieve_manager
     from .certificates import origin, DiscoveryError
@@ -178,7 +175,7 @@ def environment_delete(request, pk):
 @staff_required
 @require_POST
 def collect(request, pk):
-    environment = get_object_or_404(Environment, pk=pk)
+    environment = get_object_or_404(page_queries.environments(), pk=pk)
     try:
         enqueue(environment, request.user)
         messages.success(request, "Audit queued. The worker will collect a new snapshot.")
@@ -245,7 +242,7 @@ def report_content(request, pk):
 @login_required
 @require_GET
 def api_jobs(request):
-    jobs = AuditJob.objects.select_related("environment").defer("config")
+    jobs = page_queries.jobs()
     requested = request.GET.getlist("id")
     if requested:
         try:
@@ -281,7 +278,7 @@ def health(request):
 def rule_history(request, pk):
     from django.utils import timezone
     from .history import STATUS_LABELS
-    environment = get_object_or_404(Environment, pk=pk)
+    environment = get_object_or_404(page_queries.environments(), pk=pk)
     try:
         days = int(request.GET.get("days", preferences(request).history_days))
     except ValueError:
@@ -365,8 +362,8 @@ def website_settings(request):
 @login_required
 @require_GET
 def collection_history(request, pk):
-    environment = get_object_or_404(Environment, pk=pk)
-    jobs = Paginator(environment.jobs.select_related("environment", "snapshot").defer("config", "snapshot__report", "snapshot__html"),
+    environment = get_object_or_404(page_queries.environments(), pk=pk)
+    jobs = Paginator(page_queries.jobs(environment.jobs.all()),
                      preferences(request).page_size).get_page(request.GET.get("page"))
     return render(request, "inventory/collection_history.html", {"environment": environment, "jobs": jobs})
 
@@ -486,14 +483,14 @@ def notifications(request):
         condition |= Q(status='succeeded')
     if options.notify_coverage:
         condition |= Q(status='succeeded', snapshot__summary__new_coverage_issues__gt=0)
-    jobs = AuditJob.objects.filter(condition, finished_at__gte=timezone.now()-timedelta(days=30)).select_related('environment', 'snapshot').defer('config','error','snapshot__report','snapshot__html')
+    jobs = page_queries.jobs(AuditJob.objects.filter(condition, finished_at__gte=timezone.now()-timedelta(days=30))).defer('error')
     seen = preferences(request).notifications_seen_at
     unread = jobs.filter(finished_at__gt=seen).count() if seen else jobs.count()
     items = []
     from django.urls import reverse
     for job in jobs.order_by('-finished_at')[:50]:
         snapshot = getattr(job, 'snapshot', None)
-        issues = snapshot.summary.get('new_coverage_issues', 0) if snapshot else 0
+        issues = (job.new_coverage_issues or 0) if snapshot else 0
         label = 'Collection failed' if job.status == 'failed' else 'Audit completed'
         if job.testing:
             label = 'Testing collection failed' if job.status == 'failed' else 'Testing audit completed'
@@ -548,21 +545,20 @@ def workspace_section(request, section):
 def environment_directory(request):
     from .usability import freshness, policy
     query = request.GET.get('q','').strip()
-    environments = Environment.objects.all()
+    environments = page_queries.environments()
     if query:
         from django.db.models import Q
         environments = environments.filter(Q(name__icontains=query)|Q(manager__icontains=query))
     options=policy()
     page=Paginator(environments, preferences(request).page_size).get_page(request.GET.get('page'))
-    cards=[{'environment':env,'latest':snapshot_list().filter(environment=env).first(),
-            'freshness':freshness(env,options),'active':env.jobs.filter(status__in=['queued','running']).first()} for env in page]
+    cards=page_queries.cards(page.object_list,options)
     return render(request,'inventory/environment_directory.html',{'cards':cards,'page':page,'query':query,'view':request.GET.get('view','table')})
 
 
 @login_required
 @require_GET
 def all_collections(request):
-    jobs = AuditJob.objects.select_related('environment','snapshot').defer('config','snapshot__report','snapshot__html')
+    jobs = page_queries.jobs()
     state=request.GET.get('status','')
     if state in AuditJob.Status.values:
         jobs=jobs.filter(status=state)

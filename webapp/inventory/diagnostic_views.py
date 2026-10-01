@@ -54,7 +54,7 @@ def audit_log(request):
 def collection_diagnostics(request, pk):
     if not request.user.is_staff:
         return HttpResponseForbidden('Staff access required.')
-    job = get_object_or_404(AuditJob.objects.defer('config').select_related('environment'), pk=pk)
+    job = get_object_or_404(AuditJob.objects.defer('config','environment__password_ciphertext','environment__ca_certificate').select_related('environment'), pk=pk)
     response = render(request, 'inventory/collection_diagnostics.html', {
         'job': job, 'timeline': job.diagnostics.get('timeline', []),
         'error_detail': json.dumps(job.diagnostics.get('error', {}), indent=2),

@@ -10,7 +10,8 @@ The collector sends GET requests to NSX; it does not change rules or reset count
 
 ## What it does
 
-- Inventory groups, services, distributed firewall policies, rules, tags and scopes.
+- Inventory VMs, groups, services, distributed firewall policies, rules, tags and scopes.
+- Explore VM tags and related groups, firewall rules and configured services; relationships are configuration evidence, not verified membership or traffic.
 - Identify empty groups, unreferenced custom objects, disabled rules and zero recorded counters.
 - Inspect membership definitions, configuration references and collection coverage.
 - Schedule collections per environment, with progress tracking and readable errors.
@@ -42,7 +43,7 @@ also start PostgreSQL, database migrations, the worker and the scheduler.** The
 provided deployment files include these components. The migration container exits
 successfully after initialization; this is expected.
 
-Release **0.5.1** includes automatic initial admin creation, structured logging
+Release **0.5.2** includes automatic initial admin creation, structured logging
 and audit diagnostics, and native Kubernetes deployment manifests.
 
 ## Quick start from source
@@ -72,7 +73,7 @@ docker compose up --build -d
 On a fresh source deployment, database initialization creates username **`admin`**
 with password **`NSXSecurityA!`**. Change this password after signing in through
 **Administration → Users & access**. Existing administrators are left unchanged.
-No manual account-creation command is needed with release **0.5.1**.
+No manual account-creation command is needed with release **0.5.2**.
 
 Open **http://localhost:8000** and sign in. In **Administration**, add an
 environment with its NSX Manager address, username and password. Retrieve and review its certificate if required and select a sync interval. You can also run a collection

@@ -41,13 +41,13 @@ def candidates(report):
 def synchronize(environment_id):
     """Idempotent; serialize reviews/collection against the latest full snapshot."""
     LOG.info("findings environment_id=%s acquiring environment lock", environment_id)
-    environment = Environment.objects.select_for_update().get(pk=environment_id)
-    snapshot = environment.snapshots.filter(testing=False, imported=False).first()
+    environment = Environment.objects.select_for_update().only("id").get(pk=environment_id)
+    snapshot = environment.snapshots.filter(testing=False, imported=False).only('id','generated_at').first()
     if snapshot is None:
         return
-    existing = {(f.kind, f.path): f for f in environment.findings.all()}
-    if existing and all(f.snapshot_id == snapshot.pk for f in existing.values()):
+    if environment.findings.exists() and not environment.findings.exclude(snapshot_id=snapshot.pk).exists():
         return
+    existing = {(f.kind, f.path): f for f in environment.findings.all()}
     LOG.info("findings environment_id=%s existing_count=%s", environment_id, len(existing))
     processed = 0
     seen = set()

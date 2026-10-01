@@ -145,3 +145,50 @@ kubectl -n nsx-security-analyzer exec deployment/web -- python manage.py index_s
 Use your actual web Deployment name if different. This processes saved data without
 contacting NSX. New snapshots receive the updated indexes automatically. Until old
 snapshots are refreshed, historical analysis can still read their original DFW data.
+
+
+### Environment and workspace pages
+
+Environment directories and the workspace overview batch latest-snapshot and active-job
+lookups. Freshness timestamps are selected in the environment query, so adding rows
+does not add a separate set of queries per environment. Snapshot lists select only the
+small summary values displayed on the page, rather than transferring coverage-key
+arrays with every row. Collections, progress polling and notifications exclude report
+bodies, job configuration and unused diagnostic payloads.
+
+Prepared snapshot coverage reads unknown records and the required report metadata;
+legacy unindexed snapshots retain their original fallback. Findings pages check whether
+reviews are already synchronized before fetching report evidence, and defer evidence
+on list rows. Comparison selectors load only snapshot IDs and timestamps. Comparing
+two snapshots still requires examining both configurations, but unrelated report sections
+are excluded. The first findings synchronization and legacy coverage can still be costly
+on large snapshots; ordinary environment navigation does not perform these analyses.
+
+These query changes need no additional migration beyond the existing release migrations.
+They require updating/restarting the web application image. Regression tests check the
+absence of large payload fields on listing routes, constant directory query counts, and
+coverage equivalence with the original report.
+
+### VM inventory
+
+Inventory → VMs lists saved VM names and identities, power states, assigned tag counts
+and groups referencing those tags. The details panel shows scoped tags, related groups,
+firewall rules (including disabled rules), configured services, and the VM fields NSX
+returned, such as external/compute identities and host or guest information where available.
+
+The collector reuses the VM list already retrieved for tag analysis; no per-VM API calls
+are added. Table rows are indexed in PostgreSQL with pagination, search, sorting, CSV
+export and on-demand evidence. The complete VM list is excluded from shared tag metadata.
+
+Relations are configuration evidence, not resolved VM membership or effective policy.
+Group metadata tag assignments are excluded from VM-to-rule relationships. Other grouping
+methods, including static membership and IP criteria, are not resolved by this view.
+Services are those configured on related rules; they are not observed VM traffic.
+
+After deploying, run `python manage.py index_snapshots --refresh` for existing reports to
+receive the new tab and renderer. Older snapshots can show only VMs recorded in their
+tag assignments and display a limitation notice. A new collection saves the complete
+returned VM inventory, including untagged VMs. Incomplete or sampled inventory is labelled.
+
+VM fields follow the [Broadcom NSX VM inventory API](https://developer.broadcom.com/xapis/nsx-t-data-center-rest-api/latest/method_ListAllVirtualMachines.html);
+fields absent from NSX are not inferred.

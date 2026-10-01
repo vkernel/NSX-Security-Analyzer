@@ -1,6 +1,6 @@
 # Install the complete Docker Hub stack
 
-> Release **0.5.1** creates the initial administrator automatically during database
+> Release **0.5.2** creates the initial administrator automatically during database
 > initialization. No manual account-creation command is needed.
 
 
@@ -37,7 +37,7 @@ Use a new directory. Do not overwrite an existing installation's `.env`.
 ```sh
 mkdir nsx-security-analyzer
 cd nsx-security-analyzer
-curl -fSL https://raw.githubusercontent.com/vkernel/NSX-Security-Analyzer/v0.5.1/deploy/compose.yaml -o compose.yaml
+curl -fSL https://raw.githubusercontent.com/vkernel/NSX-Security-Analyzer/v0.5.2/deploy/compose.yaml -o compose.yaml
 ```
 
 ## 2. Generate installation secrets
@@ -46,7 +46,7 @@ Run these commands in the same directory. They create `.env`; only do this on a
 fresh installation. Docker supplies Python, so you do not need Python installed.
 
 ```sh
-export NSX_IMAGE_TAG=0.5.1
+export NSX_IMAGE_TAG=0.5.2
 docker pull "vkernel/nsx-security-analyzer:$NSX_IMAGE_TAG"
 umask 077
 docker run --rm --network none --entrypoint python "vkernel/nsx-security-analyzer:$NSX_IMAGE_TAG" -c 'import secrets; print("DJANGO_SECRET_KEY="+secrets.token_hex(32)); print("POSTGRES_PASSWORD="+secrets.token_hex(32)); print("WEB_PORT=8000")' > .env
@@ -119,10 +119,10 @@ Proceed with `up` only if migration succeeds. Review failures before restarting
 workers. Never use `down -v` unless intentionally deleting the database. Reverting
 an image is not a database rollback; retain the pre-upgrade backup.
 
-For version 0.5.1, after the updated web service starts, prepare existing snapshots:
+For version 0.5.2, after the updated web service starts, prepare existing snapshots:
 
 ```sh
-docker compose exec web python manage.py index_snapshots
+docker compose exec web python manage.py index_snapshots --refresh
 ```
 
 This reads saved snapshots from PostgreSQL without contacting NSX. It skips snapshots
@@ -154,10 +154,10 @@ image does not initialize its dependencies when run alone.
 
 The sidebar and Administration show the running image's version, source revision
 and build time. Pin an explicit image tag for controlled upgrades; `latest` is mutable.
-The supplied Compose file defaults to `0.5.1`; `NSX_IMAGE_TAG` overrides it.
+The supplied Compose file defaults to `0.5.2`; `NSX_IMAGE_TAG` overrides it.
 
 - [Docker Hub](https://hub.docker.com/r/vkernel/nsx-security-analyzer)
-- [Release source](https://github.com/vkernel/NSX-Security-Analyzer/tree/v0.5.1)
+- [Release source](https://github.com/vkernel/NSX-Security-Analyzer/tree/v0.5.2)
 - [Compose file](../deploy/compose.yaml)
 - [Operations and backups](operations.md)
 - [Kubernetes installation](../deploy/kubernetes/README.md)
@@ -166,3 +166,5 @@ The optional `deploy/install.sh` uses the same release and automatic administrat
 provisioning. It is not required for the Compose instructions above.
 
 Compose reference: [Docker Compose quickstart](https://docs.docker.com/compose/gettingstarted/).
+
+Version 0.5.2 adds **Inventory → VMs**. Refresh existing prepared reports with the command above, then run a new collection for complete returned VM inventory, including untagged VMs. Older snapshots only contain VMs recoverable from their saved tag assignments. Group and service links describe configuration relationships, not confirmed membership or observed traffic.

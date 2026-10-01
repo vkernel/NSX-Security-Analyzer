@@ -8,11 +8,15 @@ def policy():
     return WorkspacePolicy.objects.filter(pk=1).first() or WorkspacePolicy(pk=1)
 
 
-def freshness(environment, settings=None):
+_UNSET = object()
+
+
+def freshness(environment, settings=None, last=_UNSET):
     if not environment.enabled:
         return {'label': 'Paused', 'stale': False}
     settings = settings or policy()
-    last = environment.snapshots.filter(testing=False, imported=False, job__status='succeeded').order_by('-generated_at').values_list('generated_at', flat=True).first()
+    if last is _UNSET:
+        last = environment.snapshots.filter(testing=False, imported=False, job__status='succeeded').order_by('-generated_at').values_list('generated_at', flat=True).first()
     if last is None:
         return {'label': 'No successful full collection', 'stale': True, 'threshold': settings.stale_hours}
     stale = last < timezone.now() - timedelta(hours=settings.stale_hours)

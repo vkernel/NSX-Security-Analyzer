@@ -140,7 +140,7 @@ class SnapshotComparisonForm(forms.Form):
     def __init__(self, *args, environment, **kwargs):
         super().__init__(*args, **kwargs)
         for field in self.fields.values():
-            field.queryset = environment.snapshots.filter(testing=False, imported=False).defer('report', 'html')
+            field.queryset = environment.snapshots.filter(testing=False, imported=False).only('id', 'generated_at')
             field.label_from_instance = lambda snapshot: snapshot.generated_at.strftime('%Y-%m-%d %H:%M:%S UTC') + ' · ' + str(snapshot.pk)[:8]
 
     def clean(self):

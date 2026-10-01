@@ -4,7 +4,7 @@ Use the supplied `manifests/` files. You do **not** need an online converter.
 These files deploy the database, a migration Job, the website, a collection
 worker and a scheduler. They expose the website inside the cluster only.
 
-The manifests use **0.5.1** for migrations, web, worker and scheduler. Database
+The manifests use **0.5.2** for migrations, web, worker and scheduler. Database
 initialization automatically provisions the initial administrator.
 
 Using Argo CD? Follow the configuration and Secret prerequisites below, then use
@@ -294,7 +294,7 @@ For each version upgrade:
 5. Verify that `migrate` succeeds, then that web, worker and scheduler become
    Healthy. If migrations fail, inspect `kubectl -n nsx-security-analyzer logs
    job/migrate`, fix the cause in Git, and perform another full sync.
-6. When upgrading from before 0.5.1, follow
+6. When upgrading from before 0.5.2, follow
    [Preparing older snapshots](#preparing-older-snapshots-for-faster-report-pages)
    after the rollout completes.
 
@@ -424,7 +424,7 @@ When upgrading to a build containing migration `0018_snapshot_presentation`, fin
 the migration Job and application rollout first. Then run:
 
 ```sh
-kubectl -n nsx-security-analyzer exec deployment/web -- python manage.py index_snapshots
+kubectl -n nsx-security-analyzer exec deployment/web -- python manage.py index_snapshots --refresh
 ```
 
 This prepares saved report sections and table records from PostgreSQL, without
@@ -433,3 +433,5 @@ an interruption. New collections do this automatically. Original snapshots remai
 intact; older reports keep working while preparation is pending. See
 [report performance](../../docs/collection-performance.md#report-navigation) for
 search, pagination, storage, and export behavior.
+
+Version 0.5.2 adds **Inventory → VMs**. Refresh existing prepared reports with the command above, then run a new collection for complete returned VM inventory, including untagged VMs. Older snapshots only contain VMs recoverable from their saved tag assignments. Group and service links describe configuration relationships, not confirmed membership or observed traffic.

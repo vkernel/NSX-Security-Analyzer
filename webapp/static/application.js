@@ -55,7 +55,7 @@
     });
     const snapshot=document.getElementById('snapshot-switcher');if(snapshot){const label=snapshot.closest('.snapshot-select'),home=label.parentElement;const place=()=>{if(mobile.matches)home.append(label);else document.getElementById('snapshot-topbar-slot').append(label);};place();mobile.addEventListener('change',place);}
     const tabs=document.querySelector('.report-section-tabs');
-    const inventory=[['Groups','all-groups'],['Services','all-services'],['Tags','tags-all'],['Scopes','tags-scopes']];
+    const inventory=[['VMs','all-vms'],['Groups','all-groups'],['Services','all-services'],['Tags','tags-all'],['Scopes','tags-scopes']];
     const firewall=[['Overview','dfw-overview'],['Policies','dfw-policies'],['Rules','dfw-rules']];
     const filters={
       groups:[['All groups','all-groups'],['Unused candidates','unused-groups'],['Empty groups','empty-groups'],['Incomplete membership checks','unknown-membership']],

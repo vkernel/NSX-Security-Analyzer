@@ -139,3 +139,84 @@ class IndexedReportTests(TestCase):
         self.assertNotIn('unrelated',str(result)+str(issues))
         self.assertNotIn('firewall_rules',issues)
         self.assertTrue(all('#>' in q['sql'] or '->' in q['sql'] for q in queries))
+
+    def test_workspace_pages_do_not_fetch_large_payloads(self):
+        from .models import AuditJob, Snapshot
+        job = AuditJob.objects.create(environment_id=self.snapshot.environment_id,status='succeeded')
+        Snapshot.objects.filter(pk=self.snapshot.pk).update(job=job,
+            summary={'groups':61,'coverage_issue_keys':['unused-large-payload']*10000})
+        routes = [('dashboard',[]),('environment-directory',[]),('environment',[self.snapshot.environment_id]),
+                  ('all-collections',[]),('collection-history',[self.snapshot.environment_id]),
+                  ('notifications',[]),('api-jobs',[])]
+        for name,args in routes:
+            with self.subTest(route=name), CaptureQueriesContext(connection) as queries:
+                response = self.client.get(reverse(name,args=args))
+                self.assertEqual(response.status_code,200)
+            for query in queries:
+                sql = query['sql']
+                if not sql.startswith('SELECT'): continue
+                for field in ('report','html','password_ciphertext','ca_certificate','config','diagnostics'):
+                    self.assertNotIn('".'+'"'+field+'"',sql)
+                # JSON key projections are allowed; selecting the complete summary is not.
+                self.assertNotIn('"inventory_snapshot"."summary",',sql)
+        response = self.client.get(reverse('environment',args=[self.snapshot.environment_id]))
+        self.assertContains(response,'61')
+
+    def test_environment_directory_query_count_is_constant(self):
+        from .models import Environment
+        with CaptureQueriesContext(connection) as initial:
+            self.client.get(reverse('environment-directory'))
+        for i in range(6):
+            Environment.objects.create(name='Extra '+str(i),slug='extra-'+str(i),manager='https://extra%d.example'%i)
+        with CaptureQueriesContext(connection) as expanded:
+            response = self.client.get(reverse('environment-directory'))
+        self.assertEqual(response.status_code,200)
+        self.assertEqual(len(initial),len(expanded))
+
+    def test_indexed_coverage_matches_original_evidence(self):
+        from .coverage import dashboard
+        from .models import SnapshotPresentation
+        from django.utils import timezone
+        now = timezone.now()
+        with CaptureQueriesContext(connection) as queries:
+            indexed = dashboard(self.snapshot.environment,30,now)
+        self.assertFalse(any('"inventory_snapshot"."report",' in q['sql'] for q in queries))
+        SnapshotPresentation.objects.filter(snapshot=self.snapshot).delete()
+        legacy = dashboard(self.snapshot.environment,30,now)
+        self.assertEqual(indexed['issues'],legacy['issues'])
+
+    def test_vm_inventory_pagination_and_relationship_evidence(self):
+        report=sample_report()
+        report['tags']={'vm_inventory_complete':True,'virtual_machines':[
+            {'external_id':'vm-%d'%i,'display_name':'VM %03d'%i,'power_state':'VM_RUNNING'} for i in range(31)],
+            'objects':[{'name':'web','scope':'role','path':'tag-web','vms':{'vm-0':'VM 000'},
+                'group_conditions':{'/infra/groups/web':'Web group'},'group_assignments':{},
+                'firewall_references':[{'rule':0,'via_group':'/infra/groups/web','tag_use':'condition'},
+                    {'rule':1,'via_group':'/infra/groups/metadata','tag_use':'assignment'}]}],
+            'firewall_rules':[{'path':'/rules/web','name':'Web rule','disabled':False},
+                              {'path':'/rules/metadata','name':'Metadata rule','disabled':False}]}
+        report['dfw']={'rules':[{'path':'/rules/web','name':'Web rule','services':['/infra/services/https']}], 'policies':[]}
+        rows=engine().vm_inventory_rows(report)
+        self.assertEqual(len(rows),31)
+        self.assertEqual(rows[0]['tag_count'],1)
+        self.assertEqual(rows[0]['related_rules'][0]['services'][0]['path'],'/infra/services/https')
+        self.assertEqual(len(rows[0]['related_rules']),1)
+        # Use ordinary snapshot rendering with the minimal VM-derived rows injected,
+        # so the synthetic tag fixture need not duplicate the full tag report schema.
+        base=sample_report()
+        snapshot=prepare_snapshot(self.snapshot.environment,base)
+        snapshot.save()
+        with patch.object(engine(),'vm_inventory_rows',return_value=rows):
+            build(snapshot)
+        url=reverse('snapshot-data',args=[snapshot.pk])
+        with CaptureQueriesContext(connection) as queries:
+            page=self.client.get(url,{'panel':'all-vms','size':25}).json()
+        self.assertEqual(page['count'],31)
+        self.assertEqual(len(page['rows']),25)
+        self.assertNotIn('related_rules',page['rows'][0]['data'])
+        self.assertFalse(any('"inventory_snapshot"."report"' in q['sql'] for q in queries))
+        detail=self.client.get(url,{'op':'detail','id':page['rows'][0]['id']}).json()
+        self.assertEqual(detail['data']['related_groups'][0]['name'],'Web group')
+        legacy=dict(report,tags=dict(report['tags']))
+        legacy['tags'].pop('virtual_machines')
+        self.assertEqual(len(engine().vm_inventory_rows(legacy)),1)

@@ -1,3 +1,4 @@
+from . import page_queries
 """Environment-level history, coverage and review pages."""
 import json
 from django.contrib import messages
@@ -18,7 +19,7 @@ from .preferences import preferences
 @login_required
 @require_GET
 def comparison(request, pk):
-    environment = get_object_or_404(Environment, pk=pk)
+    environment = get_object_or_404(page_queries.environments(), pk=pk)
     latest = list(environment.snapshots.filter(testing=False, imported=False).values_list('pk', flat=True)[:2])
     data = request.GET if 'before' in request.GET or 'after' in request.GET else ({'before': latest[1], 'after': latest[0]} if len(latest) == 2 else None)
     form = SnapshotComparisonForm(data, environment=environment)
@@ -26,7 +27,13 @@ def comparison(request, pk):
     if form.is_bound and form.is_valid():
         from .comparison import compare
         selected = form.cleaned_data
-        rows = compare(selected['before'].report, selected['after'].report)
+        def configuration(snapshot):
+            from .models import Snapshot
+            data = Snapshot.objects.filter(pk=snapshot.pk).values(
+                'report__inventory','report__objects','report__dfw__rules').get()
+            return {'inventory':data['report__inventory'] or {}, 'objects':data['report__objects'] or [],
+                    'dfw':{'rules':data['report__dfw__rules'] or []}}
+        rows = compare(configuration(selected['before']), configuration(selected['after']))
     page = Paginator(rows, preferences(request).page_size).get_page(request.GET.get('page'))
     query = request.GET.copy()
     if selected:
@@ -40,22 +47,22 @@ def comparison(request, pk):
 @require_GET
 def coverage(request, pk):
     from .coverage import dashboard
-    environment = get_object_or_404(Environment, pk=pk)
+    environment = get_object_or_404(page_queries.environments(), pk=pk)
     days = int(request.GET.get('days', '30')) if request.GET.get('days', '30') in ('7', '30', '90') else 30
     result = dashboard(environment, days)
     page = Paginator(result.pop('issues'), preferences(request).page_size).get_page(request.GET.get('page'))
     return render(request, 'inventory/coverage.html', {'environment': environment, 'coverage': result,
         'days': days, 'page': page, 'query_string': f'days={days}', 'failed_count': result['failed'].count(),
         'gap_page': Paginator(result['gaps'], 25).get_page(request.GET.get('gap_page')),
-        'jobs': result['failed'].select_related('environment', 'snapshot').defer('config', 'snapshot__report', 'snapshot__html')[:20]})
+        'jobs': page_queries.jobs(result['failed'])[:20]})
 
 
 @login_required
 @require_GET
 def findings(request, pk):
-    environment = get_object_or_404(Environment, pk=pk)
+    environment = get_object_or_404(page_queries.environments(), pk=pk)
     synchronize(environment.pk)  # Establish a baseline for pre-upgrade snapshots too.
-    rows = environment.findings.select_related('owner')
+    rows = environment.findings.select_related('owner').defer('evidence')
     state = request.GET.get('status', 'present')
     if state == 'present':
         rows = rows.filter(present=True)
@@ -80,7 +87,7 @@ def findings(request, pk):
 @login_required
 @require_http_methods(['GET', 'POST'])
 def finding_detail(request, pk, finding_id):
-    environment = get_object_or_404(Environment, pk=pk)
+    environment = get_object_or_404(page_queries.environments(), pk=pk)
     if request.method == 'POST' and not request.user.is_staff:
         return HttpResponseForbidden('Staff access is required to review findings.')
     synchronize(environment.pk)

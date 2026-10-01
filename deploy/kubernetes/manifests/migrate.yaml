@@ -19,7 +19,7 @@ spec:
       automountServiceAccountToken: false
       containers:
         - name: migrate
-          image: vkernel/nsx-security-analyzer:0.5.1
+          image: vkernel/nsx-security-analyzer:0.5.2
           imagePullPolicy: IfNotPresent
           env:
             - name: POSTGRES_PASSWORD

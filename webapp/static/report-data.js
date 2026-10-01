@@ -24,10 +24,10 @@
     if (['25','50','100'].includes(document.body.dataset.reportPageSize)) size.value=document.body.dataset.reportPageSize;
     const policy=['dfw-policies','empty-policies'].includes(panel), tags=panel.startsWith('tags-'), scopes=panel==='tags-scopes';
     const dfw=policy || ['dfw-rules','zero-hit-rules','disabled-rules','unknown-statistics','empty-group-rules','dfw-scope-rules'].includes(panel);
-    const keys = scopes ? ['name','tag_count','vm_count','group_count','other_count',null] : tags ? ['name','status','vm_count','group_count','other_count',null]
+    const keys = panel==='all-vms' ? ['name','power_state','tag_count','group_count',null] : scopes ? ['name','tag_count','vm_count','group_count','other_count',null] : tags ? ['name','status','vm_count','group_count','other_count',null]
       : dfw ? ['name',policy?'category':'policy_name',policy?'status':'hit_status',policy?'rule_count':'hit_count',null]
       : ['name','kind','usage','membership',null];
-    const permitted = [...new Set([...keys.filter(Boolean),'path',...(dfw && !policy?['category','rule_id','policy_rule_id']:[]),...(tags&&!scopes?['scope']:[]),...(!dfw&&!tags?['method','references']:[])])];
+    const permitted = [...new Set([...keys.filter(Boolean),'path',...(dfw && !policy?['category','rule_id','policy_rule_id']:[]),...(tags&&!scopes?['scope']:[]),...(!dfw&&!tags&&panel!=='all-vms'?['method','references']:[])])];
     sort.replaceChildren(...permitted.map(key=>new Option(key.replaceAll('_',' '),key)));
     let countToken='', page=0, timer, sequence=0, pending, mounted=true, lastParams=null, shown=[];
     function params(op='rows') { return {op,panel,count_token:countToken,q:search.value,mode:mode.value,syntax:syntax.value,evidence:evidence.checked?'1':'0',size:size.value,sort:sort.value,order:order.value,page,filters:JSON.stringify([...filters])}; }

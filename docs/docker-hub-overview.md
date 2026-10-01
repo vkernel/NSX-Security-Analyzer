@@ -1,8 +1,9 @@
 # NSX Security Analyzer
 
-> Release **0.5.1** improves Inventory and Firewall page loading, historical activity,
-> tag evidence and table filtering. Existing installations should apply migrations
-> and run `python manage.py index_snapshots --refresh` after updating.
+> Release **0.5.2** adds Inventory → VMs and faster environment and collection pages.
+> After updating, run `python manage.py index_snapshots --refresh` in the web container
+> and collect a new snapshot for complete returned VM details, including untagged VMs.
+> Group/rule/service relationships are configuration evidence, not verified membership or traffic.
 
 
 Web-based VMware NSX Policy inventory, configuration review and snapshot history.
@@ -21,9 +22,9 @@ The application image is used by web, migration, collection worker and scheduler
 containers. PostgreSQL runs separately with persistent storage. Pulling or running
 this image alone does not start the complete product.
 
-- [Installation instructions](https://github.com/vkernel/NSX-Security-Analyzer/blob/v0.5.1/docs/docker-hub.md)
-- [Download Compose file](https://raw.githubusercontent.com/vkernel/NSX-Security-Analyzer/v0.5.1/deploy/compose.yaml)
-- [Configuration example](https://raw.githubusercontent.com/vkernel/NSX-Security-Analyzer/v0.5.1/deploy/.env.example)
+- [Installation instructions](https://github.com/vkernel/NSX-Security-Analyzer/blob/v0.5.2/docs/docker-hub.md)
+- [Download Compose file](https://raw.githubusercontent.com/vkernel/NSX-Security-Analyzer/v0.5.2/deploy/compose.yaml)
+- [Configuration example](https://raw.githubusercontent.com/vkernel/NSX-Security-Analyzer/v0.5.2/deploy/.env.example)
 - [Source code](https://github.com/vkernel/NSX-Security-Analyzer)
 
 ## Required application services
@@ -66,7 +67,7 @@ Docker Desktop's Run dialog and plain `docker run` do not automatically load it.
 | `POSTGRES_PORT` | Database port; defaults to `5432`. |
 | `DJANGO_ALLOWED_HOSTS` | Hostnames/IPs used to access the application, comma-separated and without schemes or ports. Local Compose defaults: `localhost,127.0.0.1,[::1]`. Configure your hostname for remote access. |
 | `WEB_PORT` | Compose-only host port; defaults to `8000`. The web process listens on container port `8000`. |
-| `NSX_IMAGE_TAG` | Compose-only image selection; defaults to `0.5.1`. |
+| `NSX_IMAGE_TAG` | Compose-only image selection; defaults to `0.5.2`. |
 
 For an HTTPS reverse proxy, also configure `DJANGO_CSRF_TRUSTED_ORIGINS`
 (full HTTPS origins), `DJANGO_HTTPS` and, only behind a trusted proxy,
@@ -82,9 +83,9 @@ Start in a **new directory**; do not overwrite an existing installation's `.env`
 ```sh
 mkdir nsx-security-analyzer
 cd nsx-security-analyzer
-curl -fSL https://raw.githubusercontent.com/vkernel/NSX-Security-Analyzer/v0.5.1/deploy/compose.yaml -o compose.yaml
+curl -fSL https://raw.githubusercontent.com/vkernel/NSX-Security-Analyzer/v0.5.2/deploy/compose.yaml -o compose.yaml
 
-export NSX_IMAGE_TAG=0.5.1
+export NSX_IMAGE_TAG=0.5.2
 docker pull "vkernel/nsx-security-analyzer:$NSX_IMAGE_TAG"
 umask 077
 docker run --rm --network none --entrypoint python "vkernel/nsx-security-analyzer:$NSX_IMAGE_TAG" -c 'import secrets; print("DJANGO_SECRET_KEY="+secrets.token_hex(32)); print("POSTGRES_PASSWORD="+secrets.token_hex(32)); print("WEB_PORT=8000")' > .env
@@ -119,7 +120,7 @@ not cause it to be recreated.
 Keep your `.env` and PostgreSQL backups; `docker compose down` retains data,
 whereas `down -v` deletes the database volume.
 
-Release **0.5.1** supports Linux AMD64 and ARM64. It adds indexed snapshot reports,
+Release **0.5.2** supports Linux AMD64 and ARM64. It adds indexed snapshot reports,
 server-side pagination/search/sorting, on-demand evidence, and full-result CSV exports.
 It retains structured logs, audit history, automatic initial administrator provisioning,
 and Kubernetes deployment support. Experimental IPFIX functionality is deferred.

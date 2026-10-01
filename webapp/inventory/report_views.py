@@ -21,7 +21,7 @@ from . import tag_evidence
 
 LOG = logging.getLogger('inventory.web')
 
-SORTS = {'name','path','scope','category','policy_name','rule_count','hit_count','rule_id',
+SORTS = {'power_state','name','path','scope','category','policy_name','rule_count','hit_count','rule_id',
          'policy_rule_id','vm_count','group_count','other_count','tag_count','usage',
          'membership','hit_status','status','kind','method','references'}
 
@@ -140,7 +140,7 @@ def snapshot_data(request, pk):
                     # Validate the search before starting a streamed download.
                     rows.exists()
                     view = rows.values_list('view', flat=True).first()
-                    headers = ['Object / path','Type','Usage','Membership','Evidence'] if view == 'inventory' else ['Tag / scope','Usage','VMs','Groups','Other resources','Evidence'] if view == 'tags' else ['Scope','Tags','VMs','Groups','Other resources','Evidence'] if view == 'scopes' else ['Object / path','Policy / category','Status','Count','Evidence']
+                    headers = ['VM / identity','Power state','Tags','Related groups','Relationships & details'] if view == 'vms' else ['Object / path','Type','Usage','Membership','Evidence'] if view == 'inventory' else ['Tag / scope','Usage','VMs','Groups','Other resources','Evidence'] if view == 'tags' else ['Scope','Tags','VMs','Groups','Other resources','Evidence'] if view == 'scopes' else ['Object / path','Policy / category','Status','Count','Evidence']
                     response = StreamingHttpResponse(csv_stream(rows, headers), content_type='text/csv; charset=utf-8')
                     response['Content-Disposition'] = 'attachment; filename="snapshot-'+str(pk)+'.csv"'
                     response['Cache-Control'] = 'private, no-store'
