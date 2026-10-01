@@ -132,7 +132,7 @@ def prepare_snapshot(environment, report, imported=False):
         if imported:
             report["rendered_from_saved_report"] = True
         audit = engine()
-        rendered = audit.render_html_report(report)  # Prepared once for the queryable presentation.
+        rendered = audit.prepare_index_report(report)  # No serialized inventory embedded in the layout.
         review = bool(audit.needs_review(report))
         dfw = report.get("dfw", {})
         summary = {"groups": report["groups_scanned"], "services": report["custom_services_scanned"],

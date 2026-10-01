@@ -192,3 +192,18 @@ returned VM inventory, including untagged VMs. Incomplete or sampled inventory i
 
 VM fields follow the [Broadcom NSX VM inventory API](https://developer.broadcom.com/xapis/nsx-t-data-center-rest-api/latest/method_ListAllVirtualMachines.html);
 fields absent from NSX are not inferred.
+
+
+### Refresh memory usage
+
+Index construction now receives structured row references directly from report preparation.
+It no longer embeds the entire inventory in HTML and JSON-decodes that inventory again.
+Only the layout is rendered; expanded database records are inserted in batches of at most
+50, and panel links in batches of 1,000. Refresh logs the current snapshot, inserted record
+counts and elapsed time. Each snapshot remains one transaction, including replacement of
+its old index; a failed refresh rolls back that snapshot's index.
+
+Run large refreshes in a separate maintenance Job, not inside the live web container.
+The snapshot JSON and derived relationship data still occupy memory, so this is not a
+fixed-memory streaming reader and no universal memory limit can be guaranteed. Use the
+updated application build in the maintenance Job: version 0.5.2 does not contain this fix.

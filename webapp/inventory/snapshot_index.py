@@ -1,6 +1,7 @@
 """Build immutable, queryable report records once when a snapshot is published."""
 import json
 import re
+import logging
 from html.parser import HTMLParser
 
 from django.db import transaction
@@ -82,9 +83,11 @@ def tag_context(row, metadata):
     return result
 
 
+@transaction.atomic
 def build(snapshot, rendered=None):
     """Publish the whole index transactionally. Other requests never see half an index."""
     from .services import engine
+    Snapshot.objects.select_for_update().only("id").get(pk=snapshot.pk)
     if not SnapshotHistoryData.objects.filter(snapshot_id=snapshot.pk).exists():
         fields = ('path','name','rule_id','policy_rule_id','unique_id','created_at',
                   'configuration_fingerprint','disabled','hit_status','statistics_checked_at','statistics')
@@ -93,10 +96,12 @@ def build(snapshot, rendered=None):
             'rules': [{key:row[key] for key in fields if key in row} for row in dfw.get('rules', [])],
             'errors': bool(dfw.get('errors'))}})
     if SnapshotPresentation.objects.filter(snapshot_id=snapshot.pk).exists(): return
-    rendered = rendered or engine().render_html_report(snapshot.report)
-    match = re.search(r'<script type="application/json" id="report-rows">(.*?)</script>', rendered['scripts'], re.S)
-    payload = json.loads(match.group(1))
-    metadata = payload['tag_evidence']
+    # Ignore legacy rendered input: it contains a full serialized copy of the inventory.
+    if rendered is None or '_index_rows' not in rendered:
+        rendered = engine().prepare_index_report(snapshot.report)
+    records = rendered['_index_rows']
+    metadata = rendered['_index_metadata']
+    rendered = {k:v for k,v in rendered.items() if not k.startswith('_index_')}
     parts, panel_rows = [], {}
     content = rendered['content']
     for start, end, slug in sorted(Panels(content).found):
@@ -111,13 +116,17 @@ def build(snapshot, rendered=None):
         # Summary panels are small and immediately visible, even on a cold visit.
         parts.append((start, end, html if slug in ('overview', 'dfw-overview') else stub))
     for start, end, stub in reversed(parts): content = content[:start] + stub + content[end:]
-    remote_payload = json.dumps({'rows': [], 'tag_evidence': {}, 'remote': True, 'snapshot': str(snapshot.pk)})
-    scripts = rendered['scripts'][:match.start(1)] + remote_payload + rendered['scripts'][match.end(1):]
-    shell = dict(rendered, content=content, scripts=scripts)
+    shell = dict(rendered, content=content)
     shell['diagnostics'] = {'dfw': {'collection_diagnostics': snapshot.report.get('dfw', {}).get('collection_diagnostics')},
                             'performance': {'concurrency': {'endpoints': snapshot.report.get('performance', {}).get('concurrency', {}).get('endpoints', {})}}}
-    rows = []
-    for ordinal, record in enumerate(payload['rows']):
+    rows, record_ids = [], []
+    def flush():
+        if not rows: return
+        SnapshotRecord.objects.bulk_create(rows, batch_size=50)
+        record_ids.extend(row.pk for row in rows)
+        rows.clear()
+        logging.getLogger('inventory.collection').info('Index snapshot=%s records_saved=%d', snapshot.pk, len(record_ids))
+    for ordinal, record in enumerate(records):
         row, view = record['data'], record['view']
         compact = {key: val for key, val in row.items() if not isinstance(val, (dict, list))}
         compact['referenced_by'] = []
@@ -134,11 +143,14 @@ def build(snapshot, rendered=None):
                     compact=compact, data=row, columns=columns(view, dict(row, resolved_tag_evidence=extra) if extra else row), sort_values=sorts,
                     search_basic=row['name']+' '+row['path'],
                     search_evidence=flatten(row)+' '+flatten(extra)+' '+flatten([LABELS.get(row.get(k), '') for k in ['usage','membership','hit_status','status']])+(' Disabled' if row.get('disabled') else ' Enabled' if 'disabled' in row else '')))
-    with transaction.atomic():
-        Snapshot.objects.select_for_update().only('id').get(pk=snapshot.pk)
-        if SnapshotPresentation.objects.filter(snapshot_id=snapshot.pk).exists(): return
-        SnapshotRecord.objects.bulk_create(rows, batch_size=250)
-        for slug, (html, ids) in panel_rows.items():
-            panel = SnapshotPanel.objects.create(snapshot=snapshot, slug=slug, html=html)
-            SnapshotRecordPanel.objects.bulk_create([SnapshotRecordPanel(panel=panel, record=rows[i]) for i in ids], batch_size=1000)
-        SnapshotPresentation.objects.create(snapshot=snapshot, shell=shell, tag_evidence=metadata)
+        # Flush incrementally; never accumulate all expanded ORM records.
+        if len(rows) >= 50:
+            flush()
+    flush()
+    for slug, (html, ids) in panel_rows.items():
+        panel = SnapshotPanel.objects.create(snapshot=snapshot, slug=slug, html=html)
+        for offset in range(0, len(ids), 1000):
+            SnapshotRecordPanel.objects.bulk_create([
+                SnapshotRecordPanel(panel=panel, record_id=record_ids[i])
+                for i in ids[offset:offset+1000]], batch_size=1000)
+    SnapshotPresentation.objects.create(snapshot=snapshot, shell=shell, tag_evidence=metadata)

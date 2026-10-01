@@ -220,3 +220,28 @@ class IndexedReportTests(TestCase):
         legacy=dict(report,tags=dict(report['tags']))
         legacy['tags'].pop('virtual_machines')
         self.assertEqual(len(engine().vm_inventory_rows(legacy)),1)
+
+    def test_direct_index_matches_legacy_rows_without_serialized_payload(self):
+        import re
+        report=sample_report()
+        report['objects']=[dict(report['objects'][0],name='Group %d'%i,path='/groups/%d'%i,
+            notes=['large-evidence-'+'x'*10000]) for i in range(120)]
+        legacy=engine().render_html_report(report)
+        old=json.loads(re.search(r'id="report-rows">(.*?)</script>',legacy['scripts'],re.S)[1])
+        direct=engine().prepare_index_report(report)
+        self.assertEqual(direct['_index_rows'],old['rows'])
+        self.assertEqual(direct['_index_metadata'],old['tag_evidence'])
+        self.assertNotIn('large-evidence-',direct['scripts'])
+        self.assertLess(len(direct['scripts']),len(legacy['scripts'])//2)
+        snapshot=prepare_snapshot(self.snapshot.environment,report)
+        snapshot.save()
+        create=SnapshotRecord.objects.bulk_create
+        batches=[]
+        def bounded(rows,**kwargs):
+            batches.append(len(rows))
+            self.assertLessEqual(len(rows),50)
+            return create(rows,**kwargs)
+        with patch.object(engine(),'render_html_report',side_effect=AssertionError('Legacy render called')), patch.object(SnapshotRecord.objects,'bulk_create',side_effect=bounded):
+            build(snapshot,snapshot._rendered)
+        self.assertGreater(len(batches),1)
+        self.assertEqual(SnapshotRecord.objects.filter(snapshot=snapshot).count(),len(old['rows']))

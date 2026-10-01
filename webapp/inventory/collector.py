@@ -1574,7 +1574,7 @@ dialog :is(button,input,select):focus-visible{outline:2px solid var(--teal);outl
 """
 
 
-def _render_report(report, *, fragments):
+def _render_report(report, *, fragments, indexed=False):
     """Build a self-contained report; escape all inventory values."""
     def safe(value):
         return escape(display_number(value), quote=True)
@@ -1609,7 +1609,7 @@ def _render_report(report, *, fragments):
         for row in sorted(items, key=lambda r: (r["name"].casefold(), r["path"])):
             key = (view, row["path"])
             if key not in row_ids:
-                record = dict(row)
+                record = row if indexed else dict(row)
                 row_ids[key] = len(row_pool)
                 row_pool.append({"view": view, "data": record})
             indices.append(row_ids[key])
@@ -1931,7 +1931,7 @@ table{min-width:760px}th{line-height:1.5}td{padding:15px 14px}.path{line-height:
 </main><dialog id="detail-dialog" aria-labelledby="detail-title">
 <div class="dialog-heading"><h2 id="detail-title">Details</h2><button type="button" id="close-details" autofocus>Close</button></div>
 <div id="detail-body"></div></dialog><noscript><p>This report requires JavaScript to display tables. Enable JavaScript to explore this snapshot.</p></noscript>
-<script type="application/json" id="report-rows">''' + json.dumps({"rows": row_pool, "tag_evidence": {key: value for key, value in tags.items() if key not in {"objects", "virtual_machines"}}}, ensure_ascii=False, separators=(',', ':')).replace('<', '\\u003c') + '''</script><script>
+<script type="application/json" id="report-rows">''' + json.dumps(({"rows": [], "tag_evidence": {}, "remote": True} if indexed else {"rows": row_pool, "tag_evidence": {key: value for key, value in tags.items() if key not in {"objects", "virtual_machines"}}}), ensure_ascii=False, separators=(',', ':')).replace('<', '\\u003c') + '''</script><script>
 (() => {
   if (window.self !== window.top) document.body.classList.add('embedded-report');
   const dataElement = document.getElementById('report-rows');
@@ -2645,7 +2645,11 @@ table{min-width:760px}th{line-height:1.5}td{padding:15px 14px}.path{line-height:
             "Open Search options to choose Plain text or Regex under Syntax, and Contains or Does not contain under Match.")
         content = content.replace("View evidence and View details open a dialog. Expand its sections for more information. JSON blocks have line numbers, syntax highlighting and Copy buttons. Close the dialog with Close, Escape or a click outside it.",
             "Select an object name, View evidence or View details to open the evidence side panel. Use its Summary, References, Definition and Statistics tabs where applicable; raw JSON is under Advanced. JSON blocks have line numbers, syntax highlighting and Copy buttons. Close the panel with Close, Escape or a click outside it.")
-        return {"styles": styles, "navigation": menu, "content": content, "scripts": scripts}
+        result = {"styles": styles, "navigation": menu, "content": content, "scripts": scripts}
+        if indexed:
+            result['_index_rows'] = row_pool
+            result['_index_metadata'] = {key:value for key,value in tags.items() if key not in {'objects','virtual_machines'}}
+        return result
     return document
 
 
@@ -2653,3 +2657,8 @@ table{min-width:760px}th{line-height:1.5}td{padding:15px 14px}.path{line-height:
 def render_html_report(report):
     """Return fragments for the integrated, database-backed report viewer."""
     return _render_report(report, fragments=True)
+
+
+def prepare_index_report(report):
+    """Prepare layout and direct row references without embedding inventory JSON."""
+    return _render_report(report, fragments=True, indexed=True)
