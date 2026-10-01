@@ -29,9 +29,9 @@
       : ['name','kind','usage','membership',null];
     const permitted = [...new Set([...keys.filter(Boolean),'path',...(dfw && !policy?['category','rule_id','policy_rule_id']:[]),...(tags&&!scopes?['scope']:[]),...(!dfw&&!tags?['method','references']:[])])];
     sort.replaceChildren(...permitted.map(key=>new Option(key.replaceAll('_',' '),key)));
-    let page=0, timer, sequence=0, pending, mounted=true, lastParams=null, shown=[];
-    function params(op='rows') { return {op,panel,q:search.value,mode:mode.value,syntax:syntax.value,evidence:evidence.checked?'1':'0',size:size.value,sort:sort.value,order:order.value,page,filters:JSON.stringify([...filters])}; }
-    const getValues=async (index,text)=> (await window.reportData(payload,{...params('values'),column:index,value:text})).values;
+    let countToken='', page=0, timer, sequence=0, pending, mounted=true, lastParams=null, shown=[];
+    function params(op='rows') { return {op,panel,count_token:countToken,q:search.value,mode:mode.value,syntax:syntax.value,evidence:evidence.checked?'1':'0',size:size.value,sort:sort.value,order:order.value,page,filters:JSON.stringify([...filters])}; }
+    const getValues=async (index,text,signal)=> {const result=await window.reportData(payload,{...params('values'),column:index,value:text},signal);getValues.message=result.message || '';return result.values;};
     getValues.remote=true;
     const filters=columnFilters(widget.querySelector('table'),()=>{page=0;lastParams=null;refresh();},getValues);
     const headers=[];
@@ -55,7 +55,7 @@
       try {
         const result=await window.reportData(payload,query,pending.signal);
         if(version!==sequence || !mounted)return;
-        page=result.page;lastParams=JSON.stringify(params());
+        countToken=result.count_token || '';page=result.page;lastParams=JSON.stringify(params());
         result.rows.forEach(row=>{rowPool[row.id]=row;shown.push(row.id);});
         tbody.innerHTML=shown.map(id=>renderRow(id)).join('');
         status.textContent=result.count?`${page*Number(size.value)+1}–${Math.min((page+1)*Number(size.value),result.count)} of ${result.count}`:'0 results';

@@ -81,3 +81,61 @@ class IndexedReportTests(TestCase):
             with self.assertRaises(RuntimeError): build(self.snapshot,self.snapshot._rendered)
         self.assertFalse(SnapshotRecord.objects.filter(snapshot=self.snapshot).exists())
         self.assertFalse(SnapshotPanel.objects.filter(snapshot=self.snapshot).exists())
+
+    def test_navigation_reads_only_display_metadata_with_large_history(self):
+        # Summary may contain thousands of coverage fingerprints; it is not dropdown metadata.
+        from .models import Snapshot
+        Snapshot.objects.filter(pk=self.snapshot.pk).update(summary={'coverage_issue_keys':['x'*64]*10000})
+        for _ in range(3):
+            Snapshot.objects.create(environment_id=self.snapshot.environment_id,
+                generated_at=self.snapshot.generated_at, summary={'coverage_issue_keys':['x'*64]*10000},
+                report={'not_needed':'never transfer this'}, html='not needed')
+        with CaptureQueriesContext(connection) as queries:
+            redirect_response = self.client.get(reverse('workspace-section', args=['inventory']),
+                                                {'environment':self.snapshot.environment_id})
+            response = self.client.get(reverse('snapshot',args=[self.snapshot.pk]))
+        self.assertEqual(redirect_response.status_code,302)
+        self.assertEqual(response.status_code,200)
+        forbidden = ['"summary"','"report"','"html"','"password_ciphertext"','"ca_bundle_pem"']
+        for query in queries:
+            if query['sql'].startswith('SELECT'):
+                for field in forbidden:
+                    self.assertNotIn(field, query['sql'])
+        self.assertEqual(len(response.context['history']),4)
+
+    def test_signed_count_reuse_and_changed_search(self):
+        first = self.client.get(self.url, {'panel':'all-groups'}).json()
+        with CaptureQueriesContext(connection) as queries:
+            page = self.client.get(self.url, {'panel':'all-groups', 'page':1,
+                'count_token':first['count_token']}).json()
+        self.assertEqual(page['count'],61)
+        self.assertFalse(any('COUNT(' in q['sql'] for q in queries))
+        changed = self.client.get(self.url, {'panel':'all-groups', 'q':'Group 060',
+            'count_token':first['count_token']}).json()
+        self.assertEqual(changed['count'],1)
+        tampered = self.client.get(self.url, {'panel':'all-groups',
+            'count_token':first['count_token']+'invalid'}).json()
+        self.assertEqual(tampered['count'],61)
+
+    def test_evidence_suggestions_do_not_aggregate_large_payloads(self):
+        with CaptureQueriesContext(connection) as queries:
+            response = self.client.get(self.url, {'panel':'all-groups','op':'values','column':4}).json()
+        self.assertEqual(response['values'],[])
+        self.assertTrue(response['message'])
+        self.assertFalse(any('GROUP BY' in q['sql'] for q in queries))
+
+    def test_tag_evidence_projects_only_requested_paths(self):
+        from .tag_evidence import for_tag, coverage
+        SnapshotPresentation.objects.filter(snapshot=self.snapshot).update(tag_evidence={
+            'conditions':[{'name':'needed'},{'name':'unrelated'}],
+            'condition_sets':[[0],[1]], 'firewall_rules':[{'name':'rule'},{'name':'unrelated'}],
+            'unsupported_conditions':[0], 'unmatched_conditions':[], 'firewall_reference_note':'note'})
+        with CaptureQueriesContext(connection) as queries:
+            result = for_tag(self.snapshot.pk, {'condition_evidence_set':0,
+                'firewall_references':[{'rule':0}]})
+            issues = coverage(self.snapshot.pk)
+        self.assertEqual(result['conditions'],{0:{'name':'needed'}})
+        self.assertEqual(result['firewall_rules'],{0:{'name':'rule'}})
+        self.assertNotIn('unrelated',str(result)+str(issues))
+        self.assertNotIn('firewall_rules',issues)
+        self.assertTrue(all('#>' in q['sql'] or '->' in q['sql'] for q in queries))

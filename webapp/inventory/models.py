@@ -5,6 +5,7 @@ from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.core.validators import MaxValueValidator, MinValueValidator, RegexValidator
 from django.db import models
+from django.core.serializers.json import DjangoJSONEncoder
 
 env_name = RegexValidator(r"^[A-Za-z_][A-Za-z0-9_]*$", "Use an environment variable name.")
 
@@ -115,6 +116,7 @@ class Snapshot(models.Model):
 
     class Meta:
         ordering = ["-generated_at", "-created_at"]
+        indexes = [models.Index(fields=["environment", "-generated_at", "-created_at"], name="snapshot_env_latest")]
 
 
 class UserPreferences(models.Model):
@@ -244,3 +246,39 @@ class SnapshotRecordPanel(models.Model):
 
     class Meta:
         constraints = [models.UniqueConstraint(fields=['panel', 'record'], name='snapshot_panel_record_unique')]
+
+
+class HistoryRevision(models.Model):
+    environment = models.OneToOneField(Environment, on_delete=models.CASCADE, primary_key=True)
+    revision = models.PositiveBigIntegerField(default=0)
+
+
+class HistoryAssessment(models.Model):
+    environment = models.ForeignKey(Environment, on_delete=models.CASCADE)
+    anchor = models.ForeignKey(Snapshot, null=True, on_delete=models.CASCADE)
+    cache_key = models.CharField(max_length=50)
+    revision = models.BigIntegerField(default=-1)
+    expires_at = models.DateTimeField(null=True)
+    metadata = models.JSONField(default=dict, encoder=DjangoJSONEncoder)
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=['environment', 'cache_key'], name='history_assessment_unique')]
+
+
+class HistoryAssessmentRow(models.Model):
+    assessment = models.ForeignKey(HistoryAssessment, on_delete=models.CASCADE, related_name='rows')
+    name = models.TextField()
+    sort_name = models.TextField()
+    path = models.TextField()
+    rule_id_text = models.TextField()
+    status = models.CharField(max_length=20)
+    data = models.JSONField(encoder=DjangoJSONEncoder)
+
+    class Meta:
+        indexes = [models.Index(fields=['assessment', 'sort_name'], name='history_row_name'),
+                   models.Index(fields=['assessment', 'status'], name='history_row_status')]
+
+
+class SnapshotHistoryData(models.Model):
+    snapshot = models.OneToOneField(Snapshot, on_delete=models.CASCADE, primary_key=True, related_name='history_data')
+    payload = models.JSONField()

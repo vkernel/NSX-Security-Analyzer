@@ -5,6 +5,7 @@
 {% block extra_head %}<link rel="stylesheet" href="{% static 'report-workspace.css' %}">{% endblock %}
 
 {% block content %}
+{% if legacy_report %}<p class="snapshot-information" role="status">This older snapshot has not been prepared for fast loading. An administrator can run <code>python manage.py index_snapshots</code> to prepare saved reports.</p>{% endif %}
 <a class="breadcrumb" href="{% url 'environment' snapshot.environment_id %}">← {{ snapshot.environment.name }} / History</a>
 <div class="report-toolbar"><div><p class="eyebrow">{% if is_latest %}LATEST SNAPSHOT{% else %}HISTORICAL SNAPSHOT{% endif %}</p><h1>{{ snapshot.environment.name }}</h1><p class="muted">{% user_time snapshot.generated_at %}{% if snapshot.testing %} · Testing sample{% endif %}{% if snapshot.imported %} · Imported{% endif %}</p><a class="pill {% if snapshot.needs_review %}review{% else %}success{% endif %}" href="#coverage">{% if snapshot.testing %}Testing sample{% elif snapshot.needs_review %}Coverage: incomplete checks{% else %}Coverage: complete{% endif %}</a></div><div class="snapshot-select"><label for="snapshot-switcher">Snapshot</label><select id="snapshot-switcher">{% for item in history %}<option value="{% url 'snapshot' item.pk %}" {% if item.pk == snapshot.pk %}selected{% endif %}>{% user_time item.generated_at plain=True %}{% if item.testing %} · Testing{% endif %}</option>{% endfor %}</select></div></div>
 

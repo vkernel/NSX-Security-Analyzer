@@ -2285,12 +2285,13 @@ table{min-width:760px}th{line-height:1.5}td{padding:15px 14px}.path{line-height:
         const values=getValues.remote ? null : getValues();
         const choices=editor.querySelector('.column-values');
         const valueStatus=editor.querySelector('.column-values-status');
-        let valueRequest = 0;
+        let valueRequest = 0, valueTimer, valueAbort;
         async function populateValues() {
           const version = ++valueRequest;
+          valueAbort?.abort(); valueAbort=new AbortController();
           let options;
-          try { options = getValues.remote ? await getValues(index,input.value) : columnValueOptions(values,index,input.value); }
-          catch (error) { if (version === valueRequest) valueStatus.textContent=error.message; return; }
+          try { options = getValues.remote ? await getValues(index,input.value,valueAbort.signal) : columnValueOptions(values,index,input.value); }
+          catch (error) { if (error.name !== 'AbortError' && version === valueRequest) valueStatus.textContent=error.message; return; }
           if (version !== valueRequest) return;
           choices.replaceChildren();
           options.slice(0,100).forEach(({value,count}) => {
@@ -2300,14 +2301,15 @@ table{min-width:760px}th{line-height:1.5}td{padding:15px 14px}.path{line-height:
           });
           choices.selectedIndex=-1;
           choices.disabled=!options.length;
-          valueStatus.textContent=options.length ? 'Showing '+number(Math.min(100,options.length))+' of '+number(options.length)+' distinct values. Counts show rows. Type to narrow the list.' : 'No matching values. You can still apply the text you entered.';
+          valueStatus.textContent=getValues.message || (options.length ? 'Showing '+number(Math.min(100,options.length))+' of '+number(options.length)+' distinct values. Counts show rows. Type to narrow the list.' : 'No matching values. You can still apply the text you entered.');
         }
-        input.addEventListener('input',populateValues);
+        input.addEventListener('input',()=>{clearTimeout(valueTimer);valueAbort?.abort();valueRequest++;valueTimer=setTimeout(populateValues,200);});
         choices.addEventListener('change',() => {if(choices.selectedIndex>=0) input.value=choices.value;});
         populateValues();
         // Enter applies the filter, rather than activating the first (Cancel) button.
         input.addEventListener('keydown',event => {if(event.key==='Enter'){event.preventDefault();editor.close('apply');}});
         editor.addEventListener('close',() => {
+          clearTimeout(valueTimer);valueAbort?.abort();valueRequest++;
           if(editor.returnValue==='clear') filters.delete(index);
           if(editor.returnValue==='apply') {
             if(input.value.trim()) filters.set(index,{text:input.value.trim(),mode:mode.value});

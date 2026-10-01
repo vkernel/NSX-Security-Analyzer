@@ -11,7 +11,7 @@ def preferences(request):
 
 def display_preferences(request):
     from .models import Environment
-    environments = list(Environment.objects.all()) if request.user.is_authenticated else []
+    environments = list(Environment.objects.only("id", "name")) if request.user.is_authenticated else []
     selected_id = request.session.get('selected_environment')
     match = request.resolver_match
     if match and match.kwargs.get('pk') and match.url_name in ('environment','environment-edit','collection-history','rule-history','snapshot-comparison','collection-coverage','findings','finding-detail'):

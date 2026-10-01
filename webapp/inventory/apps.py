@@ -6,4 +6,4 @@ class InventoryConfig(AppConfig):
     default_auto_field = 'django.db.models.BigAutoField'
 
     def ready(self):
-        from . import audit_signals  # noqa: F401
+        from . import history_cache, audit_signals  # noqa: F401

@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.5.1 — 2026-10-01
+
+- Reduce Inventory and Firewall first-load metadata queries.
+- Reuse historical activity assessments with database pagination and invalidation when collection history changes.
+- Load only relevant tag evidence; debounce filter suggestions and reuse signed matching-row counts.
+- Add compact history projections and migrations 0019/0020.
+- Run Kubernetes migrations as an ordered Argo CD Sync hook to avoid immutable Job update errors.
+
+Upgrade: apply migrations and restart application services, then run `python manage.py index_snapshots --refresh` once to update existing prepared reports. Original snapshots are preserved.
+
 ## 0.5.0 — 2026-09-30
 
 - Load inventory and firewall summaries without reading or rendering the full snapshot on each first visit.

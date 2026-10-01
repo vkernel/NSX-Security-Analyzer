@@ -35,13 +35,14 @@ Choose one installation path:
 | Docker Hub + Compose | [Step-by-step installation](docs/docker-hub.md) | Easiest way to run the published release |
 | Docker Compose from source | [Source setup](webapp/README.md#run-from-source-with-docker-desktop) | Test changes not published to Docker Hub yet |
 | Kubernetes | [Step-by-step installation](deploy/kubernetes/README.md) | Run on an existing Kubernetes platform |
+| Kubernetes with Argo CD | [GitOps deployment and upgrades](deploy/kubernetes/README.md#argo-cd-deployment-and-upgrades) | Run migrations before application rollouts using sync hooks |
 
 Docker Hub's Run button starts a single container. **Compose or Kubernetes must
 also start PostgreSQL, database migrations, the worker and the scheduler.** The
 provided deployment files include these components. The migration container exits
 successfully after initialization; this is expected.
 
-Release **0.5.0** includes automatic initial admin creation, structured logging
+Release **0.5.1** includes automatic initial admin creation, structured logging
 and audit diagnostics, and native Kubernetes deployment manifests.
 
 ## Quick start from source
@@ -71,7 +72,7 @@ docker compose up --build -d
 On a fresh source deployment, database initialization creates username **`admin`**
 with password **`NSXSecurityA!`**. Change this password after signing in through
 **Administration → Users & access**. Existing administrators are left unchanged.
-No manual account-creation command is needed with release **0.5.0**.
+No manual account-creation command is needed with release **0.5.1**.
 
 Open **http://localhost:8000** and sign in. In **Administration**, add an
 environment with its NSX Manager address, username and password. Retrieve and review its certificate if required and select a sync interval. You can also run a collection

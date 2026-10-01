@@ -3,6 +3,9 @@ import csv
 import io
 import json
 import logging
+import hashlib
+from time import perf_counter
+from django.core import signing
 import re
 from functools import reduce
 from operator import and_, or_
@@ -14,7 +17,7 @@ from django.http import JsonResponse, StreamingHttpResponse
 from django.shortcuts import get_object_or_404
 from django.views.decorators.http import require_GET
 from .models import Snapshot, SnapshotPanel, SnapshotPresentation, SnapshotRecord
-from .snapshot_index import tag_context
+from . import tag_evidence
 
 LOG = logging.getLogger('inventory.web')
 
@@ -112,16 +115,21 @@ def snapshot_data(request, pk):
                     row = get_object_or_404(SnapshotRecord.objects.only('data','view','ordinal'), snapshot_id=pk, ordinal=int(request.GET.get('id', '-1')))
                     result = {'id':row.ordinal,'data':row.data,'view':row.view}
                     if row.view == 'tags':
-                        meta = get_object_or_404(SnapshotPresentation.objects.only('tag_evidence'), snapshot_id=pk).tag_evidence
-                        result['tag_evidence'] = tag_context(row.data, meta)
+                        result['tag_evidence'] = tag_evidence.for_tag(pk, row.data)
                 else:
-                    meta = get_object_or_404(SnapshotPresentation.objects.only('tag_evidence'), snapshot_id=pk).tag_evidence
-                    result = {'tag_evidence':meta}
+                    get_object_or_404(SnapshotPresentation.objects.only('snapshot_id'), snapshot_id=pk)
+                    result = {'tag_evidence':tag_evidence.coverage(pk)}
             elif op in ('rows', 'export', 'values'):
                 rows = filtered(request, pk)
                 if op == 'values':
                     index = int(request.GET.get('column', '-1'))
                     if not 0 <= index <= 5: raise ValueError('Invalid column.')
+                    # Evidence contains potentially large JSON, not useful distinct-value suggestions.
+                    view = rows.values_list('view', flat=True).first()
+                    if index == (5 if view in ('tags','scopes') else 4):
+                        response = JsonResponse({'values':[], 'message':'Enter evidence text to filter; suggestions are disabled for this column.'})
+                        response['Cache-Control'] = 'private, no-store'
+                        return response
                     field = 'columns__'+str(index)
                     text = request.GET.get('value', '')[:1000]
                     values = rows.filter(**{field+'__icontains':text}).order_by().values(value=F(field)).annotate(count=Count('pk')).order_by('value')[:100]
@@ -139,11 +147,28 @@ def snapshot_data(request, pk):
                     return response
                 size = int(request.GET.get('size', '25'))
                 if size not in (25,50,100): raise ValueError('Invalid page size.')
-                count = rows.count()
+                count_started = perf_counter()
+                fingerprint = hashlib.sha256(json.dumps([str(pk), *[request.GET.get(k, '') for k in
+                    ('panel','q','mode','syntax','evidence','filters')]], separators=(',',':')).encode()).hexdigest()
+                reused = False
+                try:
+                    saved_count = signing.loads(request.GET.get('count_token',''), salt='snapshot-count', max_age=300)
+                    if saved_count['query'] != fingerprint or type(saved_count['count']) is not int or saved_count['count'] < 0:
+                        raise ValueError('Count does not match query')
+                    count = saved_count['count']
+                    reused = True
+                except (signing.BadSignature, ValueError, KeyError, TypeError):
+                    count = rows.count()
+                count_token = signing.dumps({'query':fingerprint,'count':count}, salt='snapshot-count', compress=True)
+                count_seconds = perf_counter()-count_started
+                rows_started = perf_counter()
                 page = min(max(0,int(request.GET.get('page', '0'))),max(0,(count-1)//size))
-                result = {'count':count,'page':page,'rows':[
+                result = {'count':count,'count_token':count_token,'page':page,'rows':[
                     {'id':r.ordinal,'view':r.view,'data':r.compact}
                     for r in rows.only('ordinal','view','compact')[page*size:(page+1)*size]]}
+                LOG.info('Snapshot table snapshot=%s panel=%s count_reused=%s count_seconds=%.3f rows_seconds=%.3f returned=%d',
+                         pk, request.GET.get('panel','overview'), reused, count_seconds,
+                         perf_counter()-rows_started, len(result['rows']))
             else: raise ValueError('Unknown report request.')
     except (ValueError, TypeError, KeyError):
         response = JsonResponse({'error':'Invalid search or filter. Check the expression and try again.'}, status=400)

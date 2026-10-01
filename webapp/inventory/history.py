@@ -41,9 +41,18 @@ def counters(rule, generated):
         return None
 
 
+def history_snapshots(queryset):
+    """Use compact counter observations; retain a compatibility path for old snapshots."""
+    for row in queryset.values('pk','generated_at','history_data__payload').iterator(chunk_size=10):
+        payload = row['history_data__payload']
+        if payload is None:
+            payload = queryset.model.objects.filter(pk=row['pk']).values_list('report__dfw', flat=True).get()
+        yield {'report__dfw':payload, 'generated_at':row['generated_at']}
+
+
 def analyze(environment, days, end):
     start = end - timedelta(days=days)
-    latest = environment.snapshots.filter(testing=False, generated_at__lte=end).values('report__dfw', 'generated_at').first()
+    latest = next(history_snapshots(environment.snapshots.filter(testing=False, generated_at__lte=end)[:1]), None)
     if not latest:
         return {'rows': [], 'counts': {}, 'snapshots': 0, 'failed_jobs': 0, 'start': start, 'end': end}
     latest_rules = (latest['report__dfw'] or {}).get('rules', [])
@@ -56,10 +65,9 @@ def analyze(environment, days, end):
     window = Q(generated_at__gte=start)
     if baseline:
         window |= Q(pk=baseline.pk)
-    snapshots = environment.snapshots.filter(window, testing=False, generated_at__lte=end).values(
-        'report__dfw', 'generated_at').order_by('-generated_at', '-created_at')
+    snapshots = environment.snapshots.filter(window, testing=False, generated_at__lte=end).order_by('-generated_at', '-created_at')
     snapshot_count = 0
-    for snapshot in snapshots.iterator(chunk_size=10):
+    for snapshot in history_snapshots(snapshots):
         snapshot_count += 1
         dfw = snapshot['report__dfw'] or {}
         records = {r['path']: r for r in dfw.get('rules', [])}

@@ -19,7 +19,7 @@ a database also restores its accounts and migration history. Keep one migration
 job per deployment and wait for it before starting application pods. This works
 with bundled and external PostgreSQL; it does not provision a PostgreSQL login.
 
-No manual account-creation command is needed with release **0.5.0**.
+No manual account-creation command is needed with release **0.5.1**.
 
 ## Routine checks
 
@@ -53,6 +53,23 @@ Wait for active collections to finish before stopping workers where practical.
 Review service health and collection history afterward. Do not roll back code across
 schema changes without reviewing migration compatibility; restore a matching backup
 if necessary. Avoid `docker compose down -v` unless deliberately deleting all data.
+
+## Kubernetes and Argo CD upgrades
+
+Use the [Argo CD upgrade procedure](../deploy/kubernetes/README.md#argo-cd-deployment-and-upgrades)
+for GitOps deployments, or the [manual kubectl procedure](../deploy/kubernetes/README.md#manual-kubectl-upgrades)
+when applying manifests yourself.
+
+An immutable-field error on `migrate` means an existing Job is being updated in
+place. The migration manifest uses a `Sync` hook with `BeforeHookCreation` so Argo
+CD recreates that Job. Configuration/database resources run in wave `-2`, migration
+in wave `-1`, and application Deployments in the default wave `0`. Full syncs run
+hooks; selective resource syncs do not. Existing application pods are not stopped
+by this ordering, so incompatible schema changes still need a maintenance window.
+
+Retain migration logs before the next sync replaces the Job. If an old ordinary
+Job blocks adoption, use the recovery instructions in the Argo CD guide. Do not
+delete the PostgreSQL PVC or database to resolve a Job immutability error.
 
 ## Backups
 
@@ -95,7 +112,7 @@ snapshot of NSX. No counters or configuration are modified.
 
 ## Logging, audit trail and collection diagnostics
 
-These features are included in release **0.5.0**. Pull and recreate application
+These features are included in release **0.5.1**. Pull and recreate application
 containers when upgrading; restarting an older image does not update its code.
 
 Application and Gunicorn logs use JSON on stdout/stderr with UTC timestamps,

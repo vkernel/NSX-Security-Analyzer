@@ -137,3 +137,31 @@ class RuleHistoryTests(TestCase):
         self.assertNotContains(self.client.get(url, {'q': 'absent'}), '<strong>Web</strong>')
         self.assertEqual(self.client.get(url, {'snapshot': 'invalid'}).status_code, 404)
         self.assertEqual(self.client.get(url, {'days': 'invalid'}).status_code, 200)
+
+    def test_shared_assessment_reused_and_invalidated(self):
+        from unittest.mock import patch
+        from .history_cache import assessment
+        from .services import fail_job
+        self.full_window()
+        first = assessment(self.environment,7,self.end)
+        self.assertEqual(first.rows.get().status,'zero')
+        with patch('inventory.history_cache.analyze',side_effect=AssertionError('Repeated analysis')):
+            self.assertEqual(assessment(self.environment,7,self.end).pk,first.pk)
+        job = AuditJob.objects.create(environment=self.environment,status='running')
+        fail_job(job.pk,'Synthetic failure')
+        refreshed = assessment(self.environment,7,timezone.now())
+        self.assertEqual(refreshed.rows.get().status,'limited')
+        self.assertGreater(refreshed.revision,first.revision)
+
+    def test_compact_history_equivalence_and_report_update(self):
+        from .models import SnapshotHistoryData
+        self.full_window()
+        expected = analyze(self.environment,7,self.end)
+        for snapshot in self.environment.snapshots.all():
+            SnapshotHistoryData.objects.create(snapshot=snapshot,payload=snapshot.report['dfw'])
+        self.assertEqual(analyze(self.environment,7,self.end),expected)
+        snapshot = self.environment.snapshots.first()
+        snapshot.report['dfw']['rules'][0]['hit_status']='unknown'
+        snapshot.save(update_fields=['report'])
+        self.assertFalse(SnapshotHistoryData.objects.filter(snapshot=snapshot).exists())
+        self.assertEqual(self.result()['status'],'limited')

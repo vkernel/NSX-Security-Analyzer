@@ -84,3 +84,64 @@ skips snapshots already indexed. It can be restarted after interruption. Allow i
 to finish before measuring cold-page performance for older snapshots. Until indexed,
 older snapshots remain readable through the previous renderer and its bounded
 per-process cache. Newly collected snapshots are indexed automatically.
+
+### Diagnosing a slow first page
+
+The report page reads only display metadata for its snapshot selector (IDs,
+timestamps and testing flags). It does not fetch historical summary JSON, report
+JSON, or environment credentials for that selector. Migration
+`0019_snapshot_latest_index` adds an index for selecting an environment's newest
+snapshots in date order.
+
+Web container logs include a `Snapshot page` entry with `mode=indexed` or
+`mode=legacy`, timings for metadata retrieval, presentation loading and template
+rendering, and the response size. Inspect them with:
+
+```sh
+kubectl -n nsx-security-analyzer logs deployment/web --since=10m
+```
+
+`mode=legacy` means the snapshot has not been indexed and still needs the old
+full-report renderer. Run the `index_snapshots` command above; also ensure the
+collection worker runs the updated image so new snapshots are indexed. The report
+page displays a notice for unindexed snapshots.
+
+For indexed reports, a long metadata time suggests database query/connection
+latency; a long presentation time points to retrieving the prepared presentation.
+Compare the request timing with the browser's network timing to distinguish server
+work from ingress delays, network transfer and browser rendering. The logs alone
+do not measure those browser or ingress delays.
+
+### Inventory and Firewall subpages
+
+Table page changes reuse a signed matching-row count for five minutes. Changing the
+search or column filters triggers a new count. Evidence remains available on demand,
+and CSV exports still include every matching row. Column value searches wait briefly
+while typing and cancel superseded requests. Evidence columns accept text filters
+without aggregating large evidence payloads into suggestion lists.
+
+Tag details select only the referenced conditions and firewall rules from PostgreSQL;
+tag coverage selects only its relevant conditions.
+
+Historical activity saves a shared assessment in PostgreSQL and filters and paginates
+those saved rows. The first request for a time window still calculates the assessment.
+Subsequent requests reuse it for up to five minutes, with the assessed period shown on
+the page. Snapshot and collection-result changes invalidate it. Compact counter
+projections reduce the data read during assessment; the original snapshots remain intact.
+
+After deploying this update and applying migrations, refresh existing prepared reports
+once to update their embedded controls and add the compact history projections:
+
+```sh
+docker compose exec web python manage.py index_snapshots --refresh
+```
+
+In Kubernetes, run the same management command in the web pod:
+
+```sh
+kubectl -n nsx-security-analyzer exec deployment/web -- python manage.py index_snapshots --refresh
+```
+
+Use your actual web Deployment name if different. This processes saved data without
+contacting NSX. New snapshots receive the updated indexes automatically. Until old
+snapshots are refreshed, historical analysis can still read their original DFW data.

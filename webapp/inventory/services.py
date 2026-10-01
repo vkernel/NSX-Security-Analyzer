@@ -89,6 +89,7 @@ def update_progress(job_id, completed, stage):
         progress_completed=completed, progress_stage=stage[:150])
 
 
+@transaction.atomic
 def fail_job(job_id, message, diagnostics=None):
     from .audit_events import record
     from .observability import safe_data
@@ -96,6 +97,8 @@ def fail_job(job_id, message, diagnostics=None):
     changed = AuditJob.objects.filter(pk=job_id, status="running").update(
         status="failed", finished_at=timezone.now(), error=message[:1500], **extra)
     if changed:
+        from .history_cache import invalidate
+        invalidate(AuditJob.objects.values_list('environment_id', flat=True).get(pk=job_id))
         record('collection.failed', 'AuditJob', job_id, outcome='failed',
                details={'code': (diagnostics or {}).get('error', {}).get('code', 'COLLECTION_FAILED')}, best_effort=True)
 

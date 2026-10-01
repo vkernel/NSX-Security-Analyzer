@@ -1,4 +1,6 @@
 import json
+import logging
+from time import perf_counter
 from uuid import UUID
 from functools import wraps
 
@@ -199,11 +201,17 @@ def testing_data(request):
 
 @login_required
 def snapshot_detail(request, pk):
-    snapshot = get_object_or_404(snapshot_list(), pk=pk)
+    started = perf_counter()
+    snapshot = get_object_or_404(
+        Snapshot.objects.select_related("environment").only(
+            "id", "environment_id", "environment__id", "environment__name",
+            "generated_at", "created_at", "testing", "needs_review", "imported"), pk=pk)
     request.session['selected_environment'] = snapshot.environment_id
-    history = list(snapshot_list().filter(environment=snapshot.environment)[:50])
+    history = list(Snapshot.objects.filter(environment_id=snapshot.environment_id)
+                   .only("id", "generated_at", "testing")[:50])
     if not any(item.pk == snapshot.pk for item in history):
         history.append(snapshot)
+    metadata_seconds = perf_counter() - started
     # JSONField maps to PostgreSQL JSONB; render from the immutable database snapshot.
     from .report_cache import presentation
     from .models import SnapshotPresentation
@@ -212,8 +220,13 @@ def snapshot_detail(request, pk):
         report, report_diagnostics = indexed, indexed.get("diagnostics", {})
     else:
         report, report_diagnostics = presentation(snapshot, engine().render_html_report)
+    presentation_seconds = perf_counter() - started - metadata_seconds
     response = render(request, "inventory/snapshot.html", {
-        "snapshot": snapshot, "environment": snapshot.environment, "history": history, "report": report, "report_diagnostics": report_diagnostics, "is_latest": bool(history and history[0].pk == snapshot.pk)})
+        "snapshot": snapshot, "environment": snapshot.environment, "history": history, "report": report, "report_diagnostics": report_diagnostics, "is_latest": bool(history and history[0].pk == snapshot.pk), "legacy_report": indexed is None})
+    logging.getLogger("inventory.web").info(
+        "Snapshot page snapshot=%s mode=%s metadata_seconds=%.3f presentation_seconds=%.3f render_seconds=%.3f response_bytes=%d",
+        snapshot.pk, "indexed" if indexed is not None else "legacy", metadata_seconds,
+        presentation_seconds, perf_counter() - started - metadata_seconds - presentation_seconds, len(response.content))
     response["Cache-Control"] = "private, no-store"
     response["Content-Security-Policy"] = (
         "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; "
@@ -267,7 +280,7 @@ def health(request):
 @require_GET
 def rule_history(request, pk):
     from django.utils import timezone
-    from .history import analyze, STATUS_LABELS
+    from .history import STATUS_LABELS
     environment = get_object_or_404(Environment, pk=pk)
     try:
         days = int(request.GET.get("days", preferences(request).history_days))
@@ -284,23 +297,29 @@ def rule_history(request, pk):
             from django.http import Http404
             raise Http404()
         end = anchor.generated_at
-    result = analyze(environment, days, end)
+    from .history_cache import assessment, timestamps, HistoryChanged
+    from django.db.models import Q
+    try:
+        saved = assessment(environment, days, end, anchor)
+    except HistoryChanged as exc:
+        return HttpResponse(str(exc), status=503)
+    result = timestamps(saved.metadata, ('start', 'end', 'latest'))
     selected = request.GET.get("status", "")
     query = request.GET.get("q", "").strip()
-    rows = result.pop("rows")
-    for row in rows:
-        row["label"] = STATUS_LABELS[row["status"]]
+    rows = saved.rows.all()
     if selected in STATUS_LABELS:
-        rows = [r for r in rows if r["status"] == selected]
+        rows = rows.filter(status=selected)
     if query:
-        rows = [r for r in rows if query.casefold() in (r["name"]+' '+r["path"]+' '+str(r["rule_id"])).casefold()]
-    rows.sort(key=lambda r: (r["name"].casefold(), r["path"]))
+        rows = rows.filter(Q(name__icontains=query) | Q(path__icontains=query) | Q(rule_id_text__icontains=query))
+    page = Paginator(rows.order_by('sort_name','path').only('data','status'), preferences(request).page_size).get_page(request.GET.get('page'))
+    page.object_list = [dict(timestamps(row.data, ('first','last','last_positive')), label=STATUS_LABELS[row.status])
+                        for row in page.object_list]
     params = request.GET.copy()
     params.pop("page", None)
     response = render(request, "inventory/rule_history.html", {"environment": environment, "days": days,
         "periods": (7, 30, 90), "anchor": anchor, "history": result, "query": query,
         "selected": selected, "statuses": STATUS_LABELS.items(), "params": params.urlencode(),
-        "rows": Paginator(rows, preferences(request).page_size).get_page(request.GET.get("page"))})
+        "rows": page})
     response["Cache-Control"] = "private, no-store"
     return response
 
@@ -501,7 +520,7 @@ def workspace_section(request, section):
     from django.urls import reverse
     sections = {'inventory':'overview','services':'all-services','tags':'tags-all','scopes':'tags-scopes',
                 'firewall':'dfw-overview','policies':'dfw-policies','rules':'dfw-rules','help':'feature-guide'}
-    environments = Environment.objects.all()
+    environments = Environment.objects.only("id", "name")
     selected = request.GET.get('environment') or request.session.get('selected_environment') or preferences(request).preferred_environment_id
     try:
         environment = environments.filter(pk=int(selected)).first() if selected else None
@@ -516,7 +535,7 @@ def workspace_section(request, section):
             return redirect('rule-history', pk=environment.pk)
         if section == 'environment':
             return redirect('environment', pk=environment.pk)
-        snapshot = snapshot_list().filter(environment=environment).first()
+        snapshot = Snapshot.objects.only("id").filter(environment_id=environment.pk).first()
         if snapshot and section in sections:
             allowed = set(sections.values()) | {'overview','all-groups','unused-groups','empty-groups','unknown-membership','unused-services','empty-policies','zero-hit-rules','disabled-rules','unknown-statistics','empty-group-rules','dfw-scope-rules','tags-both','tags-vm_only','tags-group_only','tags-other_only','tags-unknown','coverage','tags-coverage'}
             panel = request.GET.get('panel')

@@ -1,11 +1,15 @@
 # Install on Kubernetes
 
 Use the supplied `manifests/` files. You do **not** need an online converter.
-These files deploy the database, a one-time migration Job, the website, a collection
+These files deploy the database, a migration Job, the website, a collection
 worker and a scheduler. They expose the website inside the cluster only.
 
-The manifests use **0.5.0** for migrations, web, worker and scheduler. Database
+The manifests use **0.5.1** for migrations, web, worker and scheduler. Database
 initialization automatically provisions the initial administrator.
+
+Using Argo CD? Follow the configuration and Secret prerequisites below, then use
+[Argo CD deployment and upgrades](#argo-cd-deployment-and-upgrades) for synchronization.
+The numbered `kubectl apply` steps are for manual deployments.
 
 ## 1. Before you start
 
@@ -260,6 +264,7 @@ if it restarted. Replace `POD_NAME` with a name from `get pods`.
 | ImagePullBackOff | Image tag exists, registry credentials if private, outbound registry access |
 | Pending | PVC StorageClass/capacity, cluster resources and scheduling events |
 | Migration failed | Database host, credentials, schema permissions and TLS trust |
+| Argo CD: `field is immutable` on `migrate` | Adopt the [migration hook and recovery steps](#argo-cd-deployment-and-upgrades), then perform a full application sync |
 | Website returns 400 | Browser hostname is included in allowed hosts |
 | CSRF failure | Trusted origin matches the HTTPS URL and proxy configuration |
 | Collection stays queued | Worker is running and uses the same database and Django key |
@@ -268,7 +273,88 @@ if it restarted. Replace `POD_NAME` with a name from `get pods`.
 Do not share Secrets or `.env` files in bug reports. See [operations](../../docs/operations.md)
 for the expanded logs available in newer source builds.
 
-## Upgrades
+## Argo CD deployment and upgrades
+
+Kubernetes does not allow an existing Job's Pod template to change, including its
+container image. Updating the image tag in an ordinary fixed-name Job therefore
+causes `field is immutable`. The supplied migration hook recreates the Job instead.
+
+For each version upgrade:
+
+1. Back up PostgreSQL, retain the existing `DJANGO_SECRET_KEY`, and let active
+   collections finish.
+2. Update the image tag in `manifests/migrate.yaml` and all three Deployments in
+   `manifests/application.yaml` to the same published version. Keep your database
+   connection settings and Secret references.
+3. Commit these changes to the repository and branch watched by your Argo CD
+   Application. Ensure it includes the hook and wave annotations shown below.
+   An Application pinned to an older release tag will not receive newer manifests.
+4. Refresh the Application in Argo CD and perform a **full Sync**. Leave selective
+   resource synchronization disabled so the migration hook runs.
+5. Verify that `migrate` succeeds, then that web, worker and scheduler become
+   Healthy. If migrations fail, inspect `kubectl -n nsx-security-analyzer logs
+   job/migrate`, fix the cause in Git, and perform another full sync.
+6. When upgrading from before 0.5.1, follow
+   [Preparing older snapshots](#preparing-older-snapshots-for-faster-report-pages)
+   after the rollout completes.
+
+No Docker image rebuild is required to adopt these annotations. They must be in
+the manifests Argo CD actually reads; changing only a local checkout has no effect.
+
+The manifests support a **full application sync** with this order:
+
+| Sync wave | Resources | Purpose |
+| --- | --- | --- |
+| `-2` | ConfigMap and optional bundled database resources | Prepare configuration and wait for database readiness |
+| `-1` | `migrate` Sync hook | Apply database migrations before rolling out new application pods |
+| `0` (default) | Web, worker, scheduler and application Service | Roll out the application after migrations succeed |
+
+Create the `nsx-django` and `nsx-postgress-app` Secrets in the target namespace
+before syncing. If Argo CD manages these Secrets in the same Application, give them
+wave `-2` or earlier. For an existing PostgreSQL server, omit `database.yaml` and
+ensure that the database is reachable before syncing. Waves do not order resources
+belonging to separate Argo CD Applications.
+
+The migration Job has these annotations under its top-level `metadata`:
+
+```yaml
+annotations:
+  argocd.argoproj.io/hook: Sync
+  argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
+  argocd.argoproj.io/sync-wave: "-1"
+```
+
+`BeforeHookCreation` deletes the previous migration Job before creating its
+replacement, avoiding `field is immutable` when the image tag changes. Only the
+Job and its pods are replaced; the PostgreSQL database and PVC are preserved.
+Successful and failed Jobs remain available for logs until the next full sync.
+Django applies only migrations that have not already been applied.
+
+Use **Sync** for the whole Application when updating the version, with the same
+image tag in `migrate.yaml` and every application Deployment. Do not selectively
+sync only the Deployments: selective sync skips hooks. A migration failure blocks
+the later application rollout. These waves do not stop already-running application
+pods; schema changes incompatible with the old application require a maintenance
+window with collections paused and the application scaled down through Git first.
+
+If an older ordinary `migrate` Job still blocks the first sync after adopting these
+annotations, check its status and save any logs. Once it is no longer running,
+delete **only that Job**, then perform a full Argo CD sync:
+
+```sh
+kubectl -n nsx-security-analyzer get job migrate
+kubectl -n nsx-security-analyzer logs job/migrate
+kubectl -n nsx-security-analyzer delete job migrate --ignore-not-found
+```
+
+Do not force-replace all application resources or delete the database/PVC to fix
+this error. No new application image is needed for this manifest-only change.
+Plain `kubectl apply` ignores the Argo CD annotations; follow the manual upgrade
+steps below when not using Argo CD.
+
+Reference: [Argo CD sync phases, hooks and waves](https://argo-cd.readthedocs.io/en/stable/user-guide/sync-waves/).
+
+## Manual kubectl upgrades
 
 Back up the database and keep the original secret. Wait for collections to finish.
 Set the **same published image tag** in `migrate.yaml` and all three containers in
@@ -314,7 +400,7 @@ is not automatically available in a remote cluster. Private registries need an
 
 - `manifests/config.yaml`: non-secret connection and application settings.
 - `manifests/database.yaml`: optional bundled PostgreSQL with persistent storage.
-- `manifests/migrate.yaml`: one-time schema initialization/upgrade Job.
+- `manifests/migrate.yaml`: schema initialization/upgrade Job; recreated as a hook on each full Argo CD sync.
 - `manifests/application.yaml`: web, worker, scheduler and internal web Service.
 - `compose.yaml`: optional converter input for users who still need Kompose or an
   online converter. It is not the installation path above; converted output needs

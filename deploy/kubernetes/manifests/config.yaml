@@ -2,6 +2,8 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: nsx-config
+  annotations:
+    argocd.argoproj.io/sync-wave: "-2"
 data:
   DJANGO_ALLOWED_HOSTS: "localhost,127.0.0.1,[::1]"
   DJANGO_CSRF_TRUSTED_ORIGINS: ""

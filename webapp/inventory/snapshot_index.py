@@ -4,7 +4,7 @@ import re
 from html.parser import HTMLParser
 
 from django.db import transaction
-from .models import Snapshot, SnapshotPanel, SnapshotPresentation, SnapshotRecord, SnapshotRecordPanel
+from .models import Snapshot, SnapshotPanel, SnapshotPresentation, SnapshotRecord, SnapshotRecordPanel, SnapshotHistoryData
 
 LABELS = {'referenced':'Referenced', 'unused_candidate':'Unused candidate', 'empty':'Empty',
           'nonempty':'Has members', 'unknown':'Unknown', 'not_applicable':'Not applicable',
@@ -83,6 +83,13 @@ def tag_context(row, metadata):
 def build(snapshot, rendered=None):
     """Publish the whole index transactionally. Other requests never see half an index."""
     from .services import engine
+    if not SnapshotHistoryData.objects.filter(snapshot_id=snapshot.pk).exists():
+        fields = ('path','name','rule_id','policy_rule_id','unique_id','created_at',
+                  'configuration_fingerprint','disabled','hit_status','statistics_checked_at','statistics')
+        dfw = snapshot.report.get('dfw', {})
+        SnapshotHistoryData.objects.get_or_create(snapshot=snapshot, defaults={'payload':{
+            'rules': [{key:row[key] for key in fields if key in row} for row in dfw.get('rules', [])],
+            'errors': bool(dfw.get('errors'))}})
     if SnapshotPresentation.objects.filter(snapshot_id=snapshot.pk).exists(): return
     rendered = rendered or engine().render_html_report(snapshot.report)
     match = re.search(r'<script type="application/json" id="report-rows">(.*?)</script>', rendered['scripts'], re.S)
