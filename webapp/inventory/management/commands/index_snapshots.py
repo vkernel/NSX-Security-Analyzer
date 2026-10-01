@@ -1,4 +1,5 @@
 import gc
+from uuid import UUID
 import time
 from django.core.management.base import BaseCommand
 from django.db import transaction
@@ -11,10 +12,13 @@ class Command(BaseCommand):
     help = 'Prepare saved snapshots for fast report pages; no NSX requests are made.'
 
     def add_arguments(self, parser):
+        parser.add_argument('--snapshot', type=UUID, help='Refresh only this snapshot UUID.')
         parser.add_argument('--refresh', action='store_true', help='Rebuild prepared report layouts and tables as well as missing indexes.')
 
     def handle(self, **options):
         snapshots = Snapshot.objects.all()
+        if options.get('snapshot'):
+            snapshots = snapshots.filter(pk=options['snapshot'])
         if not options['refresh']:
             snapshots = snapshots.filter(Q(presentation__isnull=True) | Q(history_data__isnull=True))
         ids = snapshots.values_list('pk', flat=True)

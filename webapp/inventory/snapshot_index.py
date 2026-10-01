@@ -2,6 +2,8 @@
 import json
 import re
 import logging
+import resource
+import sys
 from html.parser import HTMLParser
 
 from django.db import transaction, connection
@@ -12,6 +14,13 @@ LABELS = {'referenced':'Referenced', 'unused_candidate':'Unused candidate', 'emp
           'not_assessed':'Not assessed', 'not_supported':'Not supported', 'zero_hits':'Zero recorded hits',
           'traffic_recorded':'Traffic recorded', 'has_rules':'Has rules', 'both':'VMs and groups',
           'vm_only':'VM use', 'group_only':'Group use', 'other_only':'Other resource use'}
+
+
+def checkpoint(snapshot_id, stage):
+    peak = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
+    peak_mib = peak / (1024 * 1024 if sys.platform == 'darwin' else 1024)
+    logging.getLogger('inventory.collection').info(
+        'Index snapshot=%s stage=%s peak_rss_mib=%.1f', snapshot_id, stage, peak_mib)
 
 
 def flatten(value):
@@ -106,6 +115,9 @@ def build(snapshot, rendered=None):
     """Publish the whole index transactionally. Other requests never see half an index."""
     from .services import engine
     Snapshot.objects.select_for_update().only("id").get(pk=snapshot.pk)
+    checkpoint(snapshot.pk, "load_report_start")
+    report = snapshot.report
+    checkpoint(snapshot.pk, "load_report_complete")
     if not SnapshotHistoryData.objects.filter(snapshot_id=snapshot.pk).exists():
         fields = ('path','name','rule_id','policy_rule_id','unique_id','created_at',
                   'configuration_fingerprint','disabled','hit_status','statistics_checked_at','statistics')
@@ -113,39 +125,18 @@ def build(snapshot, rendered=None):
         SnapshotHistoryData.objects.get_or_create(snapshot=snapshot, defaults={'payload':{
             'rules': [{key:row[key] for key in fields if key in row} for row in dfw.get('rules', [])],
             'errors': bool(dfw.get('errors'))}})
+    checkpoint(snapshot.pk, "history_projection_complete")
     if SnapshotPresentation.objects.filter(snapshot_id=snapshot.pk).exists(): return
-    # Ignore legacy rendered input: it contains a full serialized copy of the inventory.
-    if rendered is None or '_index_rows' not in rendered:
-        rendered = engine().prepare_index_report(snapshot.report)
-    records = rendered['_index_rows']
-    metadata = rendered['_index_metadata']
-    rendered = {k:v for k,v in rendered.items() if not k.startswith('_index_')}
-    parts, panel_rows = [], {}
-    content = rendered['content']
-    for start, end, slug in sorted(Panels(content).found):
-        html = content[start:end]
-        ids = [int(v) for m in re.finditer(r'data-rows="([0-9,]*)"', html) for v in m[1].split(',') if v]
-        # A report section currently has one inventory table.
-        html = re.sub(r'data-rows="[0-9,]*"', 'data-rows="" data-server-table="'+slug+'"', html)
-        panel_rows[slug] = (html, ids)
-        heading = re.search(r'<h2[^>]*>(.*?)</h2>', html, re.S)
-        title = heading[1] if heading else 'Snapshot overview'
-        stub = '<section data-panel data-lazy-panel="true" id="'+slug+'" tabindex="-1"><h2>'+title+'</h2><p role="status">Loading section…</p></section>'
-        # Summary panels are small and immediately visible, even on a cold visit.
-        parts.append((start, end, html if slug in ('overview', 'dfw-overview') else stub))
-    for start, end, stub in reversed(parts): content = content[:start] + stub + content[end:]
-    shell = dict(rendered, content=content)
-    shell['diagnostics'] = {'dfw': {'collection_diagnostics': snapshot.report.get('dfw', {}).get('collection_diagnostics')},
-                            'performance': {'concurrency': {'endpoints': snapshot.report.get('performance', {}).get('concurrency', {}).get('endpoints', {})}}}
+    metadata = {k:v for k,v in snapshot.report.get('tags', {}).items() if k not in {'objects','virtual_machines'}}
     rows, record_ids = [], []
     def flush():
         if not rows: return
         SnapshotRecord.objects.bulk_create(rows, batch_size=50)
         record_ids.extend(row.pk for row in rows)
         rows.clear()
+        checkpoint(snapshot.pk, 'records_batch_complete')
         logging.getLogger('inventory.collection').info('Index snapshot=%s records_saved=%d', snapshot.pk, len(record_ids))
-    for ordinal, record in enumerate(records):
-        row, view = record['data'], record['view']
+    def store_record(ordinal, view, row):
         compact = {key: val for key, val in row.items() if not isinstance(val, (dict, list))}
         compact['referenced_by'] = []
         compact['notes_count'] = len(row.get('notes', []))
@@ -164,11 +155,35 @@ def build(snapshot, rendered=None):
         # Flush incrementally; never accumulate all expanded ORM records.
         if len(rows) >= 50:
             flush()
+    # Emit and discard expanded rows during preparation, including VM evidence.
+    checkpoint(snapshot.pk, "prepare_layout_start")
+    rendered = engine().prepare_index_report(snapshot.report, row_sink=store_record)
     flush()
+    checkpoint(snapshot.pk, "prepare_layout_complete")
+    rendered = {k:v for k,v in rendered.items() if not k.startswith('_index_')}
+    parts, panel_rows = [], {}
+    content = rendered['content']
+    for start, end, slug in sorted(Panels(content).found):
+        html = content[start:end]
+        ids = [int(v) for m in re.finditer(r'data-rows="([0-9,]*)"', html) for v in m[1].split(',') if v]
+        # A report section currently has one inventory table.
+        html = re.sub(r'data-rows="[0-9,]*"', 'data-rows="" data-server-table="'+slug+'"', html)
+        panel_rows[slug] = (html, ids)
+        heading = re.search(r'<h2[^>]*>(.*?)</h2>', html, re.S)
+        title = heading[1] if heading else 'Snapshot overview'
+        stub = '<section data-panel data-lazy-panel="true" id="'+slug+'" tabindex="-1"><h2>'+title+'</h2><p role="status">Loading section…</p></section>'
+        # Summary panels are small and immediately visible, even on a cold visit.
+        parts.append((start, end, html if slug in ('overview', 'dfw-overview') else stub))
+    for start, end, stub in reversed(parts): content = content[:start] + stub + content[end:]
+    shell = dict(rendered, content=content)
+    shell['diagnostics'] = {'dfw': {'collection_diagnostics': snapshot.report.get('dfw', {}).get('collection_diagnostics')},
+                            'performance': {'concurrency': {'endpoints': snapshot.report.get('performance', {}).get('concurrency', {}).get('endpoints', {})}}}
     for slug, (html, ids) in panel_rows.items():
         panel = SnapshotPanel.objects.create(snapshot=snapshot, slug=slug, html=html)
         for offset in range(0, len(ids), 1000):
             SnapshotRecordPanel.objects.bulk_create([
                 SnapshotRecordPanel(panel=panel, record_id=record_ids[i])
                 for i in ids[offset:offset+1000]], batch_size=1000)
+    checkpoint(snapshot.pk, "save_presentation_start")
     SnapshotPresentation.objects.create(snapshot=snapshot, shell=shell, tag_evidence=metadata)
+    checkpoint(snapshot.pk, "save_presentation_complete")

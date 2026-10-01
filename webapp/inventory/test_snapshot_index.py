@@ -206,7 +206,7 @@ class IndexedReportTests(TestCase):
         base=sample_report()
         snapshot=prepare_snapshot(self.snapshot.environment,base)
         snapshot.save()
-        with patch.object(engine(),'vm_inventory_rows',return_value=rows):
+        with patch.object(engine(),'iter_vm_inventory_rows',return_value=iter(rows)):
             build(snapshot)
         url=reverse('snapshot-data',args=[snapshot.pk])
         with CaptureQueriesContext(connection) as queries:
@@ -264,3 +264,25 @@ class IndexedReportTests(TestCase):
             if query['sql'].startswith('SELECT'):
                 self.assertNotIn('inventory_snapshotrecord',query['sql'])
                 self.assertNotIn('"report"',query['sql'])
+
+    def test_vm_preparation_inserts_before_consuming_entire_inventory(self):
+        snapshot=prepare_snapshot(self.snapshot.environment,sample_report())
+        snapshot.save()
+        def machines(report):
+            for i in range(151):
+                if i == 100:
+                    self.assertGreater(SnapshotRecord.objects.filter(snapshot=snapshot,view='vms').count(),0)
+                yield {'name':'VM %03d'%i,'path':'vm-%d'%i,'power_state':'VM_RUNNING',
+                       'tag_count':0,'group_count':0,'related_rules':[],'related_groups':[],'tags':[]}
+        with patch.object(engine(),'iter_vm_inventory_rows',side_effect=machines):
+            build(snapshot)
+        self.assertEqual(SnapshotRecord.objects.filter(snapshot=snapshot,view='vms').count(),151)
+
+    def test_targeted_refresh_preserves_other_snapshots(self):
+        from django.core.management import call_command
+        other=prepare_snapshot(self.snapshot.environment,sample_report())
+        other.save()
+        build(other)
+        before=list(SnapshotRecord.objects.filter(snapshot=other).values_list('pk',flat=True))
+        call_command('index_snapshots',refresh=True,snapshot=self.snapshot.pk,stdout=io.StringIO())
+        self.assertEqual(list(SnapshotRecord.objects.filter(snapshot=other).values_list('pk',flat=True)),before)

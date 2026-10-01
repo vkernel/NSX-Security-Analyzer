@@ -214,3 +214,29 @@ all old evidence records when delete-signal listeners are registered, even when 
 listeners do not act on index records. The SQL deletion removes panel/record links first
 and does not delete source snapshots or history projections. Progress messages distinguish
 old-index deletion from preparation and insertion, helping locate any remaining memory peak.
+
+### Diagnose preparation-stage OOMs
+
+Index preparation now emits rows to the database as they are produced, and generates
+VM relationship rows one VM at a time. It no longer retains a complete expanded VM
+relationship list during refresh. Source snapshot JSON, lookup maps, layout strings
+and ordinal/panel mappings still consume memory; this is not a fixed-memory JSON reader.
+
+`stage=load_report_start` and `stage=load_report_complete` bracket JSON loading.
+Further checkpoints identify history projection, layout preparation, row insertion and
+presentation saving. `peak_rss_mib` is the process lifetime high-water RSS in MiB,
+not current usage or total pod usage. An abrupt stop after a start checkpoint helps
+locate the next operation to investigate.
+
+To isolate a failing snapshot in the separate maintenance Job, use the updated build
+and replace its command with:
+
+```yaml
+command: [python, manage.py, index_snapshots, --refresh, --snapshot, YOUR-SNAPSHOT-UUID]
+```
+
+The `--snapshot` option is not present in build `2398e23`. Refreshing one snapshot
+leaves other indexes unchanged. Keep the Job logs on failure. A synthetic Python
+allocation comparison with 1,000 VMs and 100 related rules per VM measured 24.61 MiB
+for the materialized VM list versus 0.18 MiB for incremental consumption, excluding
+source report allocation and database inserts. This is not a production memory guarantee.

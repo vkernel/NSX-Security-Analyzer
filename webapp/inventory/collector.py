@@ -952,7 +952,7 @@ def audit_tags(client, groups, testing=False, resources=(), workers=1):
 
 
 
-def vm_inventory_rows(report):
+def iter_vm_inventory_rows(report):
     """Relate saved tag assignments to configuration references, not resolved membership."""
     tags = report.get("tags", {})
     by_vm = {}
@@ -966,7 +966,6 @@ def vm_inventory_rows(report):
     rules = {r["path"]:r for r in report.get("dfw", {}).get("rules", [])}
     services = {r["path"]:r.get("name",r["path"]) for r in report.get("inventory", {}).get("services", [])}
     pool = tags.get("firewall_rules", [])
-    result = []
     for vm in raw:
         identity = vm.get("path") or vm.get("external_id") or vm.get("id")
         if not identity:
@@ -992,8 +991,10 @@ def vm_inventory_rows(report):
                "group_count":len(groups), "tags":[{"scope":t.get("scope", ""),"tag":t["name"]} for t in related],
                "related_groups":[{"path":path,"name":name} for path,name in sorted(groups.items())],
                "related_rules":list(refs.values()), "vm_details":vm}
-        result.append(row)
-    return sorted(result, key=lambda row:(row["name"].casefold(),row["path"]))
+        yield row
+
+def vm_inventory_rows(report):
+    return sorted(iter_vm_inventory_rows(report), key=lambda row:(row["name"].casefold(),row["path"]))
 
 def tag_scopes(tags):
     """Summarize observed scopes, counting each VM/group once per scope."""
@@ -1574,7 +1575,7 @@ dialog :is(button,input,select):focus-visible{outline:2px solid var(--teal);outl
 """
 
 
-def _render_report(report, *, fragments, indexed=False):
+def _render_report(report, *, fragments, indexed=False, row_sink=None):
     """Build a self-contained report; escape all inventory values."""
     def safe(value):
         return escape(display_number(value), quote=True)
@@ -1606,12 +1607,15 @@ def _render_report(report, *, fragments, indexed=False):
 
     def table_shell(headers, items, view):
         indices = []
-        for row in sorted(items, key=lambda r: (r["name"].casefold(), r["path"])):
+        for row in (items if row_sink else sorted(items, key=lambda r: (r["name"].casefold(), r["path"]))):
             key = (view, row["path"])
             if key not in row_ids:
                 record = row if indexed else dict(row)
-                row_ids[key] = len(row_pool)
-                row_pool.append({"view": view, "data": record})
+                row_ids[key] = len(row_ids)
+                if row_sink:
+                    row_sink(row_ids[key], view, record)
+                else:
+                    row_pool.append({"view": view, "data": record})
             indices.append(row_ids[key])
         return ('<div class="table-widget view-' + view + '" data-rows="' + ",".join(map(str, indices))
                 + '"><div class="table-tools" hidden>'
@@ -1732,14 +1736,16 @@ def _render_report(report, *, fragments, indexed=False):
         '<a href="#feature-guide">Report user guide</a>'
         '<a href="#coverage">Audit scope &amp; exclusions</a>'
         '<a href="#tags-coverage">Tag coverage</a>')
-    vm_rows = vm_inventory_rows(report)
+    vm_rows = iter_vm_inventory_rows(report) if row_sink else vm_inventory_rows(report)
+    vm_table = table_shell(["VM / identity", "Power state", "Tags", "Related groups", "Relationships & details"],vm_rows,"vms")
+    vm_count = sum(view == "vms" for view, path in row_ids)
     vm_note = ("VM inventory retrieved from NSX." if "virtual_machines" in tags else
                "Older snapshot: only VMs present in saved tag assignments are available. Run a new collection for full VM inventory.")
     if not tags.get("vm_inventory_complete"):
         vm_note += " VM inventory is incomplete or sampled; missing VMs do not indicate deletion."
     vm_note += " Related groups reference assigned tags; membership is not verified. Services come from related firewall rules, not observed VM traffic."
-    sections += '<section data-panel id="all-vms" tabindex="-1"><h2>VMs <span class="count">'+display_number(len(vm_rows))+'</span></h2><p class="muted">'+safe(vm_note)+'</p>'+table_shell(["VM / identity", "Power state", "Tags", "Related groups", "Relationships & details"],vm_rows,"vms")+'</section>'
-    menu += menu_link("all-vms", "VMs", len(vm_rows))
+    sections += '<section data-panel id="all-vms" tabindex="-1"><h2>VMs <span class="count">'+display_number(vm_count)+'</span></h2><p class="muted">'+safe(vm_note)+'</p>'+vm_table+'</section>'
+    menu += menu_link("all-vms", "VMs", vm_count)
     sections += feature_guide()
     for anchor, title, items in (("all-groups", "All groups", all_group_rows),
                                   ("all-services", "All services", all_service_rows)):
@@ -2659,6 +2665,6 @@ def render_html_report(report):
     return _render_report(report, fragments=True)
 
 
-def prepare_index_report(report):
+def prepare_index_report(report, row_sink=None):
     """Prepare layout and direct row references without embedding inventory JSON."""
-    return _render_report(report, fragments=True, indexed=True)
+    return _render_report(report, fragments=True, indexed=True, row_sink=row_sink)
