@@ -207,3 +207,10 @@ Run large refreshes in a separate maintenance Job, not inside the live web conta
 The snapshot JSON and derived relationship data still occupy memory, so this is not a
 fixed-memory streaming reader and no universal memory limit can be guaranteed. Use the
 updated application build in the maintenance Job: version 0.5.2 does not contain this fix.
+
+Refresh also deletes the old derived index directly in PostgreSQL before rebuilding,
+inside the same snapshot transaction. Ordinary ORM cascade deletion can materialize
+all old evidence records when delete-signal listeners are registered, even when those
+listeners do not act on index records. The SQL deletion removes panel/record links first
+and does not delete source snapshots or history projections. Progress messages distinguish
+old-index deletion from preparation and insertion, helping locate any remaining memory peak.

@@ -4,7 +4,7 @@ from django.core.management.base import BaseCommand
 from django.db import transaction
 from django.db.models import Q
 from inventory.models import Snapshot, SnapshotPresentation, SnapshotPanel, SnapshotRecord
-from inventory.snapshot_index import build
+from inventory.snapshot_index import build, clear_index
 
 
 class Command(BaseCommand):
@@ -19,7 +19,7 @@ class Command(BaseCommand):
             snapshots = snapshots.filter(Q(presentation__isnull=True) | Q(history_data__isnull=True))
         ids = snapshots.values_list('pk', flat=True)
         for pk in ids.iterator(chunk_size=100):
-            snapshot = Snapshot.objects.defer("html", "summary").filter(pk=pk).first()
+            snapshot = Snapshot.objects.only("pk").filter(pk=pk).first()
             if snapshot is None: continue
             started = time.monotonic()
             self.stdout.write("Indexing snapshot " + str(pk))
@@ -27,9 +27,11 @@ class Command(BaseCommand):
             with transaction.atomic():
                 Snapshot.objects.select_for_update().only('pk').get(pk=pk)
                 if options['refresh']:
-                    SnapshotPresentation.objects.filter(snapshot_id=pk).delete()
-                    SnapshotPanel.objects.filter(snapshot_id=pk).delete()
-                    SnapshotRecord.objects.filter(snapshot_id=pk).delete()
+                    self.stdout.write('Deleting old index in PostgreSQL: '+str(pk))
+                    self.stdout.flush()
+                    clear_index(pk)
+                self.stdout.write('Preparing index: '+str(pk))
+                self.stdout.flush()
                 build(snapshot)
             self.stdout.write('Indexed snapshot {} in {:.1f}s'.format(pk, time.monotonic()-started))
             del snapshot

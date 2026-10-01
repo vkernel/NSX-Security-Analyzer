@@ -245,3 +245,22 @@ class IndexedReportTests(TestCase):
             build(snapshot,snapshot._rendered)
         self.assertGreater(len(batches),1)
         self.assertEqual(SnapshotRecord.objects.filter(snapshot=snapshot).count(),len(old['rows']))
+
+    def test_refresh_deletes_index_without_loading_records_and_rolls_back(self):
+        from .snapshot_index import clear_index
+        from .models import SnapshotRecordPanel
+        from django.db import transaction
+        before = SnapshotRecord.objects.filter(snapshot=self.snapshot).count()
+        with self.assertRaises(RuntimeError):
+            with transaction.atomic():
+                with CaptureQueriesContext(connection) as queries:
+                    clear_index(self.snapshot.pk)
+                self.assertFalse(SnapshotRecord.objects.filter(snapshot=self.snapshot).exists())
+                self.assertFalse(SnapshotRecordPanel.objects.filter(panel__snapshot=self.snapshot).exists())
+                raise RuntimeError('Simulated failed rebuild')
+        self.assertEqual(SnapshotRecord.objects.filter(snapshot=self.snapshot).count(),before)
+        self.assertTrue(SnapshotPresentation.objects.filter(snapshot=self.snapshot).exists())
+        for query in queries:
+            if query['sql'].startswith('SELECT'):
+                self.assertNotIn('inventory_snapshotrecord',query['sql'])
+                self.assertNotIn('"report"',query['sql'])

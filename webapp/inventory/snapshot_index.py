@@ -4,7 +4,7 @@ import re
 import logging
 from html.parser import HTMLParser
 
-from django.db import transaction
+from django.db import transaction, connection
 from .models import Snapshot, SnapshotPanel, SnapshotPresentation, SnapshotRecord, SnapshotRecordPanel, SnapshotHistoryData
 
 LABELS = {'referenced':'Referenced', 'unused_candidate':'Unused candidate', 'empty':'Empty',
@@ -81,6 +81,24 @@ def tag_context(row, metadata):
         rid = ref['rule']
         result['firewall_rules'][rid] = metadata['firewall_rules'][rid]
     return result
+
+
+@transaction.atomic
+def clear_index(snapshot_id):
+    """Delete disposable index rows in SQL, without ORM cascade materialization.
+
+    These four derived tables have no application audit events. Delete their
+    dependent links first; keep source snapshots and history projections intact.
+    """
+    Snapshot.objects.select_for_update().only('pk').get(pk=snapshot_id)
+    quote = connection.ops.quote_name
+    panel = quote(SnapshotPanel._meta.db_table)
+    record = quote(SnapshotRecord._meta.db_table)
+    links = quote(SnapshotRecordPanel._meta.db_table)
+    with connection.cursor() as cursor:
+        cursor.execute(f'DELETE FROM {links} WHERE panel_id IN (SELECT id FROM {panel} WHERE snapshot_id = %s) OR record_id IN (SELECT id FROM {record} WHERE snapshot_id = %s)', [snapshot_id, snapshot_id])
+        for model in (SnapshotPanel, SnapshotRecord, SnapshotPresentation):
+            cursor.execute(f'DELETE FROM {quote(model._meta.db_table)} WHERE snapshot_id = %s', [snapshot_id])
 
 
 @transaction.atomic
