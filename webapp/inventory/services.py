@@ -252,6 +252,13 @@ def execute_job(job_id):
             previous = job.environment.snapshots.filter(testing=False).only("report").first()
         client.statistics_backoff = audit.statistics_backoff(previous.report if previous else None,
                                                              urlsplit(client.base_url).netloc)
+        client.membership_hints = {}
+        for row in (previous.report if previous else {}).get("objects", []):
+            if row.get("kind") == "group" and row.get("membership") == "nonempty":
+                for note in row.get("notes", []):
+                    prefix = "Resolved members found: "
+                    if note.startswith(prefix) and note[len(prefix):] in audit.MEMBERSHIP_ENDPOINTS:
+                        client.membership_hints[row["path"]] = note[len(prefix):]
         client.request_deadline = time.monotonic() + max(0, settings.AUDIT_TIMEOUT - (timezone.now()-job.started_at).total_seconds() - 10) if job.started_at else time.monotonic() + settings.AUDIT_TIMEOUT - 10
         concurrency = None if job.testing else adapt_requests(client)
         try:

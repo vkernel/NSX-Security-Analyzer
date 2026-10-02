@@ -324,6 +324,30 @@ def group_definition(group):
             "definition": definition}
 
 
+MEMBERSHIP_ENDPOINTS = ("ip-addresses", "virtual-machines", "logical-ports", "logical-switches")
+
+
+def membership_order(group, previous=None):
+    """Order existence probes; never omit negative checks based on configuration."""
+    preferred = []
+    if previous in MEMBERSHIP_ENDPOINTS:
+        preferred.append(previous)
+    types = {"VirtualMachine": "virtual-machines", "VIF": "logical-ports",
+             "SegmentPort": "logical-ports", "LogicalPort": "logical-ports",
+             "Segment": "logical-switches", "LogicalSwitch": "logical-switches",
+             "IPAddress": "ip-addresses"}
+    def visit(value):
+        if isinstance(value, list):
+            for child in value: visit(child)
+        elif isinstance(value, dict):
+            endpoint = types.get(value.get("member_type"))
+            if endpoint: preferred.append(endpoint)
+            for child in value.values():
+                if isinstance(child, (dict, list)): visit(child)
+    visit(group.get("expression", []))
+    return list(dict.fromkeys(preferred + list(MEMBERSHIP_ENDPOINTS)))
+
+
 def membership(client, group):
     """Positive evidence wins; negative results require supported, successful checks."""
     issues = []
@@ -360,7 +384,9 @@ def membership(client, group):
         issues.append("Extended membership expressions require review")
     if explicit:
         return "nonempty", ["Contains explicit IP/MAC members"]
-    for endpoint in ("ip-addresses", "virtual-machines", "logical-ports", "logical-switches"):
+    hints = getattr(client, "membership_hints", {})
+    previous = hints.get(group["path"]) if isinstance(hints, dict) else None
+    for endpoint in membership_order(group, previous):
         try:
             # Only existence is needed; do not download a large membership list.
             page = client.get(group["path"] + "/members/" + endpoint, {"page_size": 1})
@@ -1216,8 +1242,20 @@ def audit(client, workers=4, testing=False, progress=None):
     phase = time.perf_counter()
     LOG.info("Checking membership for %d groups...", len(groups))
     progress(3, "Checking group membership and references")
+    membership_progress = {"completed": 0, "last_log": time.monotonic()}
+    membership_lock = threading.Lock()
+    def check_membership(group):
+        result = membership(client, group)
+        with membership_lock:
+            membership_progress["completed"] += 1
+            now = time.monotonic()
+            if now-membership_progress["last_log"] >= 30 or membership_progress["completed"] == len(groups):
+                LOG.info("Group membership progress: completed=%d total=%d elapsed_seconds=%.1f",
+                         membership_progress["completed"], len(groups), time.perf_counter()-phase)
+                membership_progress["last_log"] = now
+        return result
     with ThreadPoolExecutor(max_workers=workers) as pool:
-        memberships = dict(zip((g["path"] for g in groups), pool.map(lambda g: membership(client, g), groups)))
+        memberships = dict(zip((g["path"] for g in groups), pool.map(check_membership, groups)))
     refs = collect_references(resources + all_groups + services + dfw_configuration, groups + custom)
     rule_references = {}
     # Include searched gateway/other firewall rules as well as directly read DFW rules.

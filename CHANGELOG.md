@@ -2,6 +2,8 @@
 
 ## Unreleased — development
 
+- Allow stable collection traffic to grow from 10 to 40 requests/second, prioritize likely membership endpoints without reusing stale results, and log measured request and group progress.
+
 - Pace collection requests, share throttling cooldowns, honor Retry-After with bounded randomized retries, and serialize collections for duplicate manager origins.
 
 - Enable retention by default for new installations: 180-day full snapshots and collection history, 7-day testing snapshots. Preserve existing saved policies.

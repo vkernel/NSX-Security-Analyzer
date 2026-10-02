@@ -325,8 +325,10 @@ Collection requests start at 10 requests/second with no initial burst. All colle
 threads share that pacing gate, in addition to the existing adaptive concurrency
 limit. HTTP 429 halves the rate (minimum 0.5/second), starts a shared cooldown and
 reduces concurrency. Simultaneous rejections during a cooldown do not repeatedly
-halve the rate. Successful traffic recovers by 0.5 requests/second after each
-30-second stable interval, up to 10/second. These are conservative application tuning
+halve the rate. Successful traffic can grow above the starting rate: after at least 20 successful
+attempts and 10 seconds, the rate rises by 25% (at least 1 request/second), up to
+40/second. After throttling, growth waits until 30 seconds beyond the shared
+cooldown. These are conservative application tuning
 values, not advertised NSX limits.
 
 Retries honor numeric or HTTP-date `Retry-After` headers and otherwise use exponential
@@ -351,3 +353,26 @@ unknown through the existing coverage handling; it is never classified as empty.
 Validate the defaults with a representative full collection and monitor coverage,
 429 counts and elapsed time before changing limits. More retries or higher NSX API
 limits are not a substitute for sustainable request pacing.
+
+
+### Reducing membership calls and measuring progress
+
+Membership probes try the last successful endpoint from the previous snapshot first,
+then endpoints suggested by the current group member types, then every remaining
+supported endpoint. Previous evidence is only an ordering hint: NSX is queried anew.
+A positive result ends the check; negative checks are never skipped merely because
+the group definition is unchanged. Failed checks remain unknown unless another
+endpoint provides positive membership evidence.
+
+Request progress logs every 30 seconds of response activity include completed and
+failed attempts, measured interval throughput, configured rate, throttling count,
+and aggregate pacing wait. Aggregate wait sums waiting time across threads; it is
+not collection wall-clock time. Group membership progress logs include completed
+and total groups and elapsed seconds. Existing phase heartbeats continue when
+requests are blocked; progress messages are emitted on request/group completion.
+Rate-increase messages appear only when the configured rate actually changes.
+
+The 40 requests/second ceiling is a conservative application bound, not a guaranteed
+NSX capacity. Shared clients or expensive endpoints can still trigger throttling.
+Roll out to the collection workers and start a new collection to use this behavior;
+already-running collectors retain their previous rate policy.

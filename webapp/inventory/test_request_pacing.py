@@ -20,8 +20,24 @@ class PacingTests(SimpleTestCase):
         self.assertEqual(pacer.rate,5)
         now[0]=131
         pacer.result()
-        self.assertEqual(pacer.rate,5.5)
+        self.assertEqual(pacer.rate,5)
+        now[0] = 146
+        for _ in range(20): pacer.result()
+        self.assertEqual(pacer.rate,6.25)
         self.assertEqual(pacer.summary()['throttled_attempts'],2)
+
+    def test_rate_grows_above_start_and_stops_at_ceiling(self):
+        now=[0.0]
+        pacer=RequestPacer(clock=lambda:now[0])
+        for _ in range(20):
+            now[0]+=10
+            for _ in range(20): pacer.result()
+        self.assertEqual(pacer.rate,40)
+        with self.assertLogs('inventory.collector',level='INFO') as logs:
+            now[0]+=30
+            pacer.result()
+        self.assertFalse(any('increased' in line for line in logs.output))
+        self.assertTrue(any('completed=' in line for line in logs.output))
 
     def test_concurrent_requests_are_spaced(self):
         pacer=RequestPacer()
@@ -66,3 +82,26 @@ class ManagerClaimTests(TestCase):
         self.assertIsNone(claim_job())
         running.status='succeeded';running.save()
         self.assertEqual(claim_job().pk,blocked.pk)
+
+
+class MembershipOrderingTests(SimpleTestCase):
+    def test_positive_vm_evidence_requires_one_call(self):
+        from .collector import membership
+        client=SimpleNamespace(get=Mock(return_value={'results':[{'id':'vm'}]}))
+        group={'path':'/group','expression':[{'resource_type':'Condition','member_type':'VirtualMachine'}]}
+        self.assertEqual(membership(client,group)[0],'nonempty')
+        self.assertEqual(client.get.call_count,1)
+        self.assertTrue(client.get.call_args.args[0].endswith('/virtual-machines'))
+
+    def test_old_hint_is_rechecked_and_empty_checks_are_not_skipped(self):
+        from .collector import membership, MEMBERSHIP_ENDPOINTS
+        client=SimpleNamespace(membership_hints={'/group':'logical-ports'},get=Mock(return_value={'results':[]}))
+        group={'path':'/group','expression':[{'resource_type':'Condition','member_type':'VirtualMachine'}]}
+        self.assertEqual(membership(client,group)[0],'empty')
+        self.assertTrue(client.get.call_args_list[0].args[0].endswith('/logical-ports'))
+        self.assertEqual({call.args[0].rsplit('/',1)[1] for call in client.get.call_args_list},set(MEMBERSHIP_ENDPOINTS))
+
+    def test_failed_probe_is_unknown_not_empty(self):
+        from .collector import membership
+        client=SimpleNamespace(get=Mock(side_effect=[AuditError('throttled',429),{'results':[]},{'results':[]},{'results':[]}]))
+        self.assertEqual(membership(client,{'path':'/group','expression':[]})[0],'unknown')
