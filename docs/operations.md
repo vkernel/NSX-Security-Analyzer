@@ -191,3 +191,34 @@ Audit events default to indefinite retention independently of snapshot cleanup.
 Set `NSX_AUDIT_LOG_RETENTION_DAYS` to a positive number to remove older events in
 batches of 1,000 through the scheduler. Cleanup itself is audited. Backups follow
 your database backup policy; external log retention is configured separately.
+
+## Default snapshot and collection retention
+
+New installations enable automatic cleanup with these starting settings:
+
+| Data | Retention |
+|---|---|
+| Full snapshots and their derived report indexes | 180 days |
+| Testing snapshots | 7 days |
+| Finished collection history (successful, failed or stopped) | 180 days |
+
+180 days preserves the 90-day analysis window with additional comparison history.
+Testing data has a shorter lifetime because it is not a full audit. These are starting
+values, not a guarantee of database capacity: collection frequency, snapshot size and
+environment count still determine storage requirements.
+
+The scheduler performs cleanup at most once per hour. Keep the scheduler running.
+The latest full snapshot and latest testing snapshot in each environment are always
+preserved, even after their retention period. Retained snapshots protect their source
+collection records. Environments with queued or running collections are skipped.
+Deletion occurs in batches, so a backlog can take multiple cleanup cycles.
+
+Migration `0026` changes defaults only. Existing saved policies, including disabled
+cleanup and “Keep forever”, remain unchanged. To adopt these settings in an existing
+installation, open **Administration → Retention**, enable automatic cleanup, select
+**180 / 7 / 180 days**, preview the impact, and save. Expired data is eligible for
+permanent deletion on the next scheduler cleanup; migrations do not run cleanup.
+
+Audit-event retention is separate and remains controlled by
+`NSX_AUDIT_LOG_RETENTION_DAYS` (default `0`, indefinite). Finding review evidence and
+notes survive snapshot retention. Use database backups for longer-term recovery.

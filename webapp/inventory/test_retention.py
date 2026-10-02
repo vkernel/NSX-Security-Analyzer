@@ -102,3 +102,17 @@ class RetentionTests(TestCase):
         job = AuditJob.objects.create(environment=self.environment, status='failed', finished_at=self.now-timedelta(days=200))
         AuditJob.objects.filter(pk=job.pk).update(created_at=self.now-timedelta(days=201))
         self.assertEqual(cleanup_retention(self.now), (0, 1))
+
+    def test_default_policy_is_enabled_with_balanced_windows(self):
+        self.policy.delete()
+        policy, _ = RetentionPolicy.objects.get_or_create(pk=1)
+        self.assertTrue(policy.enabled)
+        self.assertEqual((policy.snapshot_days, policy.testing_days, policy.collection_days), (180, 7, 180))
+        expired = self.snapshot(181)
+        retained = self.snapshot(179)
+        latest = self.snapshot(0)
+        expired_test = self.snapshot(8, testing=True)
+        latest_test = self.snapshot(0, testing=True)
+        cleanup_retention(self.now)
+        self.assertFalse(Snapshot.objects.filter(pk__in=[expired.pk, expired_test.pk]).exists())
+        self.assertEqual(set(Snapshot.objects.values_list('pk', flat=True)), {retained.pk, latest.pk, latest_test.pk})

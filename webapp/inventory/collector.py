@@ -5,6 +5,8 @@ Requires read access across Local Manager /infra Policy inventory and search.
 Missing references and zero counters are review evidence, not deletion approval.
 """
 
+import random
+from email.utils import parsedate_to_datetime
 import base64
 import hashlib
 import json
@@ -57,9 +59,23 @@ def configure_logging(debug=False):
 class AuditError(Exception):
     """A request or inventory completeness check failed."""
 
-    def __init__(self, message, status_code=None):
+    def __init__(self, message, status_code=None, retry_after=None):
         super().__init__(message)
         self.status_code = status_code
+        self.retry_after = retry_after
+
+
+def parse_retry_after(value):
+    if not value:
+        return None
+    try:
+        seconds = float(value)
+        return seconds if 0 <= seconds < float('inf') else None
+    except (ValueError, TypeError):
+        try:
+            return max(0, parsedate_to_datetime(value).timestamp() - time.time())
+        except (ValueError, TypeError, OverflowError):
+            return None
 
 
 class InventoryChanged(AuditError):
@@ -104,7 +120,12 @@ class NSXClient:
     def get(self, path, params=None):
         bulk = path.endswith("/statistics") and "/rules/" not in path
         retries = 0 if bulk else getattr(self, "retries", 0)
+        retry_deadline = min(time.monotonic() + 60, getattr(self, "request_deadline", float("inf")))
+        if hasattr(self, "request_context"):
+            self.request_context.deadline = retry_deadline
         for attempt in range(retries + 1):
+            if attempt and time.monotonic() >= retry_deadline:
+                raise AuditError("GET {}: retry time budget exhausted".format(path))
             if hasattr(self, "metrics_lock"):
                 with self.metrics_lock:
                     self.metrics["requests"] += 1
@@ -117,13 +138,15 @@ class NSXClient:
                 LOG.debug("GET %s completed in %.3fs returned_records=%s", path, time.perf_counter() - started, len(data.get("results", [])) if isinstance(data.get("results"), list) else "n/a")
                 return data
             except AuditError as exc:
-                LOG.warning("GET %s failed status=%s elapsed=%.3fs", path, exc.status_code,
-                          time.perf_counter() - started)
                 if exc.status_code not in (429, 502, 503, 504) or attempt == retries:
+                    LOG.warning("GET %s failed status=%s attempts=%d; no further retries", path, exc.status_code, attempt+1)
                     raise
-                delay = min(2 ** attempt, 8)
-                LOG.warning("GET %s returned HTTP %s; retry %d/%d in %ss",
-                            path, exc.status_code, attempt + 1, self.retries, delay)
+                delay = max(exc.retry_after or 0, min(2 ** attempt, 30) + random.uniform(0, 1))
+                if time.monotonic() + delay >= retry_deadline:
+                    LOG.warning("GET %s failed status=%s; retry time budget exhausted", path, exc.status_code)
+                    raise
+                LOG.warning("GET %s returned HTTP %s; retry %d/%d in %.2fs",
+                            path, exc.status_code, attempt + 1, retries, delay)
                 time.sleep(delay)
 
     def _get(self, path, params=None):
@@ -145,7 +168,7 @@ class NSXClient:
                 except (ValueError, UnicodeError):
                     pass
                 raise AuditError("GET {}: HTTP {} {}{}".format(path, response.status, response.reason,
-                    " — " + detail if detail else ""), status_code=response.status)
+                    " — " + detail if detail else ""), status_code=response.status, retry_after=parse_retry_after(response.headers.get("Retry-After")))
             data = json.loads(response.data)
         except (urllib3.exceptions.HTTPError, OSError, ValueError) as exc:
             raise AuditError("GET {}: {}".format(path, exc)) from exc

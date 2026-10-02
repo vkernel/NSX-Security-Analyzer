@@ -98,12 +98,22 @@ class AdaptiveRequests:
 
 def adapt_requests(client):
     controller = AdaptiveRequests()
+    from .request_pacing import RequestPacer
+    pacer = RequestPacer(deadline=getattr(client, "request_deadline", None))
+    client.request_pacer = pacer
+    client.request_context = threading.local()
     original = client._get
 
     def request(path, params=None):
         started = controller.acquire()
         error = None
         try:
+            try:
+                pacer.acquire(getattr(client.request_context, "deadline", None))
+            except TimeoutError as exc:
+                from .collector import AuditError
+                raise AuditError(str(exc)) from exc
+            started = controller.clock()
             return original(path, params)
         except BaseException as exc:
             error = exc
@@ -111,6 +121,7 @@ def adapt_requests(client):
         finally:
             endpoint = ("rule_statistics" if "/rules/" in path else "policy_statistics") if path.endswith("/statistics") else (
                 "membership" if "/members/" in path else "search" if path.startswith("/search/") else "inventory")
+            pacer.result(error)
             controller.release(started, error, endpoint)
 
     # Limit each attempt; NSXClient.get releases the slot before retry backoff.

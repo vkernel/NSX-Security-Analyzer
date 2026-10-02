@@ -153,9 +153,9 @@ class UserPreferences(models.Model):
 
 class RetentionPolicy(models.Model):
     id = models.PositiveSmallIntegerField(primary_key=True, default=1, editable=False)
-    enabled = models.BooleanField(default=False)
+    enabled = models.BooleanField(default=True)
     snapshot_days = models.PositiveIntegerField(default=180, choices=[(0, 'Keep forever'), (91, '91 days'), (180, '180 days'), (365, '1 year'), (730, '2 years')])
-    testing_days = models.PositiveIntegerField(default=30, choices=[(0, 'Keep forever'), (7, '7 days'), (30, '30 days'), (91, '91 days')])
+    testing_days = models.PositiveIntegerField(default=7, choices=[(0, 'Keep forever'), (7, '7 days'), (30, '30 days'), (91, '91 days')])
     collection_days = models.PositiveIntegerField(default=180, choices=[(0, 'Keep forever'), (91, '91 days'), (180, '180 days'), (365, '1 year'), (730, '2 years')])
     last_run = models.DateTimeField(null=True, editable=False)
     deleted_snapshots = models.PositiveIntegerField(default=0, editable=False)

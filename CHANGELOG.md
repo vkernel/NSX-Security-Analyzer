@@ -2,6 +2,10 @@
 
 ## Unreleased — development
 
+- Pace collection requests, share throttling cooldowns, honor Retry-After with bounded randomized retries, and serialize collections for duplicate manager origins.
+
+- Enable retention by default for new installations: 180-day full snapshots and collection history, 7-day testing snapshots. Preserve existing saved policies.
+
 - Load VM relationship sections in bounded pages, fetch rule details on expansion, cache recent responses and deduplicate rules while preserving group provenance.
 
 - Remove the optional refresh Job manifest to prevent suspended maintenance from blocking Argo CD; document explicit temporary maintenance Jobs instead.

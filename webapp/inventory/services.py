@@ -67,12 +67,21 @@ def schedule_due():
 def claim_job():
     with transaction.atomic():
         from django.db import connection
+        if connection.vendor == "postgresql":
+            with connection.cursor() as cursor:
+                cursor.execute("SELECT pg_advisory_xact_lock(781249310)")
         jobs = AuditJob.objects.filter(status="queued").order_by("created_at")
         if connection.features.has_select_for_update_skip_locked:
             jobs = jobs.select_for_update(skip_locked=True)
         else:
             jobs = jobs.select_for_update()
-        job = jobs.first()
+        from urllib.parse import urlsplit
+        def manager_key(config):
+            origin = config.get("manager", "")
+            parsed = urlsplit(origin if "://" in origin else "https://" + origin)
+            return (parsed.hostname or "").lower(), parsed.port or 443
+        busy = {manager_key(config) for config in AuditJob.objects.filter(status="running").values_list("config", flat=True)}
+        job = next((candidate for candidate in jobs.iterator() if manager_key(candidate.config) not in busy), None)
         if job:
             job.status = "running"
             job.started_at = timezone.now()
@@ -243,16 +252,20 @@ def execute_job(job_id):
             previous = job.environment.snapshots.filter(testing=False).only("report").first()
         client.statistics_backoff = audit.statistics_backoff(previous.report if previous else None,
                                                              urlsplit(client.base_url).netloc)
+        client.request_deadline = time.monotonic() + max(0, settings.AUDIT_TIMEOUT - (timezone.now()-job.started_at).total_seconds() - 10) if job.started_at else time.monotonic() + settings.AUDIT_TIMEOUT - 10
         concurrency = None if job.testing else adapt_requests(client)
         try:
             with phase(job.pk, "retrieve_nsx_inventory"):
                 report = audit.audit(client, workers=1 if job.testing else concurrency.maximum, testing=job.testing,
                                  progress=lambda completed, stage: update_progress(job.pk, completed, stage))
         finally:
+            if concurrency:
+                LOG.info("NSX request pacing summary: %s", client.request_pacer.summary())
             client.close()
         if concurrency:
             report.setdefault("performance", {})["concurrency"] = concurrency.summary()
             report["performance"]["workers"] = concurrency.peak
+            report["performance"]["request_pacing"] = client.request_pacer.summary()
         update_progress(job.pk, 5, "Preparing report and hit history")
         from urllib.parse import urlsplit
         report["manager"] = urlsplit(client.base_url).netloc

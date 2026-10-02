@@ -318,3 +318,36 @@ only the requested relationship page; it may still decompress and scan the selec
 VM record's JSONB arrays, particularly when deduplicating legacy rule references.
 The application does not retrieve or parse the whole snapshot. New collections store
 each related rule once per VM while preserving all related group paths.
+
+### Throttling and sustained collection rate
+
+Collection requests start at 10 requests/second with no initial burst. All collection
+threads share that pacing gate, in addition to the existing adaptive concurrency
+limit. HTTP 429 halves the rate (minimum 0.5/second), starts a shared cooldown and
+reduces concurrency. Simultaneous rejections during a cooldown do not repeatedly
+halve the rate. Successful traffic recovers by 0.5 requests/second after each
+30-second stable interval, up to 10/second. These are conservative application tuning
+values, not advertised NSX limits.
+
+Retries honor numeric or HTTP-date `Retry-After` headers and otherwise use exponential
+backoff plus randomness. Existing environment retry counts remain the attempt cap;
+each request also has a 60-second retry/pacing budget bounded by the collection's
+remaining deadline. A server delay exceeding that budget ends the request rather
+than retrying early. The worker's overall timeout and Stop collection supervisor
+remain effective during waits. Optional bulk statistics still fall back without
+retries, but their 429 responses also cool down other requests.
+
+Job claiming is serialized briefly in PostgreSQL and prevents simultaneous running
+jobs for the same normalized manager hostname and port across environment entries
+and worker replicas. Different DNS aliases or IP addresses for the same manager
+cannot be identified automatically; configure a consistent manager address. External
+applications and separate Analyzer databases do not share this limiter. Existing
+running collections must finish before the new worker behavior takes effect.
+
+Logs show shared cooldowns, rate recovery, retry exhaustion and a final pacing
+summary; successful report performance metadata includes throttled attempt counts,
+final request rate and aggregate thread wait time. A failed membership request stays
+unknown through the existing coverage handling; it is never classified as empty.
+Validate the defaults with a representative full collection and monitor coverage,
+429 counts and elapsed time before changing limits. More retries or higher NSX API
+limits are not a substitute for sustainable request pacing.
