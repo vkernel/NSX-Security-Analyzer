@@ -103,6 +103,46 @@ def fail_job(job_id, message, diagnostics=None):
                details={'code': (diagnostics or {}).get('error', {}).get('code', 'COLLECTION_FAILED')}, best_effort=True)
 
 
+class CollectionStopped(Exception):
+    pass
+
+
+def stop_requested(job_id):
+    from .models import CollectionStopRequest
+    return CollectionStopRequest.objects.filter(job_id=job_id).exists()
+
+
+@transaction.atomic
+def finish_stopped_job(job_id):
+    from .audit_events import record
+    changed = AuditJob.objects.filter(pk=job_id, status__in=["queued", "running"]).update(
+        status="cancelled", finished_at=timezone.now(), progress_stage="Stopped by operator", error="")
+    if changed:
+        record('collection.stopped', 'AuditJob', job_id)
+        LOG.info("job=%s collection stopped by operator", job_id)
+    return changed
+
+
+@transaction.atomic
+def request_collection_stop(job_id, actor):
+    from .models import CollectionStopRequest
+    from .audit_events import record
+    from django.db import connection
+    if not AuditJob.objects.filter(pk=job_id, status__in=["queued", "running"]).exists():
+        return False
+    _, created = CollectionStopRequest.objects.get_or_create(job_id=job_id,
+        defaults={"actor_id_text": str(actor.pk)})
+    if created:
+        record('collection.stop_requested', 'AuditJob', job_id, actor=actor.pk)
+    # Cancel an unclaimed job immediately. Never wait for a running collector's
+    # snapshot transaction; its supervisor will kill the process and roll it back.
+    queued = AuditJob.objects.filter(pk=job_id, status="queued")
+    queued = queued.select_for_update(skip_locked=True) if connection.features.has_select_for_update_skip_locked else queued.select_for_update()
+    if queued.only('pk').first():
+        finish_stopped_job(job_id)
+    return True
+
+
 def expire_jobs():
     # A crashed worker must not leave an environment permanently locked.
     cutoff = timezone.now() - timedelta(seconds=settings.AUDIT_TIMEOUT + 300)
@@ -220,6 +260,8 @@ def execute_job(job_id):
         with phase(job.pk, "prepare_snapshot"):
             snapshot = prepare_snapshot(job.environment, redact(report))
         update_progress(job.pk, 6, "Saving snapshot")
+        if stop_requested(job.pk):
+            raise CollectionStopped()
         with phase(job.pk, "snapshot_transaction"), transaction.atomic():
             with phase(job.pk, "lock_collection_job"):
                 current = AuditJob.objects.select_for_update().get(pk=job.pk)
@@ -235,6 +277,8 @@ def execute_job(job_id):
             from .findings import synchronize
             with phase(job.pk, "synchronize_findings"):
                 synchronize(job.environment_id)
+            if stop_requested(job.pk):
+                raise CollectionStopped()
             current.status = "succeeded"
             current.finished_at = timezone.now()
             current.progress_completed = 7
@@ -250,6 +294,8 @@ def execute_job(job_id):
             AuditJob.objects.filter(pk=job.pk, status='succeeded').update(diagnostics={'timeline': diagnostic_log.TIMELINE})
         except Exception as exc:
             log_failure(job.pk, exc)
+    except CollectionStopped:
+        finish_stopped_job(job.pk)
     except Exception as exc:
         failure = log_failure(job.pk, exc)
         detail = failure['chain'][0]['message'] if failure['chain'] else 'Collection failed.'

@@ -24,7 +24,7 @@ def eligible(environment, policy, now):
     jobs = environment.jobs.none()
     if policy.collection_days:
         cutoff = now - timedelta(days=policy.collection_days)
-        jobs = environment.jobs.filter(status__in=['succeeded', 'failed'],
+        jobs = environment.jobs.filter(status__in=['succeeded', 'failed', 'cancelled'],
             created_at__lt=cutoff, finished_at__lt=cutoff).filter(
                 Q(snapshot__isnull=True) | Q(snapshot__pk__in=expired.values('pk')))
     return expired, jobs

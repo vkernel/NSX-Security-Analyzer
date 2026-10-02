@@ -436,8 +436,8 @@ class WorkerTransactionTests(TransactionTestCase):
         job = enqueue(self.environment, self.operator)
         with patch("inventory.management.commands.audit_worker.subprocess.Popen") as process:
             child = process.return_value.__enter__.return_value
-            child.wait.side_effect = [TimeoutExpired("collector", 1), 0]
-            call_command("audit_worker", once=True, stdout=io.StringIO())
+            with patch("inventory.management.commands.audit_worker.Command.wait_for_collection", side_effect=TimeoutExpired("collector", 1)):
+                call_command("audit_worker", once=True, stdout=io.StringIO())
             child.kill.assert_called_once()
         job.refresh_from_db()
         self.assertEqual(job.status, "failed")

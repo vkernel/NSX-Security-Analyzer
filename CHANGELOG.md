@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased — development
+
+- Add an optional `snapshot-refresh` Compose container and standalone Kubernetes maintenance Job, excluded from normal startup and Argo CD sync.
+- Add staff-only collection stop controls with persistent requests, worker process termination, rollback of unfinished snapshots and audit events.
+- Add small/medium/large resource sizing and maintenance instructions.
+
+Upgrade: apply migration `0021`, then deploy the updated web, worker and scheduler images. Older workers do not process stop requests. See [snapshot maintenance](docs/snapshot-maintenance.md).
+
 ## 0.5.2 — 2026-10-01
 
 - Add Inventory → VMs with paginated VM identities, power states, tags and on-demand group, rule and service relationships.

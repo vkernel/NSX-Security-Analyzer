@@ -15,7 +15,7 @@ def snapshots():
 
 def jobs(queryset=None):
     queryset = AuditJob.objects.all() if queryset is None else queryset
-    return queryset.select_related('environment','snapshot').defer(
+    return queryset.select_related('environment','snapshot','stop_request').defer(
         'config','diagnostics','environment__password_ciphertext','environment__ca_certificate',
         'snapshot__report','snapshot__html','snapshot__summary').annotate(
             new_coverage_issues=F('snapshot__summary__new_coverage_issues'))

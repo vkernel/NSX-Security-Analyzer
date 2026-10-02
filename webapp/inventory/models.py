@@ -70,6 +70,7 @@ class AuditJob(models.Model):
         RUNNING = "running", "Running"
         SUCCEEDED = "succeeded", "Completed"
         FAILED = "failed", "Failed"
+        CANCELLED = "cancelled", "Stopped"
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     environment = models.ForeignKey(Environment, on_delete=models.PROTECT, related_name="jobs")
@@ -98,6 +99,15 @@ class AuditJob(models.Model):
         ordering = ["-created_at"]
         constraints = [models.UniqueConstraint(fields=["environment"],
             condition=models.Q(status__in=["queued", "running"]), name="one_active_audit_per_environment")]
+
+
+class CollectionStopRequest(models.Model):
+    # No database FK: a stop request must not wait on the collector's long
+    # snapshot transaction/row lock. ORM deletion still cascades with the job.
+    job = models.OneToOneField(AuditJob, primary_key=True, on_delete=models.CASCADE,
+                              db_constraint=False, related_name="stop_request")
+    requested_at = models.DateTimeField(auto_now_add=True)
+    actor_id_text = models.CharField(max_length=100, blank=True)
 
 
 class Snapshot(models.Model):

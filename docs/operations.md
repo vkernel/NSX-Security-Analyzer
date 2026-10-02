@@ -1,5 +1,9 @@
 # Operations
 
+See [snapshot maintenance and stopping collections](snapshot-maintenance.md) for optional refresh jobs and collection cancellation.
+
+For CPU, memory and capacity planning, see [small, medium and large resource sizing](resource-sizing.md).
+
 Run Compose commands from the folder containing your deployment's `compose.yaml`
 and `.env`: the downloaded installation folder for Docker Hub, or `webapp/` for
 a source build. Keep any override `-f` arguments on every command. Kubernetes

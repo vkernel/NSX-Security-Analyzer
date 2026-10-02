@@ -7,7 +7,7 @@ from django.conf import settings
 from django.core.management.base import BaseCommand
 from django.db import close_old_connections
 from inventory.diagnostics import LOG, log_failure, phase
-from inventory.services import claim_job, expire_jobs, fail_job
+from inventory.services import claim_job, expire_jobs, fail_job, stop_requested, finish_stopped_job
 
 
 class Command(BaseCommand):
@@ -31,6 +31,26 @@ class Command(BaseCommand):
         finally:
             signal.signal(signal.SIGTERM, previous)
 
+    def wait_for_collection(self, process, job_id):
+        deadline = time.monotonic() + settings.AUDIT_TIMEOUT
+        while True:
+            if stop_requested(job_id):
+                LOG.warning("job=%s stop requested; killing collector and rolling back unfinished work", job_id)
+                process.kill()
+                process.wait()
+                finish_stopped_job(job_id)
+                return
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise subprocess.TimeoutExpired("run_audit", settings.AUDIT_TIMEOUT)
+            try:
+                process.wait(timeout=min(2, remaining))
+                if stop_requested(job_id):
+                    finish_stopped_job(job_id)
+                return
+            except subprocess.TimeoutExpired:
+                continue
+
     def run_worker(self, options):
         LOG.info("Worker started timeout_seconds=%s", settings.AUDIT_TIMEOUT)
         while True:
@@ -39,6 +59,11 @@ class Command(BaseCommand):
                 expire_jobs()
             with phase('worker', 'claim_queued_job', quiet=True):
                 job = claim_job()
+            if job and stop_requested(job.pk):
+                finish_stopped_job(job.pk)
+                if options["once"]:
+                    return
+                continue
             if job:
                 LOG.info("job=%s claimed; starting collector subprocess", job.pk)
                 try:
@@ -46,7 +71,7 @@ class Command(BaseCommand):
                     with subprocess.Popen([sys.executable, str(settings.BASE_DIR / "manage.py"),
                                            "run_audit", str(job.pk)]) as process:
                         try:
-                            process.wait(timeout=settings.AUDIT_TIMEOUT)
+                            self.wait_for_collection(process, job.pk)
                             LOG.info("job=%s collector exited returncode=%s", job.pk, process.returncode)
                         except subprocess.TimeoutExpired:
                             LOG.error("job=%s collection timed out after %s seconds; terminating subprocess", job.pk, settings.AUDIT_TIMEOUT)
@@ -58,6 +83,10 @@ class Command(BaseCommand):
                             process.kill()
                             process.wait()
                             fail_job(job.pk, "The worker was stopped during collection. You can start a new audit.", {"error": {"code": "WORKER_STOPPED"}})
+                            raise
+                        except Exception:
+                            process.kill()
+                            process.wait()
                             raise
                 except OSError:
                     LOG.error("job=%s collector subprocess could not start", job.pk)

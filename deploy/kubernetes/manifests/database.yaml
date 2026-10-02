@@ -68,8 +68,9 @@ spec:
               command: [sh, -c, 'pg_isready -U "$POSTGRES_USER" -d "$POSTGRES_DB"']
             periodSeconds: 5
           resources:
-            requests: {cpu: 100m, memory: 256Mi}
-            limits: {memory: 1Gi}
+            # Medium starting profile; see docs/resource-sizing.md.
+            requests: {cpu: "1", memory: 4Gi}
+            limits: {memory: 8Gi}
       volumes:
         - name: data
           persistentVolumeClaim:

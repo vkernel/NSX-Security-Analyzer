@@ -1,26 +1,25 @@
+# Optional one-off maintenance. Apply explicitly; keep outside Argo CD's normal sync path.
+# Use the SAME image/build as the application and size memory for your snapshots.
 apiVersion: batch/v1
 kind: Job
 metadata:
-  name: migrate
-  annotations:
-    # Recreate the Job on each full sync; Job Pod templates are immutable.
-    argocd.argoproj.io/hook: Sync
-    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
-    argocd.argoproj.io/sync-wave: "-1"
+  name: nsx-refresh-snapshots
+  namespace: nsx-security-analyzer
 spec:
-  backoffLimit: 1
-  activeDeadlineSeconds: 900
+  backoffLimit: 0
   template:
     metadata:
       labels:
-        app: nsx-migrate
+        app: nsx-refresh-snapshots
     spec:
       restartPolicy: Never
       automountServiceAccountToken: false
+      terminationGracePeriodSeconds: 60
       containers:
-        - name: migrate
+        - name: snapshot-refresh
           image: vkernel/nsx-security-analyzer:0.5.2
           imagePullPolicy: IfNotPresent
+          command: [python, manage.py, index_snapshots, --refresh]
           env:
             - name: POSTGRES_PASSWORD
               valueFrom:
@@ -37,6 +36,5 @@ spec:
               drop: [ALL]
           resources:
             # Medium starting profile; see docs/resource-sizing.md.
-            requests: {cpu: 500m, memory: 1Gi}
-            limits: {memory: 4Gi}
-          command: [python, manage.py, migrate, --noinput]
+            requests: {cpu: "2", memory: 8Gi}
+            limits: {memory: 16Gi}

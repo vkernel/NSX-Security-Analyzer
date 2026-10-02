@@ -1,5 +1,7 @@
 # NSX Security Analyzer workspace
 
+See [snapshot maintenance and stopping collections](../docs/snapshot-maintenance.md) for the optional refresh container and staff-only stop controls.
+
 A web application for read-only NSX security analysis. PostgreSQL
 stores environments, audit jobs and snapshots. A separate worker collects inventory;
 web requests never wait for an NSX audit to finish. All environment configuration, collections and report exploration are managed through

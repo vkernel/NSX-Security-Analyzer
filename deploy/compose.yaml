@@ -124,5 +124,34 @@ services:
       migrate:
         condition: service_completed_successfully
 
+  # Optional one-off container; never started by a normal compose up.
+  snapshot-refresh:
+    image: vkernel/nsx-security-analyzer:${NSX_IMAGE_TAG:-0.5.2}
+    profiles: [maintenance]
+    mem_limit: 16g
+    cpus: "2"
+    init: true
+    environment:
+      DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY:?Set DJANGO_SECRET_KEY in .env}
+      DJANGO_ALLOWED_HOSTS: ${DJANGO_ALLOWED_HOSTS:-localhost,127.0.0.1,[::1]}
+      DJANGO_CSRF_TRUSTED_ORIGINS: ${DJANGO_CSRF_TRUSTED_ORIGINS:-}
+      DJANGO_HTTPS: ${DJANGO_HTTPS:-0}
+      DJANGO_TRUST_PROXY: ${DJANGO_TRUST_PROXY:-0}
+      POSTGRES_DB: ${POSTGRES_DB:-nsx}
+      POSTGRES_USER: ${POSTGRES_USER:-nsx}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+      POSTGRES_HOST: ${POSTGRES_HOST:-db}
+      POSTGRES_PORT: ${POSTGRES_PORT:-5432}
+      POSTGRES_SSLMODE: ${POSTGRES_SSLMODE:-prefer}
+      POSTGRES_SSLROOTCERT: ${POSTGRES_SSLROOTCERT:-}
+      POSTGRES_CONNECT_TIMEOUT: ${POSTGRES_CONNECT_TIMEOUT:-10}
+      NSX_AUDIT_TIMEOUT: ${NSX_AUDIT_TIMEOUT:-3600}
+      NSX_LOG_FORMAT: ${NSX_LOG_FORMAT:-json}
+      NSX_AUDIT_LOG_RETENTION_DAYS: ${NSX_AUDIT_LOG_RETENTION_DAYS:-0}
+    command: ["python", "manage.py", "index_snapshots", "--refresh"]
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+
 volumes:
   postgres-data:

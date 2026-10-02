@@ -1,5 +1,7 @@
 # NSX Security Analyzer
 
+See [snapshot maintenance and stopping collections](docs/snapshot-maintenance.md) for optional refresh jobs and collection cancellation.
+
 A read-only NSX Policy inventory and security review workspace. Collect inventory
 from multiple NSX Managers, explore firewall rules and reference evidence, and
 compare saved snapshots in a PostgreSQL-backed web application.
@@ -83,6 +85,8 @@ Keep `DJANGO_SECRET_KEY` stable: it is used to protect saved manager credentials
 The default service listens on loopback. Use an HTTPS reverse proxy for shared access.
 
 ## Documentation
+
+- [Small, medium and large resource sizing](docs/resource-sizing.md)
 
 - [Collection performance and diagnostics](docs/collection-performance.md)
 - [Snapshot comparison, finding reviews and coverage](docs/history-and-review.md)

@@ -35,8 +35,9 @@ spec:
             capabilities:
               drop: [ALL]
           resources:
-            requests: {cpu: 100m, memory: 256Mi}
-            limits: {memory: 2Gi}
+            # Medium starting profile; see docs/resource-sizing.md.
+            requests: {cpu: 500m, memory: 2Gi}
+            limits: {memory: 4Gi}
           ports:
             - containerPort: 8000
           startupProbe:
@@ -92,8 +93,9 @@ spec:
             capabilities:
               drop: [ALL]
           resources:
-            requests: {cpu: 100m, memory: 256Mi}
-            limits: {memory: 2Gi}
+            # Medium starting profile; see docs/resource-sizing.md.
+            requests: {cpu: "1", memory: 4Gi}
+            limits: {memory: 8Gi}
           command: [python, manage.py, audit_worker]
 ---
 apiVersion: apps/v1
@@ -133,8 +135,9 @@ spec:
             capabilities:
               drop: [ALL]
           resources:
+            # Medium starting profile; see docs/resource-sizing.md.
             requests: {cpu: 100m, memory: 256Mi}
-            limits: {memory: 2Gi}
+            limits: {memory: 512Mi}
           command: [python, manage.py, sync_scheduler]
 ---
 apiVersion: v1

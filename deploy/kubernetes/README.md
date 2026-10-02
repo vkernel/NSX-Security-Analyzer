@@ -22,8 +22,11 @@ You need:
 - Cluster access to Docker Hub, DNS, and your NSX Managers on HTTPS port 443.
 - Git and a terminal. Commands below use macOS/Linux/WSL shell syntax.
 
-The memory settings are starting values, not sizing guarantees: allow up to 2 GiB
-for each application pod and 1 GiB for PostgreSQL. Large inventories may need more.
+The default manifests use the **medium** resource profile, not a production sizing guarantee.
+With bundled PostgreSQL and one replica per application component, normal memory
+requests total 10.25Gi; migration and optional refresh Jobs require additional capacity.
+Use the [small, medium and large sizing guide](../../docs/resource-sizing.md) to choose
+per-container CPU/memory allocations and validate them with real collections and refreshes.
 The bundled database is a single instance, not a highly available database service.
 Ask your platform administrator to review storage, backups and resources for production.
 
@@ -402,6 +405,7 @@ is not automatically available in a remote cluster. Private registries need an
 - `manifests/database.yaml`: optional bundled PostgreSQL with persistent storage.
 - `manifests/migrate.yaml`: schema initialization/upgrade Job; recreated as a hook on each full Argo CD sync.
 - `manifests/application.yaml`: web, worker, scheduler and internal web Service.
+- `maintenance/refresh-snapshots.yaml`: optional one-off refresh Job; apply separately, outside the normal Argo CD sync path.
 - `compose.yaml`: optional converter input for users who still need Kompose or an
   online converter. It is not the installation path above; converted output needs
   Secret references, storage, startup ordering and probes added manually.
@@ -420,18 +424,38 @@ References: [Secret environment mappings](https://kubernetes.io/docs/tasks/injec
 
 ### Preparing older snapshots for faster report pages
 
-When upgrading to a build containing migration `0018_snapshot_presentation`, finish
-the migration Job and application rollout first. Then run:
+Snapshot indexing prepares report sections and table records from snapshots already
+stored in PostgreSQL. It makes report browsing faster and does not contact NSX or
+collect new inventory. New collections perform this preparation automatically in
+the collection worker.
+
+For older snapshots, finish schema migration and application rollout first. The
+management commands are:
 
 ```sh
-kubectl -n nsx-security-analyzer exec deployment/web -- python manage.py index_snapshots --refresh
+# Prepare snapshots missing presentation or history data.
+python manage.py index_snapshots
+
+# Rebuild prepared data for every saved snapshot, including existing indexes.
+python manage.py index_snapshots --refresh
 ```
 
-This prepares saved report sections and table records from PostgreSQL, without
-contacting NSX. It skips snapshots already prepared and can be rerun safely after
-an interruption. New collections do this automatically. Original snapshots remain
-intact; older reports keep working while preparation is pending. See
-[report performance](../../docs/collection-performance.md#report-navigation) for
-search, pagination, storage, and export behavior.
+These are maintenance commands, not an additional always-running service. The optional manifest
+`maintenance/refresh-snapshots.yaml` runs refresh in a separate on-demand Job. Set its
+image to your deployed application build, verify database/Secret settings and size
+its resources before applying it. See [snapshot maintenance](../../docs/snapshot-maintenance.md)
+for execution, logs, stopping and retry instructions.
+Do not execute a large refresh inside the web pod: it shares that container's memory
+limit and can interrupt the website if the container is OOMKilled. See the
+[resource sizing guide](../../docs/resource-sizing.md) for initial allocations.
+Keep this optional maintenance Job outside the normal Argo CD installation/sync path.
+
+The refresh rebuilds derived data; it preserves the original saved snapshot.
+It can be rerun after interruption, but `--refresh` rebuilds already-prepared
+snapshots too. In development builds supporting `--snapshot`, add
+`--snapshot <snapshot-uuid>` to limit the work to one snapshot; check
+`python manage.py index_snapshots --help` in the deployed image first.
+See [report performance](../../docs/collection-performance.md#report-navigation)
+for search, pagination, storage and export behavior.
 
 Version 0.5.2 adds **Inventory → VMs**. Refresh existing prepared reports with the command above, then run a new collection for complete returned VM inventory, including untagged VMs. Older snapshots only contain VMs recoverable from their saved tag assignments. Group and service links describe configuration relationships, not confirmed membership or observed traffic.

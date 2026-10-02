@@ -1,5 +1,7 @@
 # Collection performance
 
+For CPU, memory and capacity planning, see [small, medium and large resource sizing](resource-sizing.md).
+
 Development builds from 0.2.2-dev retain fresh inventory and counter checks while reducing transport and fallback overhead.
 
 - HTTPS connections are pooled per collection (up to 16 connections); the existing adaptive limiter still caps concurrent requests at eight. Uploaded CA certificates and hostname validation remain supported. Redirects are rejected, and the pool closes when collection finishes. System HTTPS proxy settings and proxy bypass rules are honored.
@@ -73,10 +75,10 @@ run migrations through the normal deployment process, then prepare older snapsho
 
 ```sh
 # Docker Compose: run from the folder containing compose.yaml and .env.
-docker compose exec web python manage.py index_snapshots
+docker compose run --rm --no-deps snapshot-refresh python manage.py index_snapshots
 
-# Kubernetes: use the namespace and web Deployment from your installation.
-kubectl -n nsx-security-analyzer exec deployment/web -- python manage.py index_snapshots
+# Kubernetes: command to configure in an optional, separately sized maintenance Job.
+python manage.py index_snapshots
 ```
 
 The command reads one saved snapshot at a time, commits each index atomically, and
@@ -133,16 +135,21 @@ After deploying this update and applying migrations, refresh existing prepared r
 once to update their embedded controls and add the compact history projections:
 
 ```sh
-docker compose exec web python manage.py index_snapshots --refresh
+docker compose run --rm --no-deps snapshot-refresh python manage.py index_snapshots --refresh
 ```
 
-In Kubernetes, run the same management command in the web pod:
+In Kubernetes, configure the same management command in a separately sized, on-demand
+maintenance Job using `deploy/kubernetes/maintenance/refresh-snapshots.yaml`:
 
 ```sh
-kubectl -n nsx-security-analyzer exec deployment/web -- python manage.py index_snapshots --refresh
+python manage.py index_snapshots --refresh
 ```
 
-Use your actual web Deployment name if different. This processes saved data without
+Use the application image and database/Secret settings for the Job. See the
+[Kubernetes guide](../deploy/kubernetes/README.md#preparing-older-snapshots-for-faster-report-pages).
+The Compose command creates a separate temporary container using the optional snapshot-refresh service
+configuration; include your usual override files and allocate sufficient memory.
+This processes saved data without
 contacting NSX. New snapshots receive the updated indexes automatically. Until old
 snapshots are refreshed, historical analysis can still read their original DFW data.
 
@@ -240,3 +247,6 @@ leaves other indexes unchanged. Keep the Job logs on failure. A synthetic Python
 allocation comparison with 1,000 VMs and 100 related rules per VM measured 24.61 MiB
 for the materialized VM list versus 0.18 MiB for incremental consumption, excluding
 source report allocation and database inserts. This is not a production memory guarantee.
+
+For the temporary container/Job lifecycle and collection stop controls, see
+[snapshot maintenance](snapshot-maintenance.md).

@@ -1,5 +1,9 @@
 # Install the complete Docker Hub stack
 
+See [snapshot maintenance and stopping collections](snapshot-maintenance.md) for optional refresh jobs and collection cancellation.
+
+For CPU, memory and capacity planning, see [small, medium and large resource sizing](resource-sizing.md).
+
 > Release **0.5.2** creates the initial administrator automatically during database
 > initialization. No manual account-creation command is needed.
 

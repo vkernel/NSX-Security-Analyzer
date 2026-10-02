@@ -187,6 +187,18 @@ def collect(request, pk):
 
 
 @staff_required
+@require_POST
+def stop_collection(request, pk):
+    from .services import request_collection_stop
+    job = get_object_or_404(AuditJob.objects.only('id', 'environment_id'), pk=pk)
+    if request_collection_stop(job.pk, request.user):
+        messages.success(request, "Stop requested. The worker will terminate the collection; earlier snapshots remain available.")
+    else:
+        messages.info(request, "This collection has already finished.")
+    return redirect('collection-history', pk=job.environment_id)
+
+
+@staff_required
 def testing_data(request):
     if request.method == "POST":
         from .demo import create_demo_environment

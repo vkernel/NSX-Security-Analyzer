@@ -12,3 +12,5 @@ services:
     <<: *hub-image
   scheduler:
     <<: *hub-image
+  snapshot-refresh:
+    <<: *hub-image

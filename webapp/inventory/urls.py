@@ -2,6 +2,7 @@ from django.urls import path
 from . import views, history_views, diagnostic_views, report_views
 
 urlpatterns = [
+    path("collections/<uuid:pk>/stop/", views.stop_collection, name="stop-collection"),
     path("snapshots/<uuid:pk>/data/", report_views.snapshot_data, name="snapshot-data"),
     path('administration/audit/', diagnostic_views.audit_log, name='audit-log'),
     path('administration/audit/collect/', diagnostic_views.diagnostic_collection, name='diagnostic-collection'),
