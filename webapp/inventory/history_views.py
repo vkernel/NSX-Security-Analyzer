@@ -12,7 +12,7 @@ from django.utils import timezone
 from django.views.decorators.http import require_GET, require_http_methods
 from .models import Environment, Finding, FindingEvent
 from .forms import SnapshotComparisonForm, FindingReviewForm
-from .findings import synchronize, LABELS
+from .findings import LABELS
 from .preferences import preferences
 
 
@@ -21,26 +21,21 @@ from .preferences import preferences
 def comparison(request, pk):
     environment = get_object_or_404(page_queries.environments(), pk=pk)
     latest = list(environment.snapshots.filter(testing=False, imported=False).values_list('pk', flat=True)[:2])
-    data = request.GET if 'before' in request.GET or 'after' in request.GET else ({'before': latest[1], 'after': latest[0]} if len(latest) == 2 else None)
-    form = SnapshotComparisonForm(data, environment=environment)
+    initial = {'before': latest[1], 'after': latest[0]} if len(latest) == 2 else {}
+    data = request.GET if 'before' in request.GET or 'after' in request.GET else None
+    form = SnapshotComparisonForm(data, initial=initial, environment=environment, choices_page=request.GET.get("choices_page", 1))
     rows, selected = [], None
     if form.is_bound and form.is_valid():
-        from .comparison import compare
+        from .comparison_cache import comparison_rows
         selected = form.cleaned_data
-        def configuration(snapshot):
-            from .models import Snapshot
-            data = Snapshot.objects.filter(pk=snapshot.pk).values(
-                'report__inventory','report__objects','report__dfw__rules').get()
-            return {'inventory':data['report__inventory'] or {}, 'objects':data['report__objects'] or [],
-                    'dfw':{'rules':data['report__dfw__rules'] or []}}
-        rows = compare(configuration(selected['before']), configuration(selected['after']))
+        rows = comparison_rows(selected['before'], selected['after'])
     page = Paginator(rows, preferences(request).page_size).get_page(request.GET.get('page'))
     query = request.GET.copy()
     if selected:
         query['before'], query['after'] = str(selected['before'].pk), str(selected['after'].pk)
     query.pop('page', None)
     return render(request, 'inventory/comparison.html', {'environment': environment, 'form': form,
-        'selected': selected, 'page': page, 'query_string': query.urlencode(), 'count': len(rows)})
+        'selected': selected, 'page': page, 'query_string': query.urlencode(), 'count': page.paginator.count})
 
 
 @login_required
@@ -49,7 +44,7 @@ def coverage(request, pk):
     from .coverage import dashboard
     environment = get_object_or_404(page_queries.environments(), pk=pk)
     days = int(request.GET.get('days', '30')) if request.GET.get('days', '30') in ('7', '30', '90') else 30
-    result = dashboard(environment, days)
+    result = dashboard(environment, days, lazy=True)
     page = Paginator(result.pop('issues'), preferences(request).page_size).get_page(request.GET.get('page'))
     return render(request, 'inventory/coverage.html', {'environment': environment, 'coverage': result,
         'days': days, 'page': page, 'query_string': f'days={days}', 'failed_count': result['failed'].count(),
@@ -61,7 +56,6 @@ def coverage(request, pk):
 @require_GET
 def findings(request, pk):
     environment = get_object_or_404(page_queries.environments(), pk=pk)
-    synchronize(environment.pk)  # Establish a baseline for pre-upgrade snapshots too.
     rows = environment.findings.select_related('owner').defer('evidence')
     state = request.GET.get('status', 'present')
     if state == 'present':
@@ -90,10 +84,13 @@ def finding_detail(request, pk, finding_id):
     environment = get_object_or_404(page_queries.environments(), pk=pk)
     if request.method == 'POST' and not request.user.is_staff:
         return HttpResponseForbidden('Staff access is required to review findings.')
-    synchronize(environment.pk)
-    with transaction.atomic():
-        Environment.objects.select_for_update().get(pk=pk)
-        finding = get_object_or_404(Finding.objects.select_for_update(), pk=finding_id, environment=environment)
+    from contextlib import nullcontext
+    with transaction.atomic() if request.method == 'POST' else nullcontext():
+        rows = Finding.objects.select_related('owner').defer('evidence')
+        if request.method == 'POST':
+            Environment.objects.select_for_update().only('pk').get(pk=pk)
+            rows = rows.select_for_update(of=('self',))
+        finding = get_object_or_404(rows, pk=finding_id, environment=environment)
         form = FindingReviewForm(request.POST if request.method == 'POST' else None,
             initial={'status': finding.status, 'owner': finding.owner_id, 'review_date': finding.review_date, 'revision': finding.revision})
         if request.method == 'POST' and form.is_valid():
@@ -116,4 +113,4 @@ def finding_detail(request, pk, finding_id):
     page = Paginator(finding.events.select_related('actor'), 20).get_page(request.GET.get('page'))
     return render(request, 'inventory/finding_detail.html', {'environment': environment, 'finding': finding,
         'label': LABELS.get(finding.kind, finding.kind), 'form': form, 'page': page,
-        'evidence': json.dumps(finding.evidence, indent=2, ensure_ascii=False)})
+        'evidence': json.dumps(finding.evidence, indent=2, ensure_ascii=False) if request.GET.get('evidence') == '1' else None})

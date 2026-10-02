@@ -5,6 +5,20 @@ automatically. A snapshot refresh is optional maintenance: it rebuilds report in
 from saved PostgreSQL data, without contacting NSX. Use it when an upgrade requires
 older reports to be rebuilt. It is not a scheduled collection or schema migration.
 
+## Avoid overlapping refresh with collections
+
+Before starting maintenance, pause automatic collection for the affected environments
+in the web GUI. Wait for running collections to finish (or use Stop collection and
+wait for acknowledgement), and stop queued collections. For a full refresh, do this
+for all environments. Avoid starting manual collections until maintenance completes,
+then restore the environments' previous scheduling settings.
+
+Suspending the maintenance Job prevents automatic startup; it is **not** a database
+lock against collections once you manually start it. There is currently no global
+mutual-exclusion mechanism between maintenance and collection workers. Running both
+can compete for database, CPU and memory resources. Normal collections must continue
+to index their own new snapshot; that is separate from refreshing saved history.
+
 ## Docker Compose: temporary refresh container
 
 First finish migrations and start your normal application stack. From the directory
@@ -45,7 +59,17 @@ name also prevents accidentally starting two of these named refreshes at once. D
 
 The optional manifest is `deploy/kubernetes/maintenance/refresh-snapshots.yaml`,
 **outside the normal `manifests/` directory**. Keep it outside Argo CD's normal sync
-path so deployments do not automatically trigger a full reindex.
+path so deployments do not automatically trigger a full reindex. It now includes
+`spec.suspend: true`: applying it creates a suspended Job without starting a pod.
+Start it only with the explicit unsuspend command below, after pausing collections.
+
+Argo CD discovers resources by its configured source path, recursion, Kustomize or
+Helm inclusion—not by whether a folder is named `maintenance`. Point the normal
+application at `deploy/kubernetes/manifests`, or otherwise exclude this maintenance
+manifest from the resources it renders. Do not add migration-style Sync hooks to it.
+If Argo owns the Job, self-healing can undo a manual unsuspend; keep the manual Job
+outside that application's managed resources. Removing it with pruning enabled can
+terminate an existing run, so preserve logs first.
 
 Before applying it:
 
@@ -63,6 +87,8 @@ From the repository root:
 
 ```sh
 kubectl apply -f deploy/kubernetes/maintenance/refresh-snapshots.yaml
+# Explicit manual start, after completing the maintenance-window checks above:
+kubectl -n nsx-security-analyzer patch job nsx-refresh-snapshots --type=merge -p '{"spec":{"suspend":false}}'
 kubectl -n nsx-security-analyzer get pods -l app=nsx-refresh-snapshots
 kubectl -n nsx-security-analyzer logs -f job/nsx-refresh-snapshots
 ```
@@ -71,13 +97,24 @@ Success shows `Completed`. `backoffLimit: 0` prevents automatic retries of a lar
 failed refresh. Inspect logs and pod termination details before retrying. No new PVC
 is required: results are stored in the application's existing PostgreSQL database.
 
-Before another run, save any logs you need, delete the old Job and apply it again:
+Before another run, save any logs you need, delete the old Job and apply it again (it will be suspended):
 
 ```sh
 kubectl -n nsx-security-analyzer delete job nsx-refresh-snapshots
 kubectl apply -f deploy/kubernetes/maintenance/refresh-snapshots.yaml
 ```
 
+Repeat the explicit unsuspend command when ready for the new run. Reapplying the
+manifest to an active Job restores `suspend: true` and stops its running pod.
+
+To stop an unintended active refresh without deleting the Job:
+
+```sh
+kubectl -n nsx-security-analyzer patch job nsx-refresh-snapshots --type=merge -p '{"spec":{"suspend":true}}'
+```
+
+Save logs first if possible. If Argo still manages an unsuspended version, correct
+its Git source or exclude the Job so reconciliation does not restart it.
 Deleting a running refresh Job also stops it. Each snapshot's index rebuild is
 transactional: unfinished work rolls back, while earlier completed refreshes remain.
 Database rollback/cleanup may take time. Do not run overlapping refresh Jobs for the
@@ -112,3 +149,5 @@ do not stop the separate snapshot-refresh maintenance Job; use the commands abov
 
 References: [Docker Compose profiles](https://docs.docker.com/compose/how-tos/profiles/),
 [one-off containers](https://docs.docker.com/reference/cli/docker/compose/run/).
+
+Kubernetes reference: [suspending Jobs](https://kubernetes.io/docs/concepts/workloads/controllers/job/#suspending-a-job).

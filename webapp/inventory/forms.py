@@ -137,10 +137,20 @@ class SnapshotComparisonForm(forms.Form):
     before = forms.ModelChoiceField(queryset=None, label='Earlier snapshot')
     after = forms.ModelChoiceField(queryset=None, label='Later snapshot')
 
-    def __init__(self, *args, environment, **kwargs):
+    def __init__(self, *args, environment, choices_page=1, **kwargs):
         super().__init__(*args, **kwargs)
+        from uuid import UUID
+        from django.core.paginator import Paginator
+        self.snapshot_page = Paginator(environment.snapshots.filter(testing=False, imported=False).values_list('pk', flat=True), 100).get_page(choices_page)
+        ids = list(self.snapshot_page)
+        for name in ('before', 'after'):
+            try:
+                ids.append(UUID(str(self.data.get(name) or self.initial.get(name))))
+            except (ValueError, TypeError):
+                pass
         for field in self.fields.values():
-            field.queryset = environment.snapshots.filter(testing=False, imported=False).only('id', 'generated_at')
+            field.queryset = environment.snapshots.filter(testing=False, imported=False, pk__in=ids).only('id', 'generated_at')
+            field.help_text = 'Up to 100 full snapshots from this selector page, plus your selected snapshots.'
             field.label_from_instance = lambda snapshot: snapshot.generated_at.strftime('%Y-%m-%d %H:%M:%S UTC') + ' · ' + str(snapshot.pk)[:8]
 
     def clean(self):

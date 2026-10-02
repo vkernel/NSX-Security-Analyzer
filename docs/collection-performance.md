@@ -250,3 +250,31 @@ source report allocation and database inserts. This is not a production memory g
 
 For the temporary container/Job lifecycle and collection stop controls, see
 [snapshot maintenance](snapshot-maintenance.md).
+
+### Environment analysis tabs (development)
+
+Environment snapshot and collection lists use small database projections and page
+queries. Collection history has an environment/time index for recent-job lookups.
+
+- **Compare snapshots** opens with selectors only. Select **Compare snapshots** to
+  calculate a pair; the first calculation still reads the two saved configuration
+  projections and can take time for large inventories. Results are saved in PostgreSQL,
+  shared across web pods and paginated in SQL on subsequent requests. Selector choices
+  are also paginated (100 snapshots per page); older snapshots remain selectable.
+  Cached differences consume database storage and cascade when either snapshot is
+  deleted by retention. Saving a changed source report invalidates its comparisons.
+- **Finding reviews** reads persisted findings without synchronizing or locking the
+  environment during GET requests. Collection workers continue to synchronize findings
+  when saving a full snapshot. Older installations without a baseline need a new full
+  collection. Review POST requests retain locking and revision checks. Opening a finding
+  no longer fetches its complete source snapshot, and saved evidence is loaded only
+  when the user selects **Load saved finding evidence**.
+- **Collection coverage** filters compact indexed statuses, counts issues in PostgreSQL,
+  and retrieves detailed notes only for the visible page. Snapshot-level errors remain
+  included. Observation gaps still use timestamps within the selected window; these
+  queries do not load snapshot payloads. Unprepared legacy snapshots show an explicit
+  maintenance notice instead of loading a full report in the page request.
+
+Apply migrations `0022` and `0023` before deploying this build. They add shared comparison
+storage and pagination indexes; creating indexes can take time on a large existing
+history. No refresh is required for already indexed snapshots to use these changes.

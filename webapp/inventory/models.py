@@ -97,6 +97,7 @@ class AuditJob(models.Model):
 
     class Meta:
         ordering = ["-created_at"]
+        indexes = [models.Index(fields=["environment", "-created_at"], name="job_environment_recent")]
         constraints = [models.UniqueConstraint(fields=["environment"],
             condition=models.Q(status__in=["queued", "running"]), name="one_active_audit_per_environment")]
 
@@ -189,6 +190,7 @@ class Finding(models.Model):
     class Meta:
         constraints = [models.UniqueConstraint(fields=['environment', 'kind', 'path'], name='unique_environment_finding')]
         ordering = ['status', 'name', 'pk']
+        indexes = [models.Index(fields=['environment', 'present', 'status', 'name', 'id'], name='finding_environment_list')]
 
 
 class FindingEvent(models.Model):
@@ -292,3 +294,23 @@ class HistoryAssessmentRow(models.Model):
 class SnapshotHistoryData(models.Model):
     snapshot = models.OneToOneField(Snapshot, on_delete=models.CASCADE, primary_key=True, related_name='history_data')
     payload = models.JSONField()
+
+
+class SnapshotComparison(models.Model):
+    before = models.ForeignKey(Snapshot, on_delete=models.CASCADE, related_name='comparisons_before')
+    after = models.ForeignKey(Snapshot, on_delete=models.CASCADE, related_name='comparisons_after')
+    ready = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=['before', 'after'], name='snapshot_comparison_pair')]
+
+
+class SnapshotComparisonRow(models.Model):
+    comparison = models.ForeignKey(SnapshotComparison, on_delete=models.CASCADE, related_name='rows')
+    ordinal = models.PositiveIntegerField()
+    data = models.JSONField()
+
+    class Meta:
+        ordering = ['ordinal']
+        indexes = [models.Index(fields=['comparison', 'ordinal'], name='comparison_row_order')]

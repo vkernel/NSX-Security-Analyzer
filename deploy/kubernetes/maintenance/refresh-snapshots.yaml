@@ -1,4 +1,5 @@
-# Optional one-off maintenance. Apply explicitly; keep outside Argo CD's normal sync path.
+# Optional manual maintenance. Applying this manifest does NOT start indexing.
+# Keep outside Argo CD's normal sync path; unsuspend explicitly in a maintenance window.
 # Use the SAME image/build as the application and size memory for your snapshots.
 apiVersion: batch/v1
 kind: Job
@@ -6,6 +7,7 @@ metadata:
   name: nsx-refresh-snapshots
   namespace: nsx-security-analyzer
 spec:
+  suspend: true
   backoffLimit: 0
   template:
     metadata:

@@ -405,7 +405,7 @@ is not automatically available in a remote cluster. Private registries need an
 - `manifests/database.yaml`: optional bundled PostgreSQL with persistent storage.
 - `manifests/migrate.yaml`: schema initialization/upgrade Job; recreated as a hook on each full Argo CD sync.
 - `manifests/application.yaml`: web, worker, scheduler and internal web Service.
-- `maintenance/refresh-snapshots.yaml`: optional one-off refresh Job; apply separately, outside the normal Argo CD sync path.
+- `maintenance/refresh-snapshots.yaml`: optional suspended refresh Job; apply separately and unsuspend manually, outside the normal Argo CD sync path.
 - `compose.yaml`: optional converter input for users who still need Kompose or an
   online converter. It is not the installation path above; converted output needs
   Secret references, storage, startup ordering and probes added manually.
@@ -441,7 +441,8 @@ python manage.py index_snapshots --refresh
 ```
 
 These are maintenance commands, not an additional always-running service. The optional manifest
-`maintenance/refresh-snapshots.yaml` runs refresh in a separate on-demand Job. Set its
+`maintenance/refresh-snapshots.yaml` defines a separate, suspended Job. Applying it
+does not start indexing; pause collections and explicitly unsuspend it for maintenance. Set its
 image to your deployed application build, verify database/Secret settings and size
 its resources before applying it. See [snapshot maintenance](../../docs/snapshot-maintenance.md)
 for execution, logs, stopping and retry instructions.

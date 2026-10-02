@@ -2,6 +2,10 @@
 
 ## Unreleased — development
 
+- Load environment analysis tabs on demand: shared paginated comparisons, read-only finding pages, deferred finding evidence and SQL-paginated coverage issues. Add migrations 0022/0023 for comparison storage and history indexes.
+
+- Suspend the optional Kubernetes snapshot-refresh Job by default; require an explicit manual start and document collection maintenance windows.
+
 - Add an optional `snapshot-refresh` Compose container and standalone Kubernetes maintenance Job, excluded from normal startup and Argo CD sync.
 - Add staff-only collection stop controls with persistent requests, worker process termination, rollback of unfinished snapshots and audit events.
 - Add small/medium/large resource sizing and maintenance instructions.

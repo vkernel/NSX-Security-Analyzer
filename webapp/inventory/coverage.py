@@ -6,7 +6,7 @@ from .models import Snapshot, SnapshotRecord, SnapshotPresentation
 from django.db.models import Q
 
 
-def dashboard(environment, days, now=None):
+def dashboard(environment, days, now=None, lazy=False):
     now = now or timezone.now()
     start = now - timedelta(days=days)
     snapshots = environment.snapshots.filter(testing=False, imported=False)
@@ -17,13 +17,16 @@ def dashboard(environment, days, now=None):
             for a, b in zip(boundaries, boundaries[1:]) if b-a > threshold]
     latest = snapshots.filter(generated_at__lte=now).only('id','generated_at','needs_review').first()
     issues = []
+    indexed_rows = None
     if latest:
         if SnapshotPresentation.objects.filter(snapshot_id=latest.pk).exists():
             # Select only unknown rows and the fields displayed in this table.
             rows = SnapshotRecord.objects.filter(snapshot_id=latest.pk).filter(
-                Q(data__membership='unknown') | Q(data__hit_status='unknown') | Q(data__status='unknown'))
+                Q(compact__membership='unknown') | Q(compact__hit_status='unknown') | Q(compact__status='unknown'))
             report = {'objects':[], 'dfw':{'rules':[], 'policies':[]}, 'tags':{'objects':[]}}
-            for row in rows.values('view','data__name','data__notes','data__membership','data__hit_status','data__status'):
+            if lazy:
+                indexed_rows = rows
+            for row in ([] if lazy else rows.values('view','data__name','data__notes','data__membership','data__hit_status','data__status')):
                 data = {key.removeprefix('data__'):value for key,value in row.items() if key.startswith('data__')}
                 target = report['objects'] if row['view']=='inventory' else report['tags']['objects'] if row['view']=='tags' else report['dfw']['rules'] if data['hit_status'] else report['dfw']['policies']
                 target.append(data)
@@ -34,6 +37,10 @@ def dashboard(environment, days, now=None):
             report['tags']['unsupported_conditions'] = metadata['report__tags__unsupported_conditions']
             report['search_coverage'] = metadata['report__search_coverage'] or {}
             report['limitations'] = metadata['report__limitations'] or 'Search coverage was not recorded.'
+        elif lazy:
+            report = {'search_coverage': {'mode': 'all_types'}}
+            issues.append({'area': 'Audit', 'name': 'Report index not prepared',
+                'detail': 'Run snapshot maintenance or collect a new snapshot to view detailed coverage checks.'})
         else:
             report = latest.report
         for row in report.get('objects', []):
@@ -54,11 +61,49 @@ def dashboard(environment, days, now=None):
         search = report.get('search_coverage', {})
         if search.get('mode') != 'all_types':
             issues.append({'area': 'Search', 'name': 'Limited or unrecorded coverage', 'detail': report.get('limitations', 'Search coverage was not recorded.')})
-        if latest.needs_review and not issues:
+        if latest.needs_review and not issues and (indexed_rows is None or not indexed_rows.exists()):
             issues.append({'area': 'Audit', 'name': 'Incomplete checks', 'detail': 'This snapshot is flagged for review; consult its report.'})
+    if indexed_rows is not None:
+        issues = CoverageIssues(indexed_rows, issues)
     return {'start': start, 'end': now, 'latest': latest, 'issues': issues, 'gaps': gaps,
             'snapshots': len(stamps), 'first': stamps[0] if stamps else None, 'last': stamps[-1] if stamps else None,
             'threshold_hours': round(threshold.total_seconds()/3600, 2), 'freshness': freshness(environment),
             'stale_data': latest is None or now-latest.generated_at > timedelta(hours=policy().stale_hours),
             'failed': environment.jobs.filter(status='failed', created_at__gte=start, created_at__lte=now),
             'active': environment.jobs.filter(status__in=['queued', 'running']).count()}
+
+
+class CoverageIssues:
+    """Paginate projected issue details in SQL, then append small snapshot-level notes."""
+    def __init__(self, rows, extra):
+        from django.db.models import Case, When, Value, IntegerField
+        self.rows = rows.annotate(area_order=Case(
+            When(view='inventory', then=Value(0)),
+            When(view='tags', then=Value(3)),
+            When(compact__hit_status='unknown', then=Value(1)),
+            default=Value(2), output_field=IntegerField())).order_by('area_order','ordinal','pk')
+        self.extra = extra
+        self.row_count = rows.count()
+
+    def count(self):
+        return self.row_count + len(self.extra)
+
+    def __len__(self):
+        return self.count()
+
+    def __getitem__(self, key):
+        if not isinstance(key, slice):
+            if key < 0: key += len(self)
+            if key < 0 or key >= len(self): raise IndexError(key)
+            return self[key:key+1][0]
+        start, stop, step = key.indices(len(self))
+        result = []
+        if start < min(stop, self.row_count):
+            for row in self.rows.values('view','data__name','data__notes','data__hit_status')[start:min(stop,self.row_count)]:
+                area = ('Group membership' if row['view']=='inventory' else 'Tag usage' if row['view']=='tags'
+                        else 'Rule counters' if row['data__hit_status'] else 'Policy inventory')
+                fallback = 'Membership is unknown.' if row['view']=='inventory' else 'Evidence is unknown.'
+                result.append({'area':area,'name':row['data__name'],
+                               'detail':'; '.join(row['data__notes'] or []) or fallback})
+        result.extend(self.extra[max(0,start-self.row_count):max(0,stop-self.row_count)])
+        return result[::step]
