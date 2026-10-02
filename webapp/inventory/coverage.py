@@ -1,9 +1,9 @@
-"""Collection visibility, not a claim of continuous traffic observation."""
+"""Collection visibility, using prepared coverage rows for web requests."""
 from datetime import timedelta
 from django.utils import timezone
 from .usability import freshness, policy
-from .models import Snapshot, SnapshotRecord, SnapshotPresentation
-from django.db.models import Q
+from .models import SnapshotCoverage
+from .coverage_index import PreparedIssues, report_issues
 
 
 def dashboard(environment, days, now=None, lazy=False):
@@ -16,94 +16,24 @@ def dashboard(environment, days, now=None, lazy=False):
     gaps = [{'start': a, 'end': b, 'hours': round((b-a).total_seconds()/3600, 2)}
             for a, b in zip(boundaries, boundaries[1:]) if b-a > threshold]
     latest = snapshots.filter(generated_at__lte=now).only('id','generated_at','needs_review').first()
-    issues = []
-    indexed_rows = None
-    if latest:
-        if SnapshotPresentation.objects.filter(snapshot_id=latest.pk).exists():
-            # Select only unknown rows and the fields displayed in this table.
-            rows = SnapshotRecord.objects.filter(snapshot_id=latest.pk).filter(
-                Q(compact__membership='unknown') | Q(compact__hit_status='unknown') | Q(compact__status='unknown'))
-            report = {'objects':[], 'dfw':{'rules':[], 'policies':[]}, 'tags':{'objects':[]}}
-            if lazy:
-                indexed_rows = rows
-            for row in ([] if lazy else rows.values('view','data__name','data__notes','data__membership','data__hit_status','data__status')):
-                data = {key.removeprefix('data__'):value for key,value in row.items() if key.startswith('data__')}
-                target = report['objects'] if row['view']=='inventory' else report['tags']['objects'] if row['view']=='tags' else report['dfw']['rules'] if data['hit_status'] else report['dfw']['policies']
-                target.append(data)
-            metadata = Snapshot.objects.filter(pk=latest.pk).values('report__dfw__errors',
-                'report__tags__errors','report__tags__unsupported_conditions','report__search_coverage','report__limitations').get()
-            for area in ('dfw','tags'):
-                report[area]['errors'] = metadata['report__'+area+'__errors'] or []
-            report['tags']['unsupported_conditions'] = metadata['report__tags__unsupported_conditions']
-            report['search_coverage'] = metadata['report__search_coverage'] or {}
-            report['limitations'] = metadata['report__limitations'] or 'Search coverage was not recorded.'
-        elif lazy:
-            report = {'search_coverage': {'mode': 'all_types'}}
-            issues.append({'area': 'Audit', 'name': 'Report index not prepared',
-                'detail': 'Run snapshot maintenance or collect a new snapshot to view detailed coverage checks.'})
-        else:
-            report = latest.report
-        for row in report.get('objects', []):
-            if row.get('membership') == 'unknown':
-                issues.append({'area': 'Group membership', 'name': row.get('name'), 'detail': '; '.join(row.get('notes', [])) or 'Membership is unknown.'})
-        dfw = report.get('dfw', {})
-        for rows, field, label in ((dfw.get('rules', []), 'hit_status', 'Rule counters'),
-                                   (dfw.get('policies', []), 'status', 'Policy inventory'),
-                                   (report.get('tags', {}).get('objects', []), 'status', 'Tag usage')):
-            for row in rows:
-                if row.get(field) == 'unknown':
-                    issues.append({'area': label, 'name': row.get('name'), 'detail': '; '.join(row.get('notes', [])) or 'Evidence is unknown.'})
-        for area in ('dfw', 'tags'):
-            for error in report.get(area, {}).get('errors', []):
-                issues.append({'area': area.upper(), 'name': 'Collection error', 'detail': error})
-        if report.get('tags', {}).get('unsupported_conditions'):
-            issues.append({'area': 'Tags', 'name': 'Unsupported conditions', 'detail': 'Some tag conditions could not be evaluated.'})
-        search = report.get('search_coverage', {})
-        if search.get('mode') != 'all_types':
-            issues.append({'area': 'Search', 'name': 'Limited or unrecorded coverage', 'detail': report.get('limitations', 'Search coverage was not recorded.')})
-        if latest.needs_review and not issues and (indexed_rows is None or not indexed_rows.exists()):
-            issues.append({'area': 'Audit', 'name': 'Incomplete checks', 'detail': 'This snapshot is flagged for review; consult its report.'})
-    if indexed_rows is not None:
-        issues = CoverageIssues(indexed_rows, issues)
+    saved = SnapshotCoverage.objects.filter(snapshot_id=latest.pk).first() if latest else None
+    pending = bool(lazy and latest and saved is None)
+    if saved:
+        issues = PreparedIssues(saved) if lazy else list(saved.issues.values('area','name','detail'))
+    elif pending:
+        issues = [{'area':'Audit', 'name':'Coverage summary not prepared',
+                   'detail':'Collect a new snapshot or ask an administrator to prepare saved coverage. Detailed checks have not been loaded.'}]
+    elif latest:
+        # Explicit non-web callers can inspect legacy evidence. Web requests never
+        # silently fall back to parsing report JSON or rebuilding an index.
+        issues = list(report_issues(latest.report, latest.needs_review))
+    else:
+        issues = []
+    options = policy()
     return {'start': start, 'end': now, 'latest': latest, 'issues': issues, 'gaps': gaps,
             'snapshots': len(stamps), 'first': stamps[0] if stamps else None, 'last': stamps[-1] if stamps else None,
-            'threshold_hours': round(threshold.total_seconds()/3600, 2), 'freshness': freshness(environment),
-            'stale_data': latest is None or now-latest.generated_at > timedelta(hours=policy().stale_hours),
+            'threshold_hours': round(threshold.total_seconds()/3600, 2), 'freshness': freshness(environment, options),
+            'stale_data': latest is None or now-latest.generated_at > timedelta(hours=options.stale_hours),
             'failed': environment.jobs.filter(status='failed', created_at__gte=start, created_at__lte=now),
+            'coverage_pending': pending,
             'active': environment.jobs.filter(status__in=['queued', 'running']).count()}
-
-
-class CoverageIssues:
-    """Paginate projected issue details in SQL, then append small snapshot-level notes."""
-    def __init__(self, rows, extra):
-        from django.db.models import Case, When, Value, IntegerField
-        self.rows = rows.annotate(area_order=Case(
-            When(view='inventory', then=Value(0)),
-            When(view='tags', then=Value(3)),
-            When(compact__hit_status='unknown', then=Value(1)),
-            default=Value(2), output_field=IntegerField())).order_by('area_order','ordinal','pk')
-        self.extra = extra
-        self.row_count = rows.count()
-
-    def count(self):
-        return self.row_count + len(self.extra)
-
-    def __len__(self):
-        return self.count()
-
-    def __getitem__(self, key):
-        if not isinstance(key, slice):
-            if key < 0: key += len(self)
-            if key < 0 or key >= len(self): raise IndexError(key)
-            return self[key:key+1][0]
-        start, stop, step = key.indices(len(self))
-        result = []
-        if start < min(stop, self.row_count):
-            for row in self.rows.values('view','data__name','data__notes','data__hit_status')[start:min(stop,self.row_count)]:
-                area = ('Group membership' if row['view']=='inventory' else 'Tag usage' if row['view']=='tags'
-                        else 'Rule counters' if row['data__hit_status'] else 'Policy inventory')
-                fallback = 'Membership is unknown.' if row['view']=='inventory' else 'Evidence is unknown.'
-                result.append({'area':area,'name':row['data__name'],
-                               'detail':'; '.join(row['data__notes'] or []) or fallback})
-        result.extend(self.extra[max(0,start-self.row_count):max(0,stop-self.row_count)])
-        return result[::step]

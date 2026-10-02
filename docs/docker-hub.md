@@ -172,3 +172,5 @@ provisioning. It is not required for the Compose instructions above.
 Compose reference: [Docker Compose quickstart](https://docs.docker.com/compose/gettingstarted/).
 
 Version 0.5.2 adds **Inventory → VMs**. Refresh existing prepared reports with the command above, then run a new collection for complete returned VM inventory, including untagged VMs. Older snapshots only contain VMs recoverable from their saved tag assignments. Group and service links describe configuration relationships, not confirmed membership or observed traffic.
+
+For optional single sign-on, follow [Keycloak authentication setup](keycloak.md).

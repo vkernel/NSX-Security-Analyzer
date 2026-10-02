@@ -33,10 +33,11 @@ def source_changed(sender, instance, raw=False, **kwargs):
     if not raw and sender._meta.apps is apps:
         if sender is Snapshot and kwargs.get('signal') is post_save and not kwargs.get('created'):
             if kwargs.get('update_fields') is None or 'report' in kwargs['update_fields']:
-                from .models import SnapshotComparison, SnapshotHistoryData
+                from .models import SnapshotComparison, SnapshotHistoryData, SnapshotCoverage
                 from django.db.models import Q
                 SnapshotComparison.objects.filter(Q(before_id=instance.pk) | Q(after_id=instance.pk)).delete()
                 SnapshotHistoryData.objects.filter(snapshot=instance).delete()
+                SnapshotCoverage.objects.filter(snapshot=instance).delete()
         invalidate(instance.environment_id)
 
 

@@ -82,3 +82,11 @@ LOGGING = {
 }
 # 0 retains audit events indefinitely; independent of snapshot retention.
 AUDIT_EVENT_RETENTION_DAYS = max(0, int(os.getenv("NSX_AUDIT_LOG_RETENTION_DAYS", "0")))
+
+# Optional Keycloak sign-in. Local authentication remains available.
+KEYCLOAK_ENABLED = os.getenv("NSX_KEYCLOAK_ENABLED", "0") == "1"
+KEYCLOAK_ISSUER = os.getenv("NSX_KEYCLOAK_ISSUER", "").rstrip("/")
+KEYCLOAK_CLIENT_ID = os.getenv("NSX_KEYCLOAK_CLIENT_ID", "")
+KEYCLOAK_CLIENT_SECRET = os.getenv("NSX_KEYCLOAK_CLIENT_SECRET", "")
+KEYCLOAK_CA_BUNDLE = os.getenv("NSX_KEYCLOAK_CA_BUNDLE", "")
+KEYCLOAK_ROLES = {"viewer": "nsx-analyzer-viewer", "operator": "nsx-analyzer-operator", "admin": "nsx-analyzer-admin"}

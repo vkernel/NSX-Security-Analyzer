@@ -2,6 +2,12 @@
 
 ## Unreleased — development
 
+- Local user administration now offers the same Viewer, Operator and Administrator roles as Keycloak, with a shared permission mapping.
+
+- Optional Keycloak sign-in with PKCE, verified identity tokens, explicit access roles and local login fallback.
+
+- Prepare compact coverage summaries and paginated issue rows during collection (migration 0024), removing report JSON reads and inventory scans from coverage browsing. Remove unnecessary snapshot joins/summary extraction from polling and collection lists.
+
 - Load environment analysis tabs on demand: shared paginated comparisons, read-only finding pages, deferred finding evidence and SQL-paginated coverage issues. Add migrations 0022/0023 for comparison storage and history indexes.
 
 - Suspend the optional Kubernetes snapshot-refresh Job by default; require an explicit manual start and document collection maintenance windows.

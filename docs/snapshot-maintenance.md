@@ -50,7 +50,7 @@ For a targeted refresh in a build supporting `--snapshot`:
 docker compose run --rm --no-deps --name nsx-snapshot-refresh snapshot-refresh python manage.py index_snapshots --refresh --snapshot YOUR-SNAPSHOT-UUID
 ```
 
-To prepare only missing presentation/history data, override the command with
+To prepare only missing presentation/history/coverage data, override the command with
 `python manage.py index_snapshots` (omit `--refresh`). To stop a refresh, use
 `docker stop nsx-snapshot-refresh` from another terminal. The explicit container
 name also prevents accidentally starting two of these named refreshes at once. Do not stop the normal collection worker to stop this maintenance task.

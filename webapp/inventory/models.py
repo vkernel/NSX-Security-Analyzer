@@ -314,3 +314,29 @@ class SnapshotComparisonRow(models.Model):
     class Meta:
         ordering = ['ordinal']
         indexes = [models.Index(fields=['comparison', 'ordinal'], name='comparison_row_order')]
+
+
+class SnapshotCoverage(models.Model):
+    snapshot = models.OneToOneField(Snapshot, on_delete=models.CASCADE, primary_key=True, related_name='coverage_data')
+    issue_count = models.PositiveIntegerField(default=0)
+
+
+class SnapshotCoverageIssue(models.Model):
+    coverage = models.ForeignKey(SnapshotCoverage, on_delete=models.CASCADE, related_name='issues')
+    ordinal = models.PositiveIntegerField()
+    area = models.CharField(max_length=40)
+    name = models.TextField(blank=True, null=True)
+    detail = models.TextField()
+
+    class Meta:
+        ordering = ['ordinal']
+        indexes = [models.Index(fields=['coverage', 'ordinal'], name='coverage_issue_order')]
+
+
+class KeycloakIdentity(models.Model):
+    issuer = models.CharField(max_length=500)
+    subject = models.CharField(max_length=255)
+    user = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=["issuer", "subject"], name="unique_keycloak_identity")]

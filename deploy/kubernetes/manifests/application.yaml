@@ -21,6 +21,9 @@ spec:
           image: vkernel/nsx-security-analyzer:0.5.2
           imagePullPolicy: IfNotPresent
           env:
+            - name: NSX_KEYCLOAK_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef: {name: nsx-keycloak, key: client-secret, optional: true}
             - name: POSTGRES_PASSWORD
               valueFrom:
                 secretKeyRef: {name: nsx-postgress-app, key: password}

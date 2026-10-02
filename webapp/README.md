@@ -492,3 +492,5 @@ The main Docker service definitions are explicit. For online conversion, use
 [`deploy/kubernetes/compose.yaml`](../deploy/kubernetes/compose.yaml), which omits
 Docker-only startup/build/profile features and contains no deployment credentials.
 Follow the [Kubernetes conversion guide](../deploy/kubernetes/README.md) before deployment.
+
+For optional single sign-on, follow [Keycloak authentication setup](../docs/keycloak.md).

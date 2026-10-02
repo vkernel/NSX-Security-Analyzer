@@ -278,3 +278,29 @@ queries. Collection history has an environment/time index for recent-job lookups
 Apply migrations `0022` and `0023` before deploying this build. They add shared comparison
 storage and pagination indexes; creating indexes can take time on a large existing
 history. No refresh is required for already indexed snapshots to use these changes.
+
+### Prepared coverage summaries (development)
+
+Migration `0024` adds small coverage summaries and issue rows. New collections prepare
+these from the already-loaded report in the worker, in the same transaction as the
+snapshot index. Coverage browsing reads the stored issue count and only the requested
+page of plain-text issue rows. It no longer extracts fields from report JSON, scans
+inventory JSON statuses or sorts every inventory record before showing a page.
+
+After migration and rollout, either run a new collection or prepare missing coverage
+for an existing snapshot using the separate maintenance container/Job:
+
+```sh
+python manage.py index_snapshots --snapshot YOUR-SNAPSHOT-UUID
+```
+
+Omit `--refresh`: existing inventory indexes are reused. Omitting `--snapshot` prepares
+all snapshots missing derived data. This backfill still loads each source report once,
+so use the [maintenance window and resource guidance](snapshot-maintenance.md). It is
+not run by the schema migration or a page request. Until prepared, older snapshots show
+an explicit coverage-pending message, never a misleading zero-issues result.
+
+The wider page review also removes snapshot joins from live collection polling and
+stops extracting snapshot summaries on collection-list pages. Notifications request
+their coverage indicator explicitly. First uncached comparisons and historical activity
+assessments still involve larger calculations; their existing saved-result caches apply.

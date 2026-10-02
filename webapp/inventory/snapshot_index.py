@@ -96,7 +96,7 @@ def tag_context(row, metadata):
 def clear_index(snapshot_id):
     """Delete disposable index rows in SQL, without ORM cascade materialization.
 
-    These four derived tables have no application audit events. Delete their
+    These derived tables have no application audit events. Delete their
     dependent links first; keep source snapshots and history projections intact.
     """
     Snapshot.objects.select_for_update().only('pk').get(pk=snapshot_id)
@@ -104,7 +104,10 @@ def clear_index(snapshot_id):
     panel = quote(SnapshotPanel._meta.db_table)
     record = quote(SnapshotRecord._meta.db_table)
     links = quote(SnapshotRecordPanel._meta.db_table)
+    from .models import SnapshotCoverage, SnapshotCoverageIssue
     with connection.cursor() as cursor:
+        cursor.execute(f'DELETE FROM {quote(SnapshotCoverageIssue._meta.db_table)} WHERE coverage_id = %s', [snapshot_id])
+        cursor.execute(f'DELETE FROM {quote(SnapshotCoverage._meta.db_table)} WHERE snapshot_id = %s', [snapshot_id])
         cursor.execute(f'DELETE FROM {links} WHERE panel_id IN (SELECT id FROM {panel} WHERE snapshot_id = %s) OR record_id IN (SELECT id FROM {record} WHERE snapshot_id = %s)', [snapshot_id, snapshot_id])
         for model in (SnapshotPanel, SnapshotRecord, SnapshotPresentation):
             cursor.execute(f'DELETE FROM {quote(model._meta.db_table)} WHERE snapshot_id = %s', [snapshot_id])
@@ -126,6 +129,8 @@ def build(snapshot, rendered=None):
             'rules': [{key:row[key] for key in fields if key in row} for row in dfw.get('rules', [])],
             'errors': bool(dfw.get('errors'))}})
     checkpoint(snapshot.pk, "history_projection_complete")
+    from .coverage_index import build_coverage
+    build_coverage(snapshot, report)
     if SnapshotPresentation.objects.filter(snapshot_id=snapshot.pk).exists(): return
     metadata = {k:v for k,v in snapshot.report.get('tags', {}).items() if k not in {'objects','virtual_machines'}}
     rows, record_ids = [], []

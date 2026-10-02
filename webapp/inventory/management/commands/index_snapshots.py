@@ -20,7 +20,7 @@ class Command(BaseCommand):
         if options.get('snapshot'):
             snapshots = snapshots.filter(pk=options['snapshot'])
         if not options['refresh']:
-            snapshots = snapshots.filter(Q(presentation__isnull=True) | Q(history_data__isnull=True))
+            snapshots = snapshots.filter(Q(presentation__isnull=True) | Q(history_data__isnull=True) | Q(coverage_data__isnull=True))
         ids = snapshots.values_list('pk', flat=True)
         for pk in ids.iterator(chunk_size=100):
             snapshot = Snapshot.objects.only("pk").filter(pk=pk).first()

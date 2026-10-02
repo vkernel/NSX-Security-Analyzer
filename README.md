@@ -130,3 +130,5 @@ own licenses; the project license does not replace their terms.
 
 This is an independent project and is not affiliated with or endorsed by VMware
 or Broadcom.
+
+Optional single sign-on: [Keycloak setup](docs/keycloak.md).

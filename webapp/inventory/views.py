@@ -254,7 +254,9 @@ def report_content(request, pk):
 @login_required
 @require_GET
 def api_jobs(request):
-    jobs = page_queries.jobs()
+    jobs = AuditJob.objects.select_related('environment').only(
+        'id', 'environment_id', 'environment__id', 'environment__name', 'status',
+        'progress_completed', 'progress_stage', 'created_at', 'error')
     requested = request.GET.getlist("id")
     if requested:
         try:
@@ -495,7 +497,7 @@ def notifications(request):
         condition |= Q(status='succeeded')
     if options.notify_coverage:
         condition |= Q(status='succeeded', snapshot__summary__new_coverage_issues__gt=0)
-    jobs = page_queries.jobs(AuditJob.objects.filter(condition, finished_at__gte=timezone.now()-timedelta(days=30))).defer('error')
+    jobs = page_queries.jobs(AuditJob.objects.filter(condition, finished_at__gte=timezone.now()-timedelta(days=30)), include_coverage=True).defer('error')
     seen = preferences(request).notifications_seen_at
     unread = jobs.filter(finished_at__gt=seen).count() if seen else jobs.count()
     items = []

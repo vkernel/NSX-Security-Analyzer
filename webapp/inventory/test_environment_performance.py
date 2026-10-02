@@ -73,7 +73,8 @@ class EnvironmentPerformanceTests(TestCase):
             page = Paginator(result['issues'], 10).get_page(2)
             rows = list(page)
         self.assertEqual(len(rows), 10)
-        selects = [q['sql'] for q in queries if 'inventory_snapshotrecord' in q['sql'] and 'notes' in q['sql']]
+        self.assertFalse(any('inventory_snapshotrecord' in q['sql'] or '"report"' in q['sql'] for q in queries))
+        selects = [q['sql'] for q in queries if 'inventory_snapshotcoverageissue' in q['sql']]
         self.assertEqual(len(selects), 1)
         self.assertIn('LIMIT 10 OFFSET 10', selects[0])
         eager = dashboard(self.env, 30)['issues']
@@ -87,3 +88,61 @@ class EnvironmentPerformanceTests(TestCase):
         form = SnapshotComparisonForm({'before':self.before.pk,'after':self.after.pk}, environment=self.env)
         self.assertTrue(form.is_valid(),form.errors)
         self.assertLessEqual(form.fields['before'].queryset.count(),102)
+
+    def test_missing_coverage_never_falls_back_to_report_on_page(self):
+        with CaptureQueriesContext(connection) as queries:
+            response = self.client.get(reverse('collection-coverage', args=[self.env.pk]))
+        self.assertContains(response, 'Coverage summary not prepared')
+        self.assertNotContains(response, 'No incomplete checks were identified')
+        self.assertFalse(any('"report"' in q['sql'] or 'inventory_snapshotrecord' in q['sql'] for q in queries))
+
+    def test_prepared_coverage_matches_all_evidence_categories(self):
+        from .coverage_index import report_issues
+        from .coverage import dashboard
+        report = sample_report()
+        report['objects'][0].update(membership='unknown',notes=['Membership endpoint failed'])
+        report['dfw'] = {'rules':[{'name':'Rule', 'hit_status':'unknown', 'notes':['Counters unavailable']}],
+                         'policies':[{'name':'Policy', 'status':'unknown'}], 'errors':['Policy endpoint failed']}
+        report['tags'] = {'objects':[{'name':'Tag', 'status':'unknown'}], 'errors':['Tag error'], 'unsupported_conditions':3}
+        report['search_coverage'] = {'mode':'partial'}
+        report['limitations'] = 'Limited search'
+        self.after.report = report
+        self.after.needs_review = True
+        self.after.save(update_fields=['report','needs_review'])
+        from .coverage_index import build_coverage
+        build_coverage(self.after, report)
+        prepared = dashboard(self.env,30,lazy=True)['issues']
+        self.assertEqual(list(prepared[:]), list(report_issues(report, True)))
+        self.assertEqual(prepared.count(),8)
+        self.after.report['limitations'] = 'Changed'
+        self.after.save(update_fields=['report'])
+        self.assertFalse(self.after.__class__.objects.filter(pk=self.after.pk, coverage_data__isnull=False).exists())
+
+    def test_backfill_prepares_coverage_without_rebuilding_existing_index(self):
+        from .models import SnapshotCoverage
+        from django.core.management import call_command
+        import io
+        build(self.after)
+        SnapshotCoverage.objects.filter(snapshot=self.after).delete()
+        with patch('inventory.collector.prepare_index_report', side_effect=AssertionError('Rebuilt inventory index')):
+            call_command('index_snapshots', snapshot=self.after.pk, stdout=io.StringIO())
+        self.assertTrue(SnapshotCoverage.objects.filter(snapshot=self.after).exists())
+
+    def test_live_job_polling_never_joins_snapshots(self):
+        from .models import AuditJob
+        job = AuditJob.objects.create(environment=self.env)
+        with CaptureQueriesContext(connection) as queries:
+            response = self.client.get(reverse('api-jobs'), {'id':str(job.pk)})
+        self.assertEqual(response.status_code,200)
+        self.assertEqual(response.json()['jobs'][0]['id'],str(job.pk))
+        self.assertFalse(any('inventory_snapshot' in q['sql'] for q in queries))
+
+    def test_collection_lists_do_not_extract_snapshot_summary(self):
+        from .models import AuditJob
+        job = AuditJob.objects.create(environment=self.env, status='succeeded')
+        self.after.job = job
+        self.after.save(update_fields=['job'])
+        with CaptureQueriesContext(connection) as queries:
+            response = self.client.get(reverse('collection-history',args=[self.env.pk]))
+        self.assertEqual(response.status_code,200)
+        self.assertFalse(any('"summary"' in q['sql'] for q in queries))
