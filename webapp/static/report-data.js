@@ -78,3 +78,60 @@
     return {refresh,invalidate(){page=0;lastParams=null;refresh();},unmount(){mounted=false;pending?.abort();sequence++;delete widget.dataset.pendingQuery;clearTimeout(timer);lastParams=null;tbody.replaceChildren();shown.forEach(id=>delete rowPool[id]);shown=[];}};
   };
 })();
+
+/* VM evidence is independent of saved report HTML, so older snapshots benefit too. */
+(() => {
+  const cache = new Map(); let cacheBytes = 0;
+  const make = (tag, text) => { const node=document.createElement(tag); if(text!=null)node.textContent=text; return node; };
+  async function load(id, section, page=0, path='') {
+    const params={op:'vm-relationships',id,section,page,path}, key=JSON.stringify(params);
+    if(cache.has(key))return cache.get(key).value;
+    const value=await window.reportData(null,params), bytes=JSON.stringify(value).length*2;
+    if(bytes<500000){while(cache.size && (cache.size>=30 || cacheBytes+bytes>2000000)){const first=cache.keys().next().value;cacheBytes-=cache.get(first).bytes;cache.delete(first);}cache.set(key,{value,bytes});cacheBytes+=bytes;}
+    return value;
+  }
+  window.showVmRelationships = (body, payload, id, summary) => {
+    body.replaceChildren();
+    const header=make('p',summary?.name || 'VM relationships');body.append(header,make('p','Configuration relationships only; resolved membership and effective policy are not verified.'));
+    function paged(parent,section,label,path='') {
+      const box=make('details'), title=make('summary',label), content=make('div');box.append(title,content);parent.append(box);
+      let loaded=false, version=0;
+      async function render(page=0) {
+        const current=++version;content.replaceChildren(make('p','Loading…'));
+        try {
+          const data=await load(id,section,page,path);
+          if(current!==version || !body.isConnected)return;
+          content.replaceChildren();loaded=true;
+          if(!data.items.length)content.append(make('p','No relationships recorded.'));
+          data.items.forEach(item=>{
+            if(section==='related_rules'){
+              const rule=make('details'), caption=make('summary',item.name || item.path), detail=make('div');rule.append(caption,detail);content.append(rule);
+              let ready=false, busy=false;
+              rule.addEventListener('toggle',async()=>{
+                if(!rule.open || ready || busy)return;busy=true;detail.replaceChildren(make('p','Loading…'));
+                try { const response=await load(id,'rule',0,item.path);const ruleData=response.details;detail.replaceChildren(make('code',ruleData.path),make('p','Action: '+(ruleData.action || 'Unknown')+' · '+(ruleData.disabled?'Disabled':'Enabled')),make('h3','Configured services'));const services=make('ul');(ruleData.services || []).forEach(service=>{services.append(make('li',typeof service==='string'?service:(service.name || service.path)));});detail.append(services);paged(detail,'via_groups','Related groups for this rule',item.path);ready=true; }
+                catch(error){detail.replaceChildren(make('p',error.message+' Close and expand to retry.'));} finally {busy=false;}
+              });
+            } else {const itemNode=make('p'),link=make('a',typeof item==='string'?item:item.name || item.tag || item.path);link.href=section==='tags'?'#tags-all':'#all-groups';link.addEventListener('click',()=>body.closest('dialog')?.close());itemNode.append(link);if(typeof item==='object')itemNode.append(make('code',item.path || item.scope || ''));content.append(itemNode);}
+          });
+          const previous=make('button','Previous'), next=make('button','Next');previous.type=next.type='button';previous.disabled=page===0;next.disabled=!data.has_next;
+          previous.onclick=()=>render(page-1);next.onclick=()=>render(page+1);content.append(previous,make('span',' Page '+(page+1)+' '),next);
+        }catch(error){content.replaceChildren(make('p',error.message));const retry=make('button','Retry');retry.type='button';retry.onclick=()=>render(page);content.append(retry);}
+      }
+      box.addEventListener('toggle',()=>{if(box.open&&!loaded)render();});
+    }
+    paged(body,'tags','Assigned tags');paged(body,'related_groups','Related groups');paged(body,'related_rules','Related rules and services');
+    const advanced=make('details'), title=make('summary','VM inventory details'), content=make('pre');advanced.append(title,content);body.append(advanced);
+    let ready=false;advanced.addEventListener('toggle',async()=>{if(!advanced.open||ready)return;content.textContent='Loading…';try{const response=await load(id,'vm');content.textContent=JSON.stringify(response.details,null,2);ready=true;}catch(error){content.textContent=error.message+' Close and expand to retry.';}});
+  };
+  document.addEventListener('click',event=>{
+    const button=event.target.closest('.detail-button[data-evidence-row]');
+    if(!button?.closest('[data-server-table="all-vms"]'))return;
+    event.preventDefault();event.stopImmediatePropagation();
+    const dialog=document.getElementById('detail-dialog'),body=document.getElementById('detail-body');
+    document.getElementById('detail-title').textContent=button.dataset.title;
+    window.showVmRelationships(body,null,Number(button.dataset.evidenceRow),null);
+    if(!dialog.open)dialog.showModal();
+    dialog.addEventListener('close',()=>button.isConnected&&button.focus(),{once:true});
+  },true);
+})();

@@ -139,7 +139,7 @@ docker compose run --rm --no-deps snapshot-refresh python manage.py index_snapsh
 ```
 
 In Kubernetes, configure the same management command in a separately sized, on-demand
-maintenance Job using `deploy/kubernetes/maintenance/refresh-snapshots.yaml`:
+maintenance Job following the [manual maintenance procedure](snapshot-maintenance.md#kubernetes-create-a-temporary-job-manually):
 
 ```sh
 python manage.py index_snapshots --refresh
@@ -304,3 +304,17 @@ The wider page review also removes snapshot joins from live collection polling a
 stops extracting snapshot summaries on collection-list pages. Notifications request
 their coverage indicator explicitly. First uncached comparisons and historical activity
 assessments still involve larger calculations; their existing saved-result caches apply.
+
+### VM relationship details
+
+VM relationship dialogs open without fetching expanded evidence. Tags, groups and
+deduplicated rules load on expansion in pages of 25. Rule details and their complete
+“via group” relationships are fetched separately; raw VM metadata loads only when
+requested. The browser retains at most 30 responses, bounded to approximately 2 MB
+of serialized text, for the current page. Large responses are not cached.
+
+Existing prepared snapshots use this interface without a refresh. PostgreSQL extracts
+only the requested relationship page; it may still decompress and scan the selected
+VM record's JSONB arrays, particularly when deduplicating legacy rule references.
+The application does not retrieve or parse the whole snapshot. New collections store
+each related rule once per VM while preserving all related group paths.

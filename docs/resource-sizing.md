@@ -74,7 +74,7 @@ resources:
 
 - `deploy/kubernetes/manifests/application.yaml`: separate blocks for web, worker and scheduler.
 - `deploy/kubernetes/manifests/migrate.yaml`: migration Job.
-- `deploy/kubernetes/maintenance/refresh-snapshots.yaml`: optional refresh Job, applied separately from normal deployment manifests.
+- Optional refresh: allocate resources in the temporary Job created with the [manual maintenance procedure](snapshot-maintenance.md#kubernetes-create-a-temporary-job-manually). No refresh Job is included in deployment manifests.
 - `deploy/kubernetes/manifests/database.yaml`: bundled PostgreSQL only.
 
 Commit changes to the repository watched by Argo CD and sync. Deployment resource

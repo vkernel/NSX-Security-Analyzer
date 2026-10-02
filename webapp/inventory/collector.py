@@ -983,8 +983,12 @@ def iter_vm_inventory_rows(report):
                     continue
                 rule = pool[index]
                 full = rules.get(rule["path"], {})
-                key = (rule["path"],ref["via_group"])
-                refs[key] = dict(rule, via_group=ref["via_group"], action=full.get("action", "Unknown"),
+                key = rule["path"]
+                if key in refs:
+                    if ref["via_group"] not in refs[key]["via_groups"]:
+                        refs[key]["via_groups"].append(ref["via_group"])
+                    continue
+                refs[key] = dict(rule, via_group=ref["via_group"], via_groups=[ref["via_group"]], action=full.get("action", "Unknown"),
                     services=[{"path":path,"name":services.get(path,path)} for path in full.get("services", [])])
         row = {"name":vm.get("display_name") or identity, "path":identity,
                "power_state":vm.get("power_state") or "Not recorded", "tag_count":len(related),
@@ -1971,6 +1975,13 @@ table{min-width:760px}th{line-height:1.5}td{padding:15px 14px}.path{line-height:
     if (!button) return;
     detailTrigger = button;
     detailTitle.textContent = button.dataset.title;
+    const vmRow = rowPool[Number(button.dataset.evidenceRow)];
+    if (payload.remote && vmRow?.view === 'vms' && window.showVmRelationships) {
+      detailBody.replaceChildren();
+      if (!dialog.open) dialog.showModal();
+      window.showVmRelationships(detailBody, payload, Number(button.dataset.evidenceRow), vmRow.data);
+      return;
+    }
     if (payload.remote && (button.dataset.tagRow !== undefined || button.dataset.evidenceRow !== undefined || button.dataset.tagCoverage)) {
       detailBody.textContent = 'Loading evidence…';
       dialog.showModal();

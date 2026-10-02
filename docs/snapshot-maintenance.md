@@ -13,8 +13,7 @@ wait for acknowledgement), and stop queued collections. For a full refresh, do t
 for all environments. Avoid starting manual collections until maintenance completes,
 then restore the environments' previous scheduling settings.
 
-Suspending the maintenance Job prevents automatic startup; it is **not** a database
-lock against collections once you manually start it. There is currently no global
+A manually started maintenance Job does **not** lock out collections. There is currently no global
 mutual-exclusion mechanism between maintenance and collection workers. Running both
 can compete for database, CPU and memory resources. Normal collections must continue
 to index their own new snapshot; that is separate from refreshing saved history.
@@ -55,70 +54,119 @@ To prepare only missing presentation/history/coverage data, override the command
 `docker stop nsx-snapshot-refresh` from another terminal. The explicit container
 name also prevents accidentally starting two of these named refreshes at once. Do not stop the normal collection worker to stop this maintenance task.
 
-## Kubernetes: separate maintenance Job
+## Kubernetes: create a temporary Job manually
 
-The optional manifest is `deploy/kubernetes/maintenance/refresh-snapshots.yaml`,
-**outside the normal `manifests/` directory**. Keep it outside Argo CD's normal sync
-path so deployments do not automatically trigger a full reindex. It now includes
-`spec.suspend: true`: applying it creates a suspended Job without starting a pod.
-Start it only with the explicit unsuspend command below, after pausing collections.
+No snapshot-refresh Job manifest is included in the deployment. Normal deployments
+need only the migration Job and application services. New collections prepare their
+own indexes automatically. Use the following procedure only to repair or rebuild
+older saved snapshots, after finishing migrations and pausing collections as above.
+Do not add this temporary Job to Argo CD, Helm or Kustomize resources.
 
-Argo CD discovers resources by its configured source path, recursion, Kustomize or
-Helm inclusion—not by whether a folder is named `maintenance`. Point the normal
-application at `deploy/kubernetes/manifests`, or otherwise exclude this maintenance
-manifest from the resources it renders. Do not add migration-style Sync hooks to it.
-If Argo owns the Job, self-healing can undo a manual unsuspend; keep the manual Job
-outside that application's managed resources. Removing it with pruning enabled can
-terminate an existing run, so preserve logs first.
+### Remove a previously managed refresh Job
 
-Before applying it:
-
-1. Set its image to the exact application build you deployed. Development fixes
-   require the corresponding development image, not the stable default tag.
-2. Check the namespace, `nsx-config` ConfigMap and Secret names/key mappings.
-3. Finish the migration Job first. Set resources for the largest saved snapshot.
-   The medium example requests 2 CPUs and 8 GiB RAM, with a 16 GiB memory limit;
-   this is not a guarantee
-   that every snapshot fits.
-4. Optionally append `--snapshot` and a snapshot UUID to `command` when supported by
-   the image. Check `python manage.py index_snapshots --help` if unsure.
-
-From the repository root:
+If Argo CD is waiting for a suspended `nsx-refresh-snapshots` Job, terminate the
+current sync first. Remove the Job from the Git resources Argo manages, refresh
+Argo CD, then delete the old Job and perform a full sync:
 
 ```sh
-kubectl apply -f deploy/kubernetes/maintenance/refresh-snapshots.yaml
-# Explicit manual start, after completing the maintenance-window checks above:
-kubectl -n nsx-security-analyzer patch job nsx-refresh-snapshots --type=merge -p '{"spec":{"suspend":false}}'
+kubectl -n nsx-security-analyzer delete job nsx-refresh-snapshots --ignore-not-found
+```
+
+Deletion does not delete saved snapshots. If the Job is running, save its logs first;
+deletion terminates that maintenance run. Removing only the cluster resource while
+leaving it in Git allows Argo CD to recreate it.
+
+### Start maintenance when required
+
+Check that no other refresh is running. The command below reads the current web
+image so maintenance uses the same build. Verify that this is the intended version
+and that the namespace, ConfigMap and Secret references match your installation.
+If your application uses extra database TLS mounts, imagePullSecrets or other pod
+settings, add the same required settings to this temporary Job before running it.
+
+The example requests 2 CPUs and 8 GiB RAM and limits memory to 16 GiB (medium starting
+profile). Adjust for your largest snapshot and cluster capacity; see
+[resource sizing](resource-sizing.md). Results are stored in the existing PostgreSQL
+database; the maintenance container does not require its own PVC.
+
+**This command starts maintenance immediately.** It is deliberately not a stored
+manifest or deployment hook. `kubectl create` fails if the named Job already exists,
+helping prevent accidental duplicate runs.
+
+```sh
+NSX_MAINTENANCE_IMAGE=$(kubectl -n nsx-security-analyzer get deployment web -o jsonpath='{.spec.template.spec.containers[?(@.name=="web")].image}')
+test -n "$NSX_MAINTENANCE_IMAGE" && kubectl create -f - <<EOF
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: nsx-refresh-snapshots
+  namespace: nsx-security-analyzer
+spec:
+  backoffLimit: 0
+  template:
+    metadata:
+      labels:
+        app: nsx-refresh-snapshots
+    spec:
+      restartPolicy: Never
+      automountServiceAccountToken: false
+      terminationGracePeriodSeconds: 60
+      containers:
+        - name: snapshot-refresh
+          image: ${NSX_MAINTENANCE_IMAGE}
+          imagePullPolicy: IfNotPresent
+          command: [python, manage.py, index_snapshots, --refresh]
+          env:
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef: {name: nsx-postgress-app, key: password}
+          envFrom:
+            - configMapRef: {name: nsx-config}
+            - secretRef: {name: nsx-django}
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 10001
+            runAsGroup: 10001
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: [ALL]
+          resources:
+            # Medium starting profile; see docs/resource-sizing.md.
+            requests: {cpu: "2", memory: 8Gi}
+            limits: {memory: 16Gi}
+EOF
+```
+
+The example rebuilds all saved indexes with `--refresh`. For missing
+presentation/history/coverage data only, remove `--refresh` from `command`. For one
+snapshot, append `--snapshot, YOUR-SNAPSHOT-UUID` to the command array (check the
+installed version's `index_snapshots --help` for supported arguments).
+
+### Monitor, stop and clean up
+
+```sh
 kubectl -n nsx-security-analyzer get pods -l app=nsx-refresh-snapshots
 kubectl -n nsx-security-analyzer logs -f job/nsx-refresh-snapshots
+kubectl -n nsx-security-analyzer get job nsx-refresh-snapshots
 ```
 
-Success shows `Completed`. `backoffLimit: 0` prevents automatic retries of a large,
-failed refresh. Inspect logs and pod termination details before retrying. No new PVC
-is required: results are stored in the application's existing PostgreSQL database.
+Success shows `Complete`. `backoffLimit: 0` prevents automatic retries after failure.
+If no pod starts, inspect `kubectl describe job nsx-refresh-snapshots` and the pod's
+events in the same namespace for scheduling or image errors.
 
-Before another run, save any logs you need, delete the old Job and apply it again (it will be suspended):
+Save logs before cleanup, then delete the Job:
 
 ```sh
+kubectl -n nsx-security-analyzer logs job/nsx-refresh-snapshots > snapshot-refresh.log
 kubectl -n nsx-security-analyzer delete job nsx-refresh-snapshots
-kubectl apply -f deploy/kubernetes/maintenance/refresh-snapshots.yaml
 ```
 
-Repeat the explicit unsuspend command when ready for the new run. Reapplying the
-manifest to an active Job restores `suspend: true` and stops its running pod.
-
-To stop an unintended active refresh without deleting the Job:
-
-```sh
-kubectl -n nsx-security-analyzer patch job nsx-refresh-snapshots --type=merge -p '{"spec":{"suspend":true}}'
-```
-
-Save logs first if possible. If Argo still manages an unsuspended version, correct
-its Git source or exclude the Job so reconciliation does not restart it.
-Deleting a running refresh Job also stops it. Each snapshot's index rebuild is
-transactional: unfinished work rolls back, while earlier completed refreshes remain.
-Database rollback/cleanup may take time. Do not run overlapping refresh Jobs for the
-same snapshots. A refresh is never run inside the web pod.
+Deleting a running Job also stops maintenance. Each snapshot's index rebuild is
+transactional: unfinished work rolls back while earlier completed refreshes remain.
+Wait for the pod to terminate and database rollback to finish before resuming
+collections or retrying. Inspect failures and correct their cause before explicitly
+creating another Job. Restore the previous collection schedules after maintenance.
+Never run a large refresh inside the web pod, where it competes with page serving.
 
 ## Stop a queued or running collection
 
@@ -150,4 +198,4 @@ do not stop the separate snapshot-refresh maintenance Job; use the commands abov
 References: [Docker Compose profiles](https://docs.docker.com/compose/how-tos/profiles/),
 [one-off containers](https://docs.docker.com/reference/cli/docker/compose/run/).
 
-Kubernetes reference: [suspending Jobs](https://kubernetes.io/docs/concepts/workloads/controllers/job/#suspending-a-job).
+Kubernetes reference: [Jobs](https://kubernetes.io/docs/concepts/workloads/controllers/job/).

@@ -107,7 +107,11 @@ def snapshot_data(request, pk):
         with transaction.atomic():
             limit_query()
             op = request.GET.get('op', 'rows')
-            if op == 'section':
+            if op == 'vm-relationships':
+                from .vm_relationships import read
+                result = read(pk, int(request.GET.get('id', '-1')), request.GET.get('section', 'summary'),
+                              int(request.GET.get('page', '0')), request.GET.get('path', ''))
+            elif op == 'section':
                 panel = get_object_or_404(SnapshotPanel.objects.only('html'), snapshot_id=pk, slug=request.GET.get('panel'))
                 result = {'html':panel.html}
             elif op in ('detail', 'tag-coverage'):

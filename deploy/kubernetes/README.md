@@ -405,7 +405,6 @@ is not automatically available in a remote cluster. Private registries need an
 - `manifests/database.yaml`: optional bundled PostgreSQL with persistent storage.
 - `manifests/migrate.yaml`: schema initialization/upgrade Job; recreated as a hook on each full Argo CD sync.
 - `manifests/application.yaml`: web, worker, scheduler and internal web Service.
-- `maintenance/refresh-snapshots.yaml`: optional suspended refresh Job; apply separately and unsuspend manually, outside the normal Argo CD sync path.
 - `compose.yaml`: optional converter input for users who still need Kompose or an
   online converter. It is not the installation path above; converted output needs
   Secret references, storage, startup ordering and probes added manually.
@@ -440,12 +439,12 @@ python manage.py index_snapshots
 python manage.py index_snapshots --refresh
 ```
 
-These are maintenance commands, not an additional always-running service. The optional manifest
-`maintenance/refresh-snapshots.yaml` defines a separate, suspended Job. Applying it
-does not start indexing; pause collections and explicitly unsuspend it for maintenance. Set its
-image to your deployed application build, verify database/Secret settings and size
-its resources before applying it. See [snapshot maintenance](../../docs/snapshot-maintenance.md)
-for execution, logs, stopping and retry instructions.
+These are optional manual maintenance commands, not deployment steps or an
+always-running service. No refresh Job manifest is shipped with the deployment.
+When needed, pause collections and create a separate temporary Job using the
+[snapshot maintenance instructions](../../docs/snapshot-maintenance.md#kubernetes-create-a-temporary-job-manually).
+That guide covers resources, database settings, logs, stopping, cleanup and removing
+an older suspended Job from Argo CD. Do not include maintenance Jobs in normal syncs.
 Do not execute a large refresh inside the web pod: it shares that container's memory
 limit and can interrupt the website if the container is OOMKilled. See the
 [resource sizing guide](../../docs/resource-sizing.md) for initial allocations.

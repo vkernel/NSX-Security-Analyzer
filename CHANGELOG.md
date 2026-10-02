@@ -2,6 +2,10 @@
 
 ## Unreleased — development
 
+- Load VM relationship sections in bounded pages, fetch rule details on expansion, cache recent responses and deduplicate rules while preserving group provenance.
+
+- Remove the optional refresh Job manifest to prevent suspended maintenance from blocking Argo CD; document explicit temporary maintenance Jobs instead.
+
 - Local user administration now offers the same Viewer, Operator and Administrator roles as Keycloak, with a shared permission mapping.
 
 - Optional Keycloak sign-in with PKCE, verified identity tokens, explicit access roles and local login fallback.
