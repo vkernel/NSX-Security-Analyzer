@@ -269,11 +269,12 @@ def execute_job(job_id):
                                  retries=config["retries"])
         from urllib.parse import urlsplit
         with phase(job.pk, "load_previous_snapshot"):
-            previous = job.environment.snapshots.filter(testing=False).only("report").first()
-        client.statistics_backoff = audit.statistics_backoff(previous.report if previous else None,
+            from .previous_evidence import load
+            previous = load(job.environment)
+        client.statistics_backoff = audit.statistics_backoff(previous,
                                                              urlsplit(client.base_url).netloc)
         client.membership_hints = {}
-        for row in (previous.report if previous else {}).get("objects", []):
+        for row in (previous or {}).get("objects", []):
             if row.get("kind") == "group" and row.get("membership") == "nonempty":
                 for note in row.get("notes", []):
                     prefix = "Resolved members found: "
@@ -296,7 +297,7 @@ def execute_job(job_id):
         update_progress(job.pk, 5, "Preparing report and hit history")
         from urllib.parse import urlsplit
         report["manager"] = urlsplit(client.base_url).netloc
-        audit.retain_hit_history(report, previous.report if previous else None)
+        audit.retain_hit_history(report, previous)
         with phase(job.pk, "prepare_snapshot"):
             snapshot = prepare_snapshot(job.environment, redact(report))
         update_progress(job.pk, 6, "Saving snapshot")

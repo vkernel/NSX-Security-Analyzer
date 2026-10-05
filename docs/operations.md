@@ -96,8 +96,8 @@ lost, saved manager passwords must be entered again.
 
 ## Retention
 
-Retention is configured in Administration and is disabled by default. Review the
-policy and its preview before enabling it. Pruning old observations affects the
+Retention is configured in Administration and is enabled by default. Review the
+policy and its preview to see which records are eligible for cleanup. Pruning old observations affects the
 available history window; deleted evidence cannot be reconstructed by later audits.
 Retention is not a replacement for backups.
 
@@ -213,11 +213,12 @@ preserved, even after their retention period. Retained snapshots protect their s
 collection records. Environments with queued or running collections are skipped.
 Deletion occurs in batches, so a backlog can take multiple cleanup cycles.
 
-Migration `0026` changes defaults only. Existing saved policies, including disabled
-cleanup and “Keep forever”, remain unchanged. To adopt these settings in an existing
-installation, open **Administration → Retention**, enable automatic cleanup, select
-**180 / 7 / 180 days**, preview the impact, and save. Expired data is eligible for
-permanent deletion on the next scheduler cleanup; migrations do not run cleanup.
+Migration `0028` enables existing disabled policies once on upgrade. Existing retention
+periods, including “Keep forever”, are preserved. New policies use **180 / 7 / 180
+days**. You can adjust the periods or disable cleanup afterward in **Administration
+→ Retention**; normal restarts do not override that choice. Review the preview before
+upgrading if you have historical data to retain. Expired data becomes eligible for
+permanent deletion on the next scheduler cleanup; the migration itself deletes no data.
 
 Audit-event retention is separate and remains controlled by
 `NSX_AUDIT_LOG_RETENTION_DAYS` (default `0`, indefinite). Finding review evidence and

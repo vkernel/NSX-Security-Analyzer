@@ -268,7 +268,8 @@ replication lag, failed archiving and database-container memory. A replica repor
 
 - **Retention:** verify it is enabled on the deployed installation. New installations
   default to 180 days of full snapshots, 7 days of testing snapshots and 180 days of
-  collection jobs; existing settings are preserved. Shorten retention or reduce
+  collection jobs. Migration `0028` enables existing disabled policies once while
+  preserving their retention periods. Shorten retention or reduce
   collection frequency only when acceptable for historical analysis. Audit-event
   retention is separate. See [operations](operations.md).
 - **Maintenance scheduling:** run refresh only when needed, with collection activity

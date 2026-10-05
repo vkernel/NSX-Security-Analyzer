@@ -116,3 +116,23 @@ class RetentionTests(TestCase):
         cleanup_retention(self.now)
         self.assertFalse(Snapshot.objects.filter(pk__in=[expired.pk, expired_test.pk]).exists())
         self.assertEqual(set(Snapshot.objects.values_list('pk', flat=True)), {retained.pk, latest.pk, latest_test.pk})
+
+    def test_upgrade_enables_existing_policy_without_changing_windows(self):
+        from importlib import import_module
+        from types import SimpleNamespace
+        from django.apps import apps
+        from django.db import connection
+
+        self.policy.enabled = False
+        self.policy.testing_days = 0
+        self.policy.save()
+        migrate = import_module('inventory.migrations.0028_enable_retention').enable_retention
+        migrate(apps, SimpleNamespace(connection=connection))
+        self.policy.refresh_from_db()
+        self.assertTrue(self.policy.enabled)
+        self.assertEqual((self.policy.snapshot_days, self.policy.testing_days, self.policy.collection_days), (91, 0, 180))
+        self.policy.enabled = False
+        self.policy.save()
+        self.assertEqual(cleanup_retention(self.now), (0, 0))
+        self.policy.refresh_from_db()
+        self.assertFalse(self.policy.enabled)

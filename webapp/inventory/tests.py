@@ -206,7 +206,8 @@ class WorkspaceTests(TestCase):
         self.assertEqual(job.progress["percent"], 100)
         self.assertEqual(job.snapshot.report["performance"]["concurrency"]["mode"], "automatic")
         self.assertEqual(Snapshot.objects.count(), 2)
-        self.assertEqual(history.call_args.args[1], old.report)
+        self.assertEqual(history.call_args.args[1]['manager'], old.report['manager'])
+        self.assertNotIn('inventory', history.call_args.args[1])
         self.assertEqual(job.snapshot.environment, self.environment)
         self.assertEqual(self.client.get(reverse("dashboard")).status_code, 200)
 

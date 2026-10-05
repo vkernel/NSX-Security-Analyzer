@@ -348,8 +348,8 @@ def membership_order(group, previous=None):
     return list(dict.fromkeys(preferred + list(MEMBERSHIP_ENDPOINTS)))
 
 
-def membership(client, group, group_inventory=None):
-    """Positive evidence wins; negative results require supported, successful checks."""
+def membership_scope(group, group_inventory=None, cache=None):
+    """Collection-local configuration analysis; cached subtrees contain no live evidence."""
     issues, limitations = [], []
     group_types = group.get("group_type", [])
     if isinstance(group_types, str):
@@ -363,6 +363,8 @@ def membership(client, group, group_inventory=None):
                              "ExternalIDExpression", "PathExpression"}
 
     visiting = {group.get("path")}
+    cache = cache if cache is not None else {}
+    dependencies = []
 
     def inspect(value):
         if isinstance(value, list):
@@ -388,6 +390,16 @@ def membership(client, group, group_inventory=None):
                 if path in visiting or len(visiting) >= 64:
                     issues.append("Nested membership cycle or depth limit encountered: " + path)
                     continue
+                for dependency in dependencies:
+                    dependency.add(path)
+                cached = cache.get(path)
+                if cached and not cached[1].intersection(visiting) and len(visiting) + len(cached[1]) < 64:
+                    limitations.extend(cached[0])
+                    for dependency in dependencies:
+                        dependency.update(cached[1])
+                    continue
+                before_issues, before_limits = len(issues), len(limitations)
+                dependencies.append({path})
                 visiting.add(path)
                 child_types = child.get('group_type', [])
                 if isinstance(child_types, str):
@@ -400,11 +412,21 @@ def membership(client, group, group_inventory=None):
                 # AND/OR criteria. Effective membership comes from parent endpoints.
                 inspect(child.get('expression', []))
                 visiting.remove(path)
+                subtree = dependencies.pop()
+                if len(issues) == before_issues and len(subtree) <= 256:
+                    cache[path] = (tuple(limitations[before_limits:]), subtree)
         return inspect(value.get("expressions", [])) or literal
 
     explicit = inspect(group.get("expression", []))
     if group.get("extended_expression"):
         limitations.append("Extended identity membership is outside the supported membership checks")
+    return explicit, tuple(issues), tuple(limitations)
+
+
+def membership(client, group, group_inventory=None, scope=None):
+    """Positive evidence wins; negative results require supported, successful checks."""
+    explicit, issues, limitations = scope if scope is not None else membership_scope(group, group_inventory)
+    issues, limitations = list(issues), list(limitations)
     if explicit:
         return "nonempty", ["Contains explicit IP/MAC members"]
     hints = getattr(client, "membership_hints", {})
@@ -1252,38 +1274,49 @@ def audit(client, workers=4, testing=False, progress=None):
         result, configuration = audit_dfw(client, domains, workers, testing=testing)
         return result, configuration, round(time.perf_counter() - started, 2)
 
-    # Both tasks use the same client's adaptive request limiter. Keep diagnostic
-    # samples and single-worker calls sequential; worker callbacks stay on this thread.
-    with ThreadPoolExecutor(max_workers=1 if testing or workers == 1 else 2) as pool:
-        search_future = pool.submit(read_search)
-        dfw_future = pool.submit(read_dfw)
-        try:
-            resources, search_coverage, phases["search"] = search_future.result()
-            progress(2, "Completing firewall rules and counters")
-            dfw, dfw_configuration, phases["dfw"] = dfw_future.result()
-        except BaseException:
-            search_future.cancel()
-            dfw_future.cancel()
-            raise
-    phases["search_and_dfw"] = round(time.perf_counter() - combined_started, 2)
-    phase = time.perf_counter()
+    membership_started = time.perf_counter()
     LOG.info("Checking membership for %d groups...", len(groups))
-    progress(3, "Checking group membership and references")
     membership_progress = {"completed": 0, "last_log": time.monotonic()}
     membership_lock = threading.Lock()
     group_inventory = {g["path"]: g for g in all_groups}
+    scope_cache = {}
+    scopes = {g['path']: membership_scope(g, group_inventory, scope_cache) for g in groups}
     def check_membership(group):
-        result = membership(client, group, group_inventory)
+        result = membership(client, group, group_inventory, scopes[group['path']])
         with membership_lock:
             membership_progress["completed"] += 1
             now = time.monotonic()
             if now-membership_progress["last_log"] >= 30 or membership_progress["completed"] == len(groups):
                 LOG.info("Group membership progress: completed=%d total=%d elapsed_seconds=%.1f",
-                         membership_progress["completed"], len(groups), time.perf_counter()-phase)
+                         membership_progress["completed"], len(groups), time.perf_counter()-membership_started)
                 membership_progress["last_log"] = now
         return result
-    with ThreadPoolExecutor(max_workers=workers) as pool:
-        memberships = dict(zip((g["path"] for g in groups), pool.map(check_membership, groups)))
+    def read_membership():
+        started = time.perf_counter()
+        with ThreadPoolExecutor(max_workers=workers) as members_pool:
+            result = dict(zip((g["path"] for g in groups), members_pool.map(check_membership, groups)))
+        return result, round(time.perf_counter()-started, 2)
+
+    # All retrieval tasks use the same client's adaptive request limiter. Keep diagnostic
+    # samples and single-worker calls sequential; worker callbacks stay on this thread.
+    with ThreadPoolExecutor(max_workers=1 if testing or workers == 1 else 3) as pool:
+        search_future = pool.submit(read_search)
+        dfw_future = pool.submit(read_dfw)
+        membership_future = pool.submit(read_membership)
+        try:
+            resources, search_coverage, phases["search"] = search_future.result()
+            progress(2, "Completing firewall rules and counters")
+            dfw, dfw_configuration, phases["dfw"] = dfw_future.result()
+            phases['search_and_dfw'] = round(time.perf_counter()-combined_started, 2)
+            progress(3, "Checking group membership and references")
+            memberships, phases['membership'] = membership_future.result()
+        except BaseException:
+            search_future.cancel()
+            dfw_future.cancel()
+            membership_future.cancel()
+            raise
+    phases["parallel_retrieval"] = round(time.perf_counter() - combined_started, 2)
+    phase = time.perf_counter()
     refs = collect_references(resources + all_groups + services + dfw_configuration, groups + custom)
     rule_references = {}
     # Include searched gateway/other firewall rules as well as directly read DFW rules.
@@ -1344,7 +1377,7 @@ def audit(client, workers=4, testing=False, progress=None):
             row["unique_id"] = obj.get("unique_id")
             row["created_at"] = obj.get("_create_time")
             inventory[key].append(row)
-    phases["membership_and_references"] = round(time.perf_counter() - phase, 2)
+    phases["references"] = round(time.perf_counter() - phase, 2)
     limitations = "Search is eventually consistent; non-indexed and RBAC-hidden references may be absent."
     if testing:
         limitations += " TESTING ONLY: one record per list and no pagination. No unused-object, policy-emptiness or rule-activity conclusions. Empty or excluded samples can leave checks unexercised."

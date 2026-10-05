@@ -428,3 +428,19 @@ also applies to old snapshots without reindexing or a schema migration. It reduc
 transfer and Python processing; PostgreSQL must still read the stored snapshot JSON
 and the first comparison still examines all compared objects. Logs expose
 `projection_seconds`, `compare_seconds`, and `persist_seconds` for measurement.
+
+## Overlapped retrieval and prior-run hints
+
+Search, firewall and membership retrieval now overlap for normal multi-worker
+collections. All use the same client request pacing and adaptive concurrency gate;
+the 40 requests/second ceiling is unchanged. Testing and single-worker runs remain
+sequential. `parallel_retrieval` is wall-clock duration; individual overlapping phase
+durations must not be added together. Membership and reference processing now have
+separate timings.
+
+Nested scope analysis reuses bounded, successfully analyzed subtrees within one
+collection. Cycle/depth checks remain enforced and API membership evidence is never
+cached between collections. Prior-run data is projected in PostgreSQL to membership
+hints, statistics backoff and rule identity/hit-history fields, excluding full
+inventory and statistics payloads. No schema migration or historical refresh is
+required. Gains depend on API latency and available capacity below the shared limit.
