@@ -1,7 +1,8 @@
 from django.urls import path
-from . import views, history_views, diagnostic_views, report_views
+from . import system_health, views, history_views, diagnostic_views, report_views
 
 urlpatterns = [
+    path("administration/health/", system_health.health_page, name="system-health"),
     path("collections/<uuid:pk>/stop/", views.stop_collection, name="stop-collection"),
     path("snapshots/<uuid:pk>/data/", report_views.snapshot_data, name="snapshot-data"),
     path('administration/audit/', diagnostic_views.audit_log, name='audit-log'),

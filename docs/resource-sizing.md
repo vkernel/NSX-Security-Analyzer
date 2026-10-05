@@ -28,8 +28,8 @@ and history-analysis work; it does not mean a refresh loads every snapshot at on
 Each cell gives **CPU request; memory request / memory limit**. CPU `1` is one vCPU;
 `500m` is half a vCPU. Memory uses binary GiB/MiB. Values apply per replica, not to the
 whole namespace. The snapshot refresh Job below is an **optional maintenance recommendation**,
-available as a Compose service and a separate Kubernetes maintenance manifest. It
-is excluded from normal startup/sync and uses its own memory allocation. See
+available as an explicitly invoked Compose service or a manually created temporary
+Kubernetes Job. It is excluded from normal startup/sync and uses its own memory allocation. See
 [snapshot maintenance](snapshot-maintenance.md) for commands. New collections prepare
 their snapshot indexes automatically in the worker.
 
@@ -84,7 +84,7 @@ its pod resources. Preserve its logs first. This does not mean deleting the data
 PVC or namespace. Argo CD migration-hook handling is covered in the
 [Kubernetes guide](../deploy/kubernetes/README.md#argo-cd-deployment-and-upgrades).
 
-The default Kubernetes manifests and optional refresh Job use the **medium** profile
+The default Kubernetes manifests and documented manual refresh Job example use the **medium** profile
 above. Profiles are not selected automatically; adjust the manifests for your workload.
 Check the actual running pod after sync; namespace defaults or policy can alter resources.
 
@@ -139,16 +139,171 @@ peaks. Use your monitoring system's historical container-memory data as well. In
 RSS, not all processes in the pod. After `OOMKilled`, the observed surviving samples
 can understate the required memory. Do not treat a failed run as a measured safe peak.
 
-## Database storage is separate from RAM
+## Database disk sizing
 
-Only the database needs persistent storage for snapshots and indexes. Application,
-worker, scheduler and refresh containers do not need a shared report PVC. For an
-external database, manage storage on that database service.
+Only PostgreSQL needs persistent storage for snapshots and indexes. Web, worker,
+scheduler and refresh containers do not need a shared report PVC. For an external
+or operator-managed database, change storage on that service; changing the bundled
+`database.yaml` does not resize an external database.
 
-Estimate capacity from **measured database growth per completed indexed snapshot**,
-multiplied by collections per day, retention days and environments; then include
-existing data, WAL, indexes, backup policy and maintenance headroom. Do not size from
-raw report JSON alone. Refresh can temporarily retain old rows while inserting new
-ones in a transaction. Leave substantial free space and monitor growth rather than
-using a fixed VM-to-disk ratio. The bundled 10Gi PVC is an example, not a production
-storage recommendation. See [operations](operations.md) for backup/retention guidance.
+These are **illustrative initial disk budgets per PostgreSQL instance**, not tested
+capacity guarantees. Choose the larger of this starting budget and the measured
+retention requirement below. Even a small environment can exceed the large budget
+with frequent collections, long retention or dense relationships.
+
+| Profile | Data budget (tables, indexes, free space) | Additional WAL budget | Single combined volume | Three instances, combined volumes |
+| --- | --- | --- | --- | --- |
+| Small | 50Gi | 20Gi | 70Gi | 210Gi |
+| Medium | 200Gi | 50Gi | 250Gi | 750Gi |
+| Large | 500Gi | 100Gi | 600Gi | 1,800Gi |
+
+Each physical PostgreSQL replica holds a full copy, not one third of the database.
+The totals exclude backups, storage snapshots and any additional replication performed
+by the storage platform. WAL (write-ahead log) supports crash recovery and replication;
+its required space depends on write rate, refreshes, archiving and replica lag, not
+just the retained database size. The WAL budgets above are not configured WAL limits.
+
+With a single data PVC, tables and WAL normally share capacity. If your database
+operator uses a separate WAL PVC, size and monitor **both** filesystems. CloudNativePG
+supports separate WAL storage and PVC expansion when supported by the StorageClass;
+follow its version-specific procedure for existing clusters. Do not assume adding
+`walStorage` will migrate an existing installation automatically. See
+[CloudNativePG storage](https://cloudnative-pg.io/docs/1.26/storage/).
+
+The bundled **10Gi PVC is a demonstration default**, not a medium production allocation.
+CPU and memory defaults in the manifests do not automatically resize it. For an
+existing volume, request an increase through your database/operator configuration in
+Git and verify that the StorageClass permits expansion; Kubernetes does not support
+shrinking PVCs. Never delete a database PVC or files inside `pg_wal` to free space.
+
+### Calculate the retention requirement
+
+Measure complete, indexed snapshots from representative environments. Raw report JSON
+size is insufficient: derived records, search evidence, relationships and database
+indexes add storage.
+
+```text
+retained snapshot bytes = sum, across environments, of:
+    average indexed snapshot footprint × collections per day × retention days
+
+required combined capacity =
+    (baseline data + retained snapshot bytes + audit/history growth
+     + maintenance allowance + peak retained WAL) / 0.70
+```
+
+This calculation targets approximately **30% free space** as an initial operational
+margin; adjust it for measured write bursts and recovery time. Do not count the same
+indexes twice if already included in the measured snapshot footprint. Backups stored
+on the same filesystem need an additional allowance; preferably budget them separately.
+
+For example, **100MiB per indexed snapshot × 24 collections/day × 180 days is about
+422Gi per environment**, before WAL and headroom. Six-hourly collection would retain
+about 70Gi at the same retention, but reduces observation frequency. Choose collection
+frequency and retention to match the history you need, not just available disk.
+
+Measure database size before and after several completed collections during a quiet
+period. Existing free pages, concurrent cleanup and autovacuum can make net growth
+understate the snapshot footprint. Combine those measurements with table sizes and
+longer-term growth monitoring. Refresh deletes and rebuilds derived records inside a
+transaction: old versions and replacement data can coexist until cleanup is possible.
+Allow room for the largest rebuild and its WAL, not only steady-state retained data.
+
+### Check usage and alert before exhaustion
+
+Administrators can open **Administration → System health** for current web-container
+CPU, memory and filesystem usage, application database size and its ten largest tables.
+Use **Refresh measurements** for a new sample. Container metrics require readable Linux
+cgroups; unavailable measurements are labeled explicitly. The page does not measure
+other pods, PostgreSQL free disk, WAL or replica storage. Database queries have short
+timeouts and do not read snapshot payloads. The existing `/health/` readiness endpoint
+remains separate from this authenticated diagnostic page.
+
+Run these read-only SQL queries against the application database:
+
+```sql
+-- Database size includes tables/indexes/TOAST, but not the cluster's WAL directory.
+SELECT pg_size_pretty(pg_database_size(current_database())) AS database_size;
+
+-- Largest relations, including their indexes and out-of-line JSON/text (TOAST).
+SELECT relname,
+       pg_size_pretty(pg_total_relation_size(relid)) AS total_size,
+       pg_size_pretty(pg_table_size(relid)) AS table_and_toast,
+       pg_size_pretty(pg_indexes_size(relid)) AS indexes
+FROM pg_catalog.pg_statio_user_tables
+ORDER BY pg_total_relation_size(relid) DESC
+LIMIT 20;
+
+-- Row counts are estimates; look for cleanup falling behind.
+SELECT relname, n_live_tup, n_dead_tup, last_autovacuum, last_autoanalyze
+FROM pg_stat_user_tables
+ORDER BY n_dead_tup DESC
+LIMIT 20;
+```
+
+Ask the DBA to inspect WAL usage, inactive replication slots, replica lag and failed
+archiving as well. A database-size query cannot tell you how much free space remains
+on its filesystem. Check **every database instance**, including replicas. Inside a
+running PostgreSQL container with `PGDATA` set:
+
+```sh
+df -h "$PGDATA" "$PGDATA/pg_wal"
+```
+
+For Kubernetes volume configuration:
+
+```sh
+kubectl -n nsx-security-analyzer get pvc
+kubectl get storageclass
+```
+
+Start with alerts at **70% used (warning)** and **85% used (critical)** on data and WAL
+filesystems, then tune for growth rate. Also alert when projected time-to-full is less
+than your expansion/recovery lead time. Monitor volume latency/IOPS, WAL generation,
+replication lag, failed archiving and database-container memory. A replica reporting
+`no free disk space for WALs` needs its storage investigated even if the primary is healthy.
+
+## PostgreSQL resource efficiency
+
+### Operational settings to review first
+
+- **Retention:** verify it is enabled on the deployed installation. New installations
+  default to 180 days of full snapshots, 7 days of testing snapshots and 180 days of
+  collection jobs; existing settings are preserved. Shorten retention or reduce
+  collection frequency only when acceptable for historical analysis. Audit-event
+  retention is separate. See [operations](operations.md).
+- **Maintenance scheduling:** run refresh only when needed, with collection activity
+  paused, following [snapshot maintenance](snapshot-maintenance.md). New collections
+  already build their indexes. Repeated full refreshes add substantial writes and WAL.
+- **Autovacuum and statistics:** keep them enabled and monitor large snapshot tables
+  after retention cleanup. Normal VACUUM makes dead-row space reusable; it generally
+  does not return that space to the filesystem. `VACUUM FULL` requires an exclusive
+  lock and additional disk for a rewrite; it is not an emergency low-space remedy.
+  See [PostgreSQL vacuuming](https://www.postgresql.org/docs/current/routine-vacuuming.html).
+- **Memory and connections:** allocate requests/limits to every database instance,
+  including operator-managed replicas. Keep connection counts bounded as application
+  replicas grow. Tune `shared_buffers` against the database container's memory budget,
+  not the Kubernetes node's RAM. `work_mem` can be consumed by multiple operations
+  and parallel workers in each connection; a large global value can cause OOMs.
+  See [PostgreSQL memory settings](https://www.postgresql.org/docs/current/runtime-config-resource.html).
+- **WAL:** investigate lagging replicas, replication slots and archive failures before
+  merely adding capacity. `max_wal_size` is a soft checkpoint target, not a disk cap.
+  WAL compression can reduce full-page-image traffic at a CPU cost; benchmark it
+  with your DBA. Keep durability settings enabled. See
+  [WAL settings](https://www.postgresql.org/docs/current/runtime-config-wal.html).
+
+### Application improvements identified for follow-up
+
+The current implementation has opportunities to reduce writes without losing evidence:
+
+| Priority | Current behavior | Proposed improvement |
+| --- | --- | --- |
+| 1 | Snapshot records store structured evidence in `data`, serialize it again into `columns`, and store flattened search evidence. | Remove the duplicated evidence JSON from stored display/export columns and generate it on demand. Preserve exports and evidence-search behavior with regression checks. |
+| 2 | VM relationship records repeat rule/group/service information across VMs. | Store shared definitions once per snapshot and retain indexed relationships; retrieve only the requested relationship page. |
+| 3 | Retention can delete up to 1,000 snapshots per environment inside one transaction spanning environments. | Use smaller, bounded cleanup transactions, preserving latest-snapshot protection and coordination with collection/refresh. Measure cascade size and WAL per batch. |
+| 4 | Full index refresh rewrites derived records in a long transaction. | Investigate versioned, staged index builds with bounded writes and atomic publication; preserve the old index until the replacement is complete, then clean it up in batches. This needs temporary storage too. |
+
+These are **proposed changes, not features enabled by this documentation update**.
+Measure table/TOAST sizes and WAL generation first to prioritize the largest saving.
+Any schema/storage change needs tests for evidence completeness, failure recovery,
+concurrent browsing and upgrade behavior; reducing memory or disk must not silently
+remove historical evidence.
