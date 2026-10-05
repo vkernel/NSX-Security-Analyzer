@@ -222,3 +222,32 @@ permanent deletion on the next scheduler cleanup; migrations do not run cleanup.
 Audit-event retention is separate and remains controlled by
 `NSX_AUDIT_LOG_RETENTION_DAYS` (default `0`, indefinite). Finding review evidence and
 notes survive snapshot retention. Use database backups for longer-term recovery.
+
+### Stopping a collection during database trouble
+
+The Stop action persists a request in PostgreSQL; the supervising worker checks it
+between subprocess waits and kills the collector before acknowledging cancellation.
+Cancellation queries use a 5-second statement timeout and a 2-second lock timeout.
+If database supervision raises an error, the worker kills the collector and logs
+`database supervision failed`. The saved job status may remain Running until the
+database recovers and stale-job reconciliation runs.
+
+A full or unreachable database can prevent the stop request from being saved. The
+UI reports that failure rather than claiming cancellation succeeded. SQL timeouts
+bound server-side execution/lock waits, not every possible network outage. If the
+worker cannot reach PostgreSQL, stop the affected worker through your container
+platform and restore database availability. Coordinate replica changes with Argo CD
+so it does not immediately restart the workload. Earlier committed snapshots remain
+available; unfinished transactional work is rolled back.
+
+Intentional built-in/system-object exclusions alone do not mark a full collection
+incomplete. Unknown membership, missing rule evidence and collection errors still
+need review. Check the collection coverage details before interpreting an incomplete
+badge as an expected exclusion.
+
+Extended identity expressions alone are a supported-scope limitation: when all normal
+membership probes succeed without finding members, the group is labeled **Not supported**,
+not empty or a collection failure. Other unknown evidence and request failures still
+require review. This classification applies to newly collected snapshots; existing
+snapshots preserve their original assessment. See the
+[NSX Group schema](https://developer.broadcom.com/xapis/nsx-t-data-center-rest-api/latest/schemas_Group.html).

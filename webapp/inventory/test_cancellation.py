@@ -137,3 +137,70 @@ class CancellationLockTests(TransactionTestCase):
                 future.result(timeout=5)
                 with connection.cursor() as cursor:
                     cursor.execute('RESET lock_timeout')
+
+
+class CancellationDatabaseFailureTests(TestCase):
+    def test_timeout_settings_are_restored(self):
+        from django.db import connection
+        from inventory.services import cancellation_database_timeout
+        with connection.cursor() as cursor:
+            cursor.execute("SHOW statement_timeout")
+            original = cursor.fetchone()[0]
+        with cancellation_database_timeout():
+            with connection.cursor() as cursor:
+                cursor.execute("SHOW statement_timeout")
+                self.assertEqual(cursor.fetchone()[0], '5s')
+        with connection.cursor() as cursor:
+            cursor.execute("SHOW statement_timeout")
+            self.assertEqual(cursor.fetchone()[0], original)
+
+    def test_exclusions_alone_do_not_make_collection_incomplete(self):
+        from inventory.coverage_index import report_issues
+        report = sample_report()
+        report['objects'] = []
+        report['tags'] = {}
+        report['dfw'] = {'rules': [], 'policies': [], 'errors': []}
+        report['search_coverage'] = {'mode': 'all_types'}
+        report['inventory'] = {'groups': [{'membership': 'not_assessed',
+            'audit_exclusions': ['System-owned object']}]}
+        self.assertFalse(engine().needs_review(report))
+        self.assertEqual(list(report_issues(report)), [])
+
+    def test_real_failure_still_requires_review(self):
+        report = sample_report()
+        report['objects'] = [{'membership': 'unknown', 'notes': ['Request failed']}]
+        self.assertTrue(engine().needs_review(report))
+
+
+class ExtendedMembershipCoverageTests(TestCase):
+    def test_successful_empty_probes_with_extended_expression_are_scope_limitation(self):
+        from unittest.mock import Mock
+        client = Mock()
+        client.get.return_value = {'results': [], 'result_count': 0}
+        group = {'path': '/infra/domains/default/groups/identity-example',
+                 'extended_expression': [{'resource_type': 'IdentityGroupExpression'}]}
+        status, notes = engine().membership(client, group)
+        self.assertEqual(status, 'not_supported')
+        self.assertIn('not assessed as empty', notes[0])
+        report = sample_report()
+        report.update(objects=[{'membership': status}], dfw={}, tags={})
+        self.assertFalse(engine().needs_review(report))
+
+    def test_extended_expression_does_not_hide_failed_probe(self):
+        from unittest.mock import Mock
+        client = Mock()
+        client.get.side_effect = engine().AuditError('request failed')
+        status, notes = engine().membership(client, {
+            'path': '/infra/domains/default/groups/identity-example',
+            'extended_expression': [{'resource_type': 'IdentityGroupExpression'}]})
+        self.assertEqual(status, 'unknown')
+        self.assertIn('request failed', notes)
+
+    def test_positive_membership_evidence_is_preserved(self):
+        from unittest.mock import Mock
+        client = Mock()
+        client.get.return_value = {'results': [{'id': 'example'}]}
+        status, _ = engine().membership(client, {
+            'path': '/infra/domains/default/groups/identity-example',
+            'extended_expression': [{'resource_type': 'IdentityGroupExpression'}]})
+        self.assertEqual(status, 'nonempty')

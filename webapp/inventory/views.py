@@ -9,7 +9,7 @@ from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import ValidationError
 from django.core.paginator import Paginator
-from django.db import transaction
+from django.db import transaction, DatabaseError
 from django.http import HttpResponse, HttpResponseForbidden, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_GET, require_POST, require_http_methods
@@ -191,7 +191,13 @@ def collect(request, pk):
 def stop_collection(request, pk):
     from .services import request_collection_stop
     job = get_object_or_404(AuditJob.objects.only('id', 'environment_id'), pk=pk)
-    if request_collection_stop(job.pk, request.user):
+    try:
+        requested = request_collection_stop(job.pk, request.user)
+    except DatabaseError:
+        logging.getLogger(__name__).error("collection stop request could not be saved job=%s", job.pk)
+        messages.error(request, "The stop request could not be saved because the database is unavailable or busy. The collection may still be running. Ask an administrator to stop the worker and restore database availability.")
+        return redirect('collection-history', pk=job.environment_id)
+    if requested:
         messages.success(request, "Stop requested. The worker will terminate the collection; earlier snapshots remain available.")
     else:
         messages.info(request, "This collection has already finished.")

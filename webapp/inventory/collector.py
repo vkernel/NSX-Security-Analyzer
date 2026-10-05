@@ -401,6 +401,8 @@ def membership(client, group):
                 issues.append(endpoint + ": empty first page with continuation cursor")
         except AuditError as exc:
             issues.append(str(exc))
+    if issues and set(issues) == {"Extended membership expressions require review"}:
+        return "not_supported", ["Extended identity membership is outside the supported membership checks; not assessed as empty."]
     return ("unknown", sorted(set(issues))) if issues else ("empty", [])
 
 
@@ -1531,6 +1533,7 @@ def feature_guide():
 <li><strong>Not applicable:</strong> the check does not apply, such as group membership for a service.</li>
 </ul>
 <p>Disabled rules and references from other groups or services still count as usage. Self-references and realization records do not. Built-in services and default/system groups are excluded from cleanup findings. Antrea/container groups are included in reference checks. Unsupported membership checks are reported as Unknown.</p>
+<p><strong>Not supported</strong> membership means extended identity criteria cannot be resolved by these checks; this is a scope limitation, not an empty-group finding or collection failure.</p>
 <p><strong>Empty</strong> means the supported membership checks returned no members. <strong>Has members</strong> means explicit IP/MAC entries or resolved members were found. An empty group may still be referenced by a rule. Membership methods identify tag conditions, other dynamic conditions, IP/MAC addresses, explicit objects, nested groups or segment/port paths. The membership-definition popup shows configured criteria; its JSON preserves AND/OR structure and is not a resolved member list.</p>
 
 <h3>Distributed firewall overview and segmentation indicator</h3>

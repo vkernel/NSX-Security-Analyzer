@@ -5,7 +5,7 @@ import time
 from django.core.management.base import CommandError
 from django.conf import settings
 from django.core.management.base import BaseCommand
-from django.db import close_old_connections
+from django.db import close_old_connections, DatabaseError
 from inventory.diagnostics import LOG, log_failure, phase
 from inventory.services import claim_job, expire_jobs, fail_job, stop_requested, finish_stopped_job
 
@@ -83,6 +83,11 @@ class Command(BaseCommand):
                             process.kill()
                             process.wait()
                             fail_job(job.pk, "The worker was stopped during collection. You can start a new audit.", {"error": {"code": "WORKER_STOPPED"}})
+                            raise
+                        except DatabaseError:
+                            LOG.error("job=%s database supervision failed; killing collector; status reconciliation requires database recovery", job.pk)
+                            process.kill()
+                            process.wait()
                             raise
                         except Exception:
                             process.kill()

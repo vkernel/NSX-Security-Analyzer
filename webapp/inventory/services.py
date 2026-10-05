@@ -4,6 +4,7 @@ import json
 import time
 from datetime import datetime, timedelta
 from functools import lru_cache
+from contextlib import contextmanager
 
 from django.conf import settings
 from django.core.exceptions import ValidationError
@@ -116,9 +117,28 @@ class CollectionStopped(Exception):
     pass
 
 
+@contextmanager
+def cancellation_database_timeout():
+    """Bound lock/SQL waits without changing the enclosing snapshot transaction's settings."""
+    from django.db import connection
+    with transaction.atomic():
+        if connection.vendor != 'postgresql':
+            yield
+            return
+        with connection.cursor() as cursor:
+            cursor.execute("SELECT current_setting('statement_timeout'), current_setting('lock_timeout')")
+            previous = cursor.fetchone()
+            cursor.execute("SET LOCAL statement_timeout = '5s'")
+            cursor.execute("SET LOCAL lock_timeout = '2s'")
+        yield
+        with connection.cursor() as cursor:
+            cursor.execute("SELECT set_config('statement_timeout', %s, true), set_config('lock_timeout', %s, true)", previous)
+
+
 def stop_requested(job_id):
     from .models import CollectionStopRequest
-    return CollectionStopRequest.objects.filter(job_id=job_id).exists()
+    with cancellation_database_timeout():
+        return CollectionStopRequest.objects.filter(job_id=job_id).exists()
 
 
 @transaction.atomic
@@ -132,7 +152,7 @@ def finish_stopped_job(job_id):
     return changed
 
 
-@transaction.atomic
+@cancellation_database_timeout()
 def request_collection_stop(job_id, actor):
     from .models import CollectionStopRequest
     from .audit_events import record
