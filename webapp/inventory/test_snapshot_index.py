@@ -27,6 +27,25 @@ class IndexedReportTests(TestCase):
         build(self.snapshot,self.snapshot._rendered)
         self.url = reverse('snapshot-data',args=[self.snapshot.pk])
 
+    def test_repeated_panel_record_references_are_inserted_once(self):
+        import re
+        from .models import SnapshotRecordPanel
+        from .snapshot_index import clear_index
+        # Include a repeat across bulk-insert boundaries and within one widget.
+        prepare = engine().prepare_index_report
+        def repeated(*args, **kwargs):
+            result = prepare(*args, **kwargs)
+            result['content'] = re.sub(r'data-rows="([0-9,]+)"',
+                lambda match: 'data-rows="' + ','.join([match[1]] * 1001) + '"',
+                result['content'], count=1)
+            return result
+        expected = SnapshotRecordPanel.objects.filter(panel__snapshot=self.snapshot).count()
+        clear_index(self.snapshot.pk)
+        with patch.object(engine(), 'prepare_index_report', side_effect=repeated):
+            build(self.snapshot)
+        self.assertEqual(SnapshotRecordPanel.objects.filter(panel__snapshot=self.snapshot).count(), expected)
+        self.assertTrue(SnapshotPresentation.objects.filter(snapshot=self.snapshot).exists())
+
     def test_first_load_and_sections_do_not_fetch_original_report_or_records(self):
         with patch.object(engine(),'render_html_report',side_effect=AssertionError('Must not render')):
             with CaptureQueriesContext(connection) as queries:

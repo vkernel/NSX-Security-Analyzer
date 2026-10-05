@@ -171,6 +171,9 @@ def build(snapshot, rendered=None):
     for start, end, slug in sorted(Panels(content).found):
         html = content[start:end]
         ids = [int(v) for m in re.finditer(r'data-rows="([0-9,]*)"', html) for v in m[1].split(',') if v]
+        # Multiple widgets in a section may reference the same record. Membership
+        # in a panel is a set; deduplicate across the entire panel before batching.
+        ids = list(dict.fromkeys(ids))
         # A report section currently has one inventory table.
         html = re.sub(r'data-rows="[0-9,]*"', 'data-rows="" data-server-table="'+slug+'"', html)
         panel_rows[slug] = (html, ids)
