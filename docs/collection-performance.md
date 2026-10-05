@@ -414,3 +414,17 @@ creates a new table; it does not rebuild existing snapshots. Old indexes remain
 readable. New collections gain the reduced relationship payload automatically;
 manual targeted refresh can rebuild older indexes if needed. Shared records are
 deleted with their snapshot and replaced atomically during an index refresh.
+
+## Applying a snapshot comparison
+
+The first comparison of a pair still computes and caches its differences, but
+PostgreSQL now returns only the fields used by comparison. Large resolved membership
+arrays, references and counter statistics are excluded before transfer to the web
+process. Legacy `objects` data is loaded only when full group/service inventory is
+not available. Missing evidence remains distinct from empty evidence.
+
+Subsequent visits reuse the existing paginated comparison cache. This optimization
+also applies to old snapshots without reindexing or a schema migration. It reduces
+transfer and Python processing; PostgreSQL must still read the stored snapshot JSON
+and the first comparison still examines all compared objects. Logs expose
+`projection_seconds`, `compare_seconds`, and `persist_seconds` for measurement.

@@ -23,6 +23,23 @@ class EnvironmentPerformanceTests(TestCase):
         report['objects'][0]['name'] = 'Updated group'
         self.after = Snapshot.objects.create(environment=self.env, generated_at=timezone.now(), report=report)
 
+    def test_comparison_projection_preserves_results_and_drops_unused_evidence(self):
+        import json
+        from .comparison import compare, records
+        from .comparison_cache import configuration
+        reports = [sample_report(), {'objects': [], 'inventory': {}},
+            {'objects': [{'kind':'group', 'path':'/legacy', 'name':'Legacy', 'membership':'unknown'}]},
+            {'inventory': {'groups':[{'path':'/g', 'name':'G', 'configuration': {'x':1},
+                'referenced_by':['large-unused-value'] * 1000}], 'services':[]},
+             'dfw': {'rules':[{'path':'/r', 'name':'R', 'statistics':['large-unused-value']*1000}], 'errors':[]}}]
+        for report in reports:
+            self.before.report = report
+            self.before.save(update_fields=['report'])
+            lean = configuration(self.before)
+            self.assertEqual(records(lean), records(report))
+            self.assertEqual(compare(lean, sample_report()), compare(report, sample_report()))
+            self.assertNotIn('large-unused-value', json.dumps(lean))
+
     def test_comparison_tab_does_not_compare_on_navigation(self):
         with patch('inventory.comparison_cache.compare', side_effect=AssertionError('Unexpected comparison')), CaptureQueriesContext(connection) as queries:
             response = self.client.get(reverse('snapshot-comparison', args=[self.env.pk]))

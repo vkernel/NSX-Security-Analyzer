@@ -1,6 +1,11 @@
 """Compare saved evidence only; missing fields are not equivalent to empty fields."""
 import json
 
+COMPARISON_FIELDS = ('name', 'configuration', 'configuration_fingerprint', 'unique_id',
+                'created_at', 'rule_id', 'policy_rule_id', 'action', 'disabled', 'source_groups',
+                'destination_groups', 'services', 'scope', 'category', 'policy_path',
+                'membership', 'membership_definition', 'tags')
+
 
 def records(report):
     inventory = report.get('inventory', {})
@@ -11,10 +16,7 @@ def records(report):
         ('Rule', report.get('dfw', {}).get('rules', [])),
     ):
         for row in rows:
-            fields = {key: row[key] for key in ('name', 'configuration', 'configuration_fingerprint', 'unique_id',
-                'created_at', 'rule_id', 'policy_rule_id', 'action', 'disabled', 'source_groups',
-                'destination_groups', 'services', 'scope', 'category', 'policy_path',
-                'membership', 'membership_definition', 'tags') if key in row}
+            fields = {key: row[key] for key in COMPARISON_FIELDS if key in row}
             # The full configuration already explains this opaque digest.
             if 'configuration' in fields:
                 fields.pop('configuration_fingerprint', None)
