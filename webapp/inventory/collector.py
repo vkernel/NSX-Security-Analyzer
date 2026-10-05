@@ -348,19 +348,21 @@ def membership_order(group, previous=None):
     return list(dict.fromkeys(preferred + list(MEMBERSHIP_ENDPOINTS)))
 
 
-def membership(client, group):
+def membership(client, group, group_inventory=None):
     """Positive evidence wins; negative results require supported, successful checks."""
-    issues = []
+    issues, limitations = [], []
     group_types = group.get("group_type", [])
     if isinstance(group_types, str):
         group_types = [group_types]
     if any(str(kind).casefold() == "antrea" for kind in group_types):
-        issues.append("Antrea membership requires review; container members are not checked by these endpoints")
+        limitations.append("Antrea/container membership is outside the supported membership checks")
     supported_types = {"VirtualMachine", "VIF", "Segment", "SegmentPort",
                        "LogicalSwitch", "LogicalPort", "IPAddress"}
     supported_expressions = {"Condition", "ConjunctionOperator", "NestedExpression",
                              "IPAddressExpression", "MACAddressExpression",
                              "ExternalIDExpression", "PathExpression"}
+
+    visiting = {group.get("path")}
 
     def inspect(value):
         if isinstance(value, list):
@@ -369,19 +371,40 @@ def membership(client, group):
             return False
         kind = value.get("resource_type")
         if kind and kind not in supported_expressions:
-            issues.append("Unsupported membership expression: " + kind)
+            limitations.append("Unsupported membership expression: " + kind)
         member_type = value.get("member_type")
         if member_type and member_type not in supported_types:
-            issues.append("Unsupported member type: " + member_type)
+            limitations.append("Unsupported member type: " + member_type)
         literal = bool(value.get("ip_addresses") or value.get("mac_addresses"))
+        if len(visiting) > 1 and value.get('mac_addresses'):
+            limitations.append("Nested MAC membership cannot be ruled out by these endpoints")
         # Referenced/nested groups may resolve other member types.
         if kind == "PathExpression" and value.get("paths"):
-            issues.append("Path expression requires nested/member-type review")
+            for path in value['paths']:
+                child = (group_inventory or {}).get(path)
+                if child is None:
+                    issues.append("Referenced group/path was not available in collected inventory: " + path)
+                    continue
+                if path in visiting or len(visiting) >= 64:
+                    issues.append("Nested membership cycle or depth limit encountered: " + path)
+                    continue
+                visiting.add(path)
+                child_types = child.get('group_type', [])
+                if isinstance(child_types, str):
+                    child_types = [child_types]
+                if any(str(t).casefold() == 'antrea' for t in child_types):
+                    limitations.append("Nested Antrea/container membership is outside the supported membership checks")
+                if child.get('extended_expression'):
+                    limitations.append("Nested identity membership is outside the supported membership checks")
+                # Inspect scope only; child members must not bypass the parent's
+                # AND/OR criteria. Effective membership comes from parent endpoints.
+                inspect(child.get('expression', []))
+                visiting.remove(path)
         return inspect(value.get("expressions", [])) or literal
 
     explicit = inspect(group.get("expression", []))
     if group.get("extended_expression"):
-        issues.append("Extended membership expressions require review")
+        limitations.append("Extended identity membership is outside the supported membership checks")
     if explicit:
         return "nonempty", ["Contains explicit IP/MAC members"]
     hints = getattr(client, "membership_hints", {})
@@ -401,9 +424,11 @@ def membership(client, group):
                 issues.append(endpoint + ": empty first page with continuation cursor")
         except AuditError as exc:
             issues.append(str(exc))
-    if issues and set(issues) == {"Extended membership expressions require review"}:
-        return "not_supported", ["Extended identity membership is outside the supported membership checks; not assessed as empty."]
-    return ("unknown", sorted(set(issues))) if issues else ("empty", [])
+    if issues:
+        return "unknown", sorted(set(issues + limitations))
+    if limitations:
+        return "not_supported", sorted(set(limitations)) + ["Membership not assessed as empty."]
+    return "empty", []
 
 
 DFW_COUNTER_NOTE = (
@@ -1246,8 +1271,9 @@ def audit(client, workers=4, testing=False, progress=None):
     progress(3, "Checking group membership and references")
     membership_progress = {"completed": 0, "last_log": time.monotonic()}
     membership_lock = threading.Lock()
+    group_inventory = {g["path"]: g for g in all_groups}
     def check_membership(group):
-        result = membership(client, group)
+        result = membership(client, group, group_inventory)
         with membership_lock:
             membership_progress["completed"] += 1
             now = time.monotonic()
@@ -1532,8 +1558,8 @@ def feature_guide():
 <li><strong>Not assessed:</strong> this object was excluded from the check or was outside the assessed testing sample.</li>
 <li><strong>Not applicable:</strong> the check does not apply, such as group membership for a service.</li>
 </ul>
-<p>Disabled rules and references from other groups or services still count as usage. Self-references and realization records do not. Built-in services and default/system groups are excluded from cleanup findings. Antrea/container groups are included in reference checks. Unsupported membership checks are reported as Unknown.</p>
-<p><strong>Not supported</strong> membership means extended identity criteria cannot be resolved by these checks; this is a scope limitation, not an empty-group finding or collection failure.</p>
+<p>Disabled rules and references from other groups or services still count as usage. Self-references and realization records do not. Built-in services and default/system groups are excluded from cleanup findings. Antrea/container groups are included in reference checks. Unsupported membership scope is labeled Not supported; failed or incomplete API checks are reported as Unknown.</p>
+<p><strong>Not supported</strong> membership means identity, container or nested/path criteria cannot be fully resolved by these checks; this is a scope limitation, not an empty-group finding or collection failure.</p>
 <p><strong>Empty</strong> means the supported membership checks returned no members. <strong>Has members</strong> means explicit IP/MAC entries or resolved members were found. An empty group may still be referenced by a rule. Membership methods identify tag conditions, other dynamic conditions, IP/MAC addresses, explicit objects, nested groups or segment/port paths. The membership-definition popup shows configured criteria; its JSON preserves AND/OR structure and is not a resolved member list.</p>
 
 <h3>Distributed firewall overview and segmentation indicator</h3>

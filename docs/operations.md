@@ -251,3 +251,18 @@ not empty or a collection failure. Other unknown evidence and request failures s
 require review. This classification applies to newly collected snapshots; existing
 snapshots preserve their original assessment. See the
 [NSX Group schema](https://developer.broadcom.com/xapis/nsx-t-data-center-rest-api/latest/schemas_Group.html).
+
+Antrea/container membership (including Namespace/Pod criteria) uses the same
+scope-limitation classification. Successful probes with no
+members result in **Not supported**, not an empty-group finding. API failures or
+incomplete pagination remain **Unknown** and require review, even for these groups.
+Positive resolved membership evidence remains **Has members**.
+
+Nested group paths are inspected against the group inventory retrieved in the same
+collection, without additional child membership API requests. If all referenced
+group definitions use supported member types and the parent's membership probes
+succeed with no members, the result is **Empty**. The collector does not union child
+results or infer parent membership from child literals, preserving parent criteria.
+Missing references, cycles and traversal depth limits remain **Unknown**. Nested
+unsupported member types remain **Not supported**. Non-group paths not available in
+the group inventory remain unknown rather than being assumed empty.

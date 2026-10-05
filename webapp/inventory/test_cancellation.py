@@ -181,7 +181,7 @@ class ExtendedMembershipCoverageTests(TestCase):
                  'extended_expression': [{'resource_type': 'IdentityGroupExpression'}]}
         status, notes = engine().membership(client, group)
         self.assertEqual(status, 'not_supported')
-        self.assertIn('not assessed as empty', notes[0])
+        self.assertTrue(any('not assessed as empty' in note for note in notes))
         report = sample_report()
         report.update(objects=[{'membership': status}], dfw={}, tags={})
         self.assertFalse(engine().needs_review(report))
@@ -204,3 +204,44 @@ class ExtendedMembershipCoverageTests(TestCase):
             'path': '/infra/domains/default/groups/identity-example',
             'extended_expression': [{'resource_type': 'IdentityGroupExpression'}]})
         self.assertEqual(status, 'nonempty')
+
+    def test_antrea_and_nested_paths_are_scope_limits(self):
+        from unittest.mock import Mock
+        groups = [
+            {'group_type': ['Antrea'], 'expression': [
+                {'resource_type': 'Condition', 'member_type': 'Namespace'},
+                {'resource_type': 'Condition', 'member_type': 'Pod'}]},
+            {'expression': [{'resource_type': 'PathExpression', 'paths': ['/infra/groups/nested']}]}]
+        for group in groups:
+            group['path'] = '/infra/groups/example'
+            with self.subTest(group=group):
+                client = Mock()
+                client.get.return_value = {'results': []}
+                status, notes = engine().membership(client, group)
+                self.assertEqual(status, 'unknown' if 'group_type' not in group else 'not_supported')
+                report = sample_report()
+                report.update(objects=[{'membership': status}], dfw={}, tags={})
+                self.assertEqual(engine().needs_review(report), 'group_type' not in group)
+                client.get.side_effect = engine().AuditError('Request failed')
+                status, notes = engine().membership(client, group)
+                self.assertEqual(status, 'unknown')
+                self.assertIn('Request failed', notes)
+                client.get.side_effect = None
+                client.get.return_value = {'results': [{'id': 'member'}]}
+                self.assertEqual(engine().membership(client, group)[0], 'nonempty')
+
+    def test_nested_scope_uses_parent_membership_without_extra_requests(self):
+        from unittest.mock import Mock
+        parent = {'path': '/infra/groups/parent', 'expression': [
+            {'resource_type': 'PathExpression', 'paths': ['/infra/groups/child']}]}
+        child = {'path': '/infra/groups/child', 'expression': [
+            {'resource_type': 'Condition', 'member_type': 'VirtualMachine'}]}
+        client = Mock()
+        client.get.return_value = {'results': []}
+        self.assertEqual(engine().membership(client, parent, {child['path']: child})[0], 'empty')
+        self.assertEqual(client.get.call_count, 4)
+        self.assertTrue(all(call.args[0].startswith(parent['path'] + '/members/') for call in client.get.call_args_list))
+        child['expression'] = parent['expression']
+        self.assertEqual(engine().membership(client, parent, {child['path']: child})[0], 'unknown')
+        child['expression'] = [{'resource_type': 'Condition', 'member_type': 'Pod'}]
+        self.assertEqual(engine().membership(client, parent, {child['path']: child})[0], 'not_supported')
