@@ -4,10 +4,11 @@ import re
 import logging
 import resource
 import sys
+from time import perf_counter
 from html.parser import HTMLParser
 
 from django.db import transaction, connection
-from .models import Snapshot, SnapshotPanel, SnapshotPresentation, SnapshotRecord, SnapshotRecordPanel, SnapshotHistoryData
+from .models import Snapshot, SnapshotPanel, SnapshotPresentation, SnapshotRecord, SnapshotRecordPanel, SnapshotHistoryData, SnapshotVMRule
 
 LABELS = {'referenced':'Referenced', 'unused_candidate':'Unused candidate', 'empty':'Empty',
           'nonempty':'Has members', 'unknown':'Unknown', 'not_applicable':'Not applicable',
@@ -31,7 +32,7 @@ def flatten(value):
     return '' if value is None else str(value)
 
 
-def columns(view, row):
+def columns(view, row, include_evidence=True):
     identity = row.get('name', '') + '\n' + row.get('path', '')
     if view == 'vms':
         values = [identity, row.get('power_state'), row.get('tag_count'), row.get('group_count')]
@@ -47,7 +48,7 @@ def columns(view, row):
         values = [identity, row.get('category') if policy else row.get('policy_name'),
                   LABELS.get(row.get('status' if policy else 'hit_status'), '') + ('' if policy else ' ' + ('Disabled' if row.get('disabled') else 'Enabled')),
                   row.get('rule_count' if policy else 'hit_count')]
-    return [str(v) if v is not None else 'Unknown' for v in values] + [json.dumps(row, ensure_ascii=False, sort_keys=True)]
+    return [str(v) if v is not None else 'Unknown' for v in values] + [json.dumps(row, ensure_ascii=False, sort_keys=True) if include_evidence else None]
 
 
 class Panels(HTMLParser):
@@ -109,7 +110,7 @@ def clear_index(snapshot_id):
         cursor.execute(f'DELETE FROM {quote(SnapshotCoverageIssue._meta.db_table)} WHERE coverage_id = %s', [snapshot_id])
         cursor.execute(f'DELETE FROM {quote(SnapshotCoverage._meta.db_table)} WHERE snapshot_id = %s', [snapshot_id])
         cursor.execute(f'DELETE FROM {links} WHERE panel_id IN (SELECT id FROM {panel} WHERE snapshot_id = %s) OR record_id IN (SELECT id FROM {record} WHERE snapshot_id = %s)', [snapshot_id, snapshot_id])
-        for model in (SnapshotPanel, SnapshotRecord, SnapshotPresentation):
+        for model in (SnapshotPanel, SnapshotRecord, SnapshotPresentation, SnapshotVMRule):
             cursor.execute(f'DELETE FROM {quote(model._meta.db_table)} WHERE snapshot_id = %s', [snapshot_id])
 
 
@@ -134,14 +135,26 @@ def build(snapshot, rendered=None):
     if SnapshotPresentation.objects.filter(snapshot_id=snapshot.pk).exists(): return
     metadata = {k:v for k,v in snapshot.report.get('tags', {}).items() if k not in {'objects','virtual_machines'}}
     rows, record_ids = [], []
+    rule_paths, shared_rules = set(), []
+    batch_bytes = 0
+    insert_seconds = 0.0
+    started = perf_counter()
     def flush():
+        nonlocal batch_bytes, insert_seconds
         if not rows: return
-        SnapshotRecord.objects.bulk_create(rows, batch_size=50)
+        write_started = perf_counter()
+        if shared_rules:
+            SnapshotVMRule.objects.bulk_create(shared_rules, batch_size=100)
+            shared_rules.clear()
+        SnapshotRecord.objects.bulk_create(rows, batch_size=500)
+        insert_seconds += perf_counter() - write_started
+        batch_bytes = 0
         record_ids.extend(row.pk for row in rows)
         rows.clear()
         checkpoint(snapshot.pk, 'records_batch_complete')
         logging.getLogger('inventory.collection').info('Index snapshot=%s records_saved=%d', snapshot.pk, len(record_ids))
     def store_record(ordinal, view, row):
+        nonlocal batch_bytes
         compact = {key: val for key, val in row.items() if not isinstance(val, (dict, list))}
         compact['referenced_by'] = []
         compact['notes_count'] = len(row.get('notes', []))
@@ -153,18 +166,39 @@ def build(snapshot, rendered=None):
         for key in ['usage','membership','hit_status','status']: sorts[key] = LABELS.get(row.get(key), row.get(key))
         sorts.update(kind=row.get('inventory_type', row.get('kind', '')), method=flatten(row.get('membership_definition', {}).get('methods', [])), references=len(row.get('referenced_by', [])))
         extra = tag_context(row, metadata) if view == 'tags' else {}
+        stored = dict(row, resolved_tag_evidence=extra) if extra else row
+        if view == 'vms':
+            edges = []
+            for rule in row.get('related_rules', []):
+                if rule['path'] not in rule_paths:
+                    shared_rules.append(SnapshotVMRule(snapshot=snapshot, path=rule['path'],
+                        data={k:v for k,v in rule.items() if k not in ('via_group', 'via_groups')}))
+                    rule_paths.add(rule['path'])
+                    if len(shared_rules) >= 100:
+                        SnapshotVMRule.objects.bulk_create(shared_rules, batch_size=100)
+                        shared_rules.clear()
+                edges.append({k:v for k,v in rule.items() if k in ('path', 'name', 'via_group', 'via_groups')})
+            stored = dict(row, related_rules=edges, _shared_vm_rules=True)
+        # Approximate UTF-8 payload budget; one oversized record is inserted alone.
+        size = len(json.dumps(stored, ensure_ascii=False).encode('utf-8')) * 3
+        if rows and batch_bytes + size > 4 * 1024 * 1024:
+            flush()
+        batch_bytes += size
         rows.append(SnapshotRecord(snapshot=snapshot, ordinal=ordinal, view=view, name=row['name'], sort_name=row['name'].casefold(),
-                    compact=compact, data=row, columns=columns(view, dict(row, resolved_tag_evidence=extra) if extra else row), sort_values=sorts,
+                    compact=compact, data=stored, columns=columns(view, stored, include_evidence=False), sort_values=sorts,
                     search_basic=row['name']+' '+row['path'],
                     search_evidence=flatten(row)+' '+flatten(extra)+' '+flatten([LABELS.get(row.get(k), '') for k in ['usage','membership','hit_status','status']])+(' Disabled' if row.get('disabled') else ' Enabled' if 'disabled' in row else '')))
         # Flush incrementally; never accumulate all expanded ORM records.
-        if len(rows) >= 50:
+        if len(rows) >= 500 or batch_bytes >= 4 * 1024 * 1024:
             flush()
     # Emit and discard expanded rows during preparation, including VM evidence.
     checkpoint(snapshot.pk, "prepare_layout_start")
     rendered = engine().prepare_index_report(snapshot.report, row_sink=store_record)
     flush()
     checkpoint(snapshot.pk, "prepare_layout_complete")
+    logging.getLogger('inventory.collection').info(
+        'Index snapshot=%s records=%d prepare_and_insert_seconds=%.3f insert_seconds=%.3f',
+        snapshot.pk, len(record_ids), perf_counter()-started, insert_seconds)
     rendered = {k:v for k,v in rendered.items() if not k.startswith('_index_')}
     parts, panel_rows = [], {}
     content = rendered['content']

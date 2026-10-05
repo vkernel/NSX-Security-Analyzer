@@ -291,18 +291,18 @@ replication lag, failed archiving and database-container memory. A replica repor
   with your DBA. Keep durability settings enabled. See
   [WAL settings](https://www.postgresql.org/docs/current/runtime-config-wal.html).
 
-### Application improvements identified for follow-up
+### Application storage improvements and follow-up
 
 The current implementation has opportunities to reduce writes without losing evidence:
 
 | Priority | Current behavior | Proposed improvement |
 | --- | --- | --- |
-| 1 | Snapshot records store structured evidence in `data`, serialize it again into `columns`, and store flattened search evidence. | Remove the duplicated evidence JSON from stored display/export columns and generate it on demand. Preserve exports and evidence-search behavior with regression checks. |
-| 2 | VM relationship records repeat rule/group/service information across VMs. | Store shared definitions once per snapshot and retain indexed relationships; retrieve only the requested relationship page. |
+| Implemented | New snapshot indexes omit duplicated export JSON from `columns`. | Exports reconstruct evidence on demand; structured data and searchable evidence remain available. Existing indexes remain readable. |
+| Implemented | VM relationship records reference shared rule definitions, including configured services, per snapshot. | New indexes avoid repeating those structured details per VM; provenance and search text remain on VM records. Existing snapshots remain compatible. |
 | 3 | Retention can delete up to 1,000 snapshots per environment inside one transaction spanning environments. | Use smaller, bounded cleanup transactions, preserving latest-snapshot protection and coordination with collection/refresh. Measure cascade size and WAL per batch. |
 | 4 | Full index refresh rewrites derived records in a long transaction. | Investigate versioned, staged index builds with bounded writes and atomic publication; preserve the old index until the replacement is complete, then clean it up in batches. This needs temporary storage too. |
 
-These are **proposed changes, not features enabled by this documentation update**.
+Rows marked Implemented apply to new indexes in the updated build. The other rows are proposed follow-up work.
 Measure table/TOAST sizes and WAL generation first to prioritize the largest saving.
 Any schema/storage change needs tests for evidence completeness, failure recovery,
 concurrent browsing and upgrade behavior; reducing memory or disk must not silently

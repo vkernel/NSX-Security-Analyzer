@@ -376,3 +376,41 @@ The 40 requests/second ceiling is a conservative application bound, not a guaran
 NSX capacity. Shared clients or expensive endpoints can still trigger throttling.
 Roll out to the collection workers and start a new collection to use this behavior;
 already-running collectors retain their previous rate policy.
+
+## Snapshot write efficiency
+
+New indexes store structured evidence once per record instead of duplicating the full
+JSON in CSV/display columns. CSV export reconstructs that column on demand. Existing
+indexes remain readable without a refresh. Evidence-column filters on new records
+search PostgreSQL's JSON text representation; JSON key order/formatting may differ
+from the former serialized column. General evidence search is unchanged. Tag records
+retain their resolved export evidence in the structured record.
+
+Index writes use up to 500 records and an estimated 4 MiB payload budget per batch.
+The budget is based on serialized evidence with a multiplier for derived fields; it
+is an estimate, not a hard memory bound. A single oversized record is written alone.
+Finding updates and their review events use batches of 100 under the existing
+transaction and environment lock. Ownership, acknowledgements and review dates are
+preserved; changed evidence still reopens a finding.
+
+Logs report index preparation plus insertion time, insertion time separately, finding
+synchronization time and final snapshot commit time. Compare those stages and overall
+collection duration on representative environments; these changes do not increase
+NSX API request rates. Existing snapshots only gain the storage savings if explicitly
+rebuilt; normal retention replaces them over time without a mass refresh.
+
+### Shared VM relationship definitions
+
+Migration `0027_snapshotvmrule` adds shared rule definitions keyed by snapshot and
+rule path. New VM index records retain rule references and per-VM group provenance;
+rule details, including configured services, are stored once per related rule per
+snapshot instead of repeated in every VM record. Lists remain paginated. Full rule
+details, evidence-column filters and CSV exports reconstruct the original evidence
+only when requested. General evidence-search text remains materialized for searching,
+so the index still retains some repeated text.
+
+Apply migrations before starting the updated application and workers. The migration
+creates a new table; it does not rebuild existing snapshots. Old indexes remain
+readable. New collections gain the reduced relationship payload automatically;
+manual targeted refresh can rebuild older indexes if needed. Shared records are
+deleted with their snapshot and replaced atomically during an index refresh.

@@ -61,3 +61,56 @@ class VMRelationshipTests(TestCase):
         row = next(iter_vm_inventory_rows(report))
         self.assertEqual(len(row['related_rules']),1)
         self.assertEqual(row['related_rules'][0]['via_groups'],['/a','/b'])
+
+    def test_shared_rules_round_trip_and_snapshot_isolation(self):
+        from .models import SnapshotVMRule
+        from .vm_relationships import ExpandedVMData
+        shared = {'path': '/rule/shared', 'name': 'Shared rule', 'action': 'ALLOW',
+                  'services': [{'path': '/service/https', 'name': 'HTTPS'}]}
+        SnapshotVMRule.objects.create(snapshot=self.snapshot, path=shared['path'], data=shared)
+        edge = {'path': shared['path'], 'name': shared['name'], 'via_group': '/group/a', 'via_groups': ['/group/a']}
+        self.row.data = {'_shared_vm_rules': True, 'related_rules': [edge], 'vm_details': {'id': 'vm'}}
+        self.row.save()
+        self.assertEqual(read(self.snapshot.pk, 1, 'rule', path=shared['path'])['details'], shared)
+        self.assertEqual(read(self.snapshot.pk, 1, 'via_groups', path=shared['path'])['items'], ['/group/a'])
+        expanded = SnapshotRecord.objects.filter(pk=self.row.pk).annotate(expanded=ExpandedVMData()).values_list('expanded', flat=True).get()
+        self.assertEqual(expanded['related_rules'], [dict(shared, **edge)])
+        self.assertNotIn('_shared_vm_rules', expanded)
+        other = Snapshot.objects.create(environment=self.env, generated_at=timezone.now(), report={})
+        SnapshotVMRule.objects.create(snapshot=other, path=shared['path'], data=dict(shared, action='DROP'))
+        self.assertEqual(read(self.snapshot.pk, 1, 'rule', path=shared['path'])['details']['action'], 'ALLOW')
+
+    def test_index_shares_definitions_across_vms_and_export_is_equivalent(self):
+        from .tests import sample_report
+        from .services import prepare_snapshot
+        from .snapshot_index import build, clear_index
+        from .models import SnapshotVMRule
+        from .vm_relationships import ExpandedVMData
+        from .collector import iter_vm_inventory_rows
+        report = sample_report()
+        report['tags'] = {'virtual_machines': [{'path': '/vm/a'}, {'path': '/vm/b'}],
+            'firewall_rules': [{'path': '/rule/shared', 'name': 'Shared rule'}],
+            'objects': [{'name': 'tag', 'vms': {'/vm/a': 'A', '/vm/b': 'B'},
+                'group_conditions': {'/group/a': 'A'},
+                'firewall_references': [{'tag_use': 'condition', 'rule': 0, 'via_group': '/group/a'}]}]}
+        expected = list(iter_vm_inventory_rows(report))
+        # Use the real renderer/indexer, with synthetic VM rows to isolate relationship storage.
+        from unittest.mock import patch
+        from .services import engine
+        source = sample_report()
+        source['manager'] = 'nsx.example'
+        snapshot = prepare_snapshot(self.env, source)
+        snapshot.save()
+        with patch.object(engine(), 'iter_vm_inventory_rows', return_value=iter(expected)):
+            build(snapshot)
+        self.assertEqual(SnapshotVMRule.objects.filter(snapshot=snapshot).count(), 1)
+        rows = SnapshotRecord.objects.filter(snapshot=snapshot, view='vms').order_by('ordinal')
+        self.assertEqual(rows.count(), 2)
+        self.assertNotIn('services', rows.first().data['related_rules'][0])
+        self.assertEqual(list(rows.annotate(expanded=ExpandedVMData()).values_list('expanded', flat=True)), expected)
+        from .report_views import csv_stream
+        import csv, io, json
+        exported = list(csv.reader(io.StringIO(''.join(csv_stream(rows, ['name','power','tags','groups','evidence'])).lstrip('\ufeff'))))
+        self.assertEqual(json.loads(exported[1][-1]), expected[0])
+        clear_index(snapshot.pk)
+        self.assertFalse(SnapshotVMRule.objects.filter(snapshot=snapshot).exists())

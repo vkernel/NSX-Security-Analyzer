@@ -89,6 +89,17 @@ class IndexedReportTests(TestCase):
         self.assertEqual(self.client.get(self.url,{'panel':'all-groups','q':'Group AND'}).status_code,400)
         self.assertEqual(self.client.get(self.url,{'panel':'all-groups','q':'[','syntax':'regex'}).status_code,400)
 
+    def test_evidence_columns_are_generated_on_demand_and_filterable(self):
+        row = SnapshotRecord.objects.filter(snapshot=self.snapshot, view='inventory').first()
+        self.assertIsNone(row.columns[-1])
+        query = {'panel': 'all-groups', 'filters': json.dumps([[4, {'text': 'Evidence 060'}]])}
+        self.assertEqual(self.client.get(self.url, query).json()['count'], 1)
+        # Legacy stored evidence continues to work alongside the compact format.
+        row.columns[-1] = json.dumps(row.data, sort_keys=True)
+        row.save(update_fields=['columns'])
+        query['filters'] = json.dumps([[4, {'text': row.data['notes'][0]}]])
+        self.assertEqual(self.client.get(self.url, query).json()['count'], 1)
+
     def test_index_is_atomic_and_idempotent(self):
         before=SnapshotRecord.objects.count()
         build(self.snapshot)
@@ -244,7 +255,7 @@ class IndexedReportTests(TestCase):
         import re
         report=sample_report()
         report['objects']=[dict(report['objects'][0],name='Group %d'%i,path='/groups/%d'%i,
-            notes=['large-evidence-'+'x'*10000]) for i in range(120)]
+            notes=['large-evidence-'+'x'*50000]) for i in range(120)]
         legacy=engine().render_html_report(report)
         old=json.loads(re.search(r'id="report-rows">(.*?)</script>',legacy['scripts'],re.S)[1])
         direct=engine().prepare_index_report(report)
@@ -258,7 +269,7 @@ class IndexedReportTests(TestCase):
         batches=[]
         def bounded(rows,**kwargs):
             batches.append(len(rows))
-            self.assertLessEqual(len(rows),50)
+            self.assertLessEqual(len(rows),500)
             return create(rows,**kwargs)
         with patch.object(engine(),'render_html_report',side_effect=AssertionError('Legacy render called')), patch.object(SnapshotRecord.objects,'bulk_create',side_effect=bounded):
             build(snapshot,snapshot._rendered)
@@ -288,14 +299,14 @@ class IndexedReportTests(TestCase):
         snapshot=prepare_snapshot(self.snapshot.environment,sample_report())
         snapshot.save()
         def machines(report):
-            for i in range(151):
-                if i == 100:
+            for i in range(1101):
+                if i == 1000:
                     self.assertGreater(SnapshotRecord.objects.filter(snapshot=snapshot,view='vms').count(),0)
                 yield {'name':'VM %03d'%i,'path':'vm-%d'%i,'power_state':'VM_RUNNING',
                        'tag_count':0,'group_count':0,'related_rules':[],'related_groups':[],'tags':[]}
         with patch.object(engine(),'iter_vm_inventory_rows',side_effect=machines):
             build(snapshot)
-        self.assertEqual(SnapshotRecord.objects.filter(snapshot=snapshot,view='vms').count(),151)
+        self.assertEqual(SnapshotRecord.objects.filter(snapshot=snapshot,view='vms').count(),1101)
 
     def test_targeted_refresh_preserves_other_snapshots(self):
         from django.core.management import call_command

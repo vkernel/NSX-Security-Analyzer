@@ -65,6 +65,20 @@ class FoundationTests(TestCase):
         first.save()
         self.assertFalse(self.client.get(url, {'before': first.pk, 'after': second.pk}).context['form'].is_valid())
 
+    def test_findings_use_bounded_database_batches(self):
+        from django.db import connection
+        from django.test.utils import CaptureQueriesContext
+        data = report()
+        template = data['objects'][0]
+        data['objects'] = [dict(template, path='/groups/%d' % i) for i in range(250)]
+        self.snapshot(data)
+        with CaptureQueriesContext(connection) as queries:
+            synchronize(self.env.pk)
+        self.assertEqual(Finding.objects.filter(environment=self.env).count(), 500)
+        writes = [q for q in queries if q['sql'].startswith('INSERT')]
+        self.assertLess(len(writes), 20)
+        self.assertTrue(all(f.events.count() == 1 for f in Finding.objects.filter(environment=self.env)))
+
     def test_acknowledgement_preserved_then_reopened(self):
         self.snapshot()
         synchronize(self.env.pk)

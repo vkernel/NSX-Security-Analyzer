@@ -12,12 +12,15 @@ from operator import and_, or_
 
 from django.contrib.auth.decorators import login_required
 from django.db import connection, transaction, DatabaseError
-from django.db.models import F, Q, Count, Case, When, Value, JSONField
+from django.db.models import F, Q, Count, Case, When, Value, JSONField, TextField
+from django.db.models.functions import Cast, Coalesce
+from django.db.models.fields.json import KeyTextTransform
 from django.http import JsonResponse, StreamingHttpResponse
 from django.shortcuts import get_object_or_404
 from django.views.decorators.http import require_GET
 from .models import Snapshot, SnapshotPanel, SnapshotPresentation, SnapshotRecord
 from . import tag_evidence
+from .vm_relationships import ExpandedVMData
 
 LOG = logging.getLogger('inventory.web')
 
@@ -67,7 +70,12 @@ def filtered(request, pk):
         text = value.get('text', '')
         if not isinstance(text, str) or len(text) > 1000: raise ValueError('Invalid column filter text.')
         if text:
-            condition = Q(**{'columns__'+str(index)+'__icontains':text})
+            evidence_index = Case(When(view__in=['tags', 'scopes'], then=Value(5)), default=Value(4))
+            rows = rows.annotate(_evidence_index=evidence_index,
+                _column_text=Case(When(_evidence_index=index,
+                    then=Coalesce(KeyTextTransform(str(index), 'columns'), Cast(ExpandedVMData(), TextField()))),
+                    default=KeyTextTransform(str(index), 'columns'), output_field=TextField()))
+            condition = Q(_column_text__icontains=text)
             rows = rows.filter(~condition if value.get('mode') == 'excludes' else condition)
     key = request.GET.get('sort', 'name')
     if key not in SORTS: raise ValueError('Invalid sort column.')
@@ -92,7 +100,9 @@ def csv_stream(rows, headers):
         yield buffer.getvalue()
         buffer.seek(0)
         buffer.truncate(0)
-        for values in rows.values_list('columns', flat=True).iterator(chunk_size=250):
+        for values, data in rows.annotate(_export_data=ExpandedVMData()).values_list('columns', '_export_data').iterator(chunk_size=25):
+            if values and values[-1] is None:
+                values[-1] = json.dumps(data, ensure_ascii=False, sort_keys=True)
             writer.writerow(["'"+str(v) if re.match(r'^\s*[=+@-]', str(v)) else v for v in values])
             yield buffer.getvalue()
             buffer.seek(0)
@@ -117,7 +127,10 @@ def snapshot_data(request, pk):
             elif op in ('detail', 'tag-coverage'):
                 if op == 'detail':
                     row = get_object_or_404(SnapshotRecord.objects.only('data','view','ordinal'), snapshot_id=pk, ordinal=int(request.GET.get('id', '-1')))
-                    result = {'id':row.ordinal,'data':row.data,'view':row.view}
+                    data = row.data
+                    if row.view == 'vms' and data.get('_shared_vm_rules'):
+                        data = SnapshotRecord.objects.filter(pk=row.pk).annotate(_expanded=ExpandedVMData()).values_list('_expanded', flat=True).get()
+                    result = {'id':row.ordinal,'data':data,'view':row.view}
                     if row.view == 'tags':
                         result['tag_evidence'] = tag_evidence.for_tag(pk, row.data)
                 else:

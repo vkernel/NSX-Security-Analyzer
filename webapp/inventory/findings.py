@@ -1,6 +1,7 @@
 """Persistent review state, separate from immutable collection snapshots."""
 import hashlib
 import json
+from time import perf_counter
 from django.db import transaction
 from .diagnostics import LOG
 from .models import Environment, Finding, FindingEvent
@@ -49,6 +50,19 @@ def synchronize(environment_id):
         return
     existing = {(f.kind, f.path): f for f in environment.findings.all()}
     LOG.info("findings environment_id=%s existing_count=%s", environment_id, len(existing))
+    started = perf_counter()
+    creates, updates, events = [], [], []
+    def flush():
+        if creates:
+            Finding.objects.bulk_create(creates, batch_size=100)
+        if updates:
+            Finding.objects.bulk_update(updates, ['status', 'present', 'name', 'evidence',
+                'fingerprint', 'last_seen', 'evaluated_at', 'snapshot', 'revision'], batch_size=100)
+        if events:
+            FindingEvent.objects.bulk_create([FindingEvent(finding=f, message=m) for f,m in events], batch_size=100)
+        creates.clear()
+        updates.clear()
+        events.clear()
     processed = 0
     seen = set()
     for kind, path, name, evidence in candidates(snapshot.report):
@@ -56,33 +70,44 @@ def synchronize(environment_id):
         if processed % 500 == 0:
             LOG.info("findings environment_id=%s processed_candidates=%s", environment_id, processed)
         key = (kind, path)
+        if key in seen:
+            continue
         seen.add(key)
         digest = hashlib.sha256(json.dumps(evidence, sort_keys=True, separators=(',', ':')).encode()).hexdigest()
         finding = existing.get(key)
         if finding is None:
-            finding = Finding.objects.create(environment=environment, kind=kind, path=path, name=name[:255],
+            finding = Finding(environment=environment, kind=kind, path=path, name=name[:255],
                 evidence=evidence, fingerprint=digest, first_seen=snapshot.generated_at,
                 last_seen=snapshot.generated_at, evaluated_at=snapshot.generated_at, snapshot=snapshot)
-            FindingEvent.objects.create(finding=finding, message='Finding first observed in a full snapshot.')
+            creates.append(finding)
+            events.append((finding, 'Finding first observed in a full snapshot.'))
+            if len(creates) + len(updates) >= 100:
+                flush()
             continue
         if digest != finding.fingerprint or not finding.present:
             finding.status = 'open'
-            FindingEvent.objects.create(finding=finding, message='Reopened: evidence changed or the finding was observed again. Owner and review date retained.')
+            events.append((finding, 'Reopened: evidence changed or the finding was observed again. Owner and review date retained.'))
         finding.present = True
         finding.name = name[:255]
         finding.evidence, finding.fingerprint = evidence, digest
         finding.last_seen = finding.evaluated_at = snapshot.generated_at
         finding.snapshot = snapshot
         finding.revision += 1
-        finding.save()
+        updates.append(finding)
+        if len(creates) + len(updates) >= 100:
+            flush()
     for key, finding in existing.items():
         if key not in seen:
             if finding.present:
-                FindingEvent.objects.create(finding=finding, message='Not observed in the latest snapshot. This is not proof of resolution; review collection coverage.')
+                events.append((finding, 'Not observed in the latest snapshot. This is not proof of resolution; review collection coverage.'))
             finding.present = False
             finding.snapshot = snapshot
             finding.evaluated_at = snapshot.generated_at
             finding.revision += 1
-            finding.save()
+            updates.append(finding)
+            if len(creates) + len(updates) >= 100:
+                flush()
 
+    flush()
+    LOG.info("findings environment_id=%s writes_finished elapsed_seconds=%.3f", environment_id, perf_counter()-started)
     LOG.info("findings environment_id=%s synchronized candidates=%s absent=%s", environment_id, processed, len(set(existing)-seen))

@@ -340,3 +340,13 @@ class KeycloakIdentity(models.Model):
 
     class Meta:
         constraints = [models.UniqueConstraint(fields=["issuer", "subject"], name="unique_keycloak_identity")]
+
+
+class SnapshotVMRule(models.Model):
+    """Shared VM relationship definition; provenance stays on each VM edge."""
+    snapshot = models.ForeignKey(Snapshot, on_delete=models.CASCADE)
+    path = models.TextField()
+    data = models.JSONField()
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=['snapshot', 'path'], name='snapshot_vm_rule_unique')]

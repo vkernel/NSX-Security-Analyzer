@@ -326,6 +326,8 @@ def execute_job(job_id):
             with phase(job.pk, "mark_collection_completed"):
                 current.save(update_fields=["status", "finished_at", "progress_completed", "progress_stage"])
             LOG.info("job=%s transaction ready_to_commit", job.pk)
+            commit_started = time.monotonic()
+        LOG.info("job=%s commit_seconds=%.3f", job.pk, time.monotonic()-commit_started)
         LOG.info("job=%s collection committed elapsed_seconds=%.1f", job.pk, time.monotonic() - started)
         record('collection.completed', 'AuditJob', job.pk,
                details={'snapshot_id': str(snapshot.pk), 'elapsed_seconds': round(time.monotonic()-started, 3)}, best_effort=True)
