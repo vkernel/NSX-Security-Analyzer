@@ -100,6 +100,26 @@ class UsabilityTests(TestCase):
         WorkspacePolicy.objects.create(notify_failed=False,notify_completed=False,notify_coverage=False)
         self.assertEqual(self.client.get(reverse('notifications')).json()['items'],[])
 
+    def test_personal_notification_settings_filter_and_reset(self):
+        now = timezone.now()
+        for status, testing, days in [('failed', False, 0), ('succeeded', False, 0), ('failed', True, 0), ('failed', False, 10)]:
+            AuditJob.objects.create(environment=self.env, status=status, testing=testing,
+                                    finished_at=now-timedelta(days=days))
+        url = reverse('website-settings') + '?section=notifications'
+        response = self.client.post(url, {'notification_override': 'on', 'notification_failed': 'on',
+                                         'notification_coverage': 'on', 'notification_days': '7'})
+        self.assertEqual(response.status_code, 302)
+        data = self.client.get(reverse('notifications')).json()
+        self.assertEqual(data['unread'], 1)
+        self.assertEqual(len(data['items']), 1)
+        self.client.force_login(self.other)
+        self.assertEqual(self.client.get(reverse('notifications')).json()['unread'], 4)
+        self.client.force_login(self.user)
+        self.assertEqual(self.client.post(url, {'notification_days': '31'}).status_code, 200)
+        self.assertEqual(UserPreferences.objects.get(user=self.user).notification_days, 7)
+        self.client.post(url, {'action': 'reset'})
+        self.assertEqual(self.client.get(reverse('notifications')).json()['unread'], 4)
+
     def test_coverage_new_issues_and_legacy_baseline(self):
         report=sample_report();report['manager']=self.env.manager
         report['dfw']={'rules':[],'policies':[],'errors':['Unable to read policies']}

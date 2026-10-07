@@ -34,6 +34,22 @@ class KeycloakTests(TestCase):
         with self.assertRaises(PermissionDenied):
             provision(self.claims())
 
+    def test_profile_display_names_preserve_identity(self):
+        user = provision(self.claims(given_name='Alex', family_name='Example'))
+        internal_name = user.username
+        self.assertEqual(user.get_full_name(), 'Alex Example')
+        user = provision(self.claims(name='Alex Display', preferred_username='alex'))
+        self.assertEqual(user.get_full_name(), 'Alex Display')
+        user = provision(self.claims(given_name=None, family_name=[], preferred_username='alex'))
+        self.assertEqual(user.get_full_name(), 'alex')
+        self.assertEqual(user.username, internal_name)
+        self.client.force_login(user)
+        response = self.client.get('/')
+        self.assertContains(response, '<span class="user-name">alex</span>', html=True)
+        self.assertNotContains(response, internal_name)
+        user = provision(self.claims())
+        self.assertEqual(user.get_full_name(), 'Keycloak user')
+
     def test_unassigned_role_cannot_create_user(self):
         with self.assertRaises(PermissionDenied):
             provision(self.claims(realm_access={'roles': ['unrelated']}))

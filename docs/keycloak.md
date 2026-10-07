@@ -339,3 +339,7 @@ mode. Role assignments inherited from groups work in either mode. Use dedicated
 application roles and map their names explicitly. After changing roles, mappers or
 Role source, start a fresh login. Inspect generated claims locally; do not paste a
 complete token into tickets or application logs.
+
+### Display name in the application
+
+The header shows the user’s given and family names, falling back to the ID token’s `name`, then `preferred_username`. Ensure the client’s `profile` scope includes these claims in the ID token. Profile changes are applied on the next sign-in. The internal hashed username remains unchanged to keep external identities separate from local accounts. Local users see their full name when set, otherwise their username.

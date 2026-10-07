@@ -147,6 +147,12 @@ class UserPreferences(models.Model):
     remember_menus = models.BooleanField(default=True)
     landing_page = models.CharField(max_length=16, default='overview', choices=[('overview', 'Overview'), ('environment', 'Preferred environment'), ('activity', 'Firewall activity')])
     preferred_environment = models.ForeignKey(Environment, null=True, blank=True, on_delete=models.SET_NULL)
+    notification_override = models.BooleanField(default=False)
+    notification_failed = models.BooleanField(default=True)
+    notification_completed = models.BooleanField(default=False)
+    notification_coverage = models.BooleanField(default=True)
+    notification_testing = models.BooleanField(default=False)
+    notification_days = models.PositiveIntegerField(default=7, validators=[MinValueValidator(1), MaxValueValidator(30)])
     notifications_seen_at = models.DateTimeField(null=True, editable=False)
     interface_state = models.JSONField(default=dict, editable=False)
 

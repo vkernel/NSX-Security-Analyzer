@@ -131,3 +131,11 @@ Finding reviews supports independent type, qualification, review-state, presence
 owner, review-date, observed-duration and last-observed filters. Sort by name, type,
 observation duration, qualification date, first/last observation or review date in
 either direction. Filters and sorting are performed in PostgreSQL before pagination.
+
+## Personal notification settings
+
+Open the account menu → **Personal settings → Notifications**, or use **Notification settings** in the notification bell. Enable **Use my notification settings** to override the shared policy for your account. Select failed collections, successful collections, new coverage issues, whether to include testing collections, and a history window of 1–30 days. Save changes to update both the list and unread count.
+
+The suggested personal defaults are failures and new coverage issues enabled, routine successes and testing results disabled, and a 7-day window. Until personal settings are enabled, the existing shared policy applies. Reset to defaults restores shared-policy inheritance. Administrators manage that policy under **Freshness & notifications**. Changing notification preferences does not delete history or mark results read; use **Mark all read** separately.
+
+The list shows at most 50 matching results; the unread count covers all matches within the selected window. Recovery notifications, stale-data notifications and daily finding summaries are not yet generated. Upgrade database migrations through `0032` before using personal notification settings.

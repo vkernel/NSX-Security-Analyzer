@@ -134,8 +134,14 @@ def provision(claims, config=None):
         KeycloakIdentity.objects.create(issuer=issuer, subject=subject, user=user)
     apply_role(user, 'admin' if roles_config['admin'] in roles
                else 'operator' if roles_config['operator'] in roles else 'viewer')
-    user.first_name = str(claims.get('given_name', ''))[:150]
-    user.last_name = str(claims.get('family_name', ''))[:150]
+    def profile_text(key):
+        value = claims.get(key)
+        return value.strip() if isinstance(value, str) else ''
+
+    user.first_name = profile_text('given_name')[:150]
+    user.last_name = profile_text('family_name')[:150]
+    if not user.first_name and not user.last_name:
+        user.first_name = (profile_text('name') or profile_text('preferred_username') or 'Keycloak user')[:150]
     user.email = str(claims.get('email', ''))[:254] if claims.get('email_verified') is True else ''
     user.save()
     record('auth.keycloak.provision', 'User', user.pk, actor=user.pk,

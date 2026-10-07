@@ -349,6 +349,7 @@ SETTINGS_SECTIONS = {
     'dates': ('Dates & time', ['timezone','date_format']),
     'tables': ('Tables & navigation', ['page_size','report_page_size','history_days','remember_tables','landing_page','preferred_environment','remember_menus']),
     'updates': ('Live updates', ['refresh_seconds']),
+    'notifications': ('Notifications', ['notification_override', 'notification_failed', 'notification_completed', 'notification_coverage', 'notification_testing', 'notification_days']),
 }
 
 
@@ -363,6 +364,8 @@ def website_settings(request):
     # Support existing clients posting the complete preferences form.
     full_post = request.method == 'POST' and 'section' not in request.GET and 'page_size' in request.POST and 'timezone' in request.POST
     form = PreferencesForm(request.POST or None, instance=instance)
+    if full_post:
+        form.fields = {key: field for key, field in form.fields.items() if not key.startswith('notification_')}
     if not full_post:
         form.fields = {key: form.fields[key] for key in fields}
     if request.method == 'POST':
@@ -499,15 +502,23 @@ def notifications(request):
     from .usability import policy
     from datetime import timedelta
     options = policy()
+    personal = preferences(request)
+    custom = personal.notification_override
+    notify_failed = personal.notification_failed if custom else options.notify_failed
+    notify_completed = personal.notification_completed if custom else options.notify_completed
+    notify_coverage = personal.notification_coverage if custom else options.notify_coverage
+    days = personal.notification_days if custom else 30
     condition = Q(pk__in=[])
-    if options.notify_failed:
+    if notify_failed:
         condition |= Q(status='failed')
-    if options.notify_completed:
+    if notify_completed:
         condition |= Q(status='succeeded')
-    if options.notify_coverage:
+    if notify_coverage:
         condition |= Q(status='succeeded', snapshot__summary__new_coverage_issues__gt=0)
-    jobs = page_queries.jobs(AuditJob.objects.filter(condition, finished_at__gte=timezone.now()-timedelta(days=30)), include_coverage=True).defer('error')
-    seen = preferences(request).notifications_seen_at
+    jobs = page_queries.jobs(AuditJob.objects.filter(condition, finished_at__gte=timezone.now()-timedelta(days=days)), include_coverage=True).defer('error')
+    if custom and not personal.notification_testing:
+        jobs = jobs.filter(testing=False)
+    seen = personal.notifications_seen_at
     unread = jobs.filter(finished_at__gt=seen).count() if seen else jobs.count()
     items = []
     from django.urls import reverse
@@ -517,7 +528,7 @@ def notifications(request):
         label = 'Collection failed' if job.status == 'failed' else 'Audit completed'
         if job.testing:
             label = 'Testing collection failed' if job.status == 'failed' else 'Testing audit completed'
-        if options.notify_coverage and issues:
+        if notify_coverage and issues:
             label += f' · {issues} new coverage issue(s)'
         items.append({'id': str(job.pk), 'label': label, 'environment': job.environment.name, 'at': job.finished_at.isoformat(),
                       'unread': not seen or job.finished_at > seen,

@@ -103,11 +103,11 @@ class PreferencesForm(forms.ModelForm):
     class Meta:
         from .models import UserPreferences
         model = UserPreferences
-        fields = ['density', 'page_size', 'report_page_size', 'history_days', 'refresh_seconds', 'timezone', 'date_format', 'theme', 'text_size', 'high_contrast', 'reduced_motion', 'remember_tables', 'remember_menus', 'landing_page', 'preferred_environment']
-        labels = {'density': 'Display density', 'page_size': 'History rows per page',
+        fields = ['density', 'page_size', 'report_page_size', 'history_days', 'refresh_seconds', 'timezone', 'date_format', 'theme', 'text_size', 'high_contrast', 'reduced_motion', 'remember_tables', 'remember_menus', 'landing_page', 'preferred_environment', 'notification_override', 'notification_failed', 'notification_completed', 'notification_coverage', 'notification_testing', 'notification_days']
+        labels = {'notification_override': 'Use my notification settings', 'notification_failed': 'Failed collections', 'notification_completed': 'Successful collections', 'notification_coverage': 'New coverage issues', 'notification_testing': 'Include testing collections', 'notification_days': 'Show results from the last (days)', 'density': 'Display density', 'page_size': 'History rows per page',
                   'report_page_size': 'Default report table rows', 'history_days': 'Default rule history period',
                   'refresh_seconds': 'Collection status refresh'}
-        help_texts = {'page_size': 'Applies to snapshot history, collection history and rule history.',
+        help_texts = {'notification_override': 'When off, the shared Freshness & notifications policy applies. These preferences affect only your notification bell.', 'notification_days': 'Between 1 and 30 days. This does not delete collection history.', 'notification_testing': 'Include testing results matching your selected notification types.', 'page_size': 'Applies to snapshot history, collection history and rule history.',
                       'report_page_size': 'Starting row count when opening a report. You can still change it in each table.',
                       'refresh_seconds': 'How often open pages check collection progress. This does not change the automatic sync schedule.'}
 
