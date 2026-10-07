@@ -116,8 +116,12 @@ class KeycloakSettingsTests(TestCase):
             def do_GET(self):
                 issuer = 'https://localhost:%s/realms/test' % self.server.server_port
                 base = issuer + '/protocol/openid-connect'
-                body = json.dumps(dict(issuer=issuer, authorization_endpoint=base+'/auth', token_endpoint=base+'/token', jwks_uri=base+'/certs')).encode()
+                body = json.dumps({'keys': []} if self.path.endswith('/certs') else dict(issuer=issuer, authorization_endpoint=base+'/auth', token_endpoint=base+'/token', jwks_uri=base+'/certs')).encode()
                 self.send_response(200); self.end_headers(); self.wfile.write(body)
+            def do_POST(self):
+                self.rfile.read(int(self.headers.get('Content-Length', 0)))
+                self.send_response(200); self.end_headers()
+                self.wfile.write(b'{"access_token":"test-token","token_type":"Bearer"}')
             def log_message(self, *args): pass
         with tempfile.TemporaryDirectory() as directory:
             certfile, keyfile = Path(directory)/'cert.pem', Path(directory)/'key.pem'
@@ -130,9 +134,18 @@ class KeycloakSettingsTests(TestCase):
             try:
                 config = KeycloakConfiguration(issuer='https://localhost:%s/realms/test' % server.server_port)
                 with self.assertRaises(requests.exceptions.SSLError): test_connection(config)
+                from .keycloak import client
+                from .credentials import encrypt_password
+                config.enabled, config.client_id = True, 'test-client'
+                config.secret_ciphertext = encrypt_password('test-only-secret')
+                with self.assertRaises(requests.exceptions.SSLError): client(config).fetch_jwk_set()
                 config.ca_certificate = pem
                 self.assertIn('verified', test_connection(config))
+                self.assertEqual(client(config).fetch_jwk_set(), {'keys': []})
+                self.assertEqual(client(config).fetch_access_token(code='test-code')['access_token'], 'test-token')
                 config.issuer = config.issuer.replace('localhost', '127.0.0.1')
                 with self.assertRaises(requests.exceptions.SSLError): test_connection(config)
+                with self.assertRaises(requests.exceptions.SSLError): client(config).fetch_jwk_set()
+                with self.assertRaises(requests.exceptions.SSLError): client(config).fetch_access_token(code='test-code')
             finally:
                 server.shutdown(); server.server_close(); thread.join()

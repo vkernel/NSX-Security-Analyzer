@@ -4,6 +4,7 @@ import time
 from urllib.parse import parse_qs, urlsplit
 
 from authlib.integrations.django_client import OAuth
+from authlib.integrations.django_client.apps import DjangoOAuth2App
 from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth import get_user_model, login
@@ -20,6 +21,16 @@ from .audit_events import record
 from .models import KeycloakIdentity
 from .roles import apply_role
 from . import keycloak_configuration as configuration
+
+
+class TrustedKeycloakApp(DjangoOAuth2App):
+    def _get_session(self):
+        # Authlib uses this separate session for JWKS and discovery. Its default
+        # implementation does not run compliance_fix like token exchange does.
+        session = super()._get_session()
+        if self.compliance_fix:
+            self.compliance_fix(session)
+        return session
 
 
 class WorkspaceLoginView(LoginView):
@@ -39,7 +50,7 @@ def client(config=None):
         raise ImproperlyConfigured('Keycloak requires an HTTPS realm issuer, client ID and secret.')
     endpoint = issuer + '/protocol/openid-connect'
     return OAuth().register(
-        'keycloak', compliance_fix=lambda session: configuration.configure_session(session, config), client_id=config.client_id,
+        'keycloak', client_cls=TrustedKeycloakApp, compliance_fix=lambda session: configuration.configure_session(session, config), client_id=config.client_id,
         client_secret=configuration.secret(config),
         authorize_url=endpoint + '/auth', access_token_url=endpoint + '/token',
         jwks_uri=endpoint + '/certs', issuer=issuer,
