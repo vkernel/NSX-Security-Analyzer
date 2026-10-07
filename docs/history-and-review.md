@@ -79,3 +79,55 @@ docker compose up -d
 Use your usual Compose file arguments if using the remote database or source
 installation. Source installations build the new image first. Migration 0011 adds
 review tables and leaves existing snapshot JSON unchanged. Do not delete volumes.
+
+## Observation periods and finding qualification
+
+Use **Administration → Finding policy** to configure global defaults or select an
+individual environment and save a complete override. **Use global defaults** removes
+an override. Only administrators can change these settings; changes are audited.
+
+| Condition | Default observation period |
+|---|---:|
+| Zero-hit firewall rule | 90 days |
+| Empty group | 30 days |
+| Unreferenced group or service | 30 days |
+| Empty firewall policy | 30 days |
+| Disabled firewall rule | 30 days |
+
+Qualification also requires at least three successful observations. Each period can
+be disabled with `0` days. The maximum allowed observation gap defaults to twice the
+environment's collection interval; set a nonzero number of hours to override it.
+Ensure retention and collection frequency support the history you need.
+
+**Observing** means evidence is accumulating. **Eligible for review** means the
+configured duration and observation count were reached. **Insufficient evidence**
+means the condition cannot be established. **Condition cleared** requires positive
+opposite evidence (for example members or recorded hits); a missing object alone
+never proves resolution. **Qualification disabled** means the policy excludes that
+type from qualification. Review state (Open/Acknowledged) remains independent.
+
+Periods restart on relevant evidence/configuration changes, reappearance, policy
+changes, or gaps beyond the limit. Unknown and excluded observations break the
+period. Failed collections and demo/imported snapshots do not add observations.
+Fresh timestamped zero counters are required for zero-hit qualification: repeated
+old statistics cannot advance it. A positive unchanged cumulative counter is **not**
+classified as zero hits or inactivity. These sampled observations are not continuous
+traffic monitoring or proof that an object is safe to delete.
+
+Existing findings start with insufficient evidence; their old first-seen date does
+not establish continuity. The next full collection begins the observation period.
+No historical snapshot refresh is needed. Policy changes take effect at the next
+full collection and restart affected periods. Assessments are shown as of their
+last collection; stale results must not be treated as a current safety guarantee.
+
+Inventory and firewall rows and evidence dialogs show the assessment captured with
+that snapshot. CSV evidence includes assessments where available. Old snapshots
+without assessments stay unqualified, and changing policy does not rewrite history.
+Snapshot retention removes its assessment rows but preserves the current finding's
+small observation summary and review history. Page loads query only the displayed
+rows, never all historical report JSON.
+
+Finding reviews supports independent type, qualification, review-state, presence,
+owner, review-date, observed-duration and last-observed filters. Sort by name, type,
+observation duration, qualification date, first/last observation or review date in
+either direction. Filters and sorting are performed in PostgreSQL before pagination.

@@ -308,3 +308,14 @@ Measure table/TOAST sizes and WAL generation first to prioritize the largest sav
 Any schema/storage change needs tests for evidence completeness, failure recovery,
 concurrent browsing and upgrade behavior; reducing memory or disk must not silently
 remove historical evidence.
+
+### Finding observation history
+
+Finding qualification adds a small current summary per finding and a compact
+assessment per finding per full snapshot. These records contain status, dates and
+counts, not a second copy of the full object evidence. Include them in measured
+snapshot growth when sizing PostgreSQL. Snapshot retention also deletes its stored
+assessments; current finding observation periods and review history survive.
+See [finding observation policies](history-and-review.md#observation-periods-and-finding-qualification)
+for thresholds and collection-gap settings. Longer thresholds do not require
+loading more history on page requests.

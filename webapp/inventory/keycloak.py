@@ -19,32 +19,34 @@ from django.views.decorators.cache import never_cache
 from .audit_events import record
 from .models import KeycloakIdentity
 from .roles import apply_role
+from . import keycloak_configuration as configuration
 
 
 class WorkspaceLoginView(LoginView):
     def get_context_data(self, **kwargs):
-        return {**super().get_context_data(**kwargs), 'keycloak_enabled': settings.KEYCLOAK_ENABLED}
+        return {**super().get_context_data(**kwargs), 'keycloak_enabled': configuration.current().enabled}
 
 
-def client():
-    if not settings.KEYCLOAK_ENABLED:
+def client(config=None):
+    config = config or configuration.current()
+    if not config.enabled:
         raise PermissionDenied('Keycloak sign-in is disabled.')
-    issuer = settings.KEYCLOAK_ISSUER
+    issuer = config.issuer
     parsed = urlsplit(issuer)
     if (parsed.scheme != 'https' or not parsed.hostname or parsed.username or parsed.password
-            or parsed.query or parsed.fragment or not settings.KEYCLOAK_CLIENT_ID
-            or not settings.KEYCLOAK_CLIENT_SECRET):
+            or parsed.query or parsed.fragment or not config.client_id
+            or not configuration.secret(config)):
         raise ImproperlyConfigured('Keycloak requires an HTTPS realm issuer, client ID and secret.')
     endpoint = issuer + '/protocol/openid-connect'
     return OAuth().register(
-        'keycloak', client_id=settings.KEYCLOAK_CLIENT_ID,
-        client_secret=settings.KEYCLOAK_CLIENT_SECRET,
+        'keycloak', compliance_fix=lambda session: configuration.configure_session(session, config), client_id=config.client_id,
+        client_secret=configuration.secret(config),
         authorize_url=endpoint + '/auth', access_token_url=endpoint + '/token',
         jwks_uri=endpoint + '/certs', issuer=issuer,
         id_token_signing_alg_values_supported=['RS256'],
         client_kwargs={'scope': 'openid profile email', 'code_challenge_method': 'S256',
                        'token_endpoint_auth_method': 'client_secret_basic',
-                       'default_timeout': 15, 'verify': settings.KEYCLOAK_CA_BUNDLE or True})
+                       'default_timeout': 15, 'verify': config.ca_bundle or True})
 
 
 def safe_next(request, value):
@@ -53,16 +55,18 @@ def safe_next(request, value):
 
 
 @transaction.atomic
-def provision(claims):
+def provision(claims, config=None):
+    config = config or configuration.current()
+    roles_config = {'viewer': config.viewer_role, 'operator': config.operator_role, 'admin': config.admin_role}
     subject = claims.get('sub')
     if not isinstance(subject, str) or not subject or len(subject) > 255:
         raise PermissionDenied('Invalid external identity.')
     roles = claims.get('realm_access', {}).get('roles', [])
     if not isinstance(roles, list) or not all(isinstance(role, str) for role in roles):
         raise PermissionDenied('Invalid role claim.')
-    if not set(roles).intersection(settings.KEYCLOAK_ROLES.values()):
+    if not set(roles).intersection(roles_config.values()):
         raise PermissionDenied('No application role assigned.')
-    issuer = settings.KEYCLOAK_ISSUER
+    issuer = config.issuer
     identity = KeycloakIdentity.objects.select_for_update().filter(issuer=issuer, subject=subject).first()
     if identity:
         user = get_user_model().objects.select_for_update().get(pk=identity.user_id)
@@ -75,8 +79,8 @@ def provision(claims):
         user.set_unusable_password()
         user.save(force_insert=True)
         KeycloakIdentity.objects.create(issuer=issuer, subject=subject, user=user)
-    apply_role(user, 'admin' if settings.KEYCLOAK_ROLES['admin'] in roles
-               else 'operator' if settings.KEYCLOAK_ROLES['operator'] in roles else 'viewer')
+    apply_role(user, 'admin' if roles_config['admin'] in roles
+               else 'operator' if roles_config['operator'] in roles else 'viewer')
     user.first_name = str(claims.get('given_name', ''))[:150]
     user.last_name = str(claims.get('family_name', ''))[:150]
     user.email = str(claims.get('email', ''))[:254] if claims.get('email_verified') is True else ''
@@ -97,10 +101,11 @@ def failed(request, exc):
 @never_cache
 @require_GET
 def start(request):
-    if not settings.KEYCLOAK_ENABLED:
+    config = configuration.current()
+    if not config.enabled:
         raise PermissionDenied
     try:
-        oauth = client()
+        oauth = client(config)
         oauth.framework._clear_session_state(request.session)
         response = oauth.authorize_redirect(request, request.build_absolute_uri(reverse('keycloak_callback')))
         # Keep return destination per authorization attempt, including simultaneous tabs.
@@ -108,6 +113,7 @@ def start(request):
         state = parse_qs(urlsplit(response.url).query)['state'][0]
         state_key = '_state_keycloak_' + state
         request.session[state_key]['exp'] = time.time() + 600
+        request.session[state_key]['data']['configuration'] = configuration.fingerprint(config)
         request.session[state_key]['data']['next'] = safe_next(request, request.GET.get('next'))
         request.session.modified = True
         return response
@@ -118,10 +124,11 @@ def start(request):
 @never_cache
 @require_GET
 def callback(request):
-    if not settings.KEYCLOAK_ENABLED:
+    config = configuration.current()
+    if not config.enabled:
         raise PermissionDenied
     try:
-        oauth = client()
+        oauth = client(config)
         state = request.GET.get('state', '')
         saved = request.session.get('_state_keycloak_' + state, {})
         if saved.get('exp', 0) < time.time():
@@ -130,13 +137,16 @@ def callback(request):
         state_data = oauth.framework.get_state_data(request.session, state)
         if not state_data or not state_data.get('nonce'):
             raise PermissionDenied('Missing login state.')
+        if state_data.get('configuration') != configuration.fingerprint(config):
+            oauth.framework.clear_state_data(request.session, state)
+            raise PermissionDenied('Keycloak settings changed; start a new login.')
         destination = state_data.get('next')
         token = oauth.authorize_access_token(request, claims_options={
-            'iss': {'essential': True, 'value': settings.KEYCLOAK_ISSUER}}, leeway=30)
+            'iss': {'essential': True, 'value': config.issuer}}, leeway=30)
         claims = token.get('userinfo')
         if not claims or claims.get('nonce') != state_data['nonce']:
             raise PermissionDenied('Missing validated identity or nonce.')
-        user = provision(claims)
+        user = provision(claims, config)
         login(request, user, backend='django.contrib.auth.backends.ModelBackend')
         request.session.set_expiry(3600)
         return redirect(safe_next(request, destination))

@@ -20,6 +20,7 @@ from django.shortcuts import get_object_or_404
 from django.views.decorators.http import require_GET
 from .models import Snapshot, SnapshotPanel, SnapshotPresentation, SnapshotRecord
 from . import tag_evidence
+from .models import SnapshotFindingAssessment
 from .vm_relationships import ExpandedVMData
 
 LOG = logging.getLogger('inventory.web')
@@ -100,13 +101,22 @@ def csv_stream(rows, headers):
         yield buffer.getvalue()
         buffer.seek(0)
         buffer.truncate(0)
-        for values, data in rows.annotate(_export_data=ExpandedVMData()).values_list('columns', '_export_data').iterator(chunk_size=25):
-            if values and values[-1] is None:
-                values[-1] = json.dumps(data, ensure_ascii=False, sort_keys=True)
-            writer.writerow(["'"+str(v) if re.match(r'^\s*[=+@-]', str(v)) else v for v in values])
-            yield buffer.getvalue()
-            buffer.seek(0)
-            buffer.truncate(0)
+        from itertools import islice
+        records = rows.annotate(_export_data=ExpandedVMData()).values_list('snapshot_id', 'columns', '_export_data').iterator(chunk_size=25)
+        while batch := list(islice(records, 25)):
+            assessments = {}
+            for path, assessment in SnapshotFindingAssessment.objects.filter(snapshot_id=batch[0][0], path__in=[data.get('path', '') for _, _, data in batch]).values_list('path', 'assessment'):
+                assessments.setdefault(path, []).append(assessment)
+            for _, values, data in batch:
+                if data.get('path') in assessments:
+                    data['finding_assessments'] = assessments[data['path']]
+                if values:
+                    values[-1] = json.dumps(data, ensure_ascii=False, sort_keys=True)
+                writer.writerow(["'"+str(v) if re.match(r'^\s*[=+@-]', str(v)) else v for v in values])
+                yield buffer.getvalue()
+                buffer.seek(0)
+                buffer.truncate(0)
+
 
 
 @login_required
@@ -130,6 +140,7 @@ def snapshot_data(request, pk):
                     data = row.data
                     if row.view == 'vms' and data.get('_shared_vm_rules'):
                         data = SnapshotRecord.objects.filter(pk=row.pk).annotate(_expanded=ExpandedVMData()).values_list('_expanded', flat=True).get()
+                    data['finding_assessments'] = list(SnapshotFindingAssessment.objects.filter(snapshot_id=pk, path=data.get('path', '')).values_list('assessment', flat=True))
                     result = {'id':row.ordinal,'data':data,'view':row.view}
                     if row.view == 'tags':
                         result['tag_evidence'] = tag_evidence.for_tag(pk, row.data)
@@ -183,6 +194,11 @@ def snapshot_data(request, pk):
                 result = {'count':count,'count_token':count_token,'page':page,'rows':[
                     {'id':r.ordinal,'view':r.view,'data':r.compact}
                     for r in rows.only('ordinal','view','compact')[page*size:(page+1)*size]]}
+                assessments = {}
+                for path, assessment in SnapshotFindingAssessment.objects.filter(snapshot_id=pk, path__in=[r['data'].get('path', '') for r in result['rows']]).values_list('path', 'assessment'):
+                    assessments.setdefault(path, []).append(assessment)
+                for row in result['rows']:
+                    row['data']['finding_assessments'] = assessments.get(row['data'].get('path'), [])
                 LOG.info('Snapshot table snapshot=%s panel=%s count_reused=%s count_seconds=%.3f rows_seconds=%.3f returned=%d',
                          pk, request.GET.get('panel','overview'), reused, count_seconds,
                          perf_counter()-rows_started, len(result['rows']))

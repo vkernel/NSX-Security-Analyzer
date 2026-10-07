@@ -1,0 +1,13 @@
+{% extends 'base.html' %}{% block content %}
+<a class="breadcrumb" href="{% url 'administration' %}">← Administration</a>
+<div class="page-heading"><div><h1>Keycloak integration</h1><p class="lead">Configure single sign-on and verified certificate trust. Local sign-in stays available.</p></div></div>
+{% include 'inventory/admin_navigation.html' %}
+<p>{% if legacy %}No GUI settings saved yet. Existing deployment settings are used as a fallback.{% else %}Saved GUI settings override deployment Keycloak settings on every web pod. No restart is needed.{% endif %}</p>
+<p>Configure this exact redirect URI in your Keycloak client: <code>{{ callback_url }}</code></p>
+<form method="post" class="form-card">{% csrf_token %}{{ form.non_field_errors }}<div class="form-grid">{% for field in form %}{% if field.name != 'trust_retrieved' %}{% include 'inventory/settings_field.html' %}{% endif %}{% endfor %}</div>
+<p>{% if has_secret %}A client secret is configured; leave the field blank to retain it.{% else %}No saved client secret.{% endif %} {% if has_certificate %}Custom certificate trust is configured.{% else %}Using the default certificate trust store.{% endif %}</p>
+<button class="button" name="action" value="retrieve" formnovalidate>Retrieve certificate</button>
+{% if preview %}<div class="notice"><h2>Review retrieved certificate</h2><p>Retrieved from {{ preview.issuer }}. Verify the SHA-256 fingerprint with your identity administrator before trusting it. This preview expires after 10 minutes.</p>{% for cert in preview.certificates %}<p>Subject: {{ cert.subject }}<br>Issuer: {{ cert.issuer }}<br>Expires: {{ cert.expires }}<br>SHA-256: <code>{{ cert.fingerprint }}</code></p>{% endfor %}{% include 'inventory/settings_field.html' with field=form.trust_retrieved %}</div>{% endif %}
+<div class="form-actions"><button class="button" name="action" value="test">Test connection</button><button class="button primary" name="action" value="save">Save integration</button></div></form>
+<p class="muted">Connection testing checks certificate trust and realm metadata without sending the client secret. It does not prove that the client secret or role mappings are correct. Saved secrets are encrypted with the application's secret key. Certificate renewal may require retrieving and approving the replacement. Settings changes invalidate pending Keycloak login attempts.</p>
+{% endblock %}

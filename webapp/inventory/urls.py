@@ -1,7 +1,8 @@
 from django.urls import path
-from . import system_health, views, history_views, diagnostic_views, report_views
+from . import keycloak_settings, system_health, views, history_views, diagnostic_views, report_views
 
 urlpatterns = [
+    path("administration/keycloak/", keycloak_settings.settings_page, name="keycloak-settings"),
     path("administration/health/", system_health.health_page, name="system-health"),
     path("collections/<uuid:pk>/stop/", views.stop_collection, name="stop-collection"),
     path("snapshots/<uuid:pk>/data/", report_views.snapshot_data, name="snapshot-data"),
@@ -16,6 +17,7 @@ urlpatterns = [
     path('environments/', views.environment_directory, name='environment-directory'),
     path('collections/', views.all_collections, name='all-collections'),
     path('start/', views.landing, name='landing'),
+    path('administration/finding-policy/', history_views.finding_policy, name='finding-policy'),
     path('administration/collection-policy/', views.workspace_policy, name='workspace-policy'),
     path('api/preferences/interface/', views.interface_preferences, name='interface-preferences'),
     path('api/notifications/', views.notifications, name='notifications'),

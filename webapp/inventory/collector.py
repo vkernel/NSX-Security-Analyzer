@@ -2131,6 +2131,8 @@ table{min-width:760px}th{line-height:1.5}td{padding:15px 14px}.path{line-height:
       scratch.innerHTML = renderRow(Number(button.dataset.evidenceRow), true);
       detailBody.innerHTML = scratch.querySelector('.detail-content').innerHTML;
     } else detailBody.innerHTML = button.parentElement.querySelector('.detail-content').innerHTML;
+    const assessed = rowPool[Number(button.dataset.evidenceRow)]?.data;
+    if (assessed) detailBody.insertAdjacentHTML('afterbegin', observationBadges(assessed));
     enhanceDetails();
     window.workspaceEvidence?.(detailBody, detailTitle, rowPool[Number(button.dataset.evidenceRow ?? button.dataset.tagRow)]?.data);
     if (!dialog.open) dialog.showModal();
@@ -2242,11 +2244,14 @@ table{min-width:760px}th{line-height:1.5}td{padding:15px 14px}.path{line-height:
       pre.replaceWith(block);
     });
   }
+  function observationBadges(r) {
+    return (r.finding_assessments || []).map(a => '<p><span class="badge gray">'+esc(a.kind.replaceAll('_',' '))+': '+esc(a.label)+'</span><br><small>'+esc(a.observed_days)+' / '+esc(a.required_days)+' days · '+esc(a.observations)+' observations</small></p>').join('');
+  }
   function renderRow(id, includeEvidence=false) {
     const rowPopup = (title, content, label='View details') => includeEvidence ? popup(title,content,label)
       : '<button type="button" class="detail-button" aria-haspopup="dialog" data-evidence-row="'+id+'" data-title="'+esc(title)+'">'+esc(label)+'</button>';
     const {view,data:r} = rowPool[id];
-    const object = '<strong>'+esc(r.name)+'</strong>'+((r.audit_exclusions || []).length ? '<br><span class="badge gray">Excluded from findings</span>' : '')+ruleIdentity(r)+(r.policy_rule_id === undefined ? '<code class="path">'+esc(r.path)+'</code>' : '');
+    const object = observationBadges(r) + '<strong>'+esc(r.name)+'</strong>'+((r.audit_exclusions || []).length ? '<br><span class="badge gray">Excluded from findings</span>' : '')+ruleIdentity(r)+(r.policy_rule_id === undefined ? '<code class="path">'+esc(r.path)+'</code>' : '');
     let cells;
     if (view === 'vms') {
       const links = (items,anchor) => '<ul>'+(items || []).map(item=>'<li><a href="#'+anchor+'">'+esc(item.name || item.tag || item.path)+'</a>'+code(item.path || item.scope || '')+'</li>').join('')+'</ul>';

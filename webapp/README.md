@@ -493,4 +493,6 @@ The main Docker service definitions are explicit. For online conversion, use
 Docker-only startup/build/profile features and contains no deployment credentials.
 Follow the [Kubernetes conversion guide](../deploy/kubernetes/README.md) before deployment.
 
-For optional single sign-on, follow [Keycloak authentication setup](../docs/keycloak.md).
+Configure optional single sign-on in **Administration → Keycloak integration**.
+The GUI stores credentials and approved certificate trust; no Keycloak YAML settings
+are needed for a new setup. See [Keycloak authentication setup](../docs/keycloak.md).

@@ -170,6 +170,19 @@ class WorkspacePolicy(models.Model):
     notify_coverage = models.BooleanField(default=True)
 
 
+class FindingPolicy(models.Model):
+    # One global row plus optional complete overrides for individual environments.
+    scope = models.CharField(max_length=40, unique=True, default='global')
+    environment = models.OneToOneField(Environment, null=True, blank=True, on_delete=models.CASCADE)
+    zero_hits_days = models.PositiveIntegerField(default=90, validators=[MaxValueValidator(3650)])
+    empty_group_days = models.PositiveIntegerField(default=30, validators=[MaxValueValidator(3650)])
+    unused_days = models.PositiveIntegerField(default=30, validators=[MaxValueValidator(3650)])
+    empty_policy_days = models.PositiveIntegerField(default=30, validators=[MaxValueValidator(3650)])
+    disabled_days = models.PositiveIntegerField(default=30, validators=[MaxValueValidator(3650)])
+    minimum_observations = models.PositiveIntegerField(default=3, validators=[MinValueValidator(2), MaxValueValidator(10000)])
+    maximum_gap_hours = models.PositiveIntegerField(default=0, validators=[MaxValueValidator(8760)])
+
+
 class Finding(models.Model):
     environment = models.ForeignKey(Environment, on_delete=models.CASCADE, related_name='findings')
     kind = models.CharField(max_length=40)
@@ -186,11 +199,22 @@ class Finding(models.Model):
     evaluated_at = models.DateTimeField()
     snapshot = models.ForeignKey(Snapshot, null=True, on_delete=models.SET_NULL)
     revision = models.PositiveIntegerField(default=0)
+    qualification = models.CharField(max_length=24, default='insufficient', choices=[
+        ('observing', 'Observing'), ('eligible', 'Eligible for review'),
+        ('insufficient', 'Insufficient evidence'), ('cleared', 'Condition cleared'), ('disabled', 'Qualification disabled')])
+    observation_started = models.DateTimeField(null=True, blank=True)
+    observation_count = models.PositiveIntegerField(default=0)
+    observation_days = models.PositiveIntegerField(default=0)
+    required_days = models.PositiveIntegerField(default=0)
+    qualified_at = models.DateTimeField(null=True, blank=True)
+    qualification_reason = models.CharField(max_length=255, blank=True)
+    policy_fingerprint = models.CharField(max_length=64, blank=True)
+
 
     class Meta:
         constraints = [models.UniqueConstraint(fields=['environment', 'kind', 'path'], name='unique_environment_finding')]
         ordering = ['status', 'name', 'pk']
-        indexes = [models.Index(fields=['environment', 'present', 'status', 'name', 'id'], name='finding_environment_list')]
+        indexes = [models.Index(fields=['environment', 'present', 'status', 'name', 'id'], name='finding_environment_list'), models.Index(fields=['environment', 'qualification', 'kind', 'observation_days'], name='finding_qualification')]
 
 
 class FindingEvent(models.Model):
@@ -350,3 +374,27 @@ class SnapshotVMRule(models.Model):
 
     class Meta:
         constraints = [models.UniqueConstraint(fields=['snapshot', 'path'], name='snapshot_vm_rule_unique')]
+
+
+class SnapshotFindingAssessment(models.Model):
+    snapshot = models.ForeignKey(Snapshot, on_delete=models.CASCADE, related_name='finding_assessments')
+    path = models.TextField()
+    kind = models.CharField(max_length=40)
+    assessment = models.JSONField(default=dict)
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=['snapshot', 'path', 'kind'], name='snapshot_finding_assessment')]
+
+
+class KeycloakConfiguration(models.Model):
+    id = models.PositiveSmallIntegerField(primary_key=True, default=1, editable=False)
+    enabled = models.BooleanField(default=False)
+    issuer = models.URLField(max_length=512, blank=True)
+    client_id = models.CharField(max_length=255, blank=True)
+    secret_ciphertext = models.TextField(blank=True)
+    ca_certificate = models.TextField(blank=True)
+    # Preserve pre-existing environment-based trust until an administrator replaces it.
+    ca_bundle = models.CharField(max_length=1024, blank=True)
+    viewer_role = models.CharField(max_length=255, default='nsx-analyzer-viewer')
+    operator_role = models.CharField(max_length=255, default='nsx-analyzer-operator')
+    admin_role = models.CharField(max_length=255, default='nsx-analyzer-admin')

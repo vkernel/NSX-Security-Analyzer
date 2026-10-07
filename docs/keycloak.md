@@ -1,6 +1,6 @@
 # Keycloak sign-in
 
-Keycloak is optional. Local accounts continue to work at `/login/`. Use a build that includes this integration and run its database migrations (including `0025_keycloakidentity`) before enabling it. Existing published images do not gain this feature by changing configuration alone.
+Keycloak is optional. Local accounts continue to work at `/login/`. Use a build that includes this integration and run its database migrations (including `0030_keycloakconfiguration`) before enabling it. Existing published images do not gain this feature by changing configuration alone.
 
 ## Local user roles
 
@@ -26,38 +26,72 @@ For Keycloak accounts, the role selector is read-only because roles are assigned
 5. In the client's dedicated scope, add a **User Realm Role** protocol mapper. Set token claim name to `realm_access.roles`, enable multivalued and **Add to ID token**. Ensure the client's role scope permits the three roles above. Roles in the access token alone are insufficient.
 6. Copy the client secret and realm issuer, for example `https://identity.example.com/realms/security`.
 
-## Docker Compose
+## Configure the application in the web GUI
 
-Set these values in the `.env` used by `deploy/compose.yaml` or `webapp/compose.yaml`:
+The same workflow applies to Docker Compose and Kubernetes. No Keycloak variables,
+client-secret Kubernetes Secret, or certificate volume mount is required for a new
+GUI-managed integration.
 
-```dotenv
-NSX_KEYCLOAK_ENABLED=1
-NSX_KEYCLOAK_ISSUER=https://identity.example.com/realms/security
-NSX_KEYCLOAK_CLIENT_ID=nsx-security-analyzer
-NSX_KEYCLOAK_CLIENT_SECRET=replace-with-your-client-secret
-```
+1. Sign in with a local administrator and open **Administration → Keycloak integration**.
+2. Enter the full **Realm issuer URL**, **Client ID**, and **Client secret** from Keycloak.
+3. Confirm the Viewer, Operator and Administrator realm role names. Defaults match
+   the table above; use distinct names and include these roles in the ID token.
+4. Copy the exact callback URL shown on the page into Keycloak's valid redirect URIs.
+   Open the application through its public HTTPS URL so the displayed callback is correct.
+5. For a private or self-signed certificate, click **Retrieve certificate**. The
+   submitted client-secret draft stays in the masked field and is not saved to the session.
+6. Verify the displayed SHA-256 fingerprint with your identity administrator, then
+   select **I verified the fingerprint and trust this certificate**. Retrieval alone
+   does not trust it. The preview expires after 10 minutes and is bound to the issuer.
+7. Click **Test connection**. This verifies TLS and realm discovery without sending
+   the client secret or saving changes. It does not validate client credentials or roles.
+8. Select **Enable Keycloak sign-in** and **Save integration**. Enabling also performs
+   the connection check. Try **Sign in with Keycloak** in a separate browser session
+   while retaining your local administrator session for recovery.
 
-Recreate the web service with `docker compose up -d web`. The login page now offers **Sign in with Keycloak** using the existing application styling. These settings only need to reach the web service, not the collection worker.
+Settings are stored in PostgreSQL and read on each authentication request. They apply
+across web replicas without a pod restart. The client secret is encrypted using a key
+derived from `DJANGO_SECRET_KEY`; keep this key stable, shared across replicas and
+backed up separately with your recovery material. Saved secrets are never redisplayed.
+Leave the secret field blank to retain the existing value. Changing the issuer requires
+new credentials when enabling and removes trust associated with the previous issuer.
+Changes are audited without logging the secret or tokens. Pending login attempts
+must restart after configuration changes.
 
-## Kubernetes
+To disable SSO, clear **Enable Keycloak sign-in** and save. This does not require a
+successful connection test. Local login remains available. It does not revoke already
+active user sessions; disable an application user when immediate denial is needed.
 
-Create a Secret named `nsx-keycloak` in the application namespace with a key named `client-secret`. The web Deployment explicitly maps this key to `NSX_KEYCLOAK_CLIENT_SECRET`. Do not commit the secret value to Git; use your cluster's secret management process.
+## HTTPS, certificate trust and connectivity
 
-Add to `nsx-config` ConfigMap `data`:
+For HTTPS behind a trusted ingress or Gateway, configure `DJANGO_HTTPS=1`,
+`DJANGO_TRUST_PROXY=1`, the public hostname in `DJANGO_ALLOWED_HOSTS` and public HTTPS
+origin in `DJANGO_CSRF_TRUSTED_ORIGINS`. These deployment settings still belong in
+the deployment configuration. Only enable proxy trust when the Gateway controls
+and overwrites `X-Forwarded-Proto`.
 
-```yaml
-NSX_KEYCLOAK_ENABLED: "1"
-NSX_KEYCLOAK_ISSUER: "https://identity.example.com/realms/security"
-NSX_KEYCLOAK_CLIENT_ID: "nsx-security-analyzer"
-```
+The browser and web pods must reach Keycloak. Certificate verification, hostname checks
+and certificate validity checks remain enabled. The approved certificate is stored
+in the database and used in memory; no certificate files need to be mounted. Retrieval
+approves the presented server certificate, not an automatically discovered CA chain.
+Certificate renewal can therefore require retrieving and approving its replacement.
+Use **Use the default certificate trust store** to remove custom trust when Keycloak
+uses a certificate trusted by the container's default CA store.
 
-Apply or sync the configuration, then restart the web Deployment. A ConfigMap change alone does not update environment variables in existing pods. All web replicas must have the same configuration, database and Django secret key.
+## Existing YAML/environment configurations
 
-For HTTPS behind a trusted ingress, configure `DJANGO_HTTPS=1`, `DJANGO_TRUST_PROXY=1`, the public hostname in `DJANGO_ALLOWED_HOSTS` and public HTTPS origin in `DJANGO_CSRF_TRUSTED_ORIGINS`. Only enable proxy trust when the ingress controls the forwarded protocol header.
+Until the first GUI save, existing `NSX_KEYCLOAK_ENABLED`, `NSX_KEYCLOAK_ISSUER`,
+`NSX_KEYCLOAK_CLIENT_ID`, `NSX_KEYCLOAK_CLIENT_SECRET` and `NSX_KEYCLOAK_CA_BUNDLE`
+settings remain a fallback. The page shows when this fallback is in use. Saving
+adopts the existing secret if the secret field is blank and the issuer is unchanged.
+Afterward, saved GUI settings take precedence, including an explicitly disabled
+integration. Changing environment variables no longer overrides them.
 
-## Trust and connectivity
-
-The browser must reach Keycloak, and the web container must resolve and reach Keycloak over HTTPS for token and signing-key requests. Requests time out after 15 seconds. Certificate verification is always enabled. For a private CA, mount its PEM bundle read-only into the web container and set `NSX_KEYCLOAK_CA_BUNDLE` to that path. No automatic certificate trust is performed.
+If the old setup used a CA file path, retain that mount until you retrieve and approve
+the certificate in the GUI or switch to the default trust store. The first save preserves
+the old path to avoid breaking trust unexpectedly. After testing GUI-managed login,
+you can remove the legacy Keycloak environment entries and optional `nsx-keycloak`
+Secret mapping from your deployment. Do not remove `DJANGO_SECRET_KEY`.
 
 ## Account lifecycle and troubleshooting
 

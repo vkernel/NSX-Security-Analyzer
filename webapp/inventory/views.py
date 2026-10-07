@@ -51,11 +51,14 @@ def dashboard(request):
     from datetime import timedelta
     failed_count = AuditJob.objects.filter(status='failed', finished_at__gte=timezone.now()-timedelta(hours=24)).count()
     jobs = page_queries.jobs()[:8]
+    from .models import Finding
+    from django.db.models import Count
+    finding_counts = list(Finding.objects.filter(present=True).values('qualification').annotate(total=Count('pk')))
     return render(request, "inventory/dashboard.html", {
         "stale_count":sum(card['freshness']['stale'] for card in cards), "failed_count":failed_count,
         "running_count":AuditJob.objects.filter(status='running').count(), "queued_count":AuditJob.objects.filter(status='queued').count(),
         "new_issue_count":sum((card['latest'].display_summary.get('new_coverage_issues') or 0) for card in cards if card['latest']),
-        "cards": cards, "jobs": jobs, "environment_count": len(cards),
+        "finding_counts": finding_counts, "cards": cards, "jobs": jobs, "environment_count": len(cards),
         "snapshot_count": Snapshot.objects.count(),
         "active_count": AuditJob.objects.filter(status__in=["queued", "running"]).count(),
     })

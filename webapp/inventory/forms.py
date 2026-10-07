@@ -172,3 +172,42 @@ class FindingReviewForm(forms.Form):
         from django.contrib.auth import get_user_model
         super().__init__(*args, **kwargs)
         self.fields['owner'].queryset = get_user_model().objects.filter(is_active=True).order_by('username')
+
+
+class FindingPolicyForm(forms.ModelForm):
+    class Meta:
+        from .models import FindingPolicy
+        model = FindingPolicy
+        fields = ['zero_hits_days', 'empty_group_days', 'unused_days', 'empty_policy_days',
+                  'disabled_days', 'minimum_observations', 'maximum_gap_hours']
+        labels = {'zero_hits_days': 'Zero-hit rule observation days', 'empty_group_days': 'Empty group observation days',
+                  'unused_days': 'Unreferenced object observation days', 'empty_policy_days': 'Empty policy observation days',
+                  'disabled_days': 'Disabled rule observation days'}
+        help_texts = {field: 'Set to 0 to disable qualification for this type.' for field in fields[:5]}
+        help_texts['maximum_gap_hours'] = '0 uses twice the environment collection interval. A longer gap restarts observation.'
+
+
+class FindingFilterForm(forms.Form):
+    from .findings import LABELS
+    from .models import Finding
+    q = forms.CharField(required=False, label='Search name or path', max_length=255)
+    kind = forms.ChoiceField(required=False, choices=[('', 'All finding types')] + list(LABELS.items()))
+    qualification = forms.ChoiceField(required=False, choices=[('', 'All qualifications')] + list(Finding._meta.get_field('qualification').choices))
+    review = forms.ChoiceField(required=False, choices=[('', 'All review states'), ('open', 'Open'), ('acknowledged', 'Acknowledged')])
+    presence = forms.ChoiceField(required=False, choices=[('', 'All observations'), ('present', 'Currently observed'), ('absent', 'Not currently observed')])
+    owner = forms.ChoiceField(required=False)
+    due = forms.ChoiceField(required=False, choices=[('', 'Any review date'), ('overdue', 'Overdue'), ('soon', 'Due within 7 days'), ('unset', 'Not set')])
+    review_from = forms.DateField(required=False, widget=forms.DateInput(attrs={'type': 'date'}))
+    review_to = forms.DateField(required=False, widget=forms.DateInput(attrs={'type': 'date'}))
+    min_days = forms.IntegerField(required=False, min_value=0, label='Minimum observed days')
+    max_days = forms.IntegerField(required=False, min_value=0, label='Maximum observed days')
+    seen_from = forms.DateField(required=False, widget=forms.DateInput(attrs={'type': 'date'}), label='Last observed from')
+    seen_to = forms.DateField(required=False, widget=forms.DateInput(attrs={'type': 'date'}), label='Last observed to')
+    sort = forms.ChoiceField(required=False, choices=[('name', 'Name'), ('kind', 'Finding type'), ('observation_days', 'Observation duration'),
+        ('qualified_at', 'Qualification date'), ('first_seen', 'First observed'), ('last_seen', 'Last observed'), ('review_date', 'Review date')])
+    direction = forms.ChoiceField(required=False, choices=[('asc', 'Ascending'), ('desc', 'Descending')])
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        from django.contrib.auth import get_user_model
+        self.fields['owner'].choices = [('', 'Anyone'), ('me', 'Assigned to me'), ('none', 'Unassigned')] + [(str(u.pk), u.get_username()) for u in get_user_model().objects.order_by('username')]

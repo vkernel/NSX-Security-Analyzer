@@ -66,16 +66,44 @@ def findings(request, pk):
         rows = rows.filter(present=False)
     elif state == 'due':
         rows = rows.filter(present=True, review_date__lte=timezone.localdate())
+    from .forms import FindingFilterForm
+    from django.db.models import F
+    from datetime import timedelta
+    # Legacy links keep working; new filters have independent presence and review state.
+    if any(k in request.GET for k in ('presence', 'review', 'qualification', 'kind')):
+        rows = environment.findings.select_related('owner').defer('evidence')
+    form = FindingFilterForm(request.GET or {'presence': 'present', 'sort': 'name', 'direction': 'asc'})
     query = request.GET.get('q', '').strip()
-    if query:
-        rows = rows.filter(Q(name__icontains=query) | Q(path__icontains=query))
+    if form.is_valid():
+        values = form.cleaned_data
+        if values['q']:
+            rows = rows.filter(Q(name__icontains=values['q']) | Q(path__icontains=values['q']))
+        for field in ('kind', 'qualification'):
+            if values[field]: rows = rows.filter(**{field: values[field]})
+        if values['review']: rows = rows.filter(status=values['review'])
+        if values['presence']: rows = rows.filter(present=values['presence'] == 'present')
+        owner = values['owner']
+        if owner == 'none': rows = rows.filter(owner__isnull=True)
+        elif owner: rows = rows.filter(owner_id=request.user.pk if owner == 'me' else int(owner))
+        today = timezone.localdate()
+        if values['due'] == 'overdue': rows = rows.filter(review_date__lt=today)
+        elif values['due'] == 'soon': rows = rows.filter(review_date__range=(today, today + timedelta(days=7)))
+        elif values['due'] == 'unset': rows = rows.filter(review_date__isnull=True)
+        for key, lookup in [('min_days', 'observation_days__gte'), ('max_days', 'observation_days__lte'),
+                            ('seen_from', 'last_seen__date__gte'), ('seen_to', 'last_seen__date__lte'),
+                            ('review_from', 'review_date__gte'), ('review_to', 'review_date__lte')]:
+            if values[key] is not None: rows = rows.filter(**{lookup: values[key]})
+        order = F(values['sort'] or 'name')
+        rows = rows.order_by(order.desc(nulls_last=True) if values['direction'] == 'desc' else order.asc(nulls_last=True), 'pk')
+    else:
+        rows = rows.none()
     page = Paginator(rows, preferences(request).page_size).get_page(request.GET.get('page'))
     for row in page:
         row.label = LABELS.get(row.kind, row.kind)
     params = request.GET.copy()
     params.pop('page', None)
     return render(request, 'inventory/findings.html', {'environment': environment, 'page': page,
-        'state': state, 'query': query, 'query_string': params.urlencode()})
+        'state': state, 'query': query, 'filter_form': form, 'query_string': params.urlencode()})
 
 
 @login_required
@@ -114,3 +142,31 @@ def finding_detail(request, pk, finding_id):
     return render(request, 'inventory/finding_detail.html', {'environment': environment, 'finding': finding,
         'label': LABELS.get(finding.kind, finding.kind), 'form': form, 'page': page,
         'evidence': json.dumps(finding.evidence, indent=2, ensure_ascii=False) if request.GET.get('evidence') == '1' else None})
+
+
+@login_required
+@require_http_methods(['GET', 'POST'])
+def finding_policy(request):
+    from .forms import FindingPolicyForm
+    from .models import FindingPolicy
+    from .observation import policy_for
+    if not request.user.is_superuser:
+        return HttpResponseForbidden('Administrator access is required.')
+    selected = request.GET.get('environment', '')
+    environment = get_object_or_404(Environment, pk=selected) if selected else None
+    scope = str(environment.pk) if environment else 'global'
+    saved = FindingPolicy.objects.filter(scope=scope).first()
+    inherited = policy_for(environment) if environment else FindingPolicy.objects.filter(scope='global').first() or FindingPolicy()
+    form = FindingPolicyForm(request.POST or None, instance=saved or FindingPolicy(),
+        initial={name: getattr(inherited, name) for name in FindingPolicyForm.Meta.fields})
+    if request.method == 'POST':
+        if request.POST.get('inherit') == '1' and environment:
+            FindingPolicy.objects.filter(scope=scope).delete()
+            return redirect(request.get_full_path())
+        if form.is_valid():
+            obj = form.save(commit=False)
+            obj.scope, obj.environment = scope, environment
+            obj.save()
+            return redirect(request.get_full_path())
+    return render(request, 'inventory/finding_policy.html', {'form': form, 'selected': selected,
+        'environment': environment, 'overridden': bool(saved), 'environments': Environment.objects.only('pk', 'name').order_by('name')})
