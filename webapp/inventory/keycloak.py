@@ -23,6 +23,26 @@ from .roles import apply_role
 from . import keycloak_configuration as configuration
 
 
+DENIAL_REASONS = {
+    'disabled': 'Keycloak sign-in is disabled.',
+    'invalid_subject': 'The validated ID token has no valid external identity.',
+    'missing_roles': 'The ID token has no realm_access.roles claim. Configure the realm-role mapper to include roles in the ID token.',
+    'invalid_roles': 'The ID token realm_access.roles claim must be a list of role names.',
+    'unmapped_roles': 'No configured application realm role was found in the ID token. Check role assignment, client role scope and the GUI role mappings.',
+    'account_disabled': 'The application account is disabled. Contact an application administrator.',
+    'expired_state': 'The login attempt expired. Start a fresh sign-in.',
+    'missing_state': 'The login session is missing. Start a fresh sign-in using the same browser and application hostname.',
+    'changed_configuration': 'Keycloak settings changed during sign-in. Start a fresh sign-in.',
+    'invalid_identity': 'The callback has no validated identity or matching nonce. Start a fresh sign-in.',
+}
+
+
+class KeycloakDenied(PermissionDenied):
+    def __init__(self, reason):
+        self.reason = reason
+        super().__init__(DENIAL_REASONS[reason])
+
+
 class TrustedKeycloakApp(DjangoOAuth2App):
     def _get_session(self):
         # Authlib uses this separate session for JWKS and discovery. Its default
@@ -41,7 +61,7 @@ class WorkspaceLoginView(LoginView):
 def client(config=None):
     config = config or configuration.current()
     if not config.enabled:
-        raise PermissionDenied('Keycloak sign-in is disabled.')
+        raise KeycloakDenied('disabled')
     issuer = config.issuer
     parsed = urlsplit(issuer)
     if (parsed.scheme != 'https' or not parsed.hostname or parsed.username or parsed.password
@@ -71,18 +91,25 @@ def provision(claims, config=None):
     roles_config = {'viewer': config.viewer_role, 'operator': config.operator_role, 'admin': config.admin_role}
     subject = claims.get('sub')
     if not isinstance(subject, str) or not subject or len(subject) > 255:
-        raise PermissionDenied('Invalid external identity.')
-    roles = claims.get('realm_access', {}).get('roles', [])
+        raise KeycloakDenied('invalid_subject')
+    realm_access = claims.get('realm_access')
+    if realm_access is None:
+        raise KeycloakDenied('missing_roles')
+    if not isinstance(realm_access, dict):
+        raise KeycloakDenied('invalid_roles')
+    if 'roles' not in realm_access:
+        raise KeycloakDenied('missing_roles')
+    roles = realm_access['roles']
     if not isinstance(roles, list) or not all(isinstance(role, str) for role in roles):
-        raise PermissionDenied('Invalid role claim.')
+        raise KeycloakDenied('invalid_roles')
     if not set(roles).intersection(roles_config.values()):
-        raise PermissionDenied('No application role assigned.')
+        raise KeycloakDenied('unmapped_roles')
     issuer = config.issuer
     identity = KeycloakIdentity.objects.select_for_update().filter(issuer=issuer, subject=subject).first()
     if identity:
         user = get_user_model().objects.select_for_update().get(pk=identity.user_id)
         if not user.is_active:
-            raise PermissionDenied('Account disabled.')
+            raise KeycloakDenied('account_disabled')
     else:
         # No email/username linking: an IdP must never take over a local administrator.
         username = 'keycloak_' + hashlib.sha256((issuer + '\0' + subject).encode()).hexdigest()
@@ -101,11 +128,13 @@ def provision(claims, config=None):
     return user
 
 
-def failed(request, exc):
+def failed(request, exc, stage='unknown'):
     # Provider exceptions can contain authorization codes, tokens or response bodies.
+    reason = exc.reason if isinstance(exc, KeycloakDenied) else 'provider_error'
     record('auth.keycloak.failed', outcome='failed',
-           details={'exception': type(exc).__name__}, best_effort=True)
-    messages.error(request, 'Keycloak sign-in failed. Check your application role or contact your administrator. Local sign-in remains available.')
+           details={'exception': type(exc).__name__, 'reason': reason, 'stage': stage}, best_effort=True)
+    explanation = DENIAL_REASONS.get(reason, 'Check the identity provider configuration or contact your administrator.')
+    messages.error(request, 'Keycloak sign-in failed. ' + explanation + ' Local sign-in remains available.')
     return redirect('login')
 
 
@@ -129,7 +158,7 @@ def start(request):
         request.session.modified = True
         return response
     except Exception as exc:
-        return failed(request, exc)
+        return failed(request, exc, 'authorization_redirect')
 
 
 @never_cache
@@ -138,28 +167,35 @@ def callback(request):
     config = configuration.current()
     if not config.enabled:
         raise PermissionDenied
+    stage = 'configuration'
     try:
         oauth = client(config)
+        stage = 'session_validation'
         state = request.GET.get('state', '')
         saved = request.session.get('_state_keycloak_' + state, {})
+        if not saved:
+            raise KeycloakDenied('missing_state')
         if saved.get('exp', 0) < time.time():
             oauth.framework.clear_state_data(request.session, state)
-            raise PermissionDenied('Login attempt expired.')
+            raise KeycloakDenied('expired_state')
         state_data = oauth.framework.get_state_data(request.session, state)
         if not state_data or not state_data.get('nonce'):
-            raise PermissionDenied('Missing login state.')
+            raise KeycloakDenied('missing_state')
         if state_data.get('configuration') != configuration.fingerprint(config):
             oauth.framework.clear_state_data(request.session, state)
-            raise PermissionDenied('Keycloak settings changed; start a new login.')
+            raise KeycloakDenied('changed_configuration')
         destination = state_data.get('next')
+        stage = 'token_validation'
         token = oauth.authorize_access_token(request, claims_options={
             'iss': {'essential': True, 'value': config.issuer}}, leeway=30)
         claims = token.get('userinfo')
         if not claims or claims.get('nonce') != state_data['nonce']:
-            raise PermissionDenied('Missing validated identity or nonce.')
+            raise KeycloakDenied('invalid_identity')
+        stage = 'role_provisioning'
         user = provision(claims, config)
+        stage = 'session_login'
         login(request, user, backend='django.contrib.auth.backends.ModelBackend')
         request.session.set_expiry(3600)
         return redirect(safe_next(request, destination))
     except Exception as exc:
-        return failed(request, exc)
+        return failed(request, exc, stage)

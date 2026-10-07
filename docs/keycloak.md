@@ -104,3 +104,36 @@ Sign out ends the application session only. It does not sign out of Keycloak or 
 Failed sign-ins produce an `auth.keycloak.failed` audit event with the exception type and request ID, without tokens, authorization codes or client secrets. Check the Keycloak server events for provider details. Verify redirect URI, realm URL, client secret, TLS trust and the ID-token role mapper. Keep a working local administrator account for recovery.
 
 Reference: [Keycloak OIDC endpoints](https://www.keycloak.org/securing-apps/oidc-layers).
+
+### PermissionDenied after certificate trust succeeds
+
+Older builds recorded only `PermissionDenied`; that does not identify the failed
+check. New builds add a safe `reason` and `stage` to `auth.keycloak.failed` and display
+an actionable login error. Provider exception bodies, tokens, authorization codes,
+client secrets and full claims are never included.
+
+| Reason | Action |
+|---|---|
+| `missing_roles` | Add a **User Realm Role** mapper with claim `realm_access.roles`, multivalued enabled, and **Add to ID token** enabled. Roles only in the access token are insufficient. |
+| `invalid_roles` | Ensure `realm_access` is an object and its `roles` field is a list of strings, not a single string or another structure. |
+| `unmapped_roles` | Assign one of the configured application realm roles to the user/group, permit it in the client's role scope, and match its name exactly in Administration → Keycloak integration. |
+| `account_disabled` | A local administrator must review and reactivate the application account if appropriate. |
+| `missing_state` | Start from the application's login page in the same browser and hostname. Check HTTPS cookie/proxy settings and shared database/secret-key configuration across web replicas. Do not reuse a callback URL. |
+| `expired_state` | Start a new sign-in; the login attempt has a ten-minute lifetime. |
+| `changed_configuration` | Restart login after saving integration settings or changing legacy deployment settings. |
+| `invalid_subject` / `invalid_identity` | Check the ID-token configuration and start a new login. Subject and nonce validation remain mandatory. |
+| `provider_error` | Use the exception type and stage to narrow down TLS, client authentication or token validation. Check Keycloak server events without sharing tokens or secrets. |
+
+For the default Viewer role, the validated **ID token** should contain a structure
+like this (illustration only, not a token to submit):
+
+```json
+{"realm_access": {"roles": ["nsx-analyzer-viewer"]}}
+```
+
+Keycloak **client roles** under `resource_access` do not satisfy this application's
+realm-role mapping. Configure realm roles as described above. Keycloak's built-in
+`realm-admin` role also does not grant access unless it is explicitly mapped; prefer
+a dedicated application role. After changing roles or mappers, start a fresh login
+so Keycloak issues a new ID token. Use the client's token evaluation tools to inspect
+the claim locally; do not paste a complete token into tickets or application logs.

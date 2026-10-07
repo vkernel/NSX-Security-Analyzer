@@ -97,3 +97,29 @@ class KeycloakTests(TestCase):
             self.client.get('/login/keycloak/callback/?code=test&state=' + state)
             exchange.assert_not_called()
         self.assertNotIn('_auth_user_id', self.client.session)
+
+    def test_permission_denials_have_safe_specific_reasons(self):
+        from .keycloak import KeycloakDenied, failed
+        from django.contrib.messages.storage.fallback import FallbackStorage
+        from django.test import RequestFactory
+        cases = [({}, 'missing_roles'), ({'realm_access': None}, 'missing_roles'),
+                 ({'realm_access': []}, 'invalid_roles'),
+                 ({'realm_access': {'roles': 'admin'}}, 'invalid_roles'),
+                 ({'realm_access': {'roles': []}}, 'unmapped_roles')]
+        for extra, reason in cases:
+            with self.subTest(reason=reason):
+                claims = {'sub': 'user', **extra}
+                with self.assertRaises(KeycloakDenied) as caught:
+                    provision(claims)
+                self.assertEqual(caught.exception.reason, reason)
+        request = RequestFactory().get('/login/')
+        request.session = {}
+        request._messages = FallbackStorage(request)
+        with patch('inventory.keycloak.record') as audit:
+            failed(request, KeycloakDenied('missing_roles'), 'role_provisioning')
+        self.assertEqual(audit.call_args.kwargs['details']['reason'], 'missing_roles')
+        self.assertEqual(audit.call_args.kwargs['details']['stage'], 'role_provisioning')
+        with patch('inventory.keycloak.record') as audit:
+            failed(request, ValueError('private-token-value'), 'token_validation')
+        self.assertNotIn('private-token-value', str(audit.call_args))
+        self.assertNotIn('private-token-value', str(list(request._messages)))
