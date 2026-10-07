@@ -391,6 +391,7 @@ class KeycloakConfiguration(models.Model):
     enabled = models.BooleanField(default=False)
     issuer = models.URLField(max_length=512, blank=True)
     client_id = models.CharField(max_length=255, blank=True)
+    role_source = models.CharField(max_length=10, default='realm', choices=[('realm', 'Realm roles'), ('client', 'Client roles')])
     secret_ciphertext = models.TextField(blank=True)
     ca_certificate = models.TextField(blank=True)
     # Preserve pre-existing environment-based trust until an administrator replaces it.

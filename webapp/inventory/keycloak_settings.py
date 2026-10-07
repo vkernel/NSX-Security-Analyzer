@@ -41,13 +41,14 @@ class ConfigurationForm(forms.ModelForm):
 
     class Meta:
         model = KeycloakConfiguration
-        fields = ['enabled', 'issuer', 'client_id', 'client_secret', 'viewer_role', 'operator_role', 'admin_role',
+        fields = ['enabled', 'issuer', 'client_id', 'client_secret', 'role_source', 'viewer_role', 'operator_role', 'admin_role',
                   'remove_certificate', 'trust_retrieved']
         labels = {'enabled': 'Enable Keycloak sign-in', 'issuer': 'Realm issuer URL', 'client_id': 'Client ID',
-                  'viewer_role': 'Viewer realm role', 'operator_role': 'Operator realm role', 'admin_role': 'Administrator realm role'}
+                  'viewer_role': 'Viewer role', 'operator_role': 'Operator role', 'admin_role': 'Administrator role'}
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        self.fields['role_source'].help_text = 'Client roles are read only from resource_access[Client ID].roles in the ID token. Realm roles use realm_access.roles.'
         self.previous_issuer = self.instance.issuer
         self.had_secret = bool(self.instance.secret_ciphertext) or (self.instance._state.adding and bool(configuration.settings.KEYCLOAK_CLIENT_SECRET))
 
@@ -65,7 +66,7 @@ class ConfigurationForm(forms.ModelForm):
             if not values.get('client_secret') and not self.had_secret:
                 self.add_error('client_secret', 'Enter the Keycloak client secret.')
         roles = [values.get(k) for k in ('viewer_role', 'operator_role', 'admin_role')]
-        if len(set(roles)) != 3: self.add_error(None, 'Use a distinct realm role for each application role.')
+        if len(set(roles)) != 3: self.add_error(None, 'Use a distinct role for each application role.')
         if values.get('remove_certificate') and values.get('trust_retrieved'):
             self.add_error(None, 'Choose either retrieved certificate trust or the default trust store.')
         return values

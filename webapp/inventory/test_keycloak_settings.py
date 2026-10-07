@@ -14,7 +14,7 @@ class KeycloakSettingsTests(TestCase):
         self.client.force_login(self.admin)
         self.url = reverse('keycloak-settings')
         self.data = {'enabled': 'on', 'issuer': 'https://identity.example/realms/test', 'client_id': 'analyzer',
-            'client_secret': 'private-test-secret', 'viewer_role': 'viewer', 'operator_role': 'operator', 'admin_role': 'admin', 'action': 'save'}
+            'client_secret': 'private-test-secret', 'role_source': 'realm', 'viewer_role': 'viewer', 'operator_role': 'operator', 'admin_role': 'admin', 'action': 'save'}
 
     def test_admin_permissions_save_encryption_and_secret_preservation(self):
         with patch('inventory.keycloak_settings.test_connection', return_value='Verified'):
@@ -149,3 +149,12 @@ class KeycloakSettingsTests(TestCase):
                 with self.assertRaises(requests.exceptions.SSLError): client(config).fetch_access_token(code='test-code')
             finally:
                 server.shutdown(); server.server_close(); thread.join()
+
+    def test_client_role_source_is_saved_and_invalid_source_rejected(self):
+        with patch('inventory.keycloak_settings.test_connection', return_value='Verified'):
+            response = self.client.post(self.url, dict(self.data, role_source='client'))
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(current().role_source, 'client')
+        response = self.client.post(self.url, dict(self.data, role_source='all'))
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(current().role_source, 'client')

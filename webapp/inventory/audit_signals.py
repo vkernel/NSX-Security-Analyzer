@@ -8,7 +8,7 @@ from django.dispatch import receiver
 from .audit_events import record
 
 FIELDS = {
-    'KeycloakConfiguration': ('enabled', 'issuer', 'client_id', 'viewer_role', 'operator_role', 'admin_role'),
+    'KeycloakConfiguration': ('enabled', 'issuer', 'client_id', 'role_source', 'viewer_role', 'operator_role', 'admin_role'),
     'Environment': ('name', 'slug', 'manager', 'enabled', 'sync_interval_minutes', 'insecure', 'timeout', 'retries'),
     'RetentionPolicy': ('enabled', 'snapshot_days', 'testing_days', 'collection_days'),
     'FindingPolicy': ('scope', 'zero_hits_days', 'empty_group_days', 'unused_days', 'empty_policy_days', 'disabled_days', 'minimum_observations', 'maximum_gap_hours'),

@@ -1,6 +1,6 @@
 # Keycloak sign-in
 
-Keycloak is optional. Local accounts continue to work at `/login/`. Use a build that includes this integration and run its database migrations (including `0030_keycloakconfiguration`) before enabling it. Existing published images do not gain this feature by changing configuration alone.
+Keycloak is optional. Local accounts continue to work at `/login/`. Use a build that includes this integration and run its database migrations (including `0031_keycloakconfiguration_role_source`) before enabling it. Existing published images do not gain this feature by changing configuration alone.
 
 ## Local user roles
 
@@ -46,17 +46,85 @@ Copy the client secret from **Credentials** for the application GUI. Service-acc
 roles are not used for interactive user login. A local Docker test can use
 `http://localhost:8000/login/keycloak/callback/`; the Keycloak issuer still requires HTTPS.
 
+### Choose client roles or realm roles
+
+Both are supported. In **Administration → Keycloak integration → Role source**,
+choose the location in which you created the roles. Existing installations remain
+on **Realm roles** after upgrade. There is no automatic merge or fallback between
+sources.
+
+| GUI role source | Claim read from the validated ID token |
+|---|---|
+| Client roles | `resource_access[configured Client ID].roles` |
+| Realm roles | `realm_access.roles` |
+
+For **Clients → Roles**, follow the client-role workflow below, then continue with
+[application GUI setup](#configure-the-application-in-the-web-gui). The subsequent
+realm-role steps are the alternative workflow, not an additional requirement.
+
+### Client roles with group-based assignment
+
+1. Open **Clients → nsx-security-analyzer → Roles → Create role**. Create
+   `nsx-analyzer-viewer`, `nsx-analyzer-operator`, and `nsx-analyzer-admin` there.
+   Custom names also work when the application GUI uses those exact names.
+2. Open **Groups → your group → Role mapping → Assign role**. Select the client-role
+   filter, choose **nsx-security-analyzer**, and assign the appropriate role to the
+   group. The role name is not the group name.
+3. Under **Users → your user → Groups**, verify membership. Under the user's
+   **Role mapping**, show inherited roles and confirm the application client role
+   is effective. Direct user-role assignment is not required for group members.
+4. Open the application's dedicated client scope → **Scope**. If **Full scope
+   allowed** is off, allow the application **client roles** in its role scope mappings.
+   Allowing them here does not assign them to users or groups.
+5. In that dedicated scope's **Mappers**, add or edit a **User Client Role** mapper:
+
+   | Mapper field | Value for this example |
+   |---|---|
+   | Name | `analyzer-client-roles` (an arbitrary mapper label) |
+   | Mapper type | `User Client Role` |
+   | Client ID | `nsx-security-analyzer` |
+   | Client Role prefix | Empty |
+   | Multivalued | On |
+   | Token Claim Name | `resource_access.nsx-security-analyzer.roles` |
+   | Claim JSON Type | `String` |
+   | Add to ID token | On |
+
+6. Evaluate the **Generated ID token** for the group member with scopes
+   `openid profile email`. The relevant fragment should resemble:
+
+   ```json
+   {
+     "resource_access": {
+       "nsx-security-analyzer": {
+         "roles": ["nsx-analyzer-viewer"]
+       }
+     }
+   }
+   ```
+
+7. In the analyzer GUI, select **Client roles**, keep **Client ID** set to
+   `nsx-security-analyzer`, and map Viewer/Operator/Administrator to the corresponding
+   role names. Save and start a fresh sign-in.
+
+Use your actual Client ID in the mapper and token claim path when it differs from
+this example. The application reads only that exact client entry. An administrator
+role belonging to `realm-management` or another client never grants application
+access in client-role mode. Group inheritance is resolved by Keycloak; the analyzer
+reads the resulting roles from the validated token and does not query group membership.
+Keycloak's [token role mappings](https://github.com/keycloak/keycloak/blob/main/docs/documentation/server_admin/topics/clients/oidc/con-token-role-mappings.adoc)
+describe the client/realm claim structures and inheritance.
+
 ### 2. Create the application realm roles
 
 Open **Realm roles → Create role** in the selected realm and create each name below.
-Do not create these under **Clients → Roles**: those are client roles, stored under
-a different token claim.
+For this realm-role workflow, create them here. If you prefer **Clients → Roles**,
+use the client-role workflow above and select Client roles in the application.
 
 | Realm role name | Application GUI field | Application access |
 |---|---|---|
-| `nsx-analyzer-viewer` | Viewer realm role | Read application data across environments |
-| `nsx-analyzer-operator` | Operator realm role | Viewer access plus collection and environment operations |
-| `nsx-analyzer-admin` | Administrator realm role | Full application administration |
+| `nsx-analyzer-viewer` | Viewer role | Read application data across environments |
+| `nsx-analyzer-operator` | Operator role | Viewer access plus collection and environment operations |
+| `nsx-analyzer-admin` | Administrator role | Full application administration |
 
 Names are case-sensitive. A display description, group name, or Keycloak administrator
 role is not a substitute. Custom names work if the corresponding GUI field matches
@@ -119,8 +187,9 @@ names and can cause an exact-name mismatch. Avoid editing a realm-wide shared ma
 unless the change is intended for every client using it.
 
 Keycloak commonly includes roles in the access token by default. This application
-reads **only the validated ID token's `realm_access.roles`**. Roles in an access
-token, userinfo response or `resource_access.<client>.roles` do not satisfy that check.
+reads **the validated ID token's `realm_access.roles` in Realm roles mode**. Roles in an access
+token or userinfo response do not satisfy that check. Client-role claims require
+Client roles mode.
 See [Keycloak token role mappings](https://github.com/keycloak/keycloak/blob/main/docs/documentation/server_admin/topics/clients/oidc/con-token-role-mappings.adoc).
 
 ### 6. Evaluate the ID token before testing login
@@ -148,7 +217,7 @@ role mapping. Inspect the generated token locally; never share the complete toke
 |---|---|
 | No `realm_access.roles` | Mapper type, claim name, Add to ID token, and whether its scope applies |
 | Empty array or only unrelated roles | User assignment and client's effective role scope mappings |
-| Role only under `resource_access` | It was configured as a client role; create and assign a realm role |
+| Role only under `resource_access` | Select Client roles in the GUI and follow the client-role workflow, or use realm roles consistently |
 | Role name has a prefix or different case | Mapper prefix and exact names in the application GUI |
 | Correct role only in Generated access token | Enable Add to ID token on the realm-role mapper |
 | Evaluation works, live login fails | Use the same realm, client, user and requested scopes; start a fresh login and verify the saved GUI mappings |
@@ -165,8 +234,9 @@ GUI-managed integration.
 
 1. Sign in with a local administrator and open **Administration → Keycloak integration**.
 2. Enter the full **Realm issuer URL**, **Client ID**, and **Client secret** from Keycloak.
-3. Confirm the Viewer, Operator and Administrator realm role names. Defaults match
-   the table above; use distinct names and include these roles in the ID token.
+3. Select **Role source** (Client roles or Realm roles). Confirm the Viewer, Operator
+   and Administrator role names; use distinct names and include the selected role
+   claim in the ID token. Existing integrations default to Realm roles.
 4. Copy the exact callback URL shown on the page into Keycloak's valid redirect URIs.
    Open the application through its public HTTPS URL so the displayed callback is correct.
 5. For a private or self-signed certificate, click **Retrieve certificate**. The
@@ -246,8 +316,10 @@ client secrets and full claims are never included.
 | Reason | Action |
 |---|---|
 | `missing_roles` | Add a **User Realm Role** mapper with claim `realm_access.roles`, multivalued enabled, and **Add to ID token** enabled. Roles only in the access token are insufficient. |
-| `invalid_roles` | Ensure `realm_access` is an object and its `roles` field is a list of strings, not a single string or another structure. |
-| `unmapped_roles` | Assign one of the configured application realm roles to the user/group, permit it in the client's role scope, and match its name exactly in Administration → Keycloak integration. |
+| `invalid_roles` | Ensure the selected role container is an object with a `roles` list of strings, not a string or another structure. |
+| `unmapped_roles` | Check the selected Role source, group/user role assignment, client role scope, and exact GUI role names. |
+| `missing_client_roles` | Include `resource_access[Client ID].roles` in the ID token using a User Client Role mapper. Check the exact client ID. |
+| `invalid_role_source` | Select Client roles or Realm roles in the integration GUI and save. |
 | `account_disabled` | A local administrator must review and reactivate the application account if appropriate. |
 | `missing_state` | Start from the application's login page in the same browser and hostname. Check HTTPS cookie/proxy settings and shared database/secret-key configuration across web replicas. Do not reuse a callback URL. |
 | `expired_state` | Start a new sign-in; the login attempt has a ten-minute lifetime. |
@@ -255,16 +327,15 @@ client secrets and full claims are never included.
 | `invalid_subject` / `invalid_identity` | Check the ID-token configuration and start a new login. Subject and nonce validation remain mandatory. |
 | `provider_error` | Use the exception type and stage to narrow down TLS, client authentication or token validation. Check Keycloak server events without sharing tokens or secrets. |
 
-For the default Viewer role, the validated **ID token** should contain a structure
+For the default Viewer role in **Realm roles** mode, the validated **ID token** should contain a structure
 like this (illustration only, not a token to submit):
 
 ```json
 {"realm_access": {"roles": ["nsx-analyzer-viewer"]}}
 ```
 
-Keycloak **client roles** under `resource_access` do not satisfy this application's
-realm-role mapping. Configure realm roles as described above. Keycloak's built-in
-`realm-admin` role also does not grant access unless it is explicitly mapped; prefer
-a dedicated application role. After changing roles or mappers, start a fresh login
-so Keycloak issues a new ID token. Use the client's token evaluation tools to inspect
-the claim locally; do not paste a complete token into tickets or application logs.
+Keycloak client roles require **Client roles** mode; realm roles require **Realm roles**
+mode. Role assignments inherited from groups work in either mode. Use dedicated
+application roles and map their names explicitly. After changing roles, mappers or
+Role source, start a fresh login. Inspect generated claims locally; do not paste a
+complete token into tickets or application logs.

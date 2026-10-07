@@ -27,8 +27,10 @@ DENIAL_REASONS = {
     'disabled': 'Keycloak sign-in is disabled.',
     'invalid_subject': 'The validated ID token has no valid external identity.',
     'missing_roles': 'The ID token has no realm_access.roles claim. Configure the realm-role mapper to include roles in the ID token.',
-    'invalid_roles': 'The ID token realm_access.roles claim must be a list of role names.',
-    'unmapped_roles': 'No configured application realm role was found in the ID token. Check role assignment, client role scope and the GUI role mappings.',
+    'missing_client_roles': 'The ID token has no roles for the configured Client ID under resource_access. Configure a User Client Role mapper with Add to ID token enabled.',
+    'invalid_role_source': 'The configured role source is invalid. Ask an administrator to review the Keycloak integration.',
+    'invalid_roles': 'The selected ID-token role claim must be a list of role names.',
+    'unmapped_roles': 'No configured application role was found in the selected ID-token role source. Check group/user assignment, client scope, role source and GUI role names.',
     'account_disabled': 'The application account is disabled. Contact an application administrator.',
     'expired_state': 'The login attempt expired. Start a fresh sign-in.',
     'missing_state': 'The login session is missing. Start a fresh sign-in using the same browser and application hostname.',
@@ -92,14 +94,27 @@ def provision(claims, config=None):
     subject = claims.get('sub')
     if not isinstance(subject, str) or not subject or len(subject) > 255:
         raise KeycloakDenied('invalid_subject')
-    realm_access = claims.get('realm_access')
-    if realm_access is None:
-        raise KeycloakDenied('missing_roles')
-    if not isinstance(realm_access, dict):
+    if config.role_source == 'realm':
+        role_container = claims.get('realm_access')
+        missing_reason = 'missing_roles'
+    elif config.role_source == 'client':
+        resources = claims.get('resource_access')
+        if resources is None:
+            raise KeycloakDenied('missing_client_roles')
+        if not isinstance(resources, dict):
+            raise KeycloakDenied('invalid_roles')
+        # Never aggregate roles from other clients or fall back to realm roles.
+        role_container = resources.get(config.client_id)
+        missing_reason = 'missing_client_roles'
+    else:
+        raise KeycloakDenied('invalid_role_source')
+    if role_container is None:
+        raise KeycloakDenied(missing_reason)
+    if not isinstance(role_container, dict):
         raise KeycloakDenied('invalid_roles')
-    if 'roles' not in realm_access:
-        raise KeycloakDenied('missing_roles')
-    roles = realm_access['roles']
+    if 'roles' not in role_container:
+        raise KeycloakDenied(missing_reason)
+    roles = role_container['roles']
     if not isinstance(roles, list) or not all(isinstance(role, str) for role in roles):
         raise KeycloakDenied('invalid_roles')
     if not set(roles).intersection(roles_config.values()):

@@ -123,3 +123,36 @@ class KeycloakTests(TestCase):
             failed(request, ValueError('private-token-value'), 'token_validation')
         self.assertNotIn('private-token-value', str(audit.call_args))
         self.assertNotIn('private-token-value', str(list(request._messages)))
+
+    def test_client_roles_are_scoped_and_do_not_merge_realm_roles(self):
+        from .keycloak import KeycloakDenied
+        from .models import KeycloakConfiguration
+        config = KeycloakConfiguration(issuer='https://id.example/realms/test', client_id='analyzer', role_source='client')
+        claims = {'sub': 'client-user', 'realm_access': {'roles': ['nsx-analyzer-admin']},
+                  'resource_access': {'other-client': {'roles': ['nsx-analyzer-admin']},
+                                      'analyzer': {'roles': ['nsx-analyzer-viewer']}}}
+        user = provision(claims, config)
+        self.assertFalse(user.is_staff)
+        self.assertFalse(user.is_superuser)
+        claims['resource_access']['analyzer']['roles'] = ['nsx-analyzer-operator', 'nsx-analyzer-admin']
+        self.assertTrue(provision(claims, config).is_superuser)
+        claims['resource_access']['analyzer']['roles'] = ['nsx-analyzer-viewer']
+        self.assertFalse(provision(claims, config).is_superuser)
+        del claims['resource_access']['analyzer']
+        with self.assertRaises(KeycloakDenied) as exc:
+            provision(claims, config)
+        self.assertEqual(exc.exception.reason, 'missing_client_roles')
+        for invalid in ([], {'analyzer': []}, {'analyzer': {'roles': 'nsx-analyzer-admin'}}):
+            with self.subTest(invalid=invalid), self.assertRaises(KeycloakDenied):
+                provision(dict(claims, resource_access=invalid), config)
+        config.role_source = 'realm'
+        with self.assertRaises(KeycloakDenied):
+            provision({'sub': 'client-only', 'resource_access': {'analyzer': {'roles': ['nsx-analyzer-admin']}}}, config)
+
+    def test_role_source_changes_invalidate_pending_login(self):
+        from .keycloak_configuration import fingerprint
+        from .models import KeycloakConfiguration
+        config = KeycloakConfiguration(client_id='analyzer')
+        previous = fingerprint(config)
+        config.role_source = 'client'
+        self.assertNotEqual(fingerprint(config), previous)

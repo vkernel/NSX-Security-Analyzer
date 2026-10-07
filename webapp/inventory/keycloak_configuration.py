@@ -25,7 +25,7 @@ def secret(config):
 def fingerprint(config):
     # In-flight authorizations cannot complete against changed credentials or trust.
     data = [config.enabled, config.issuer, config.client_id, config.secret_ciphertext,
-            config.ca_certificate, config.ca_bundle, config.viewer_role, config.operator_role, config.admin_role]
+            config.ca_certificate, config.ca_bundle, config.role_source, config.viewer_role, config.operator_role, config.admin_role]
     if config._state.adding: data.append(settings.KEYCLOAK_CLIENT_SECRET)
     return hashlib.sha256(json.dumps(data).encode()).hexdigest()
 
