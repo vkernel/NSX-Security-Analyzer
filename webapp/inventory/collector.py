@@ -124,6 +124,8 @@ class NSXClient:
         if hasattr(self, "request_context"):
             self.request_context.deadline = retry_deadline
         for attempt in range(retries + 1):
+            if hasattr(self, "request_context"):
+                retry_deadline = self.request_context.deadline
             if attempt and time.monotonic() >= retry_deadline:
                 raise AuditError("GET {}: retry time budget exhausted".format(path))
             if hasattr(self, "metrics_lock"):
@@ -138,9 +140,16 @@ class NSXClient:
                 LOG.debug("GET %s completed in %.3fs returned_records=%s", path, time.perf_counter() - started, len(data.get("results", [])) if isinstance(data.get("results"), list) else "n/a")
                 return data
             except AuditError as exc:
+                if hasattr(self, "request_context"):
+                    retry_deadline = self.request_context.deadline
                 if exc.status_code not in (429, 502, 503, 504) or attempt == retries:
                     LOG.warning("GET %s failed status=%s attempts=%d; no further retries", path, exc.status_code, attempt+1)
                     raise
+                if exc.status_code == 429 and hasattr(self, 'request_pacer'):
+                    # Shared pacing already applies Retry-After to every worker.
+                    # Do not consume a per-request budget sleeping a second time.
+                    LOG.warning("GET %s returned HTTP 429; retry %d/%d after shared NSX cooldown", path, attempt + 1, retries)
+                    continue
                 delay = max(exc.retry_after or 0, min(2 ** attempt, 30) + random.uniform(0, 1))
                 if time.monotonic() + delay >= retry_deadline:
                     LOG.warning("GET %s failed status=%s; retry time budget exhausted", path, exc.status_code)
@@ -2188,7 +2197,7 @@ table{min-width:760px}th{line-height:1.5}td{padding:15px 14px}.path{line-height:
         if (items.length) evidence += '<details><summary>'+label+' ('+number(items.length)+')</summary><pre>'+esc(JSON.stringify(items,null,2))+'</pre></details>';
       }
       const firewallRefs = r.firewall_references || [];
-      evidence += '<details><summary>Firewall rule references ('+number(new Set(firewallRefs.map(ref=>ref.rule)).size)+')</summary><p class="muted">'+esc(payload.tag_evidence.firewall_reference_note || 'Visible rules referencing groups that use this tag.')+'</p>';
+      evidence += '<details data-evidence-section="relationships"><summary>Firewall rule references ('+number(new Set(firewallRefs.map(ref=>ref.rule)).size)+')</summary><p class="muted">'+esc(payload.tag_evidence.firewall_reference_note || 'Visible rules referencing groups that use this tag.')+'</p>';
       evidence += firewallRefs.length ? '<div class="detail-scroll"><table class="detail-table"><thead><tr><th>Firewall rule</th><th>Via group / tag use</th></tr></thead><tbody>'+firewallRefs.map(ref=>{
         const rule = payload.tag_evidence.firewall_rules[ref.rule];
         return '<tr><td>'+esc(rule.name)+ruleIdentity(rule)+'<br>'+code(rule.path)+(rule.disabled?' <b>Disabled</b>':'')+'</td><td>'+code(ref.via_group)+'<br>'+esc(ref.tag_use === 'condition' ? 'Membership condition' : 'Tag attached to group')+'</td></tr>';
@@ -2266,13 +2275,13 @@ table{min-width:760px}th{line-height:1.5}td{padding:15px 14px}.path{line-height:
     } else if (view === 'inventory') {
       const references = new Map((r.reference_details || []).map(ref => [ref.path,ref]));
       let evidence = !includeEvidence ? '' : r.usage === 'not_assessed' ? '<p>Usage was not assessed for this object.</p>' : r.referenced_by.length
-        ? '<details><summary>'+number(r.referenced_by.length)+' reference(s)</summary><ul>'+r.referenced_by.map(p=>'<li>'+esc(references.get(p)?.name || '')+ruleIdentity(references.get(p) || {})+code(p)+'</li>').join('')+'</ul></details>'
+        ? '<details data-evidence-section="relationships"><summary>'+number(r.referenced_by.length)+' reference(s)</summary><ul>'+r.referenced_by.map(p=>'<li>'+esc(references.get(p)?.name || '')+ruleIdentity(references.get(p) || {})+code(p)+'</li>').join('')+'</ul></details>'
         : '<span class="muted">No configuration references found.</span>';
       const definition = r.membership_definition;
       let membership = badge(r.membership);
       if (definition) {
         membership += '<p>'+esc(definition.methods.join(', '))+'</p>';
-        if (includeEvidence) evidence += '<details><summary>Membership definition</summary>'
+        if (includeEvidence) evidence += '<details data-evidence-section="technical"><summary>Membership definition</summary>'
           + '<p>Configured criteria; these are not resolved members. The full definition preserves AND/OR logic.</p>'
           + notes(definition.criteria) + '<pre><code>'+esc(JSON.stringify(definition.definition,null,2))+'</code></pre></details>';
       }
@@ -2289,7 +2298,7 @@ table{min-width:760px}th{line-height:1.5}td{padding:15px 14px}.path{line-height:
         status=badge(r.hit_status)+'<br><small>'+(r.disabled?'Disabled':'Enabled')+' · '+esc(r.action)+'</small>';
         count=r.hit_status==='not_supported'?'Not supported':r.hit_count===null?'Unknown':number(r.hit_count)+' hit(s)';
         if (includeEvidence) {
-        evidence='<details><summary>Counter &amp; rule details</summary><p>Checked: '+(globalThis.workspaceTime ? globalThis.workspaceTime(r.statistics_checked_at) : esc(r.statistics_checked_at))+'</p>';
+        evidence='<details data-evidence-section="overview"><summary>Counter &amp; rule details</summary><p>Checked: '+(globalThis.workspaceTime ? globalThis.workspaceTime(r.statistics_checked_at) : esc(r.statistics_checked_at))+'</p>';
         for (const sample of r.statistics) {
           evidence+='<p>'+code(sample.enforcement_point)+'<br>'+Object.entries(sample).filter(([k])=>k!=='enforcement_point').map(([k,v])=>esc(k.replaceAll('_',' '))+': '+esc(number(v))).join(' · ')+'</p>';
         }

@@ -105,3 +105,43 @@ class MembershipOrderingTests(SimpleTestCase):
         from .collector import membership
         client=SimpleNamespace(get=Mock(side_effect=[AuditError('throttled',429),{'results':[]},{'results':[]},{'results':[]}]))
         self.assertEqual(membership(client,{'path':'/group','expression':[]})[0],'unknown')
+
+
+class QueuedBudgetTests(SimpleTestCase):
+    def test_long_queue_wait_does_not_exhaust_retry_budget(self):
+        from .concurrency import adapt_requests
+        now = [0.0]
+        client = NSXClient.__new__(NSXClient)
+        client.retries = 1
+        client.request_deadline = 1000
+        client._get = Mock(side_effect=[AuditError('busy', 503), {'results': []}])
+        with patch('inventory.collector.time.monotonic', side_effect=lambda: now[0]):
+            adapt_requests(client)
+            def wait_for_slot(*args): now[0] += 70
+            with patch.object(client.request_pacer, 'acquire', side_effect=wait_for_slot), patch('inventory.collector.time.sleep'):
+                self.assertEqual(client.get('/test'), {'results': []})
+                self.assertGreaterEqual(client.request_context.deadline, 200)
+
+    def test_shared_retry_after_is_not_paid_twice(self):
+        from .concurrency import adapt_requests
+        client = NSXClient.__new__(NSXClient)
+        client.retries = 1
+        client._get = Mock(side_effect=[AuditError('busy', 429, 120), {'results': []}])
+        adapt_requests(client)
+        with patch.object(client.request_pacer, 'acquire'), patch('inventory.collector.time.sleep') as sleep:
+            self.assertEqual(client.get('/test'), {'results': []})
+            sleep.assert_not_called()
+        self.assertEqual(client.request_pacer.throttles, 1)
+
+    def test_whole_collection_deadline_is_not_membership_unknown(self):
+        from .concurrency import adapt_requests
+        from .collector import membership
+        from .request_pacing import CollectionDeadlineExceeded
+        client = NSXClient.__new__(NSXClient)
+        client.retries = 1
+        client.request_deadline = time.monotonic() - 1
+        client._get = Mock(return_value={'results': []})
+        adapt_requests(client)
+        with self.assertRaises(CollectionDeadlineExceeded):
+            membership(client, {'path': '/group', 'expression': []})
+        self.assertEqual(client.request_pacer.completed, 1)

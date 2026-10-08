@@ -92,9 +92,9 @@
   }
   window.showVmRelationships = (body, payload, id, summary) => {
     body.replaceChildren();
-    const header=make('p',summary?.name || 'VM relationships');body.append(header,make('p','Configuration relationships only; resolved membership and effective policy are not verified.'));
+    const header=make('p','Configuration relationships only; resolved membership and effective policy are not verified.');body.append(header);
     function paged(parent,section,label,path='') {
-      const box=make('details'), title=make('summary',label), content=make('div');box.append(title,content);parent.append(box);
+      const box=make('details'), title=make('summary',label), content=make('div');box.dataset.evidenceSection='relationships';box.append(title,content);parent.append(box);
       let loaded=false, version=0;
       async function render(page=0) {
         const current=++version;content.replaceChildren(make('p','Loading…'));
@@ -121,8 +121,9 @@
       box.addEventListener('toggle',()=>{if(box.open&&!loaded)render();});
     }
     paged(body,'tags','Assigned tags');paged(body,'related_groups','Related groups');paged(body,'related_rules','Related rules and services');
-    const advanced=make('details'), title=make('summary','VM inventory details'), content=make('pre');advanced.append(title,content);body.append(advanced);
+    const advanced=make('details'), title=make('summary','VM inventory details'), content=make('pre');advanced.dataset.evidenceSection='technical';advanced.append(title,content);body.append(advanced);
     let ready=false;advanced.addEventListener('toggle',async()=>{if(!advanced.open||ready)return;content.textContent='Loading…';try{const response=await load(id,'vm');content.textContent=JSON.stringify(response.details,null,2);ready=true;}catch(error){content.textContent=error.message+' Close and expand to retry.';}});
+    window.workspaceEvidence?.(body,body.closest('dialog')?.querySelector('h2'),summary);
   };
   document.addEventListener('click',event=>{
     const button=event.target.closest('.detail-button[data-evidence-row]');

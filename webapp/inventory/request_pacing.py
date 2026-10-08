@@ -7,6 +7,10 @@ import time
 LOG = logging.getLogger('inventory.collector')
 
 
+class CollectionDeadlineExceeded(TimeoutError):
+    """Fatal collection deadline, not an individual unsupported/failed check."""
+
+
 class RequestPacer:
     def __init__(self, clock=time.monotonic, deadline=None):
         self.clock = clock
@@ -30,7 +34,7 @@ class RequestPacer:
                 now = self.clock()
                 ready = max(self.next_request, self.cooldown)
                 if max(now, ready) >= deadline:
-                    raise TimeoutError('Collection request deadline reached during pacing')
+                    raise CollectionDeadlineExceeded('Collection time limit reached while waiting for NSX request pacing; earlier saved snapshots remain available')
                 if now >= ready:
                     self.next_request = now + 1 / self.rate
                     return

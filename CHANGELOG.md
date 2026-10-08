@@ -2,6 +2,11 @@
 
 ## Unreleased — development
 
+- Refresh the evidence drawer with Overview, Relationships and Technical details tabs, a wider desktop view, and on-demand VM relationship sections.
+- Simplify finding filters, expose inventory/firewall sorting, improve comparison and finding-evidence layouts, and group administration settings.
+- Highlight actionable collection failures and stale environments; clarify coverage and stop-request presentation without changing evidence classifications.
+- Exclude shared pacing and concurrency waits from individual request retry budgets, apply HTTP 429 cooldowns once, and abort when the overall collection deadline expires.
+
 - Allow stable collection traffic to grow from 10 to 40 requests/second, prioritize likely membership endpoints without reusing stale results, and log measured request and group progress.
 
 - Pace collection requests, share throttling cooldowns, honor Retry-After with bounded randomized retries, and serialize collections for duplicate manager origins.

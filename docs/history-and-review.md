@@ -28,7 +28,9 @@ Unknown membership remains unknown, never assumed empty.
 zero-hit firewall rules, empty firewall policies and disabled rules only after they
 meet the configured waiting period. Use Search, Finding type, Review state and
 Owner to filter; sort by Name, Finding type or Review status in either direction.
-Date and observation controls are no longer part of this page. Unknown or excluded
+Use **Filters** for finding type, review state and owner, and **Sort** for ordering.
+Select **Apply** to update the list; remove individual active filters using the chips
+below the toolbar, or use **Reset**. Date and observation controls are not part of this page. Unknown or excluded
 checks remain in Collection coverage rather than this review queue.
 
 Staff can assign an active user, acknowledge/reopen a finding, set a review date
@@ -169,3 +171,48 @@ Open the account menu → **Personal settings → Notifications**, or use **Noti
 The suggested personal defaults are failures and new coverage issues enabled, routine successes and testing results disabled, and a 7-day window. Until personal settings are enabled, the existing shared policy applies. Reset to defaults restores shared-policy inheritance. Administrators manage that policy under **Freshness & notifications**. Changing notification preferences does not delete history or mark results read; use **Mark all read** separately.
 
 The list shows at most 50 matching results; the unread count covers all matches within the selected window. Recovery notifications, stale-data notifications and daily finding summaries are not yet generated. Upgrade database migrations through `0032` before using personal notification settings.
+
+## Evidence drawer
+
+Inventory and firewall details use **Overview**, **Relationships**, and
+**Technical details** tabs. The overview shows recorded status and evidence;
+relationships contain references or assignments; technical details hold paths and
+raw definitions. Expand a section to inspect its contents. Existing saved reports
+remain readable, without rebuilding snapshot indexes for this layout change.
+
+Use **Expand** on desktop for a wider drawer. On smaller screens the drawer uses
+the available width. Escape or Close returns to the table. The VM relationship
+sections retain server pagination and fetch data only when expanded. Counts and
+relationships describe saved evidence, not verified effective policy.
+
+Snapshot comparison presents before and after values side by side on desktop,
+stacked on narrow screens. Finding details separate the review decision from saved
+evidence, while preserving review history and observation qualifications.
+
+Inventory and firewall tables provide **Filters**, **Sort**, and **Columns** menus.
+Sort controls use the existing server-side ordering; column filters remain visible
+as removable chips. Search options remain available for advanced matching. On
+small screens these controls appear under **Table options**.
+
+When saved finding evidence is loaded, simple values appear as labeled fields and
+nested data appears in expandable sections. **Raw evidence** preserves the complete
+original representation. If JavaScript is disabled or the evidence is not a JSON
+object, the original evidence remains visible.
+
+The Administration overview groups links to finding criteria, authentication,
+retention, shared freshness/notifications, system health, and audit diagnostics.
+Coverage indicators distinguish evidence needing review from a failed collection;
+this presentation does not suppress limitations or change collection results.
+
+## Overview and collection status
+
+The workspace overview highlights failed collections in the last 24 hours and
+stale/uncollected environments in a **Needs attention** panel when either count is
+nonzero. Metric cards link to collection failures, running collections, or
+environment health. Finding qualification counts are available in an expandable
+summary; these are saved counts, not a fresh evaluation.
+
+Collections show the current phase and completed phase count. Progress represents
+phases, not an estimate of remaining time. **Stop requested** stays visible until
+the worker acknowledges the request. Diagnostics provide collection identifiers,
+timestamps and a stage timeline, with technical error details expandable separately.

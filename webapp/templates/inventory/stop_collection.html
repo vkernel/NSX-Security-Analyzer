@@ -1,4 +1,4 @@
 {% if user.is_staff %}{% if job.status == 'queued' or job.status == 'running' %}
-{% if job.stop_request %}<p class="muted" role="status">Stop requested · waiting for worker acknowledgement</p>{% else %}
-<form method="post" action="{% url 'stop-collection' job.pk %}">{% csrf_token %}<button type="submit" class="button danger">Stop collection</button></form>
+{% if job.stop_request %}<p class="stop-pending" role="status">Stop requested · waiting for worker acknowledgement</p>{% else %}
+<form method="post" action="{% url 'stop-collection' job.pk %}">{% csrf_token %}<button type="submit" class="button stop-action">Stop collection</button></form>
 {% endif %}{% endif %}{% endif %}

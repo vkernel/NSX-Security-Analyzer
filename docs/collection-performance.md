@@ -333,11 +333,20 @@ values, not advertised NSX limits.
 
 Retries honor numeric or HTTP-date `Retry-After` headers and otherwise use exponential
 backoff plus randomness. Existing environment retry counts remain the attempt cap;
-each request also has a 60-second retry/pacing budget bounded by the collection's
-remaining deadline. A server delay exceeding that budget ends the request rather
-than retrying early. The worker's overall timeout and Stop collection supervisor
-remain effective during waits. Optional bulk statistics still fall back without
-retries, but their 429 responses also cool down other requests.
+each request also has a 60-second retry budget. Waiting for adaptive concurrency,
+shared pacing or a shared HTTP 429 cooldown does not consume that request budget.
+The shared cooldown honors `Retry-After` once, without an additional per-request
+sleep. All waits remain bounded by the collection's overall deadline, and the
+worker's overall timeout and Stop collection supervisor remain effective. Reaching
+that collection deadline aborts the collection instead of recording subsequent
+membership checks as unknown; earlier saved snapshots remain available. Optional
+bulk statistics still fall back without retries, but their 429 responses also cool
+down other requests.
+
+Compatibility-search visibility and unsupported extended-identity membership are
+separate coverage limitations, not pacing failures. The collector preserves those
+limitations when the available endpoints cannot verify the evidence; resolving a
+request timeout does not make unsupported membership checks complete.
 
 Job claiming is serialized briefly in PostgreSQL and prevents simultaneous running
 jobs for the same normalized manager hostname and port across environment entries

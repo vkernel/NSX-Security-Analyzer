@@ -105,14 +105,17 @@ def adapt_requests(client):
     original = client._get
 
     def request(path, params=None):
+        queued_at = time.monotonic()
         started = controller.acquire()
         error = None
         try:
-            try:
-                pacer.acquire(getattr(client.request_context, "deadline", None))
-            except TimeoutError as exc:
-                from .collector import AuditError
-                raise AuditError(str(exc)) from exc
+            # Queue time is not time spent attempting a request. The whole
+            # collection deadline still bounds pacing and server cooldowns.
+            pacer.acquire()
+            waited = time.monotonic() - queued_at
+            if hasattr(client.request_context, 'deadline'):
+                client.request_context.deadline = min(client.request_context.deadline + waited,
+                                                      getattr(client, 'request_deadline', float('inf')))
             started = controller.clock()
             return original(path, params)
         except BaseException as exc:
