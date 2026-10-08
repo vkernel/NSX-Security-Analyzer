@@ -476,3 +476,8 @@ An object absent from the saved index produces an error with Retry; it does not
 redirect to an unrelated list. VM relationships stay paginated and technical VM
 data loads only when its section opens. Failed requests can be retried inline.
 These relationships describe configuration, not verified effective policy.
+
+Finding reviews now use a [two-person approval workflow](finding-review-workflow.md).
+Review lists defer saved evidence and approval payloads; notification queries
+retrieve only event metadata. Full evidence is read for the selected finding or
+an explicit history export.

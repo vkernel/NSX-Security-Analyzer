@@ -6,6 +6,7 @@ from django.db import transaction
 from .diagnostics import LOG
 from .models import Environment, Finding, FindingEvent, SnapshotFindingAssessment
 from . import observation
+from .finding_workflow import invalidate, review_fingerprint, FIELDS as WORKFLOW_FIELDS
 
 LABELS = {'unused': 'Unused object candidate', 'empty_group': 'Empty group',
           'membership': 'Unknown group membership', 'zero_hits': 'Zero recorded hits',
@@ -51,6 +52,8 @@ def synchronize(environment_id):
         return
     if environment.findings.exists() and not environment.findings.exclude(snapshot_id=snapshot.pk).exists():
         return
+    from .models import SnapshotCoverage
+    incomplete = snapshot.needs_review or SnapshotCoverage.objects.filter(snapshot=snapshot, issue_count__gt=0).exists()
     policy = observation.policy_for(environment)
     report = snapshot.report
     source_rows = {r['path']: r for r in report.get('objects', []) + report.get('dfw', {}).get('rules', []) + report.get('dfw', {}).get('policies', [])}
@@ -63,7 +66,7 @@ def synchronize(environment_id):
             Finding.objects.bulk_create(creates, batch_size=100)
         if updates:
             Finding.objects.bulk_update(updates, ['status', 'present', 'name', 'evidence',
-                'fingerprint', 'last_seen', 'evaluated_at', 'snapshot', 'revision'] + observation.FIELDS, batch_size=100)
+                'fingerprint', 'last_seen', 'evaluated_at', 'snapshot', 'revision'] + observation.FIELDS + WORKFLOW_FIELDS, batch_size=100)
         if events:
             FindingEvent.objects.bulk_create([FindingEvent(finding=f, message=m) for f,m in events], batch_size=100)
         for f in creates + updates:
@@ -96,13 +99,17 @@ def synchronize(environment_id):
             if len(creates) + len(updates) >= 100:
                 flush()
             continue
+        if not finding.present or review_fingerprint(kind, evidence) != review_fingerprint(kind, finding.evidence):
+            invalidate(finding, 'Relevant evidence changed or the condition was observed again.')
         prior_qualification = finding.qualification
         observation.advance(finding, policy, environment, snapshot.generated_at, reset=observation.condition_fingerprint(kind, evidence) != observation.condition_fingerprint(kind, finding.evidence) or not finding.present, row=source_rows.get(path, {}))
+        if finding.qualification != 'eligible' or incomplete:
+            invalidate(finding, 'Current collection evidence is incomplete or no longer qualifies.')
         if prior_qualification != finding.qualification:
             events.append((finding, 'Qualification: ' + finding.get_qualification_display()))
         if digest != finding.fingerprint or not finding.present:
             finding.status = 'open'
-            events.append((finding, 'Reopened: evidence changed or the finding was observed again. Owner and review date retained.'))
+            events.append((finding, 'Saved evidence updated or the finding was observed again. Workflow approvals are reset only when relevant evidence or eligibility changes.'))
         finding.present = True
         finding.name = name[:255]
         finding.evidence, finding.fingerprint = evidence, digest
@@ -114,6 +121,7 @@ def synchronize(environment_id):
             flush()
     for key, finding in existing.items():
         if key not in seen:
+            invalidate(finding, 'The finding is no longer observed; prior approval is no longer valid.')
             if finding.present:
                 events.append((finding, 'Not observed in the latest snapshot. This is not proof of resolution; review collection coverage.'))
             observation.absent(finding, source_rows)

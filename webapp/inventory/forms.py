@@ -103,8 +103,8 @@ class PreferencesForm(forms.ModelForm):
     class Meta:
         from .models import UserPreferences
         model = UserPreferences
-        fields = ['density', 'page_size', 'report_page_size', 'history_days', 'refresh_seconds', 'timezone', 'date_format', 'theme', 'text_size', 'high_contrast', 'reduced_motion', 'remember_tables', 'remember_menus', 'landing_page', 'preferred_environment', 'notification_override', 'notification_failed', 'notification_completed', 'notification_coverage', 'notification_testing', 'notification_days']
-        labels = {'notification_override': 'Use my notification settings', 'notification_failed': 'Failed collections', 'notification_completed': 'Successful collections', 'notification_coverage': 'New coverage issues', 'notification_testing': 'Include testing collections', 'notification_days': 'Show results from the last (days)', 'density': 'Display density', 'page_size': 'History rows per page',
+        fields = ['density', 'page_size', 'report_page_size', 'history_days', 'refresh_seconds', 'timezone', 'date_format', 'theme', 'text_size', 'high_contrast', 'reduced_motion', 'remember_tables', 'remember_menus', 'landing_page', 'preferred_environment', 'notification_override', 'notification_failed', 'notification_completed', 'notification_coverage', 'notification_testing', 'notification_reviews', 'notification_days']
+        labels = {'notification_override': 'Use my notification settings', 'notification_failed': 'Failed collections', 'notification_completed': 'Successful collections', 'notification_coverage': 'New coverage issues', 'notification_reviews': 'Finding assignments and second approvals', 'notification_testing': 'Include testing collections', 'notification_days': 'Show results from the last (days)', 'density': 'Display density', 'page_size': 'History rows per page',
                   'report_page_size': 'Default report table rows', 'history_days': 'Default rule history period',
                   'refresh_seconds': 'Collection status refresh'}
         help_texts = {'notification_override': 'When off, the shared Freshness & notifications policy applies. These preferences affect only your notification bell.', 'notification_days': 'Between 1 and 30 days. This does not delete collection history.', 'notification_testing': 'Include testing results matching your selected notification types.', 'page_size': 'Applies to snapshot history, collection history and rule history.',
@@ -162,16 +162,30 @@ class SnapshotComparisonForm(forms.Form):
 
 
 class FindingReviewForm(forms.Form):
-    status = forms.ChoiceField(choices=[('open', 'Open'), ('acknowledged', 'Acknowledged')])
+    action = forms.ChoiceField(choices=[('assign', 'Assign owner'), ('approve', 'Approve'),
+        ('reject', 'Reject'), ('reopen', 'Reopen review'), ('complete', 'Record decommissioning')])
     owner = forms.ModelChoiceField(queryset=None, required=False)
-    review_date = forms.DateField(required=False, widget=forms.DateInput(attrs={'type': 'date'}))
-    note = forms.CharField(required=False, max_length=5000, widget=forms.Textarea(attrs={'rows': 4}), label='Add a note')
+    note = forms.CharField(max_length=5000, widget=forms.Textarea(attrs={'rows': 4}), label='Reason / manual checks performed')
+    change_ticket = forms.CharField(required=False, max_length=255, label='Change-ticket reference')
     revision = forms.IntegerField(widget=forms.HiddenInput)
 
     def __init__(self, *args, **kwargs):
         from django.contrib.auth import get_user_model
+        finding, actor = kwargs.pop('finding', None), kwargs.pop('actor', None)
         super().__init__(*args, **kwargs)
-        self.fields['owner'].queryset = get_user_model().objects.filter(is_active=True).order_by('username')
+        self.fields['owner'].queryset = get_user_model().objects.filter(is_active=True, is_staff=True).order_by('username')
+        if finding and actor and not self.is_bound:
+            allowed = ['assign']
+            if finding.workflow_state == 'owner_review' and actor.pk == finding.owner_id:
+                allowed = ['approve', 'reject', 'assign']
+            elif finding.workflow_state == 'second_review' and actor.pk != finding.owner_id:
+                allowed = ['approve', 'reject', 'assign']
+            elif finding.workflow_state == 'ready': allowed = ['complete', 'assign']
+            elif finding.workflow_state == 'rejected': allowed = ['reopen', 'assign']
+            labels = dict(self.fields['action'].choices)
+            self.fields['action'].choices = [(key, labels[key]) for key in allowed]
+        self.fields['owner'].help_text = 'Used only for Assign owner. Reassignment resets approvals.'
+        self.fields['change_ticket'].help_text = 'Required when recording decommissioning. This application does not delete NSX objects.'
 
 
 class FindingPolicyForm(forms.ModelForm):
@@ -193,7 +207,7 @@ class FindingFilterForm(forms.Form):
     from .models import Finding
     q = forms.CharField(required=False, label='Search name or path', max_length=255)
     kind = forms.ChoiceField(required=False, choices=[('', 'All finding types')] + list(LABELS.items()))
-    review = forms.ChoiceField(required=False, choices=[('', 'All review states'), ('open', 'Open'), ('acknowledged', 'Acknowledged')])
+    review = forms.ChoiceField(required=False, choices=[('', 'All workflow stages')] + Finding._meta.get_field('workflow_state').choices)
     owner = forms.ChoiceField(required=False)
     sort = forms.ChoiceField(required=False, choices=[('name', 'Name'), ('kind', 'Finding type'), ('status', 'Review status')])
     direction = forms.ChoiceField(required=False, choices=[('asc', 'Ascending'), ('desc', 'Descending')])

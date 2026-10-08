@@ -349,7 +349,7 @@ SETTINGS_SECTIONS = {
     'dates': ('Dates & time', ['timezone','date_format']),
     'tables': ('Tables & navigation', ['page_size','report_page_size','history_days','remember_tables','landing_page','preferred_environment','remember_menus']),
     'updates': ('Live updates', ['refresh_seconds']),
-    'notifications': ('Notifications', ['notification_override', 'notification_failed', 'notification_completed', 'notification_coverage', 'notification_testing', 'notification_days']),
+    'notifications': ('Notifications', ['notification_override', 'notification_failed', 'notification_completed', 'notification_coverage', 'notification_testing', 'notification_reviews', 'notification_days']),
 }
 
 
@@ -533,7 +533,22 @@ def notifications(request):
         items.append({'id': str(job.pk), 'label': label, 'environment': job.environment.name, 'at': job.finished_at.isoformat(),
                       'unread': not seen or job.finished_at > seen,
                       'url': reverse('snapshot', args=[snapshot.pk]) if snapshot else reverse('collection-history', args=[job.environment_id])})
-    return JsonResponse({'items': items, 'unread': unread})
+    if request.user.is_staff and personal.notification_reviews:
+        from .models import FindingEvent
+        review_events = FindingEvent.objects.filter(created_at__gte=timezone.now()-timedelta(days=days)).filter(
+            Q(details__action='assign', finding__owner=request.user, finding__workflow_state='owner_review') |
+            Q(details__to='second_review', finding__workflow_state='second_review')).exclude(
+                Q(details__to='second_review', finding__owner=request.user))
+        from django.db.models import OuterRef, Subquery
+        latest_event = FindingEvent.objects.filter(finding_id=OuterRef('finding_id')).order_by('-pk').values('pk')[:1]
+        review_events = review_events.filter(pk=Subquery(latest_event))
+        unread += review_events.filter(created_at__gt=seen).count() if seen else review_events.count()
+        for event in review_events.order_by('-created_at').values('pk','created_at','finding_id','finding__environment_id','finding__environment__name','details__action')[:50]:
+            items.append({'id': 'finding-'+str(event['pk']), 'label': 'Finding assigned to you' if event['details__action']=='assign' else 'Finding awaiting independent approval',
+                'environment': event['finding__environment__name'], 'at': event['created_at'].isoformat(), 'unread': not seen or event['created_at']>seen,
+                'url': reverse('finding-detail', args=[event['finding__environment_id'], event['finding_id']])})
+    items.sort(key=lambda item: item['at'], reverse=True)
+    return JsonResponse({'items': items[:50], 'unread': unread})
 
 
 @login_required

@@ -186,8 +186,12 @@ def run(pk, token):
             target.policy_fingerprint = ''
             target.revision += 1
             updates.append(target)
+        from .finding_workflow import invalidate, FIELDS as WORKFLOW_FIELDS
+        for target in updates:
+            if not target.present or target.qualification != 'eligible':
+                invalidate(target, 'Recalculated criteria no longer qualify this finding.')
         for offset in range(0, len(updates), 100):
-            Finding.objects.bulk_update(updates[offset:offset+100], observation.FIELDS+['revision'], batch_size=100)
+            Finding.objects.bulk_update(updates[offset:offset+100], observation.FIELDS+['revision']+WORKFLOW_FIELDS, batch_size=100)
         for offset in range(0, len(restored_updates), 100):
             Finding.objects.bulk_update(restored_updates[offset:offset+100], ['present', 'name', 'last_seen', 'evaluated_at', 'snapshot', 'evidence', 'fingerprint'], batch_size=100)
         if creates: Finding.objects.bulk_create(creates, batch_size=100)

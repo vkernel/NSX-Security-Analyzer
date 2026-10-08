@@ -152,6 +152,7 @@ class UserPreferences(models.Model):
     notification_failed = models.BooleanField(default=True)
     notification_completed = models.BooleanField(default=False)
     notification_coverage = models.BooleanField(default=True)
+    notification_reviews = models.BooleanField(default=True)
     notification_testing = models.BooleanField(default=False)
     notification_days = models.PositiveIntegerField(default=7, validators=[MinValueValidator(1), MaxValueValidator(30)])
     notifications_seen_at = models.DateTimeField(null=True, editable=False)
@@ -191,6 +192,13 @@ class FindingPolicy(models.Model):
 
 
 class Finding(models.Model):
+    workflow_state = models.CharField(max_length=24, default='unassigned', choices=[
+        ('unassigned', 'Unassigned'), ('owner_review', 'Owner review'),
+        ('second_review', 'Awaiting second approval'), ('ready', 'Ready for decommissioning'),
+        ('decommissioned', 'Decommissioned'), ('rejected', 'Rejected')], db_index=True)
+    approvals = models.JSONField(default=dict)
+    change_ticket = models.CharField(max_length=255, blank=True)
+
     environment = models.ForeignKey(Environment, on_delete=models.CASCADE, related_name='findings')
     kind = models.CharField(max_length=40)
     path = models.TextField()
@@ -225,6 +233,9 @@ class Finding(models.Model):
 
 
 class FindingEvent(models.Model):
+    actor_label = models.CharField(max_length=255, blank=True)
+    details = models.JSONField(default=dict)
+
     finding = models.ForeignKey(Finding, on_delete=models.CASCADE, related_name='events')
     actor = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, on_delete=models.SET_NULL)
     created_at = models.DateTimeField(auto_now_add=True)

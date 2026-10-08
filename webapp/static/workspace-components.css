@@ -96,3 +96,7 @@ body #detail-body .technical-viewer .code-lines{background:#122236;color:#e1e9f4
 body #detail-body .technical-viewer .json-key{color:#83d5ff}
 body #detail-body .technical-viewer .json-string{color:#a5dfb2}
 body #detail-body .technical-viewer .json-value{color:#edc282}
+/* Review decisions remain readable on narrow screens, including textarea controls. */
+.review-layout>*{min-width:0}.review-layout textarea{width:100%;max-width:100%;min-width:0;box-sizing:border-box}
+.review-layout .form-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+@media(max-width:800px){.review-layout{grid-template-columns:minmax(0,1fr)}.review-layout .form-grid{grid-template-columns:minmax(0,1fr)}}

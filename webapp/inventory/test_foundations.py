@@ -100,7 +100,7 @@ class FoundationTests(TestCase):
         finding.refresh_from_db()
         self.assertEqual(finding.status, 'open')
         self.assertEqual(finding.owner, self.user)
-        self.assertIn('Reopened', finding.events.first().message)
+        self.assertIn('Saved evidence updated', finding.events.first().message)
 
     def test_disappearing_finding_is_not_resolved_and_reappearance_opens(self):
         self.snapshot()
@@ -135,7 +135,7 @@ class FoundationTests(TestCase):
         synchronize(self.env.pk)
         finding = Finding.objects.get(kind='empty_group')
         url = reverse('finding-detail', args=[self.env.pk, finding.pk])
-        data = {'revision': finding.revision, 'status': 'acknowledged', 'owner': self.user.pk,
+        data = {'revision': finding.revision, 'action': 'assign', 'owner': self.user.pk,
                 'review_date': '2030-01-01', 'note': '<script>alert(1)</script>'}
         self.assertEqual(self.client.post(url, data).status_code, 302)
         self.assertContains(self.client.get(url), '&lt;script&gt;')

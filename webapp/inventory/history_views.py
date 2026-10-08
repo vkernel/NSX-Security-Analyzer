@@ -59,7 +59,7 @@ def findings(request, pk):
     # Only findings that met the administration policy enter the review queue.
     from django.db.models import Count
     qualification_counts = list(environment.findings.values('qualification').annotate(total=Count('pk')).order_by('qualification'))
-    rows = environment.findings.filter(present=True, qualification='eligible').select_related('owner').defer('evidence')
+    rows = environment.findings.filter(Q(present=True, qualification='eligible') | Q(workflow_state__in=['owner_review','second_review','ready','rejected','decommissioned'])).select_related('owner').defer('evidence', 'approvals')
     from .forms import FindingFilterForm
     from django.db.models import F
     form = FindingFilterForm(request.GET or {'sort': 'name', 'direction': 'asc'})
@@ -69,11 +69,11 @@ def findings(request, pk):
         if values['q']:
             rows = rows.filter(Q(name__icontains=values['q']) | Q(path__icontains=values['q']))
         if values['kind']: rows = rows.filter(kind=values['kind'])
-        if values['review']: rows = rows.filter(status=values['review'])
+        if values['review']: rows = rows.filter(workflow_state=values['review'])
         owner = values['owner']
         if owner == 'none': rows = rows.filter(owner__isnull=True)
         elif owner: rows = rows.filter(owner_id=request.user.pk if owner == 'me' else int(owner))
-        order = F(values['sort'] or 'name')
+        order = F('workflow_state' if values['sort']=='status' else values['sort'] or 'name')
         rows = rows.order_by(order.desc(nulls_last=True) if values['direction'] == 'desc' else order.asc(nulls_last=True), 'pk')
     else:
         rows = rows.none()
@@ -101,25 +101,24 @@ def finding_detail(request, pk, finding_id):
             rows = rows.select_for_update(of=('self',))
         finding = get_object_or_404(rows, pk=finding_id, environment=environment)
         form = FindingReviewForm(request.POST if request.method == 'POST' else None,
-            initial={'status': finding.status, 'owner': finding.owner_id, 'review_date': finding.review_date, 'revision': finding.revision})
+            initial={'owner': finding.owner_id, 'revision': finding.revision}, finding=finding, actor=request.user)
         if request.method == 'POST' and form.is_valid():
+            from django.core.exceptions import ValidationError
+            from .finding_workflow import decide
             data = form.cleaned_data
             if data['revision'] != finding.revision:
                 form.add_error(None, 'This finding changed while you were reviewing it. Reload the page before saving.')
             else:
-                finding.owner, finding.status, finding.review_date = data['owner'], data['status'], data['review_date']
-                finding.revision += 1
-                finding.save()
-                from .audit_events import record
-                record('finding.reviewed', 'Finding', finding.pk, details={'status': finding.status,
-                       'owner_id': finding.owner_id, 'review_date': str(finding.review_date or '')})
-                message = f'Status: {finding.get_status_display()}; owner: {finding.owner or "Unassigned"}; review date: {finding.review_date or "Not set"}.'
-                if data['note']:
-                    message += '\n' + data['note']
-                FindingEvent.objects.create(finding=finding, actor=request.user, message=message)
-                messages.success(request, 'Review saved. Acknowledgement does not change audit evidence or coverage.')
-                return redirect('finding-detail', pk=pk, finding_id=finding.pk)
-    page = Paginator(finding.events.select_related('actor'), 20).get_page(request.GET.get('page'))
+                try:
+                    decide(finding, request.user, data['action'], data['note'], data['owner'], data['change_ticket'])
+                except ValidationError as exc:
+                    from .audit_events import record
+                    record('finding.action_denied', 'Finding', finding.pk, outcome='denied', details={'action': data['action'], 'reason': '; '.join(exc.messages)})
+                    form.add_error(None, exc)
+                else:
+                    messages.success(request, 'Workflow action recorded. No NSX configuration was changed.')
+                    return redirect('finding-detail', pk=pk, finding_id=finding.pk)
+    page = Paginator(finding.events.select_related('actor').defer('details'), 20).get_page(request.GET.get('page'))
     return render(request, 'inventory/finding_detail.html', {'environment': environment, 'finding': finding,
         'label': LABELS.get(finding.kind, finding.kind), 'form': form, 'page': page,
         'evidence': json.dumps(finding.evidence, indent=2, ensure_ascii=False) if request.GET.get('evidence') == '1' else None})
@@ -167,3 +166,27 @@ def finding_policy(request):
     return render(request, 'inventory/finding_policy.html', {'form': form, 'selected': selected,
         'environment': environment, 'overridden': bool(saved), 'environments': Environment.objects.only('pk', 'name').order_by('name'),
         'recalculations': FindingRecalculation.objects.filter(**({'environment': environment} if environment else {})).select_related('environment').defer('environment__password_ciphertext', 'environment__ca_certificate').order_by('-requested_at')[:20]})
+
+
+@login_required
+@require_GET
+def finding_history_export(request, pk, finding_id):
+    """Download immutable decisions, including evidence retained after snapshot cleanup."""
+    from django.http import StreamingHttpResponse
+    if not request.user.is_staff:
+        return HttpResponseForbidden('Operator or administrator access is required.')
+    finding = get_object_or_404(Finding.objects.only('pk'), pk=finding_id, environment_id=pk)
+    def content():
+        yield '['
+        first = True
+        for row in finding.events.order_by('created_at', 'pk').values('pk','created_at','actor_id','actor_label','message','details').iterator(chunk_size=100):
+            if not first: yield ','
+            first = False
+            row['created_at'] = row['created_at'].isoformat()
+            yield json.dumps(row, ensure_ascii=False)
+        yield ']'
+    from .audit_events import record
+    record('finding.history_exported','Finding',finding.pk)
+    response = StreamingHttpResponse(content(), content_type='application/json')
+    response['Content-Disposition'] = f'attachment; filename="finding-{finding.pk}-history.json"'
+    return response

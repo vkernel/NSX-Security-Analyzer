@@ -132,3 +132,5 @@ This is an independent project and is not affiliated with or endorsed by VMware
 or Broadcom.
 
 Optional authentication providers: [Keycloak setup](docs/keycloak.md) and [LDAPS setup](docs/ldaps.md), configured under Administration → Authentication providers.
+
+Finding approval and manual decommissioning: [two-person review workflow](docs/finding-review-workflow.md).
