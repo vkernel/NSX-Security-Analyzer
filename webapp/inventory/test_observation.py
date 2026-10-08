@@ -76,10 +76,22 @@ class ObservationTests(TestCase):
         self.user.is_superuser = False; self.user.save()
         self.assertEqual(self.client.post(url, {}).status_code, 403)
 
+    def test_review_queue_only_contains_eligible_findings(self):
+        url = reverse('findings', args=[self.env.pk])
+        self.collect(0)
+        self.assertEqual(len(self.client.get(url).context['page']), 0)
+        self.collect(1); self.collect(2)
+        response = self.client.get(url)
+        self.assertEqual(len(response.context['page']), 1)
+        self.assertNotContains(response, 'Dates and observation duration')
+        self.assertNotIn('qualification', response.context['filter_form'].fields)
+        f = self.finding(); f.qualification = 'disabled'; f.save()
+        self.assertEqual(len(self.client.get(url, {'qualification': 'disabled', 'presence': ''}).context['page']), 0)
+
     def test_filters_and_invalid_sort(self):
         self.collect(0); self.collect(1); self.collect(2)
         url = reverse('findings', args=[self.env.pk])
-        response = self.client.get(url, {'qualification': 'eligible', 'kind': 'empty_group', 'sort': 'observation_days', 'direction': 'desc', 'owner': 'none'})
+        response = self.client.get(url, {'qualification': 'eligible', 'kind': 'empty_group', 'sort': 'name', 'direction': 'desc', 'owner': 'none'})
         self.assertEqual(response.status_code, 200)
         self.assertEqual(len(response.context['page']), 1)
         response = self.client.get(url, {'sort': 'evidence'})

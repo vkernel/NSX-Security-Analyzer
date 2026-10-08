@@ -24,11 +24,17 @@ Unknown membership remains unknown, never assumed empty.
 
 ## Finding reviews
 
-**Finding reviews** tracks unused candidates, empty groups/policies, disabled and
-zero-hit rules, and unknown membership, counters, policy inventory and tag usage.
+**Finding reviews** lists currently observed empty groups, unused groups/services,
+zero-hit firewall rules, empty firewall policies and disabled rules only after they
+meet the configured waiting period. Use Search, Finding type, Review state and
+Owner to filter; sort by Name, Finding type or Review status in either direction.
+Date and observation controls are no longer part of this page. Unknown or excluded
+checks remain in Collection coverage rather than this review queue.
+
 Staff can assign an active user, acknowledge/reopen a finding, set a review date
-and append a note. Viewers can read reviews. Filters include open, acknowledged,
-review due and not currently observed; results and note history are paginated.
+and append a note in its detail page. Viewers can read reviews. Results are paginated.
+Objects still accumulating observations remain visible in inventory, but are not
+listed for review. Existing notes are preserved when an object leaves the queue.
 
 Each full collection updates review evidence. Pre-upgrade snapshots establish a
 baseline when the review page is first opened. Repeated equivalent evidence
@@ -39,8 +45,7 @@ A stale edit form is rejected rather than overwriting another review or collecti
 
 Acknowledgement is a workflow decision, not deletion approval or complete audit
 coverage. A finding missing from a subsequent snapshot is **not observed**, not
-resolved: unavailable inventory can hide findings. Due dates are review reminders
-in the filtered list; no email notifications are sent.
+resolved: unavailable inventory can hide findings. Due dates are review reminders; no email notifications are sent.
 
 Review evidence and notes survive snapshot retention. The link to an expired
 source snapshot is removed; the original historical evidence may no longer be
@@ -82,7 +87,7 @@ review tables and leaves existing snapshot JSON unchanged. Do not delete volumes
 
 ## Observation periods and finding qualification
 
-Use **Administration → Finding policy** to configure global defaults or select an
+Use **Administration → Finding review criteria** to configure global defaults or select an
 individual environment and save a complete override. **Use global defaults** removes
 an override. Only administrators can change these settings; changes are audited.
 
@@ -94,7 +99,9 @@ an override. Only administrators can change these settings; changes are audited.
 | Empty firewall policy | 30 days |
 | Disabled firewall rule | 30 days |
 
-Qualification also requires at least three successful observations. Each period can
+Enter the required number of days for each condition and save. The unused-object period applies to both groups and services.
+
+Under **Advanced collection safeguards**, qualification also requires at least three successful observations by default. Each period can
 be disabled with `0` days. The maximum allowed observation gap defaults to twice the
 environment's collection interval; set a nonzero number of hours to override it.
 Ensure retention and collection frequency support the history you need.
@@ -127,10 +134,7 @@ Snapshot retention removes its assessment rows but preserves the current finding
 small observation summary and review history. Page loads query only the displayed
 rows, never all historical report JSON.
 
-Finding reviews supports independent type, qualification, review-state, presence,
-owner, review-date, observed-duration and last-observed filters. Sort by name, type,
-observation duration, qualification date, first/last observation or review date in
-either direction. Filters and sorting are performed in PostgreSQL before pagination.
+Finding review filters and sorting run in PostgreSQL before pagination. Waiting-period settings are managed separately in Administration.
 
 ## Personal notification settings
 
