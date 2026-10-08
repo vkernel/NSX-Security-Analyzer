@@ -27,6 +27,30 @@ class IndexedReportTests(TestCase):
         build(self.snapshot,self.snapshot._rendered)
         self.url = reverse('snapshot-data',args=[self.snapshot.pk])
 
+    def test_related_object_resolution_is_small_and_snapshot_scoped(self):
+        row = SnapshotRecord.objects.filter(snapshot=self.snapshot, view='inventory').first()
+        with CaptureQueriesContext(connection) as queries:
+            response = self.client.get(self.url, {'op':'resolve', 'path':row.compact['path']})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json(), {'id':row.ordinal, 'view':row.view})
+        self.assertFalse(any('"report"' in q['sql'] or '"data"' in q['sql'] for q in queries))
+        self.assertEqual(self.client.get(self.url, {'op':'resolve','path':'/missing'}).status_code,404)
+        other = prepare_snapshot(self.snapshot.environment, sample_report())
+        other.save()
+        self.assertEqual(self.client.get(reverse('snapshot-data',args=[other.pk]),
+            {'op':'resolve','path':row.compact['path']}).status_code,404)
+        self.client.logout()
+        self.assertEqual(self.client.get(self.url, {'op':'resolve','path':row.compact['path']}).status_code,302)
+
+    def test_related_tag_resolution_uses_scope(self):
+        for ordinal, scope in [(9001,'production'),(9002,'test')]:
+            SnapshotRecord.objects.create(snapshot=self.snapshot, ordinal=ordinal,view='tags',
+                name='web',sort_name='web',compact={'scope':scope},data={},columns=[],
+                sort_values={},search_basic='',search_evidence='')
+        response=self.client.get(self.url,{'op':'resolve','view':'tags','tag':'web','scope':'test'})
+        self.assertEqual(response.json(),{'id':9002,'view':'tags'})
+        self.assertEqual(self.client.get(self.url,{'op':'resolve','view':'tags','tag':'web','scope':'missing'}).status_code,404)
+
     def test_repeated_panel_record_references_are_inserted_once(self):
         import re
         from .models import SnapshotRecordPanel

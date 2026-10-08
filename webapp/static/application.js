@@ -1,12 +1,16 @@
 (() => {
   const make=(tag,text,className)=>{const node=document.createElement(tag);if(text)node.textContent=text;if(className)node.className=className;return node;};
+  const evidenceTabs=new Map();
   window.workspaceEvidence=(body,title,row)=> {
     const nodes=Array.from(body.children), groups=new Map([['Overview',[]],['Relationships',[]],['Technical details',[]]]);
     const summary=make('dl',null,'evidence-facts');
     if(row){
-      for(const [key,label] of [['inventory_type','Type'],['usage','Usage'],['membership','Membership'],['hit_status','Activity']]){
-        if(row[key])summary.append(make('dt',label),make('dd',String(row[key]).replaceAll('_',' ')));
+      if(!row.inventory_type && row.kind)summary.append(make('dt','Type'),make('dd',row.kind.replaceAll('_',' ')));
+      for(const [key,label] of [['inventory_type','Type'],['usage','Usage'],['membership','Membership'],['hit_status','Activity'],['power_state','Power state'],['tag_count','Tags'],['group_count','Groups referencing tags'],['action','Action'],['disabled','Disabled'],['hit_count','Recorded hits'],['rule_count','Rules'],['statistics_checked_at','Counters checked'],['category','Category']]){
+        if(row[key]!==undefined && row[key]!==null && row[key]!=='')summary.append(make('dt',label),make('dd',String(row[key]).replaceAll('_',' ')));
       }
+      if(row.referenced_by)summary.append(make('dt','Configuration references'),make('dd',String(row.referenced_by.length)));
+      if(row.membership_definition?.methods?.length)summary.append(make('dt','Membership method'),make('dd',row.membership_definition.methods.join(', ')));
       if(row.path){const identity=make('div',null,'evidence-identity');identity.append(make('code',row.path));const copy=make('button','Copy path');copy.type='button';copy.dataset.copyPath=row.path;identity.append(copy);groups.get('Technical details').push(identity);}
     }
     if(summary.children.length)groups.get('Overview').push(summary);
@@ -16,19 +20,31 @@
       const section=node.dataset.evidenceSection;
       let key=section==='relationships'?'Relationships':section==='technical'?'Technical details':section==='overview'?'Overview':/reference|assignment|firewall|via group/i.test(caption)?'Relationships':/definition|condition|inventory details/i.test(caption)?'Technical details':'Overview';
       if(node.matches('.code-block,pre'))key='Technical details';
-      if(node.tagName==='DETAILS')node.open=false;
+      if(node.tagName==='DETAILS')node.open=key==='Overview';
       groups.get(key).push(node);
     }
+    if(row && !groups.get('Technical details').some(node=>node.matches('details,pre,.code-block')) && row.power_state===undefined){
+      const source=make('details');source.append(make('summary','Saved object data'));const content=make('div');source.append(content);
+      source.addEventListener('toggle',()=>{if(source.open&&!content.children.length)content.append(window.technicalEvidence(row));});groups.get('Technical details').push(source);
+    }
+    // Object references remain inside the drawer; the table is never navigated or reset.
+    for(const node of groups.get('Relationships'))node.querySelectorAll('code').forEach(code=>{
+      const path=code.textContent.trim();if(!path.startsWith('/infra/')||path.includes(',')||code.closest('button'))return;
+      const link=make('button',path,'evidence-object-link');link.type='button';link.onclick=()=>window.openRelatedEvidence(body,{path},path.split('/').pop());code.replaceWith(link);
+    });
     window.prepareEvidenceDrawer?.(body);
     body.replaceChildren();const tabs=make('div',null,'evidence-tabs');tabs.setAttribute('role','tablist');body.append(tabs);
+    const type=row?.inventory_type || row?.kind || (row?.power_state!==undefined?'vm':row?.action!==undefined?'rule':'object');
     let first=true;
     groups.forEach((items,label)=>{
       if(!items.length)items.push(make('p',label==='Relationships'?'No relationship details recorded for this object.':'No additional details recorded.','muted'));
       const button=make('button',label), panel=make('div',null,'evidence-panel');button.type='button';
       const id='evidence-'+label.toLowerCase().replaceAll(' ','-');panel.id=id;button.id=id+'-tab';button.setAttribute('role','tab');button.setAttribute('aria-controls',id);button.setAttribute('aria-selected',String(first));button.tabIndex=first?0:-1;
       panel.setAttribute('role','tabpanel');panel.setAttribute('aria-labelledby',button.id);panel.tabIndex=0;panel.hidden=!first;first=false;panel.append(...items);tabs.append(button);body.append(panel);
-      button.addEventListener('click',()=>{tabs.querySelectorAll('button').forEach(b=>{b.setAttribute('aria-selected',String(b===button));b.tabIndex=b===button?0:-1;});body.querySelectorAll(':scope > .evidence-panel').forEach(p=>p.hidden=p!==panel);});
+      button.addEventListener('click',()=>{tabs.querySelectorAll('button').forEach(b=>{b.setAttribute('aria-selected',String(b===button));b.tabIndex=b===button?0:-1;});body.querySelectorAll(':scope > .evidence-panel').forEach(p=>p.hidden=p!==panel);evidenceTabs.set(type,label);if(label==='Technical details'){const first=panel.querySelector('details');if(first)first.open=true;}});
     });
+    const remembered=evidenceTabs.get(type);if(remembered)Array.from(tabs.children).find(b=>b.textContent===remembered)?.click();
+    window.enhanceTechnicalEvidence?.(body);
     tabs.addEventListener('keydown',event=>{const buttons=Array.from(tabs.children),index=buttons.indexOf(document.activeElement);if(index<0)return;let target;if(event.key==='ArrowRight')target=(index+1)%buttons.length;if(event.key==='ArrowLeft')target=(index+buttons.length-1)%buttons.length;if(event.key==='Home')target=0;if(event.key==='End')target=buttons.length-1;if(target!==undefined){event.preventDefault();buttons[target].click();buttons[target].focus();}});
   };
   window.prepareEvidenceDrawer = body => {

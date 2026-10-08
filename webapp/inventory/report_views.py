@@ -15,7 +15,7 @@ from django.db import connection, transaction, DatabaseError
 from django.db.models import F, Q, Count, Case, When, Value, JSONField, TextField
 from django.db.models.functions import Cast, Coalesce
 from django.db.models.fields.json import KeyTextTransform
-from django.http import JsonResponse, StreamingHttpResponse
+from django.http import Http404, JsonResponse, StreamingHttpResponse
 from django.shortcuts import get_object_or_404
 from django.views.decorators.http import require_GET
 from .models import Snapshot, SnapshotPanel, SnapshotPresentation, SnapshotRecord
@@ -127,7 +127,21 @@ def snapshot_data(request, pk):
         with transaction.atomic():
             limit_query()
             op = request.GET.get('op', 'rows')
-            if op == 'vm-relationships':
+            if op == 'resolve':
+                # Resolve only the requested identity within this saved snapshot.
+                rows = SnapshotRecord.objects.filter(snapshot_id=pk)
+                if request.GET.get('view') == 'tags':
+                    rows = rows.filter(view='tags', name=request.GET.get('tag', ''), compact__scope=request.GET.get('scope', ''))
+                else:
+                    path = request.GET.get('path', '')
+                    if not path:
+                        raise ValueError('An object path is required.')
+                    rows = rows.filter(compact__path=path).exclude(view='vms')
+                row = rows.only('ordinal', 'view').order_by('ordinal').first()
+                if row is None:
+                    raise Http404('This object is not available in this snapshot.')
+                result = {'id': row.ordinal, 'view': row.view}
+            elif op == 'vm-relationships':
                 from .vm_relationships import read
                 result = read(pk, int(request.GET.get('id', '-1')), request.GET.get('section', 'summary'),
                               int(request.GET.get('page', '0')), request.GET.get('path', ''))

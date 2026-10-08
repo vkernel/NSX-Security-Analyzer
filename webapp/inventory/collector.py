@@ -2127,7 +2127,7 @@ table{min-width:760px}th{line-height:1.5}td{padding:15px 14px}.path{line-height:
     }
     if (payload.remote && (button.dataset.tagRow !== undefined || button.dataset.evidenceRow !== undefined || button.dataset.tagCoverage)) {
       detailBody.textContent = 'Loading evidence…';
-      dialog.showModal();
+      if (!dialog.open) dialog.showModal();
       const token = {}; dialog.reportRequest = token;
       try {
         const result = await window.reportData(payload, {op:button.dataset.tagCoverage ? 'tag-coverage' : 'detail', id:button.dataset.tagRow ?? button.dataset.evidenceRow});
@@ -2140,7 +2140,7 @@ table{min-width:760px}th{line-height:1.5}td{padding:15px 14px}.path{line-height:
           }
         }
       } catch (error) {
-        if (dialog.open && dialog.reportRequest === token) detailBody.textContent = error.message + ' Close this dialog and try again.';
+        if (dialog.open && dialog.reportRequest === token) window.evidenceState ? window.evidenceState(detailBody, error.message, () => button.click()) : detailBody.textContent = error.message;
         return;
       }
     }
@@ -2252,6 +2252,7 @@ table{min-width:760px}th{line-height:1.5}td{padding:15px 14px}.path{line-height:
   });
   function enhanceDetails() {
     detailBody.querySelectorAll('table').forEach(table => addStaticExport(table));
+    if (window.enhanceTechnicalEvidence) { window.enhanceTechnicalEvidence(detailBody); return; }
     detailBody.querySelectorAll('pre').forEach(pre => {
       const raw = pre.textContent;
       const block = document.createElement('div');

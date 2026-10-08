@@ -72,3 +72,27 @@ body[data-theme] .stop-action:hover{color:var(--error-text);background:var(--err
 body[data-theme] .workspace-main a.button:not(.primary):not(.destructive){background:var(--app-surface);color:var(--ink);border-color:var(--line)}
 body[data-theme] .workspace-main a.button:not(.primary):not(.destructive):hover{background:var(--hover);color:var(--ink)}
 @media(max-width:600px){.directory-toolbar>.filter-control{flex-basis:100%;min-width:0}.directory-toolbar>.filter-control>.filter-fields{min-width:0}}
+
+/* Shared evidence presentation: compact metadata and bounded technical content. */
+body #detail-dialog .dialog-heading h2{font-size:18px;line-height:1.4;overflow-wrap:anywhere;flex:1;min-width:0}
+body #detail-body .evidence-panel details details{border:0!important;border-left:2px solid var(--line)!important;border-radius:0;padding:8px 12px!important}
+body #detail-body .technical-viewer .code-lines{max-height:360px!important;overflow:auto;white-space:pre;font-size:12px;line-height:1.65;margin:0;padding:12px 12px 12px 48px}
+body #detail-body .technical-viewer.expanded .code-lines{max-height:70vh!important}
+body #detail-body .technical-viewer.wrap .code-lines{white-space:pre-wrap;overflow-wrap:anywhere}
+body #detail-body .technical-viewer .code-lines li{margin:0;white-space:inherit}
+.technical-viewer .code-toolbar{display:flex;align-items:center;flex-wrap:wrap;gap:8px;padding:10px;background:var(--app-surface-soft)}
+.technical-viewer .code-toolbar>span{flex:1;min-width:130px;color:var(--muted);font-size:12px}
+.technical-viewer{border:1px solid var(--line);border-radius:8px;overflow:hidden}
+.technical-viewer .json-key{color:var(--app-accent)}.technical-viewer .json-string{color:var(--ink)}.technical-viewer .json-value{color:var(--muted);font-weight:600}
+.evidence-state{padding:16px;color:var(--muted);background:var(--app-surface-soft);border-radius:8px}.evidence-state p{margin:0 0 8px}
+body #detail-body .evidence-object-link{border:0;background:transparent;color:var(--app-accent);padding:4px 0;text-align:left;overflow-wrap:anywhere}
+.evidence-object-link+code{display:block;font-size:11px;color:var(--muted);margin:2px 0 12px}
+.evidence-note{padding:12px;border-left:3px solid var(--line);color:var(--muted);font-size:13px}
+.evidence-back{margin:12px 0}.evidence-identity code{font-size:12px;color:var(--muted)}
+/* Saved report styles define local colors; keep the drawer on the active theme. */
+body[data-theme] #detail-dialog{--ink:var(--app-text);--muted:var(--app-muted);--line:var(--app-border);--teal:var(--app-accent)}
+body #detail-dialog .evidence-tabs button{background:transparent}
+body #detail-body .technical-viewer .code-lines{background:#122236;color:#e1e9f4}
+body #detail-body .technical-viewer .json-key{color:#83d5ff}
+body #detail-body .technical-viewer .json-string{color:#a5dfb2}
+body #detail-body .technical-viewer .json-value{color:#edc282}

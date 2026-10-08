@@ -456,3 +456,23 @@ cached between collections. Prior-run data is projected in PostgreSQL to members
 hints, statistics backoff and rule identity/hit-history fields, excluding full
 inventory and statistics payloads. No schema migration or historical refresh is
 required. Gains depend on API latency and available capacity below the shared limit.
+
+
+### Reading object evidence
+
+Group, service, firewall and VM drawers use Overview, Relationships and Technical
+details tabs. Overview shows saved object facts; relationship warnings explain
+what the snapshot does and does not verify. The selected tab is remembered for
+that object type while the report remains open.
+
+Technical details are read-only, with line numbers, highlighting, Copy, Wrap and
+Expand controls. Large values initially display 200 lines; Show more loads the
+next batch. Copy includes the complete value, including undisplayed lines.
+
+VM tags, groups, rules and services open the specific saved object's evidence
+inside the drawer. Back restores the previous drawer, including expanded sections
+and relationship pages, without changing table filters, sorting or pagination.
+An object absent from the saved index produces an error with Retry; it does not
+redirect to an unrelated list. VM relationships stay paginated and technical VM
+data loads only when its section opens. Failed requests can be retried inline.
+These relationships describe configuration, not verified effective policy.

@@ -90,40 +90,64 @@
     if(bytes<500000){while(cache.size && (cache.size>=30 || cacheBytes+bytes>2000000)){const first=cache.keys().next().value;cacheBytes-=cache.get(first).bytes;cache.delete(first);}cache.set(key,{value,bytes});cacheBytes+=bytes;}
     return value;
   }
-  window.showVmRelationships = (body, payload, id, summary) => {
+  window.showVmRelationships = async (body, payload, id, summary) => {
+    const generation={};body.evidenceGeneration=generation;
+    const current=()=>body.evidenceGeneration===generation && body.closest('dialog')?.open;
+    if(!summary){
+      window.evidenceState(body,'Loading VM summary…');
+      try{summary=(await load(id,'summary')).data;}
+      catch(error){if(current())window.evidenceState(body,error.message,()=>window.showVmRelationships(body,payload,id,null));return;}
+      if(!current())return;
+    }
     body.replaceChildren();
-    const header=make('p','Configuration relationships only; resolved membership and effective policy are not verified.');body.append(header);
+    function relationLink(item,section){
+      const label=typeof item==='string'?item:item.name || item.tag || item.path;
+      const button=make('button',label);button.type='button';button.className='evidence-object-link';
+      const query=section==='tags'?{view:'tags',tag:item.tag,scope:item.scope || ''}:{path:typeof item==='string'?item:item.path};
+      button.onclick=()=>window.openRelatedEvidence(body,query,label);
+      return button;
+    }
     function paged(parent,section,label,path='') {
       const box=make('details'), title=make('summary',label), content=make('div');box.dataset.evidenceSection='relationships';box.append(title,content);parent.append(box);
-      let loaded=false, version=0;
+      let loaded=false, busy=false, version=0;
       async function render(page=0) {
-        const current=++version;content.replaceChildren(make('p','Loading…'));
+        const sequence=++version;busy=true;window.evidenceState(content,'Loading relationships…');
         try {
           const data=await load(id,section,page,path);
-          if(current!==version || !body.isConnected)return;
+          if(sequence!==version || body.evidenceGeneration!==generation)return;
           content.replaceChildren();loaded=true;
-          if(!data.items.length)content.append(make('p','No relationships recorded.'));
+          if(!data.items.length)window.evidenceState(content,'No relationships recorded in this snapshot.');
           data.items.forEach(item=>{
             if(section==='related_rules'){
               const rule=make('details'), caption=make('summary',item.name || item.path), detail=make('div');rule.append(caption,detail);content.append(rule);
-              let ready=false, busy=false;
-              rule.addEventListener('toggle',async()=>{
-                if(!rule.open || ready || busy)return;busy=true;detail.replaceChildren(make('p','Loading…'));
-                try { const response=await load(id,'rule',0,item.path);const ruleData=response.details;detail.replaceChildren(make('code',ruleData.path),make('p','Action: '+(ruleData.action || 'Unknown')+' · '+(ruleData.disabled?'Disabled':'Enabled')),make('h3','Configured services'));const services=make('ul');(ruleData.services || []).forEach(service=>{services.append(make('li',typeof service==='string'?service:(service.name || service.path)));});detail.append(services);paged(detail,'via_groups','Related groups for this rule',item.path);ready=true; }
-                catch(error){detail.replaceChildren(make('p',error.message+' Close and expand to retry.'));} finally {busy=false;}
-              });
-            } else {const itemNode=make('p'),link=make('a',typeof item==='string'?item:item.name || item.tag || item.path);link.href=section==='tags'?'#tags-all':'#all-groups';link.addEventListener('click',()=>body.closest('dialog')?.close());itemNode.append(link);if(typeof item==='object')itemNode.append(make('code',item.path || item.scope || ''));content.append(itemNode);}
+              let ready=false, loading=false;
+              const show=async()=>{
+                if(ready || loading)return;loading=true;window.evidenceState(detail,'Loading rule…');
+                try {
+                  const response=await load(id,'rule',0,item.path);if(body.evidenceGeneration!==generation)return;
+                  const ruleData=response.details;
+                  detail.replaceChildren(relationLink(item,'rules'),make('p','Action: '+(ruleData.action || 'Unknown')+' · '+(ruleData.disabled?'Disabled':'Enabled')),make('h3','Configured services'));
+                  const services=make('ul');(ruleData.services || []).forEach(service=>{const li=make('li');if(service==='ANY' || service.path==='ANY')li.textContent='Any service';else li.append(relationLink(service,'services'));services.append(li);});
+                  if(!services.children.length)services.append(make('li','No configured services recorded.'));
+                  detail.append(services);paged(detail,'via_groups','Related groups for this rule',item.path);ready=true;
+                }catch(error){window.evidenceState(detail,error.message,show);}finally{loading=false;}
+              };
+              rule.addEventListener('toggle',()=>{if(rule.open)show();});
+            } else {const itemNode=make('p');itemNode.append(relationLink(item,section));if(typeof item==='object')itemNode.append(make('code',item.path || item.scope || ''));content.append(itemNode);}
           });
-          const previous=make('button','Previous'), next=make('button','Next');previous.type=next.type='button';previous.disabled=page===0;next.disabled=!data.has_next;
-          previous.onclick=()=>render(page-1);next.onclick=()=>render(page+1);content.append(previous,make('span',' Page '+(page+1)+' '),next);
-        }catch(error){content.replaceChildren(make('p',error.message));const retry=make('button','Retry');retry.type='button';retry.onclick=()=>render(page);content.append(retry);}
+          if(page || data.has_next){const previous=make('button','Previous'), next=make('button','Next');previous.type=next.type='button';previous.disabled=page===0;next.disabled=!data.has_next;
+          previous.onclick=()=>render(page-1);next.onclick=()=>render(page+1);content.append(previous,make('span',' Page '+(page+1)+' '),next);}
+        }catch(error){if(body.evidenceGeneration===generation)window.evidenceState(content,error.message,()=>render(page));}finally{busy=false;}
       }
-      box.addEventListener('toggle',()=>{if(box.open&&!loaded)render();});
+      box.addEventListener('toggle',()=>{if(box.open&&!loaded&&!busy)render();});
     }
-    paged(body,'tags','Assigned tags');paged(body,'related_groups','Related groups');paged(body,'related_rules','Related rules and services');
-    const advanced=make('details'), title=make('summary','VM inventory details'), content=make('pre');advanced.dataset.evidenceSection='technical';advanced.append(title,content);body.append(advanced);
-    let ready=false;advanced.addEventListener('toggle',async()=>{if(!advanced.open||ready)return;content.textContent='Loading…';try{const response=await load(id,'vm');content.textContent=JSON.stringify(response.details,null,2);ready=true;}catch(error){content.textContent=error.message+' Close and expand to retry.';}});
-    window.workspaceEvidence?.(body,body.closest('dialog')?.querySelector('h2'),summary);
+    const caveat=make('p','Configuration relationships only. Group references use tag conditions; resolved membership and effective policy are not verified.');caveat.dataset.evidenceSection='relationships';caveat.className='evidence-note';body.append(caveat);
+    paged(body,'tags','Assigned tags');paged(body,'related_groups','Groups referencing these tags');paged(body,'related_rules','Related rules and services');
+    const advanced=make('details'), title=make('summary','VM inventory details'), content=make('div');advanced.dataset.evidenceSection='technical';advanced.append(title,content);body.append(advanced);
+    let ready=false,busy=false;
+    const technical=async()=>{if(ready||busy)return;busy=true;window.evidenceState(content,'Loading technical details…');try{const response=await load(id,'vm');if(body.evidenceGeneration!==generation)return;content.replaceChildren(window.technicalEvidence(response.details));ready=true;}catch(error){window.evidenceState(content,error.message,technical);}finally{busy=false;}};
+    advanced.addEventListener('toggle',()=>{if(advanced.open)technical();});
+    window.workspaceEvidence?.(body,body.closest('dialog')?.querySelector('h2'),{...summary,inventory_type:'Virtual machine'});
   };
   document.addEventListener('click',event=>{
     const button=event.target.closest('.detail-button[data-evidence-row]');
@@ -131,8 +155,8 @@
     event.preventDefault();event.stopImmediatePropagation();
     const dialog=document.getElementById('detail-dialog'),body=document.getElementById('detail-body');
     document.getElementById('detail-title').textContent=button.dataset.title;
-    window.showVmRelationships(body,null,Number(button.dataset.evidenceRow),null);
     if(!dialog.open)dialog.showModal();
-    dialog.addEventListener('close',()=>button.isConnected&&button.focus(),{once:true});
+    window.showVmRelationships(body,null,Number(button.dataset.evidenceRow),null);
+    dialog.addEventListener('close',()=>{body.evidenceGeneration=null;button.isConnected&&button.focus({preventScroll:true});},{once:true});
   },true);
 })();
