@@ -71,17 +71,19 @@ class PacingTests(SimpleTestCase):
 
 
 class ManagerClaimTests(TestCase):
-    def test_duplicate_origin_waits_other_manager_can_run(self):
+    def test_only_one_collection_across_all_managers(self):
         env=Environment.objects.create(name='One',slug='one',manager='https://nsx.example')
         running=AuditJob.objects.create(environment=env,status='running',config={'manager':'https://NSX.example:443/'})
         duplicate=Environment.objects.create(name='Two',slug='two',manager='https://NSX.example:443/')
         different=Environment.objects.create(name='Three',slug='three',manager='https://other.example')
         blocked=AuditJob.objects.create(environment=duplicate,config={'manager':'nsx.example'})
         other=AuditJob.objects.create(environment=different,config={'manager':'https://other.example'})
-        self.assertEqual(claim_job().pk,other.pk)
         self.assertIsNone(claim_job())
         running.status='succeeded';running.save()
         self.assertEqual(claim_job().pk,blocked.pk)
+        self.assertIsNone(claim_job())
+        blocked.refresh_from_db(); blocked.status="succeeded"; blocked.save()
+        self.assertEqual(claim_job().pk,other.pk)
 
 
 class MembershipOrderingTests(SimpleTestCase):

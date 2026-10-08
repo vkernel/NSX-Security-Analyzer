@@ -36,6 +36,11 @@ def claim():
     FindingRecalculation.objects.filter(status='running', started_at__lt=timezone.now()-timedelta(seconds=settings.AUDIT_TIMEOUT+60)).update(
         status='failed', error='Recalculation worker stopped or exceeded its time limit. Save criteria to retry.')
     with transaction.atomic():
+        if connection.vendor == 'postgresql':
+            with connection.cursor() as cursor:
+                cursor.execute('SELECT pg_advisory_xact_lock(781249313)')
+        if FindingRecalculation.objects.filter(status='running').exists():
+            return None
         rows = FindingRecalculation.objects.filter(status='queued').order_by('requested_at')
         rows = rows.select_for_update(skip_locked=True) if connection.features.has_select_for_update_skip_locked else rows.select_for_update()
         row = rows.first()

@@ -76,13 +76,10 @@ def claim_job():
             jobs = jobs.select_for_update(skip_locked=True)
         else:
             jobs = jobs.select_for_update()
-        from urllib.parse import urlsplit
-        def manager_key(config):
-            origin = config.get("manager", "")
-            parsed = urlsplit(origin if "://" in origin else "https://" + origin)
-            return (parsed.hostname or "").lower(), parsed.port or 443
-        busy = {manager_key(config) for config in AuditJob.objects.filter(status="running").values_list("config", flat=True)}
-        job = next((candidate for candidate in jobs.iterator() if manager_key(candidate.config) not in busy), None)
+        # One collection globally, including different NSX environments.
+        if AuditJob.objects.filter(status="running").exists():
+            return None
+        job = jobs.first()
         if job:
             job.status = "running"
             job.started_at = timezone.now()

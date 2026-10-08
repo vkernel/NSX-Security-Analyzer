@@ -86,13 +86,14 @@ class AuditJob(models.Model):
     diagnostics = models.JSONField(default=dict, blank=True)
     debug_until = models.DateTimeField(null=True, blank=True)
     progress_completed = models.PositiveSmallIntegerField(default=0, validators=[MaxValueValidator(7)])
-    progress_stage = models.CharField(max_length=150, default="Waiting for an audit worker")
+    progress_stage = models.CharField(max_length=150, default="Waiting for a collection worker")
 
     @property
     def progress(self):
         completed = 7 if self.status == "succeeded" else min(self.progress_completed, 6)
         stage = ("Completed" if self.status == "succeeded" else
                  "Stopped · " + self.progress_stage if self.status == "failed" else self.progress_stage)
+        stage = stage.replace("Waiting for an audit worker", "Waiting for a collection worker")
         return {"completed": completed, "total": 7, "percent": completed * 100 // 7, "stage": stage}
 
     class Meta:

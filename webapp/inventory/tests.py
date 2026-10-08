@@ -475,8 +475,12 @@ class WorkerTransactionTests(TransactionTestCase):
                 connections.close_all()
         with ThreadPoolExecutor(max_workers=2) as pool:
             actual = set(pool.map(lambda _: claim(), range(2)))
-        self.assertEqual(actual, expected)
+        claimed = actual - {None}
+        self.assertEqual(len(claimed), 1)
+        self.assertTrue(claimed <= expected)
         self.assertIsNone(claim_job())
+        AuditJob.objects.filter(pk__in=claimed).update(status='succeeded')
+        self.assertEqual(claim_job().pk, (expected - claimed).pop())
 
     def test_parallel_enqueues_keep_one_active_job(self):
         from concurrent.futures import ThreadPoolExecutor

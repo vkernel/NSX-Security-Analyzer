@@ -1,3 +1,4 @@
+from contextlib import ExitStack
 import subprocess
 import signal
 import sys
@@ -11,9 +12,10 @@ from inventory.services import claim_job, expire_jobs, fail_job, stop_requested,
 
 
 class Command(BaseCommand):
-    help = "Process queued NSX audits. Run multiple workers with PostgreSQL for concurrency."
+    help = "Run one collection lane and one finding-recalculation lane."
 
     def add_arguments(self, parser):
+        parser.add_argument("--lane", choices=["both", "collection", "recalculation"], default="both", help="Select a work lane; default supervises both independently.")
         parser.add_argument("--once", action="store_true", help="Process at most one queued job, then exit.")
 
     def handle(self, *args, **options):
@@ -22,7 +24,24 @@ class Command(BaseCommand):
 
         previous = signal.signal(signal.SIGTERM, stop)
         try:
-            self.run_worker(options)
+            if options['once']:
+                from inventory.worker_lanes import lease
+                lanes = ('collection', 'recalculation') if options['lane'] == 'both' else (options['lane'],)
+                with ExitStack() as stack:
+                    owned = [stack.enter_context(lease(lane)) for lane in lanes]
+                    if any(item is False for item in owned): return
+                    self.lane_connections = [item for item in owned if item is not None]
+                    self.run_worker(options)
+            elif options['lane'] == 'both':
+                self.supervise_lanes()
+            else:
+                from inventory.worker_lanes import lease
+                while True:
+                    with lease(options['lane']) as owned:
+                        if owned is not False:
+                            self.lane_connections = [owned] if owned is not None else []
+                            self.run_worker(options)
+                    time.sleep(2)
         except KeyboardInterrupt:
             return
         except Exception as exc:
@@ -31,9 +50,34 @@ class Command(BaseCommand):
         finally:
             signal.signal(signal.SIGTERM, previous)
 
+    def check_lease(self):
+        for owned in getattr(self, 'lane_connections', []):
+            # Do not reconnect: losing this connection loses the exclusive lease.
+            with owned.connection.cursor() as cursor:
+                cursor.execute('SELECT 1')
+
+    def supervise_lanes(self):
+        processes = []
+        try:
+            for lane in ('collection', 'recalculation'):
+                processes.append(subprocess.Popen([sys.executable, str(settings.BASE_DIR / 'manage.py'),
+                                                   'audit_worker', '--lane', lane]))
+            while True:
+                if any(process.poll() is not None for process in processes):
+                    raise CommandError('A worker lane stopped; restarting the worker supervisor is required.')
+                time.sleep(1)
+        finally:
+            for process in processes:
+                if process.poll() is None: process.terminate()
+            for process in processes:
+                try: process.wait(timeout=15)
+                except subprocess.TimeoutExpired:
+                    process.kill(); process.wait()
+
     def wait_for_collection(self, process, job_id):
         deadline = time.monotonic() + settings.AUDIT_TIMEOUT
         while True:
+            self.check_lease()
             if stop_requested(job_id):
                 LOG.warning("job=%s stop requested; killing collector and rolling back unfinished work", job_id)
                 process.kill()
@@ -57,8 +101,17 @@ class Command(BaseCommand):
             with subprocess.Popen([sys.executable, str(settings.BASE_DIR / 'manage.py'),
                                    'recalculate_findings', str(job.pk), str(job.token)]) as process:
                 try:
-                    process.wait(timeout=settings.AUDIT_TIMEOUT)
-                except (subprocess.TimeoutExpired, KeyboardInterrupt):
+                    deadline = time.monotonic() + settings.AUDIT_TIMEOUT
+                    while True:
+                        self.check_lease()
+                        remaining = deadline - time.monotonic()
+                        if remaining <= 0: raise subprocess.TimeoutExpired('recalculate_findings', settings.AUDIT_TIMEOUT)
+                        try:
+                            process.wait(timeout=min(2, remaining))
+                            break
+                        except subprocess.TimeoutExpired:
+                            continue
+                except BaseException:
                     process.kill()
                     process.wait()
                     fail(job.pk, job.token)
@@ -68,14 +121,20 @@ class Command(BaseCommand):
             fail(job.pk, job.token)
 
     def run_worker(self, options):
-        LOG.info("Worker started timeout_seconds=%s", settings.AUDIT_TIMEOUT)
+        lane = options.get("lane", "both")
+        LOG.info("Collection worker started lane=%s timeout_seconds=%s", lane, settings.AUDIT_TIMEOUT)
         while True:
+            self.check_lease()
             close_old_connections()
             from inventory.finding_recalculation import claim as claim_recalculation
-            recalculation = claim_recalculation()
+            recalculation = claim_recalculation() if lane != "collection" else None
             if recalculation:
                 self.run_recalculation(recalculation)
                 if options['once']: return
+                continue
+            if lane == 'recalculation':
+                if options['once']: return
+                time.sleep(2)
                 continue
             with phase('worker', 'expire_stale_jobs', quiet=True):
                 expire_jobs()

@@ -5,7 +5,7 @@ flowchart LR
   Browser --> Web[Web application]
   Web --> DB[(PostgreSQL)]
   Scheduler[Sync scheduler] --> DB
-  Worker[Audit worker] --> DB
+  Worker[Collection worker] --> DB
   Worker -->|HTTPS GET| NSX[NSX Local Manager]
 ```
 

@@ -1,4 +1,4 @@
-"""Configuration shared by the web process and audit workers."""
+"""Configuration shared by the web process and collection workers."""
 import os
 from pathlib import Path
 

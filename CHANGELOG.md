@@ -2,6 +2,8 @@
 
 ## Unreleased — development
 
+- Use “collection worker” throughout user-facing queue status; enforce one global collection and one independently running finding-history recalculation with PostgreSQL worker-lane leases.
+
 - Fix finding-history replay to restore current presence and evidence; separate condition continuity from review fingerprints and upgrade cached historical evidence during replay.
 - Use a 24-hour minimum automatic finding-observation gap, preserve explicit overrides, and explain withheld findings in the review queue.
 - Update in-app Help & coverage with finding criteria, historical recalculation, workspace controls, authentication settings and collection pacing guidance, including for existing indexed snapshots.

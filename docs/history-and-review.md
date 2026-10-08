@@ -241,3 +241,19 @@ that were incorrectly marked absent, while preserving owners, decisions and note
 Expand **Why some findings are not listed** to see qualification totals before table
 filters. Updated Help & coverage is served for indexed snapshots without rebuilding
 their saved data.
+
+
+### Collection and recalculation concurrency
+
+The normal `python manage.py audit_worker` command now supervises two independent
+lanes in the existing worker container. One collection may run globally, and one
+finding-review recalculation may run alongside it. Additional jobs remain queued.
+PostgreSQL locks enforce these limits across worker replicas; SQLite is intended
+for a single-worker development deployment. No extra Compose service or Kubernetes
+Deployment is needed. Allow worker memory for both subprocesses together.
+
+The command name remains `audit_worker` for deployment compatibility; UI labels use
+“collection worker.” `--lane collection` and `--lane recalculation` are available
+for separate process deployments. `--once` processes at most one job and exits;
+with its default lane it conservatively reserves both lanes for that invocation.
+Stop old worker replicas during upgrade, then start the new build and run migrations.

@@ -319,3 +319,15 @@ assessments; current finding observation periods and review history survive.
 See [finding observation policies](history-and-review.md#observation-periods-and-finding-qualification)
 for thresholds and collection-gap settings. Longer thresholds do not require
 loading more history on page requests.
+
+
+### Concurrent collection and finding-history replay
+
+The worker runs at most one collection plus one finding-review recalculation at a
+time. These subprocesses share the worker container's memory and CPU limits. Size
+the worker for their combined measured peak, including the supervisors; adding
+worker replicas does not raise either global concurrency limit when sharing the
+same PostgreSQL database. For independent resource limits, deploy the same image
+with `python manage.py audit_worker --lane collection` and a separate worker with
+`python manage.py audit_worker --lane recalculation` instead of the default combined
+supervisor. Both need the same database/application configuration.

@@ -348,12 +348,15 @@ separate coverage limitations, not pacing failures. The collector preserves thos
 limitations when the available endpoints cannot verify the evidence; resolving a
 request timeout does not make unsupported membership checks complete.
 
-Job claiming is serialized briefly in PostgreSQL and prevents simultaneous running
-jobs for the same normalized manager hostname and port across environment entries
-and worker replicas. Different DNS aliases or IP addresses for the same manager
-cannot be identified automatically; configure a consistent manager address. External
-applications and separate Analyzer databases do not share this limiter. Existing
-running collections must finish before the new worker behavior takes effect.
+The collection worker supervises two independent subprocess lanes: at most one
+collection across all environments and one finding-review recalculation. PostgreSQL
+session advisory locks enforce each lane across worker replicas, including while a
+recalculation is superseded by newly saved criteria. The work queues are independent;
+a recalculation can run alongside a collection. Publication for the same environment
+still briefly serializes on its environment lock, and a newly saved snapshot can
+cause recalculation to retry against the new history. Separate Analyzer databases
+do not share these limits. Stop old worker replicas before starting the upgraded
+workers so older concurrency behavior cannot overlap the new limits.
 
 Logs show shared cooldowns, rate recovery, retry exhaustion and a final pacing
 summary; successful report performance metadata includes throttled attempt counts,
