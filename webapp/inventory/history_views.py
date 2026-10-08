@@ -81,7 +81,8 @@ def findings(request, pk):
     params = request.GET.copy()
     params.pop('page', None)
     return render(request, 'inventory/findings.html', {'environment': environment, 'page': page,
-        'query': query, 'filter_form': form, 'query_string': params.urlencode()})
+        'query': query, 'filter_form': form, 'query_string': params.urlencode(),
+        'recalculation': environment.finding_recalculation if hasattr(environment, 'finding_recalculation') else None})
 
 
 @login_required
@@ -126,7 +127,7 @@ def finding_detail(request, pk, finding_id):
 @require_http_methods(['GET', 'POST'])
 def finding_policy(request):
     from .forms import FindingPolicyForm
-    from .models import FindingPolicy
+    from .models import FindingPolicy, FindingRecalculation
     from .observation import policy_for
     if not request.user.is_superuser:
         return HttpResponseForbidden('Administrator access is required.')
@@ -135,18 +136,32 @@ def finding_policy(request):
     scope = str(environment.pk) if environment else 'global'
     saved = FindingPolicy.objects.filter(scope=scope).first()
     inherited = policy_for(environment) if environment else FindingPolicy.objects.filter(scope='global').first() or FindingPolicy()
+    previous = {name: getattr(inherited, name) for name in FindingPolicyForm.Meta.fields}
     form = FindingPolicyForm(request.POST or None, instance=saved or FindingPolicy(),
         initial={name: getattr(inherited, name) for name in FindingPolicyForm.Meta.fields})
     if request.method == 'POST':
         if request.POST.get('inherit') == '1' and environment:
-            FindingPolicy.objects.filter(scope=scope).delete()
+            from .finding_recalculation import queue
+            from .observation import KINDS
+            with transaction.atomic():
+                FindingPolicy.objects.filter(scope=scope).delete()
+                queue([environment.pk], KINDS)
             return redirect(request.get_full_path())
         if form.is_valid():
             obj = form.save(commit=False)
             obj.scope, obj.environment = scope, environment
-            obj.save()
+            from .finding_recalculation import queue
+            from .observation import KINDS
+            kinds = [kind for kind in KINDS if previous[kind+'_days'] != getattr(obj, kind+'_days')]
+            if any(previous[field] != getattr(obj, field) for field in ('minimum_observations', 'maximum_gap_hours')) or not kinds:
+                kinds = list(KINDS)
+            with transaction.atomic():
+                obj.save()
+                affected = [environment.pk] if environment else Environment.objects.exclude(pk__in=FindingPolicy.objects.filter(environment__isnull=False).values('environment_id')).values_list('pk', flat=True)
+                queue(affected, kinds)
             from django.contrib import messages
-            messages.success(request, 'Criteria saved. Run a new full collection to apply them. Changed observation periods restart; 0-day criteria need no waiting period.')
+            messages.success(request, 'Criteria saved. Finding reviews are being recalculated from retained collection history by the worker; no new collection is required.')
             return redirect(request.get_full_path())
     return render(request, 'inventory/finding_policy.html', {'form': form, 'selected': selected,
-        'environment': environment, 'overridden': bool(saved), 'environments': Environment.objects.only('pk', 'name').order_by('name')})
+        'environment': environment, 'overridden': bool(saved), 'environments': Environment.objects.only('pk', 'name').order_by('name'),
+        'recalculations': FindingRecalculation.objects.filter(**({'environment': environment} if environment else {})).select_related('environment').defer('environment__password_ciphertext', 'environment__ca_certificate').order_by('-requested_at')[:20]})

@@ -51,10 +51,32 @@ class Command(BaseCommand):
             except subprocess.TimeoutExpired:
                 continue
 
+    def run_recalculation(self, job):
+        from inventory.finding_recalculation import fail
+        try:
+            with subprocess.Popen([sys.executable, str(settings.BASE_DIR / 'manage.py'),
+                                   'recalculate_findings', str(job.pk), str(job.token)]) as process:
+                try:
+                    process.wait(timeout=settings.AUDIT_TIMEOUT)
+                except (subprocess.TimeoutExpired, KeyboardInterrupt):
+                    process.kill()
+                    process.wait()
+                    fail(job.pk, job.token)
+                    raise
+            fail(job.pk, job.token)  # Only marks still-running work, e.g. an OOM exit.
+        except (OSError, subprocess.TimeoutExpired):
+            fail(job.pk, job.token)
+
     def run_worker(self, options):
         LOG.info("Worker started timeout_seconds=%s", settings.AUDIT_TIMEOUT)
         while True:
             close_old_connections()
+            from inventory.finding_recalculation import claim as claim_recalculation
+            recalculation = claim_recalculation()
+            if recalculation:
+                self.run_recalculation(recalculation)
+                if options['once']: return
+                continue
             with phase('worker', 'expire_stale_jobs', quiet=True):
                 expire_jobs()
             with phase('worker', 'claim_queued_job', quiet=True):

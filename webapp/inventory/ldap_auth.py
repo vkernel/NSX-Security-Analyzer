@@ -1,4 +1,5 @@
 """Explicit LDAPS authentication; no fallback from local credentials."""
+import copy
 import hashlib
 import ssl
 from contextlib import contextmanager
@@ -8,6 +9,7 @@ from django.contrib.auth import get_user_model
 from django.contrib.auth.backends import ModelBackend
 from django.db import transaction
 from ldap3 import Server, Connection, Tls, NONE, SUBTREE, SIMPLE
+from ldap3.core.exceptions import LDAPCommunicationError, LDAPUnavailableResult, LDAPBusyResult
 from ldap3.utils.conv import escape_filter_chars
 from .models import LDAPConfiguration, LDAPIdentity
 from .credentials import decrypt_password
@@ -61,10 +63,34 @@ def bound(config, dn, password):
             raise DirectoryDenied('bind_failed')
         yield conn
     finally:
-        conn.unbind()
+        try:
+            conn.unbind()
+        except (LDAPCommunicationError, OSError):
+            # A broken connection must not mask the bind/search failure.
+            pass
+
+
+def servers(config):
+    yield 'primary', config
+    if config.secondary_server_url:
+        secondary = copy.copy(config)
+        secondary.server_url = config.secondary_server_url
+        secondary.ca_certificate = config.secondary_ca_certificate
+        yield 'secondary', secondary
 
 
 def lookup(config, username, password):
+    for role, server_config in servers(config):
+        try:
+            return lookup_server(server_config, username, password)
+        except (LDAPCommunicationError, LDAPUnavailableResult, LDAPBusyResult, OSError) as exc:
+            if role == 'secondary' or not config.secondary_server_url:
+                raise
+            record('auth.ldap.failover', details={'reason': 'primary_unavailable', 'exception': type(exc).__name__}, best_effort=True)
+    raise DirectoryDenied('directory_unavailable')
+
+
+def lookup_server(config, username, password):
     with bound(config, config.bind_dn, decrypt_password(config.secret_ciphertext)) as conn:
         conn.search(config.user_base, '(%s=%s)' % (config.username_attribute, escape_filter_chars(username)),
                     search_scope=SUBTREE, attributes=[config.identity_attribute, 'memberOf', 'givenName', 'sn'],

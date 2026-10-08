@@ -101,7 +101,7 @@ an override. Only administrators can change these settings; changes are audited.
 
 Enter the required number of days for each condition and save. The unused-object period applies to both groups and services.
 
-Under **Advanced collection safeguards**, qualification also requires at least three successful observations by default. `0` days means no waiting period: one confirmed observation in the next full collection is sufficient. This replaces the previous meaning of zero (disabled). A value of `1` requires a full 24 hours and the configured minimum observation count; it does not mean one collection. The maximum allowed observation gap defaults to twice the
+Under **Advanced collection safeguards**, qualification also requires at least three successful observations by default. `0` days means no waiting period: a confirmed condition in the latest retained successful full collection is sufficient after background recalculation. This replaces the previous meaning of zero (disabled). A value of `1` requires a full 24 hours and the configured minimum observation count; it does not mean one collection. The maximum allowed observation gap defaults to twice the
 environment's collection interval (24 hours for manual collection); set a nonzero number of hours to override it.
 Ensure retention and collection frequency support the history you need.
 
@@ -111,19 +111,47 @@ means the condition cannot be established. **Condition cleared** requires positi
 opposite evidence (for example members or recorded hits); a missing object alone
 never proves resolution. Legacy **Qualification disabled** assessments remain unchanged in historical snapshots. Review state (Open/Acknowledged) remains independent.
 
-Periods restart on relevant evidence/configuration changes, reappearance, policy
-changes, or gaps beyond the limit. Unknown and excluded observations break the
+Periods restart on relevant evidence/configuration changes, reappearance, or gaps beyond the limit. Changing criteria re-evaluates retained evidence instead of requiring new observations. Unknown and excluded observations break the
 period. Failed collections and demo/imported snapshots do not add observations.
 Fresh timestamped zero counters are required for zero-hit qualification: repeated
 old statistics cannot advance it. A positive unchanged cumulative counter is **not**
 classified as zero hits or inactivity. These sampled observations are not continuous
 traffic monitoring or proof that an object is safe to delete.
 
-Existing findings start with insufficient evidence; their old first-seen date does
-not establish continuity. The next full collection begins the observation period.
-No historical snapshot refresh is needed. Policy changes take effect at the next
-full collection and restart affected periods. Assessments are shown as of their
-last collection; stale results must not be treated as a current safety guarantee.
+### Recalculate existing history
+
+Saving **Finding review criteria** queues a background task for the affected environments.
+Global changes skip environments with their own override. Only changed finding types are
+recalculated; changing collection safeguards or saving unchanged settings to retry processes
+all types. Choosing **Use global defaults** also queues recalculation for that environment.
+
+The existing worker processes the task in a separate process. No NSX requests or new full
+collection are required. The page displays queued/running progress, the eligible count on
+completion, and failures. Refresh the page to see current progress; save again to retry.
+Existing review results stay visible until the new results are published atomically.
+
+History is replayed in timestamp order. The start is the earliest supported observation in
+the **current unbroken sequence**, not simply the first or latest snapshot. For example,
+empty on Monday, populated Tuesday, empty Wednesday and Thursday counts from Wednesday.
+Missing objects, excluded/unknown checks, relevant configuration changes and excessive
+gaps break the sequence. Failed, demo and imported collections do not establish evidence.
+Zero-day-only recalculation needs just the latest full snapshot.
+
+The worker builds a compact evidence index for retained legacy snapshots by streaming
+individual PostgreSQL JSONB object rows, then reuses it on subsequent recalculations.
+It does not render reports or load full report/HTML payloads into web requests. The index
+is removed with its snapshot by retention. Memory holds current candidate state for one
+environment; size workers for your inventory. A task is bounded by `NSX_AUDIT_TIMEOUT`.
+A superseded request cannot publish old results; a newer completed collection causes a retry.
+
+Review owners, acknowledgement, due dates and notes are preserved. Historical snapshot
+assessments are not rewritten. If retained observations do not meet the new duration,
+count or continuity requirements, the finding remains observing/insufficient. Its detail
+page shows the reason and observed duration. Retention limits how far back evidence can be
+reconstructed. Existing findings' first-seen dates alone are never proof of continuity.
+
+Deploy the same image to web and worker and run migration `0035` before using this feature.
+No optional maintenance container or snapshot-refresh job is needed.
 
 Inventory and firewall rows and evidence dialogs show the assessment captured with
 that snapshot. CSV evidence includes assessments where available. Old snapshots

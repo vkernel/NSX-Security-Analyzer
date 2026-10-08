@@ -181,3 +181,82 @@ class LDAPTests(TestCase):
         self.config.refresh_from_db()
         self.assertEqual(self.config.ca_certificate, '')
         self.assertNotIn('typed-password', str(dict(self.client.session)))
+
+    def test_secondary_failover_keeps_identity_and_uses_own_trust(self):
+        from ldap3.core.exceptions import LDAPSocketOpenError
+        self.config.secondary_server_url = 'ldaps://replica.example:636'
+        self.config.ca_certificate = 'primary-trust'
+        self.config.secondary_ca_certificate = 'secondary-trust'
+        self.config.save()
+        result = ('stable-id', 'viewer', 'Alex', 'Example')
+        with patch('inventory.ldap_auth.lookup_server', return_value=result):
+            primary_user = authenticate(ldap_username='alex', ldap_password='user-secret')
+        with patch('inventory.ldap_auth.lookup_server', side_effect=[LDAPSocketOpenError('unavailable'), result]) as call:
+            secondary_user = authenticate(ldap_username='alex', ldap_password='user-secret')
+            fallback_config = call.call_args_list[1].args[0]
+            self.assertEqual(fallback_config.server_url, self.config.secondary_server_url)
+            self.assertEqual(fallback_config.ca_certificate, 'secondary-trust')
+        self.assertEqual(primary_user.pk, secondary_user.pk)
+        self.assertEqual(LDAPIdentity.objects.count(), 1)
+        self.config.refresh_from_db()
+        self.assertEqual(self.config.server_url, 'ldaps://directory.example:636')
+
+    def test_no_failover_on_wrong_password_or_missing_groups(self):
+        from ldap3.core.exceptions import LDAPInvalidCredentialsResult
+        self.config.secondary_server_url = 'ldaps://replica.example:636'
+        for error in (LDAPInvalidCredentialsResult(), DirectoryDenied('unmapped_groups'), DirectoryDenied('user_search_failed')):
+            with patch('inventory.ldap_auth.lookup_server', side_effect=error) as call:
+                with self.assertRaises(type(error)):
+                    lookup(self.config, 'alex', 'wrong')
+                self.assertEqual(call.call_count, 1)
+
+    def test_single_server_and_both_unavailable(self):
+        with patch('inventory.ldap_auth.lookup_server', side_effect=OSError('unavailable')) as call:
+            with self.assertRaises(OSError): lookup(self.config, 'alex', 'secret')
+            self.assertEqual(call.call_count, 1)
+        self.config.secondary_server_url = 'ldaps://replica.example:636'
+        with patch('inventory.ldap_auth.lookup_server', side_effect=OSError('unavailable')) as call:
+            with self.assertRaises(OSError): lookup(self.config, 'alex', 'secret')
+            self.assertEqual(call.call_count, 2)
+
+    def test_two_certificate_previews_are_independent_and_both_tested(self):
+        self.client.force_login(self.admin)
+        url = reverse('authentication-settings') + '?provider=ldap'
+        data = self.data(secondary_server_url='ldaps://replica.example:636', bind_password='new-secret')
+        with patch('inventory.ldap_settings.retrieve_manager', side_effect=[{'pem': 'primary-cert', 'certificates': []}, {'pem': 'secondary-cert', 'certificates': []}]):
+            self.client.post(url, dict(data, action='retrieve'))
+            self.client.post(url, dict(data, action='retrieve_secondary'))
+        session = self.client.session
+        self.assertEqual(session['ldap_certificate_preview']['pem'], 'primary-cert')
+        self.assertEqual(session['ldap_secondary_certificate_preview']['pem'], 'secondary-cert')
+        connection = MagicMock(); connection.result = {'result': 0}; connection.entries = [object()]
+        targets = []
+        @contextmanager
+        def fake_bound(config, dn, password):
+            targets.append((config.server_url, config.ca_certificate))
+            yield connection
+        with patch('inventory.ldap_auth.bound', fake_bound):
+            response = self.client.post(url, dict(data, action='save', trust_retrieved='on', trust_secondary='on'))
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(targets, [('ldaps://directory.example:636', 'primary-cert'), ('ldaps://replica.example:636', 'secondary-cert')])
+        self.config.refresh_from_db()
+        self.assertEqual(self.config.secondary_ca_certificate, 'secondary-cert')
+        self.assertNotIn('ldap_secondary_certificate_preview', self.client.session)
+
+    def test_secondary_validation_and_url_changes_clear_only_its_trust(self):
+        self.assertFalse(ConfigurationForm(self.data(secondary_server_url=self.config.server_url, bind_password='secret'), instance=self.config).is_valid())
+        self.assertFalse(ConfigurationForm(self.data(secondary_server_url='ldap://replica.example'), instance=self.config).is_valid())
+        self.assertFalse(ConfigurationForm(self.data(secondary_server_url='ldaps://replica.example'), instance=self.config).is_valid())
+        self.config.refresh_from_db()
+        self.config.secondary_server_url = 'ldaps://replica.example'
+        self.config.secondary_ca_certificate = 'old-secondary'
+        self.config.ca_certificate = 'primary'
+        self.config.save()
+        self.client.force_login(self.admin)
+        data = self.data(secondary_server_url='', action='save')
+        data.pop('enabled')
+        response = self.client.post(reverse('authentication-settings')+'?provider=ldap', data)
+        self.assertEqual(response.status_code, 302)
+        self.config.refresh_from_db()
+        self.assertEqual(self.config.secondary_ca_certificate, '')
+        self.assertEqual(self.config.ca_certificate, 'primary')

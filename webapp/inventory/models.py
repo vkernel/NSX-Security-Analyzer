@@ -411,6 +411,8 @@ class LDAPConfiguration(models.Model):
     id = models.PositiveSmallIntegerField(primary_key=True, default=1, editable=False)
     enabled = models.BooleanField(default=False)
     server_url = models.CharField(max_length=512, blank=True)
+    secondary_server_url = models.CharField(max_length=512, blank=True)
+    secondary_ca_certificate = models.TextField(blank=True)
     bind_dn = models.CharField(max_length=1024, blank=True)
     secret_ciphertext = models.TextField(blank=True)
     ca_certificate = models.TextField(blank=True)
@@ -429,3 +431,35 @@ class LDAPIdentity(models.Model):
 
     class Meta:
         constraints = [models.UniqueConstraint(fields=['directory', 'subject'], name='ldap_directory_subject_unique')]
+
+
+class FindingRecalculation(models.Model):
+    environment = models.OneToOneField(Environment, on_delete=models.CASCADE, related_name='finding_recalculation')
+    token = models.UUIDField(default=uuid.uuid4)
+    kinds = models.JSONField(default=list)
+    status = models.CharField(max_length=16, default='queued')
+    requested_at = models.DateTimeField(auto_now=True)
+    started_at = models.DateTimeField(null=True)
+    finished_at = models.DateTimeField(null=True)
+    processed = models.PositiveIntegerField(default=0)
+    total = models.PositiveIntegerField(default=0)
+    eligible = models.PositiveIntegerField(default=0)
+    error = models.CharField(max_length=255, blank=True)
+
+
+class SnapshotFindingEvidence(models.Model):
+    snapshot = models.ForeignKey(Snapshot, on_delete=models.CASCADE, related_name='finding_evidence')
+    kind = models.CharField(max_length=40)
+    path = models.TextField()
+    name = models.CharField(max_length=255)
+    fingerprint = models.CharField(max_length=64)
+    zero_counter = models.BooleanField(default=False)
+    checked_at = models.CharField(max_length=64, blank=True)
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=['snapshot', 'kind', 'path'], name='snapshot_finding_evidence_unique')]
+
+
+class SnapshotFindingEvidenceIndex(models.Model):
+    snapshot = models.OneToOneField(Snapshot, on_delete=models.CASCADE, primary_key=True)
+    version = models.PositiveSmallIntegerField(default=1)
