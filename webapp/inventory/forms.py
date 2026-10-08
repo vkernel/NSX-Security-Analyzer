@@ -161,10 +161,16 @@ class SnapshotComparisonForm(forms.Form):
         return data
 
 
+class ReviewerChoiceField(forms.ModelChoiceField):
+    def label_from_instance(self, user):
+        from .user_labels import user_label
+        return user_label(user)
+
+
 class FindingReviewForm(forms.Form):
     action = forms.ChoiceField(choices=[('assign', 'Assign owner'), ('approve', 'Approve'),
         ('reject', 'Reject'), ('reopen', 'Reopen review'), ('complete', 'Record decommissioning')])
-    owner = forms.ModelChoiceField(queryset=None, required=False)
+    owner = ReviewerChoiceField(queryset=None, required=False)
     note = forms.CharField(max_length=5000, widget=forms.Textarea(attrs={'rows': 4}), label='Reason / manual checks performed')
     change_ticket = forms.CharField(required=False, max_length=255, label='Change-ticket reference')
     revision = forms.IntegerField(widget=forms.HiddenInput)
@@ -173,7 +179,7 @@ class FindingReviewForm(forms.Form):
         from django.contrib.auth import get_user_model
         finding, actor = kwargs.pop('finding', None), kwargs.pop('actor', None)
         super().__init__(*args, **kwargs)
-        self.fields['owner'].queryset = get_user_model().objects.filter(is_active=True, is_staff=True).order_by('username')
+        self.fields['owner'].queryset = get_user_model().objects.filter(is_active=True, is_staff=True).select_related('keycloakidentity', 'ldapidentity').order_by('first_name', 'last_name', 'email', 'username')
         if finding and actor and not self.is_bound:
             allowed = ['assign']
             if finding.workflow_state == 'owner_review' and actor.pk == finding.owner_id:
@@ -184,7 +190,7 @@ class FindingReviewForm(forms.Form):
             elif finding.workflow_state == 'rejected': allowed = ['reopen', 'assign']
             labels = dict(self.fields['action'].choices)
             self.fields['action'].choices = [(key, labels[key]) for key in allowed]
-        self.fields['owner'].help_text = 'Used only for Assign owner. Reassignment resets approvals.'
+        self.fields['owner'].help_text = 'Search by name or email. Only active operators and administrators can own reviews. Keycloak and LDAP users must sign in once before appearing here. Reassignment resets approvals.'
         self.fields['change_ticket'].help_text = 'Required when recording decommissioning. This application does not delete NSX objects.'
 
 
@@ -215,4 +221,5 @@ class FindingFilterForm(forms.Form):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         from django.contrib.auth import get_user_model
-        self.fields['owner'].choices = [('', 'Anyone'), ('me', 'Assigned to me'), ('none', 'Unassigned')] + [(str(u.pk), u.get_username()) for u in get_user_model().objects.order_by('username')]
+        from .user_labels import user_label, with_identities
+        self.fields['owner'].choices = [('', 'Anyone'), ('me', 'Assigned to me'), ('none', 'Unassigned')] + [(str(u.pk), user_label(u)) for u in with_identities(get_user_model().objects.order_by('first_name', 'last_name', 'username'))]

@@ -6,7 +6,7 @@ from django.db import transaction
 from .diagnostics import LOG
 from .models import Environment, Finding, FindingEvent, SnapshotFindingAssessment
 from . import observation
-from .finding_workflow import invalidate, review_fingerprint, FIELDS as WORKFLOW_FIELDS
+from .finding_workflow import invalidate, review_fingerprint, relevant_evidence_error, FIELDS as WORKFLOW_FIELDS
 
 LABELS = {'unused': 'Unused object candidate', 'empty_group': 'Empty group',
           'membership': 'Unknown group membership', 'zero_hits': 'Zero recorded hits',
@@ -52,8 +52,6 @@ def synchronize(environment_id):
         return
     if environment.findings.exists() and not environment.findings.exclude(snapshot_id=snapshot.pk).exists():
         return
-    from .models import SnapshotCoverage
-    incomplete = snapshot.needs_review or SnapshotCoverage.objects.filter(snapshot=snapshot, issue_count__gt=0).exists()
     policy = observation.policy_for(environment)
     report = snapshot.report
     source_rows = {r['path']: r for r in report.get('objects', []) + report.get('dfw', {}).get('rules', []) + report.get('dfw', {}).get('policies', [])}
@@ -103,8 +101,9 @@ def synchronize(environment_id):
             invalidate(finding, 'Relevant evidence changed or the condition was observed again.')
         prior_qualification = finding.qualification
         observation.advance(finding, policy, environment, snapshot.generated_at, reset=observation.condition_fingerprint(kind, evidence) != observation.condition_fingerprint(kind, finding.evidence) or not finding.present, row=source_rows.get(path, {}))
-        if finding.qualification != 'eligible' or incomplete:
-            invalidate(finding, 'Current collection evidence is incomplete or no longer qualifies.')
+        relevant_error = relevant_evidence_error(kind, source_rows.get(path), report.get('search_coverage'), snapshot.generated_at, environment.sync_interval_minutes)
+        if finding.qualification != 'eligible' or relevant_error:
+            invalidate(finding, relevant_error or 'Current evidence no longer qualifies under the finding criteria.')
         if prior_qualification != finding.qualification:
             events.append((finding, 'Qualification: ' + finding.get_qualification_display()))
         if digest != finding.fingerprint or not finding.present:

@@ -343,3 +343,11 @@ complete token into tickets or application logs.
 ### Display name in the application
 
 The header shows the user’s given and family names, falling back to the ID token’s `name`, then `preferred_username`. Ensure the client’s `profile` scope includes these claims in the ID token. Profile changes are applied on the next sign-in. The internal hashed username remains unchanged to keep external identities separate from local accounts. Local users see their full name when set, otherwise their username.
+
+### Assigning findings to Keycloak users
+
+Users must sign in once and have the mapped application Operator or Administrator
+role before they can be selected as finding owners. In a finding's **Review
+decision**, choose **Assign owner**, search by name or email, then select the user
+shown as **Name · email · Keycloak**. Internal account identifiers are not used as
+owner labels. See the [click-by-click two-person review guide](finding-review-workflow.md#click-by-click-example-with-keycloak-users).

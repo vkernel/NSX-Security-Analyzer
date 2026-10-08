@@ -4,7 +4,7 @@ from django.core.exceptions import ValidationError
 from django.test import TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
-from .models import Environment, Finding, Snapshot, SnapshotCoverage, AuditEvent
+from .models import Environment, Finding, Snapshot, SnapshotCoverage, AuditEvent, SnapshotRecord
 from .finding_workflow import decide, invalidate, FIELDS
 
 
@@ -23,6 +23,7 @@ class FindingWorkflowTests(TestCase):
         self.finding = Finding.objects.create(environment=self.env, kind='empty_group', path='/infra/groups/a',
             name='A', fingerprint='a', evidence={'membership':'empty'}, first_seen=now, last_seen=now,
             evaluated_at=now, snapshot=self.snapshot, qualification='eligible')
+        self.record = SnapshotRecord.objects.create(snapshot=self.snapshot, ordinal=1, view='inventory', name='A', sort_name='a', compact={'path':self.finding.path,'membership':'empty'}, data={}, columns=[], sort_values={}, search_basic='', search_evidence='')
         self.url=reverse('finding-detail',args=[self.env.pk,self.finding.pk])
 
     def assign(self, owner=None):
@@ -51,7 +52,7 @@ class FindingWorkflowTests(TestCase):
         self.assertEqual(event.details['decision']['snapshot_id'],snapshot_id)
         self.owner.delete()
         event.refresh_from_db()
-        self.assertEqual(event.actor_label,'owner')
+        self.assertEqual(event.actor_label,'owner · Local')
 
     def test_no_self_approval_even_for_administrator(self):
         self.assign(self.admin)
@@ -82,7 +83,9 @@ class FindingWorkflowTests(TestCase):
         self.snapshot.save()
         with self.assertRaisesMessage(ValidationError,'stale'): decide(self.finding,self.reviewer,'approve','Checked')
         self.snapshot.generated_at=timezone.now();self.snapshot.needs_review=True;self.snapshot.save()
-        with self.assertRaisesMessage(ValidationError,'coverage'): decide(self.finding,self.reviewer,'approve','Checked')
+        self.record.compact['membership']='unknown';self.record.save()
+        with self.assertRaisesMessage(ValidationError,'membership'): decide(self.finding,self.reviewer,'approve','Checked')
+        self.record.compact['membership']='empty';self.record.save()
         self.snapshot.needs_review=False;self.snapshot.save();SnapshotCoverage.objects.create(snapshot=self.snapshot)
         self.finding.evidence={'membership':'empty','unique_id':'replacement'}
         with self.assertRaisesMessage(ValidationError,'changed'): decide(self.finding,self.reviewer,'approve','Checked')
@@ -93,7 +96,7 @@ class FindingWorkflowTests(TestCase):
         self.finding.save(update_fields=FIELDS)
         self.assertEqual(self.finding.workflow_state,'owner_review')
         self.assertEqual(self.finding.approvals,{})
-        self.assertEqual(self.finding.events.first().details['prior_approvals']['owner']['actor_name'],'owner')
+        self.assertEqual(self.finding.events.first().details['prior_approvals']['owner']['actor_name'],'owner · Local')
 
     def test_http_revision_permissions_and_queues(self):
         self.client.force_login(self.admin)
@@ -119,7 +122,7 @@ class FindingWorkflowTests(TestCase):
         result=self.client.get(reverse('finding-history-export',args=[self.env.pk,self.finding.pk]))
         import json
         history=json.loads(b''.join(result.streaming_content))
-        self.assertEqual(history[-1]['details']['decision']['actor_name'],'owner')
+        self.assertEqual(history[-1]['details']['decision']['actor_name'],'owner · Local')
         self.client.force_login(self.viewer)
         self.assertEqual(self.client.get(reverse('finding-history-export',args=[self.env.pk,self.finding.pk])).status_code,403)
 
@@ -129,7 +132,7 @@ class FindingWorkflowTests(TestCase):
         FindingPolicy.objects.create(empty_group_days=0)
         self.approve_owner()
         def collect(**extra):
-            Snapshot.objects.create(environment=self.env,generated_at=timezone.now(),report={'objects':[
+            Snapshot.objects.create(environment=self.env,generated_at=timezone.now(),needs_review=True,report={'search_coverage':{'mode':'explicit_types'},'objects':[
                 {'path':self.finding.path,'name':'A','membership':'empty',**extra}]})
             synchronize(self.env.pk)
             self.finding.refresh_from_db()
@@ -138,3 +141,77 @@ class FindingWorkflowTests(TestCase):
         collect(unique_id='replacement-object')
         self.assertEqual(self.finding.workflow_state,'owner_review')
         self.assertEqual(self.finding.approvals,{})
+
+    def test_keycloak_owner_names_and_provider_are_readable(self):
+        from .models import KeycloakIdentity
+        from .forms import FindingReviewForm
+        self.owner.username='keycloak_internal_opaque_identifier'
+        self.owner.first_name='Alex'; self.owner.last_name='Example'; self.owner.email='alex@example.com'; self.owner.save()
+        KeycloakIdentity.objects.create(user=self.owner,issuer='https://sso.example/realms/test',subject='immutable-subject')
+        form=FindingReviewForm()
+        choices=dict((str(key),label) for key,label in form.fields['owner'].choices)
+        self.assertEqual(choices[str(self.owner.pk)],'Alex Example · alex@example.com · Keycloak')
+        self.assertNotIn(str(self.viewer.pk),choices)
+        self.assign()
+        decide(self.finding,self.owner,'approve','Checked')
+        self.assertEqual(self.finding.approvals['owner']['actor_id'],str(self.owner.pk))
+        self.assertEqual(self.finding.approvals['owner']['actor_name'],'Alex Example · alex@example.com · Keycloak')
+        self.client.force_login(self.admin)
+        response=self.client.get(self.url)
+        self.assertContains(response,'Alex Example')
+        self.assertNotContains(response,'keycloak_internal_opaque_identifier')
+        self.finding.approvals['owner']['actor_name']=self.owner.username
+        self.finding.save(update_fields=['approvals'])
+        self.assertNotContains(self.client.get(self.url),'keycloak_internal_opaque_identifier')
+
+    def test_external_user_missing_profile_does_not_expose_internal_username(self):
+        from .user_labels import user_label
+        # Provider detection does not depend on the text of the internal username.
+        from .models import KeycloakIdentity
+        KeycloakIdentity.objects.create(user=self.owner,issuer='https://sso.example',subject='id')
+        self.owner.username='keycloak_opaque';self.owner.save()
+        label=user_label(self.owner)
+        self.assertIn('account #'+str(self.owner.pk),label)
+        self.assertNotIn('keycloak_opaque',label)
+
+    def test_unrelated_coverage_and_missing_summary_do_not_block_empty_group(self):
+        Snapshot.objects.filter(pk=self.snapshot.pk).update(needs_review=True)
+        SnapshotCoverage.objects.filter(snapshot=self.snapshot).delete()
+        self.approve_owner()
+        decide(self.finding,self.reviewer,'approve','Independent review of confirmed membership')
+        self.assertEqual(self.finding.workflow_state,'ready')
+
+    def test_missing_or_excluded_object_blocks_approval(self):
+        self.assign()
+        self.record.compact['audit_exclusions']=['membership'];self.record.save()
+        with self.assertRaisesMessage(ValidationError,'excluded'):
+            decide(self.finding,self.owner,'approve','Checked')
+        self.record.delete()
+        with self.assertRaisesMessage(ValidationError,'not prepared'):
+            decide(self.finding,self.owner,'approve','Checked')
+
+    def test_kind_specific_coverage_guards(self):
+        from .finding_workflow import relevant_evidence_error as check
+        now=timezone.now()
+        def error(kind,row,search=None): return check(kind,row,search,now,60)
+        self.assertEqual(error('disabled',{'disabled':True}), '')
+        self.assertTrue(error('disabled',{'disabled':False}))
+        self.assertEqual(error('empty_policy',{'status':'empty','rule_count':0}), '')
+        self.assertTrue(error('empty_policy',{'status':'empty','rule_count':None}))
+        self.assertTrue(error('unused',{'usage':'unused_candidate'},{'mode':'explicit_types'}))
+        self.assertTrue(error('unused',{'usage':'unused_candidate'}))
+        self.assertEqual(error('unused',{'usage':'unused_candidate'},{'mode':'all_types'}),'')
+        counters={'hit_status':'zero_hits','hit_count':0,'statistics_checked_at':now.isoformat()}
+        self.assertEqual(error('zero_hits',counters),'')
+        for patch in [{'hit_count':1},{'hit_status':'unknown'},{'statistics_checked_at':None},
+                      {'statistics_checked_at':(now-timedelta(days=2)).isoformat()},
+                      {'statistics_checked_at':(now+timedelta(minutes=1)).isoformat()}]:
+            self.assertTrue(error('zero_hits',{**counters,**patch}))
+
+    def test_approval_reads_only_compact_object(self):
+        from django.db import connection
+        from django.test.utils import CaptureQueriesContext
+        from .finding_workflow import evidence_error
+        with CaptureQueriesContext(connection) as queries:
+            self.assertEqual(evidence_error(self.finding),'')
+        self.assertFalse(any('"report"' in item['sql'] or '"data"' in item['sql'] for item in queries))

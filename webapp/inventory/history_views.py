@@ -59,7 +59,7 @@ def findings(request, pk):
     # Only findings that met the administration policy enter the review queue.
     from django.db.models import Count
     qualification_counts = list(environment.findings.values('qualification').annotate(total=Count('pk')).order_by('qualification'))
-    rows = environment.findings.filter(Q(present=True, qualification='eligible') | Q(workflow_state__in=['owner_review','second_review','ready','rejected','decommissioned'])).select_related('owner').defer('evidence', 'approvals')
+    rows = environment.findings.filter(Q(present=True, qualification='eligible') | Q(workflow_state__in=['owner_review','second_review','ready','rejected','decommissioned'])).select_related('owner__keycloakidentity', 'owner__ldapidentity').defer('evidence', 'approvals')
     from .forms import FindingFilterForm
     from django.db.models import F
     form = FindingFilterForm(request.GET or {'sort': 'name', 'direction': 'asc'})
@@ -95,7 +95,7 @@ def finding_detail(request, pk, finding_id):
         return HttpResponseForbidden('Staff access is required to review findings.')
     from contextlib import nullcontext
     with transaction.atomic() if request.method == 'POST' else nullcontext():
-        rows = Finding.objects.select_related('owner').defer('evidence')
+        rows = Finding.objects.select_related('owner__keycloakidentity', 'owner__ldapidentity').defer('evidence')
         if request.method == 'POST':
             Environment.objects.select_for_update().only('pk').get(pk=pk)
             rows = rows.select_for_update(of=('self',))
@@ -118,9 +118,18 @@ def finding_detail(request, pk, finding_id):
                 else:
                     messages.success(request, 'Workflow action recorded. No NSX configuration was changed.')
                     return redirect('finding-detail', pk=pk, finding_id=finding.pk)
-    page = Paginator(finding.events.select_related('actor').defer('details'), 20).get_page(request.GET.get('page'))
+    from django.contrib.auth import get_user_model
+    from .user_labels import user_label, with_identities
+    decisions = {stage: dict(decision) for stage, decision in finding.approvals.items()}
+    legacy_ids = [decision.get('actor_id') for decision in decisions.values()
+                  if str(decision.get('actor_id', '')).isdigit() and decision.get('actor_name', '').startswith(('keycloak_', 'ldap_'))]
+    legacy_users = {str(user.pk): user for user in with_identities(get_user_model().objects.filter(pk__in=legacy_ids))} if legacy_ids else {}
+    for decision in decisions.values():
+        actor = legacy_users.get(str(decision.get('actor_id')))
+        decision['display_name'] = user_label(actor) if actor else decision.get('actor_name', 'Former reviewer')
+    page = Paginator(finding.events.select_related('actor__keycloakidentity', 'actor__ldapidentity').defer('details'), 20).get_page(request.GET.get('page'))
     return render(request, 'inventory/finding_detail.html', {'environment': environment, 'finding': finding,
-        'label': LABELS.get(finding.kind, finding.kind), 'form': form, 'page': page,
+        'label': LABELS.get(finding.kind, finding.kind), 'form': form, 'page': page, 'approval_decisions': decisions,
         'evidence': json.dumps(finding.evidence, indent=2, ensure_ascii=False) if request.GET.get('evidence') == '1' else None})
 
 
