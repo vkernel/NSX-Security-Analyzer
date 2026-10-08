@@ -1,7 +1,8 @@
 from django.urls import path
-from . import keycloak_settings, system_health, views, history_views, diagnostic_views, report_views
+from . import authentication_settings, keycloak_settings, system_health, views, history_views, diagnostic_views, report_views
 
 urlpatterns = [
+    path("administration/authentication/", authentication_settings.settings_page, name="authentication-settings"),
     path("administration/keycloak/", keycloak_settings.settings_page, name="keycloak-settings"),
     path("administration/health/", system_health.health_page, name="system-health"),
     path("collections/<uuid:pk>/stop/", views.stop_collection, name="stop-collection"),

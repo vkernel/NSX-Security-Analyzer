@@ -101,17 +101,15 @@ an override. Only administrators can change these settings; changes are audited.
 
 Enter the required number of days for each condition and save. The unused-object period applies to both groups and services.
 
-Under **Advanced collection safeguards**, qualification also requires at least three successful observations by default. Each period can
-be disabled with `0` days. The maximum allowed observation gap defaults to twice the
-environment's collection interval; set a nonzero number of hours to override it.
+Under **Advanced collection safeguards**, qualification also requires at least three successful observations by default. `0` days means no waiting period: one confirmed observation in the next full collection is sufficient. This replaces the previous meaning of zero (disabled). A value of `1` requires a full 24 hours and the configured minimum observation count; it does not mean one collection. The maximum allowed observation gap defaults to twice the
+environment's collection interval (24 hours for manual collection); set a nonzero number of hours to override it.
 Ensure retention and collection frequency support the history you need.
 
 **Observing** means evidence is accumulating. **Eligible for review** means the
 configured duration and observation count were reached. **Insufficient evidence**
 means the condition cannot be established. **Condition cleared** requires positive
 opposite evidence (for example members or recorded hits); a missing object alone
-never proves resolution. **Qualification disabled** means the policy excludes that
-type from qualification. Review state (Open/Acknowledged) remains independent.
+never proves resolution. Legacy **Qualification disabled** assessments remain unchanged in historical snapshots. Review state (Open/Acknowledged) remains independent.
 
 Periods restart on relevant evidence/configuration changes, reappearance, policy
 changes, or gaps beyond the limit. Unknown and excluded observations break the

@@ -405,3 +405,27 @@ class KeycloakConfiguration(models.Model):
     viewer_role = models.CharField(max_length=255, default='nsx-analyzer-viewer')
     operator_role = models.CharField(max_length=255, default='nsx-analyzer-operator')
     admin_role = models.CharField(max_length=255, default='nsx-analyzer-admin')
+
+
+class LDAPConfiguration(models.Model):
+    id = models.PositiveSmallIntegerField(primary_key=True, default=1, editable=False)
+    enabled = models.BooleanField(default=False)
+    server_url = models.CharField(max_length=512, blank=True)
+    bind_dn = models.CharField(max_length=1024, blank=True)
+    secret_ciphertext = models.TextField(blank=True)
+    ca_certificate = models.TextField(blank=True)
+    user_base = models.CharField(max_length=1024, blank=True)
+    username_attribute = models.CharField(max_length=64, default='sAMAccountName')
+    identity_attribute = models.CharField(max_length=64, default='objectGUID')
+    viewer_group = models.CharField(max_length=1024, blank=True)
+    operator_group = models.CharField(max_length=1024, blank=True)
+    admin_group = models.CharField(max_length=1024, blank=True)
+
+
+class LDAPIdentity(models.Model):
+    directory = models.CharField(max_length=512)
+    subject = models.CharField(max_length=512)
+    user = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=['directory', 'subject'], name='ldap_directory_subject_unique')]

@@ -8,6 +8,7 @@ from django.dispatch import receiver
 from .audit_events import record
 
 FIELDS = {
+    'LDAPConfiguration': ('enabled', 'server_url', 'user_base', 'username_attribute', 'identity_attribute', 'viewer_group', 'operator_group', 'admin_group'),
     'KeycloakConfiguration': ('enabled', 'issuer', 'client_id', 'role_source', 'viewer_role', 'operator_role', 'admin_role'),
     'Environment': ('name', 'slug', 'manager', 'enabled', 'sync_interval_minutes', 'insecure', 'timeout', 'retries'),
     'RetentionPolicy': ('enabled', 'snapshot_days', 'testing_days', 'collection_days'),
@@ -18,7 +19,7 @@ FIELDS = {
     'Group': ('name',),
     'AuditJob': ('status', 'scheduled', 'testing'),
 }
-PRIVATE = {'KeycloakConfiguration': ('secret_ciphertext', 'ca_certificate', 'ca_bundle'), 'Environment': ('username', 'password_ciphertext', 'ca_certificate'), 'User': ('password',)}
+PRIVATE = {'LDAPConfiguration': ('bind_dn', 'secret_ciphertext', 'ca_certificate'), 'KeycloakConfiguration': ('secret_ciphertext', 'ca_certificate', 'ca_bundle'), 'Environment': ('username', 'password_ciphertext', 'ca_certificate'), 'User': ('password',)}
 
 
 def values(instance):

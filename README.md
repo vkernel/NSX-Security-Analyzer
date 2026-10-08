@@ -116,8 +116,8 @@ limit what can be concluded. A segmentation indicator describes rule configurati
 not effective workload isolation. Read coverage and evidence before acting.
 
 All signed-in workspace users can read all environments; this is not tenant
-isolation. Local user authentication is implemented. LDAP/LDAPS and Keycloak
-integration are not included in the current codebase.
+isolation. Local accounts, Keycloak and verified LDAPS authentication are supported.
+External role mappings use the same Viewer, Operator and Administrator permissions.
 
 ## Project status and license
 
@@ -131,4 +131,4 @@ own licenses; the project license does not replace their terms.
 This is an independent project and is not affiliated with or endorsed by VMware
 or Broadcom.
 
-Optional single sign-on: [Keycloak setup](docs/keycloak.md).
+Optional authentication providers: [Keycloak setup](docs/keycloak.md) and [LDAPS setup](docs/ldaps.md), configured under Administration → Authentication providers.

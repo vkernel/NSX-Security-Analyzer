@@ -57,7 +57,8 @@ class TrustedKeycloakApp(DjangoOAuth2App):
 
 class WorkspaceLoginView(LoginView):
     def get_context_data(self, **kwargs):
-        return {**super().get_context_data(**kwargs), 'keycloak_enabled': configuration.current().enabled}
+        from .ldap_auth import current as ldap_current
+        return {**super().get_context_data(**kwargs), 'keycloak_enabled': configuration.current().enabled, 'ldap_enabled': ldap_current().enabled}
 
 
 def client(config=None):

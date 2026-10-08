@@ -18,17 +18,16 @@ def policy_for(environment):
 def advance(finding, policy, environment, stamp, reset=False, row=None):
     days = getattr(policy, finding.kind + '_days', None)
     finding.required_days = days or 0
-    if not days:
-        finding.qualification = 'insufficient' if days is None else 'disabled'
-        finding.qualification_reason = ('Collection coverage requires review; no inactivity period can be established.'
-            if days is None else 'Qualification is disabled for this finding type.')
+    if days is None:
+        finding.qualification = 'insufficient'
+        finding.qualification_reason = 'Collection coverage requires review; no inactivity period can be established.'
         finding.observation_started = None
         finding.observation_count = finding.observation_days = 0
         finding.qualified_at = None
         finding.policy_fingerprint = ''
         return
 
-    gap = timedelta(hours=policy.maximum_gap_hours) if policy.maximum_gap_hours else timedelta(minutes=2 * environment.sync_interval_minutes)
+    gap = timedelta(hours=policy.maximum_gap_hours) if policy.maximum_gap_hours else timedelta(minutes=2 * environment.sync_interval_minutes) if environment.sync_interval_minutes else timedelta(hours=24)
     signature = hashlib.sha256(json.dumps([days, policy.minimum_observations, gap.total_seconds()]).encode()).hexdigest()
     restart = (reset or not finding.observation_started or finding.policy_fingerprint != signature
                or stamp <= finding.last_seen or stamp - finding.last_seen > gap)
@@ -54,10 +53,11 @@ def advance(finding, policy, environment, stamp, reset=False, row=None):
         finding.qualified_at = None
     finding.observation_count += 1
     finding.observation_days = max(0, (stamp - finding.observation_started).days)
-    if finding.observation_days >= days and finding.observation_count >= policy.minimum_observations:
+    if days == 0 or (finding.observation_days >= days and finding.observation_count >= policy.minimum_observations):
         finding.qualification = 'eligible'
         finding.qualified_at = finding.qualified_at or stamp
-        finding.qualification_reason = 'Observation period and minimum successful observations satisfied.'
+        finding.qualification_reason = ('No waiting period configured; condition confirmed in this collection.'
+            if days == 0 else 'Observation period and minimum successful observations satisfied.')
     else:
         finding.qualification = 'observing'
         finding.qualification_reason = 'Waiting for the required period and successful observations.'

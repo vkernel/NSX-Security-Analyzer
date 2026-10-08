@@ -173,6 +173,8 @@ Compose reference: [Docker Compose quickstart](https://docs.docker.com/compose/g
 
 Version 0.5.2 adds **Inventory → VMs**. Refresh existing prepared reports with the command above, then run a new collection for complete returned VM inventory, including untagged VMs. Older snapshots only contain VMs recoverable from their saved tag assignments. Group and service links describe configuration relationships, not confirmed membership or observed traffic.
 
-Configure optional single sign-on in **Administration → Keycloak integration**.
+Configure optional single sign-on in **Administration → Authentication providers → Keycloak**.
 The GUI stores credentials and approved certificate trust; no Keycloak YAML settings
 are needed for a new setup. See [Keycloak authentication setup](keycloak.md).
+
+Directory authentication is also available under **Authentication providers → LDAPS**. See [LDAPS setup](ldaps.md) for prerequisites, certificate retrieval and group role mappings.

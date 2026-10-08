@@ -65,10 +65,10 @@ class ObservationTests(TestCase):
         self.collect(4, data)
         self.assertEqual(self.finding().qualification, 'insufficient')
 
-    def test_override_disable_and_policy_permissions(self):
+    def test_override_zero_days_and_policy_permissions(self):
         FindingPolicy.objects.create(scope=str(self.env.pk), environment=self.env, empty_group_days=0)
         self.collect(0)
-        self.assertEqual(self.finding().qualification, 'disabled')
+        self.assertEqual(self.finding().qualification, 'eligible')
         url = reverse('finding-policy') + '?environment=' + str(self.env.pk)
         self.assertContains(self.client.get(url), 'Use global defaults')
         self.client.post(url, {'inherit': '1'})
@@ -87,6 +87,30 @@ class ObservationTests(TestCase):
         self.assertNotIn('qualification', response.context['filter_form'].fields)
         f = self.finding(); f.qualification = 'disabled'; f.save()
         self.assertEqual(len(self.client.get(url, {'qualification': 'disabled', 'presence': ''}).context['page']), 0)
+
+    def test_one_day_requires_elapsed_time_and_observations(self):
+        self.policy.empty_group_days = 1; self.policy.save()
+        self.collect(0); self.collect(0.25); self.collect(0.5)
+        self.assertEqual(self.finding().qualification, 'observing')
+        self.collect(1)
+        self.assertEqual(self.finding().qualification, 'eligible')
+
+    def test_manual_collection_has_nonzero_gap(self):
+        self.env.sync_interval_minutes = 0; self.env.save()
+        self.policy.empty_group_days = 1; self.policy.save()
+        self.collect(0); self.collect(0.5); self.collect(1)
+        self.assertEqual(self.finding().qualification, 'eligible')
+
+    def test_zero_days_still_requires_fresh_zero_hit_evidence(self):
+        self.policy.zero_hits_days = 0; self.policy.save()
+        data = report()
+        data['dfw']['rules'] = [{'path': '/rules/zero', 'name': 'Zero', 'disabled': False,
+                               'hit_count': 0, 'hit_status': 'zero_hits'}]
+        self.collect(0, data)
+        self.assertEqual(Finding.objects.get(kind='zero_hits').qualification, 'insufficient')
+        data['dfw']['rules'][0]['statistics_checked_at'] = (self.now + timedelta(days=1)).isoformat()
+        self.collect(1, data)
+        self.assertEqual(Finding.objects.get(kind='zero_hits').qualification, 'eligible')
 
     def test_filters_and_invalid_sort(self):
         self.collect(0); self.collect(1); self.collect(2)

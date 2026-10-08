@@ -48,7 +48,7 @@ roles are not used for interactive user login. A local Docker test can use
 
 ### Choose client roles or realm roles
 
-Both are supported. In **Administration → Keycloak integration → Role source**,
+Both are supported. In **Administration → Authentication providers → Keycloak → Role source**,
 choose the location in which you created the roles. Existing installations remain
 on **Realm roles** after upgrade. There is no automatic merge or fallback between
 sources.
@@ -232,7 +232,7 @@ The same workflow applies to Docker Compose and Kubernetes. No Keycloak variable
 client-secret Kubernetes Secret, or certificate volume mount is required for a new
 GUI-managed integration.
 
-1. Sign in with a local administrator and open **Administration → Keycloak integration**.
+1. Sign in with a local administrator and open **Administration → Authentication providers → Keycloak**.
 2. Enter the full **Realm issuer URL**, **Client ID**, and **Client secret** from Keycloak.
 3. Select **Role source** (Client roles or Realm roles). Confirm the Viewer, Operator
    and Administrator role names; use distinct names and include the selected role

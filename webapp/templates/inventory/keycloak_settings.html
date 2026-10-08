@@ -1,7 +1,7 @@
 {% extends 'base.html' %}{% block content %}
 <a class="breadcrumb" href="{% url 'administration' %}">← Administration</a>
-<div class="page-heading"><div><h1>Keycloak integration</h1><p class="lead">Configure single sign-on and verified certificate trust. Local sign-in stays available.</p></div></div>
-{% include 'inventory/admin_navigation.html' %}
+<div class="page-heading"><div><h1>Authentication providers</h1><p class="lead">Configure single sign-on and verified certificate trust. Local sign-in stays available.</p></div></div>
+{% include 'inventory/admin_navigation.html' %}{% include 'inventory/authentication_tabs.html' %}<h2>Keycloak</h2>
 <p>{% if legacy %}No GUI settings saved yet. Existing deployment settings are used as a fallback.{% else %}Saved GUI settings override deployment Keycloak settings on every web pod. No restart is needed.{% endif %}</p>
 <p>Configure this exact redirect URI in your Keycloak client: <code>{{ callback_url }}</code></p>
 <form method="post" class="form-card">{% csrf_token %}{{ form.non_field_errors }}<div class="form-grid">{% for field in form %}{% if field.name != 'trust_retrieved' %}{% include 'inventory/settings_field.html' %}{% endif %}{% endfor %}</div>

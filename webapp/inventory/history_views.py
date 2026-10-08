@@ -145,6 +145,8 @@ def finding_policy(request):
             obj = form.save(commit=False)
             obj.scope, obj.environment = scope, environment
             obj.save()
+            from django.contrib import messages
+            messages.success(request, 'Criteria saved. Run a new full collection to apply them. Changed observation periods restart; 0-day criteria need no waiting period.')
             return redirect(request.get_full_path())
     return render(request, 'inventory/finding_policy.html', {'form': form, 'selected': selected,
         'environment': environment, 'overridden': bool(saved), 'environments': Environment.objects.only('pk', 'name').order_by('name')})

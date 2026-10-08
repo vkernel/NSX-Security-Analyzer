@@ -3,9 +3,10 @@ from django.contrib.auth import views as auth_views
 from django.urls import include, path
 
 from inventory.views import administration
-from inventory import keycloak
+from inventory import keycloak, ldap_settings
 
 urlpatterns = [
+    path("login/ldap/", ldap_settings.sign_in, name="ldap-login"),
     path("admin/", administration),
     path("admin/", admin.site.urls),
     path("login/", keycloak.WorkspaceLoginView.as_view(), name="login"),

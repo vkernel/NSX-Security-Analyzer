@@ -183,8 +183,9 @@ class FindingPolicyForm(forms.ModelForm):
         labels = {'zero_hits_days': 'Firewall rules with zero hits (days)', 'empty_group_days': 'Empty groups (days)',
                   'unused_days': 'Unused groups and objects (days)', 'empty_policy_days': 'Empty firewall policies (days)',
                   'disabled_days': 'Disabled firewall rules (days)'}
-        help_texts = {field: 'Set to 0 to disable qualification for this type.' for field in fields[:5]}
-        help_texts['maximum_gap_hours'] = '0 uses twice the environment collection interval. A longer gap restarts observation.'
+        help_texts = {field: '0 shows confirmed findings after the next full collection, without waiting. 1 requires at least 24 hours plus the minimum observations.' for field in fields[:5]}
+        help_texts['minimum_observations'] = 'Required when the waiting period is at least 1 day. With 0 days, one confirmed observation is enough.'
+        help_texts['maximum_gap_hours'] = '0 uses twice the environment collection interval, or 24 hours for manual collection. A longer gap restarts observation.'
 
 
 class FindingFilterForm(forms.Form):

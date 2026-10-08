@@ -90,3 +90,5 @@ KEYCLOAK_CLIENT_ID = os.getenv("NSX_KEYCLOAK_CLIENT_ID", "")
 KEYCLOAK_CLIENT_SECRET = os.getenv("NSX_KEYCLOAK_CLIENT_SECRET", "")
 KEYCLOAK_CA_BUNDLE = os.getenv("NSX_KEYCLOAK_CA_BUNDLE", "")
 KEYCLOAK_ROLES = {"viewer": "nsx-analyzer-viewer", "operator": "nsx-analyzer-operator", "admin": "nsx-analyzer-admin"}
+
+AUTHENTICATION_BACKENDS = ['django.contrib.auth.backends.ModelBackend', 'inventory.ldap_auth.LDAPBackend']

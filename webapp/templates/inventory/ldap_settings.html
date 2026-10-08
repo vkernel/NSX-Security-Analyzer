@@ -1,0 +1,9 @@
+{% extends 'base.html' %}{% block content %}
+<div class="page-heading"><div><h1>Authentication providers</h1><p class="lead">Manage sign-in integrations. Local accounts remain available.</p></div></div>
+{% include 'inventory/admin_navigation.html' %}{% include 'inventory/authentication_tabs.html' %}
+<h2>LDAPS</h2><p>Use a read-only service account and full group DNs. Direct memberOf groups are supported; nested and primary groups are not expanded. Administrator takes precedence over Operator, then Viewer.</p>
+<form method="post" class="form-card">{% csrf_token %}{{ form.non_field_errors }}<div class="form-grid">{% for field in form %}{% if field.name != 'trust_retrieved' %}{% include 'inventory/settings_field.html' %}{% endif %}{% endfor %}</div>
+<button class="button" name="action" value="retrieve" formnovalidate>Retrieve certificate</button>
+{% if preview %}<div class="notice"><h3>Review certificate</h3><p>Verify the fingerprint with your directory administrator. Preview expires after 10 minutes.</p>{% for cert in preview.certificates %}<p>{{ cert.subject }}<br>Expires: {{ cert.expires }}<br>SHA-256: <code>{{ cert.fingerprint }}</code></p>{% endfor %}{% include 'inventory/settings_field.html' with field=form.trust_retrieved %}</div>{% endif %}
+<div class="form-actions"><button class="button" name="action" value="test">Test connection</button><button class="button primary" name="action" value="save">Save integration</button></div></form>
+<p class="muted">Passwords are encrypted at rest. User passwords are never saved. Changes to group membership are applied on the next sign-in; directory sessions expire after one hour.</p>{% endblock %}
