@@ -104,7 +104,7 @@ an override. Only administrators can change these settings; changes are audited.
 Enter the required number of days for each condition and save. The unused-object period applies to both groups and services.
 
 Under **Advanced collection safeguards**, qualification also requires at least three successful observations by default. `0` days means no waiting period: a confirmed condition in the latest retained successful full collection is sufficient after background recalculation. This replaces the previous meaning of zero (disabled). A value of `1` requires a full 24 hours and the configured minimum observation count; it does not mean one collection. The maximum allowed observation gap defaults to twice the
-environment's collection interval (24 hours for manual collection); set a nonzero number of hours to override it.
+environment's collection interval, with a minimum of 24 hours; set a nonzero number of hours to override it.
 Ensure retention and collection frequency support the history you need.
 
 **Observing** means evidence is accumulating. **Eligible for review** means the
@@ -216,3 +216,28 @@ Collections show the current phase and completed phase count. Progress represent
 phases, not an estimate of remaining time. **Stop requested** stays visible until
 the worker acknowledges the request. Diagnostics provide collection identifiers,
 timestamps and a stage timeline, with technical error details expandable separately.
+
+
+### Troubleshooting an empty review queue
+
+After upgrading, save the criteria again (even unchanged) to queue a replay using
+corrected continuity rules. Wait for recalculation to complete. The evidence cache
+is upgraded automatically during replay; no full collection or snapshot refresh is
+needed. Existing historical snapshot assessments remain unchanged.
+
+Two days means 48 hours and three days means 72 hours across qualifying observations,
+not collection counts or time since saving settings. Review the environment override,
+minimum observations, maximum gap, retention and active filters. The automatic gap
+allowance is at least 24 hours; an explicit nonzero setting is respected. This is
+sampled evidence, not proof that the condition held continuously between checks.
+
+Empty-group continuity depends on identity and membership definition, not changing
+usage/references. Zero-hit continuity excludes the statistics retrieval source while
+retaining fresh-counter and relevant rule-definition checks. Review-change detection
+still uses the full evidence, independently of the observation period.
+
+Historical recalculation restores current presence and evidence for qualifying rows
+that were incorrectly marked absent, while preserving owners, decisions and notes.
+Expand **Why some findings are not listed** to see qualification totals before table
+filters. Updated Help & coverage is served for indexed snapshots without rebuilding
+their saved data.

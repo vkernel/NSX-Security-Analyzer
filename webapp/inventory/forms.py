@@ -185,7 +185,7 @@ class FindingPolicyForm(forms.ModelForm):
                   'disabled_days': 'Disabled firewall rules (days)'}
         help_texts = {field: '0 shows confirmed conditions in the latest retained full collection. 1 requires at least 24 hours of supported history plus the minimum observations. Saving recalculates from existing history.' for field in fields[:5]}
         help_texts['minimum_observations'] = 'Required when the waiting period is at least 1 day. With 0 days, one confirmed observation is enough.'
-        help_texts['maximum_gap_hours'] = '0 uses twice the environment collection interval, or 24 hours for manual collection. A longer gap restarts observation.'
+        help_texts['maximum_gap_hours'] = '0 uses twice the environment collection interval with a minimum of 24 hours. A longer gap restarts observation.'
 
 
 class FindingFilterForm(forms.Form):

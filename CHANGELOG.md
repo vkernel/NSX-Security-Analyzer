@@ -2,6 +2,10 @@
 
 ## Unreleased — development
 
+- Fix finding-history replay to restore current presence and evidence; separate condition continuity from review fingerprints and upgrade cached historical evidence during replay.
+- Use a 24-hour minimum automatic finding-observation gap, preserve explicit overrides, and explain withheld findings in the review queue.
+- Update in-app Help & coverage with finding criteria, historical recalculation, workspace controls, authentication settings and collection pacing guidance, including for existing indexed snapshots.
+
 - Refresh the evidence drawer with Overview, Relationships and Technical details tabs, a wider desktop view, and on-demand VM relationship sections.
 - Simplify finding filters, expose inventory/firewall sorting, improve comparison and finding-evidence layouts, and group administration settings.
 - Highlight actionable collection failures and stale environments; clarify coverage and stop-request presentation without changing evidence classifications.

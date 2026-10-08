@@ -75,14 +75,14 @@ def source_rows(snapshot_id):
 @transaction.atomic
 def index(snapshot_id):
     Snapshot.objects.select_for_update().only('pk').get(pk=snapshot_id)
-    if SnapshotFindingEvidenceIndex.objects.filter(snapshot_id=snapshot_id, version=1).exists(): return
+    if SnapshotFindingEvidenceIndex.objects.filter(snapshot_id=snapshot_id, version=2).exists(): return
     SnapshotFindingEvidence.objects.filter(snapshot_id=snapshot_id).delete()
     batch = []
     for section, row in source_rows(snapshot_id):
         report = {'objects': [row]} if section == 'objects' else {'dfw': {section: [row]}}
         for kind, path, name, evidence in candidates(report):
             if kind not in observation.KINDS: continue
-            digest = hashlib.sha256(json.dumps(evidence, sort_keys=True, separators=(',', ':')).encode()).hexdigest()
+            digest = observation.condition_fingerprint(kind, evidence)
             batch.append(SnapshotFindingEvidence(snapshot_id=snapshot_id, kind=kind, path=path, name=name[:255],
                 fingerprint=digest, zero_counter=row.get('hit_count') == 0,
                 checked_at=str(row.get('statistics_checked_at') or '')[:64]))
@@ -90,7 +90,7 @@ def index(snapshot_id):
             SnapshotFindingEvidence.objects.bulk_create(batch, batch_size=100, ignore_conflicts=True)
             batch.clear()
     if batch: SnapshotFindingEvidence.objects.bulk_create(batch, batch_size=100, ignore_conflicts=True)
-    SnapshotFindingEvidenceIndex.objects.update_or_create(snapshot_id=snapshot_id, defaults={'version': 1})
+    SnapshotFindingEvidenceIndex.objects.update_or_create(snapshot_id=snapshot_id, defaults={'version': 2})
 
 
 def policy_values(policy):
@@ -145,15 +145,32 @@ def run(pk, token):
             current.update(status='queued', processed=0)
             return
         existing = {(f.kind, f.path): f for f in Finding.objects.filter(environment=env, kind__in=job.kinds).defer('evidence')}
-        creates, updates = [], []
+        # Restore evidence and presence for rows missing from the live finding state.
+        restore = {key for key in states if key not in existing or not existing[key].present}
+        restored = {}
+        if restore and history:
+            for section, row in source_rows(history[-1][0]):
+                report = {'objects': [row]} if section == 'objects' else {'dfw': {section: [row]}}
+                for kind, path, name, evidence in candidates(report):
+                    if (kind, path) in restore: restored[(kind, path)] = evidence
+        creates, updates, restored_updates = [], [], []
         for key, state in states.items():
             target = existing.pop(key, None)
             if target:
                 # Preserve collected evidence, review decisions, owners and notes.
                 for field in observation.FIELDS: setattr(target, field, getattr(state, field))
+                if key in restore:
+                    restored_updates.append(target)
+                    target.present = True
+                    target.name, target.last_seen, target.evaluated_at = state.name, state.last_seen, state.evaluated_at
+                    target.snapshot_id = state.snapshot_id
+                    target.evidence = restored[key]
+                    target.fingerprint = hashlib.sha256(json.dumps(target.evidence, sort_keys=True, separators=(',', ':')).encode()).hexdigest()
                 target.revision += 1
                 updates.append(target)
             else:
+                state.evidence = restored[key]
+                state.fingerprint = hashlib.sha256(json.dumps(state.evidence, sort_keys=True, separators=(',', ':')).encode()).hexdigest()
                 creates.append(state)
         for target in existing.values():
             target.qualification = 'insufficient'
@@ -166,6 +183,8 @@ def run(pk, token):
             updates.append(target)
         for offset in range(0, len(updates), 100):
             Finding.objects.bulk_update(updates[offset:offset+100], observation.FIELDS+['revision'], batch_size=100)
+        for offset in range(0, len(restored_updates), 100):
+            Finding.objects.bulk_update(restored_updates[offset:offset+100], ['present', 'name', 'last_seen', 'evaluated_at', 'snapshot', 'evidence', 'fingerprint'], batch_size=100)
         if creates: Finding.objects.bulk_create(creates, batch_size=100)
         eligible = Finding.objects.filter(environment=env, present=True, qualification='eligible').count()
         current.update(status='completed', finished_at=timezone.now(), eligible=eligible)

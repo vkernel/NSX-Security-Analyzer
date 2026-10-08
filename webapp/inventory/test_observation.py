@@ -186,3 +186,40 @@ class ObservationTests(TestCase):
         self.assertEqual(detail.json()['data']['finding_assessments'][0]['status'], 'observing')
         export = self.client.get(endpoint, {'op': 'export', 'panel': panel.slug})
         self.assertIn(b'finding_assessments', b''.join(export.streaming_content))
+
+    def test_empty_condition_ignores_usage_but_identity_changes_reset(self):
+        self.collect(0)
+        data = report(); data['objects'][0]['usage'] = 'referenced'; data['objects'][0]['referenced_by'] = ['/rule/new']
+        self.collect(1, data); self.collect(2, data)
+        self.assertEqual(self.finding().qualification, 'eligible')
+        data['objects'][0]['unique_id'] = 'replaced'
+        self.collect(3, data)
+        self.assertEqual(self.finding().observation_count, 1)
+
+    def test_automatic_gap_floor_and_explicit_override(self):
+        self.env.sync_interval_minutes = 60; self.env.save()
+        self.collect(0); self.collect(0.5); self.collect(1); self.collect(1.5); self.collect(2)
+        self.assertEqual(self.finding().qualification, 'eligible')
+        self.policy.maximum_gap_hours = 2; self.policy.save()
+        self.collect(2.5)
+        self.assertEqual(self.finding().observation_count, 1)
+
+    def test_queue_explains_withheld_findings(self):
+        self.collect(0)
+        response = self.client.get(reverse('findings', args=[self.env.pk]))
+        self.assertContains(response, 'Why some findings are not listed')
+        self.assertContains(response, '48 hours')
+
+    def test_zero_hit_source_change_keeps_period_but_rule_change_resets(self):
+        self.policy.zero_hits_days=2; self.policy.save()
+        for day in range(3):
+            data=report()
+            data['dfw']['rules']=[{'path':'/rules/r', 'name':'R', 'hit_status':'zero_hits', 'hit_count':0,
+                'statistics_checked_at':(self.now+timedelta(days=day)).isoformat(), 'disabled':False,
+                'statistics_source':'bulk' if day==0 else 'individual', 'action':'ALLOW'}]
+            self.collect(day,data)
+        f=Finding.objects.get(kind='zero_hits'); self.assertEqual(f.qualification,'eligible')
+        data['dfw']['rules'][0]['action']='DROP'
+        data['dfw']['rules'][0]['statistics_checked_at']=(self.now+timedelta(days=3)).isoformat()
+        self.collect(3,data)
+        f.refresh_from_db(); self.assertEqual(f.observation_count,1)

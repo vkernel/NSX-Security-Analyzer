@@ -15,6 +15,24 @@ def policy_for(environment):
             or FindingPolicy.objects.filter(scope='global').first() or FindingPolicy())
 
 
+def condition_fingerprint(kind, evidence):
+    """Continuity is separate from the full evidence used for review decisions."""
+    keys = ['unique_id', 'created_at', 'rule_id', 'policy_rule_id']
+    keys += {
+        'empty_group': ['membership_definition'],
+        'unused': ['configuration'],
+        'zero_hits': ['configuration_fingerprint', 'configuration', 'action', 'disabled',
+                      'source_groups', 'destination_groups', 'services', 'scope'],
+        'disabled': ['configuration_fingerprint', 'configuration', 'action',
+                     'source_groups', 'destination_groups', 'services', 'scope'],
+        'empty_policy': ['configuration'],
+    }.get(kind, [])
+    selected = {key: evidence[key] for key in keys if key in evidence}
+    if isinstance(selected.get('membership_definition'), dict):
+        selected['membership_definition'] = selected['membership_definition'].get('definition', selected['membership_definition'])
+    return hashlib.sha256(json.dumps(selected, sort_keys=True, separators=(',', ':')).encode()).hexdigest()
+
+
 def advance(finding, policy, environment, stamp, reset=False, row=None):
     days = getattr(policy, finding.kind + '_days', None)
     finding.required_days = days or 0
@@ -27,7 +45,7 @@ def advance(finding, policy, environment, stamp, reset=False, row=None):
         finding.policy_fingerprint = ''
         return
 
-    gap = timedelta(hours=policy.maximum_gap_hours) if policy.maximum_gap_hours else timedelta(minutes=2 * environment.sync_interval_minutes) if environment.sync_interval_minutes else timedelta(hours=24)
+    gap = timedelta(hours=policy.maximum_gap_hours) if policy.maximum_gap_hours else timedelta(minutes=max(1440, 2 * environment.sync_interval_minutes))
     signature = hashlib.sha256(json.dumps([days, policy.minimum_observations, gap.total_seconds()]).encode()).hexdigest()
     restart = (reset or not finding.observation_started or finding.policy_fingerprint != signature
                or stamp <= finding.last_seen or stamp - finding.last_seen > gap)
@@ -60,7 +78,7 @@ def advance(finding, policy, environment, stamp, reset=False, row=None):
             if days == 0 else 'Observation period and minimum successful observations satisfied.')
     else:
         finding.qualification = 'observing'
-        finding.qualification_reason = 'Waiting for the required period and successful observations.'
+        finding.qualification_reason = ('Observation restarted after a gap exceeding {:.1f} hours. '.format(gap.total_seconds()/3600) if stamp - finding.last_seen > gap else '') + 'Observed {} of {} required days; {} of {} required successful observations.'.format(finding.observation_days, days, finding.observation_count, policy.minimum_observations)
 
 
 def absent(finding, rows):

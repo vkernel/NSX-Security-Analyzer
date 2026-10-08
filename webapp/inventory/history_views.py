@@ -57,6 +57,8 @@ def coverage(request, pk):
 def findings(request, pk):
     environment = get_object_or_404(page_queries.environments(), pk=pk)
     # Only findings that met the administration policy enter the review queue.
+    from django.db.models import Count
+    qualification_counts = list(environment.findings.values('qualification').annotate(total=Count('pk')).order_by('qualification'))
     rows = environment.findings.filter(present=True, qualification='eligible').select_related('owner').defer('evidence')
     from .forms import FindingFilterForm
     from django.db.models import F
@@ -81,7 +83,7 @@ def findings(request, pk):
     params = request.GET.copy()
     params.pop('page', None)
     return render(request, 'inventory/findings.html', {'environment': environment, 'page': page,
-        'query': query, 'filter_form': form, 'query_string': params.urlencode(),
+        'qualification_counts': qualification_counts, 'query': query, 'filter_form': form, 'query_string': params.urlencode(),
         'recalculation': environment.finding_recalculation if hasattr(environment, 'finding_recalculation') else None})
 
 

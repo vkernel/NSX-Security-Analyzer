@@ -141,3 +141,36 @@ class FindingRecalculationTests(TestCase):
             call_command('audit_worker', once=True, stdout=io.StringIO())
         dispatch.assert_called_once()
         self.assertEqual(dispatch.call_args.args[0].status, 'running')
+
+    def test_replay_restores_absent_state_and_evidence_without_losing_review(self):
+        self.policy.empty_group_days = 2; self.policy.save()
+        for day in range(4): self.snapshot(day)
+        synchronize(self.env.pk)
+        f = Finding.objects.get(kind='empty_group'); f.present=False; f.status='acknowledged'; f.owner=self.admin; f.evidence={}; f.save()
+        f = self.recalc()
+        self.assertTrue(f.present)
+        self.assertEqual(f.qualification, 'eligible')
+        self.assertEqual(f.evidence['membership'], 'empty')
+        self.assertEqual((f.status, f.owner_id), ('acknowledged', self.admin.pk))
+        response = self.client.get(reverse('findings', args=[self.env.pk]))
+        self.assertEqual(len(response.context['page']), 1)
+
+    def test_replay_condition_fingerprint_and_old_cache_upgrade(self):
+        self.policy.empty_group_days=3; self.policy.save()
+        for day in range(4):
+            data=report(); data['objects'][0]['referenced_by']=['/rule/'+str(day)]
+            snapshot=self.snapshot(day, data=data)
+            SnapshotFindingEvidenceIndex.objects.create(snapshot=snapshot, version=1)
+        f=self.recalc()
+        self.assertEqual((f.qualification, f.observation_days), ('eligible', 3))
+        self.assertFalse(SnapshotFindingEvidenceIndex.objects.filter(version=1).exists())
+        self.assertEqual(f.evidence['membership'], 'empty')
+        self.snapshot(4); synchronize(self.env.pk)
+        f.refresh_from_db(); self.assertEqual(f.observation_count, 5)
+
+    def test_help_uses_current_guidance_without_index_refresh(self):
+        snap=self.snapshot(0)
+        response=self.client.get(reverse('snapshot-data', args=[snap.pk]), {'op':'section','panel':'feature-guide'})
+        self.assertEqual(response.status_code, 200)
+        self.assertIn('Why some findings are not listed', response.json()['html'])
+        self.assertIn('minimum of 24 hours', response.json()['html'])

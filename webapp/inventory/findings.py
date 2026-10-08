@@ -97,7 +97,7 @@ def synchronize(environment_id):
                 flush()
             continue
         prior_qualification = finding.qualification
-        observation.advance(finding, policy, environment, snapshot.generated_at, reset=digest != finding.fingerprint or not finding.present, row=source_rows.get(path, {}))
+        observation.advance(finding, policy, environment, snapshot.generated_at, reset=observation.condition_fingerprint(kind, evidence) != observation.condition_fingerprint(kind, finding.evidence) or not finding.present, row=source_rows.get(path, {}))
         if prior_qualification != finding.qualification:
             events.append((finding, 'Qualification: ' + finding.get_qualification_display()))
         if digest != finding.fingerprint or not finding.present:
