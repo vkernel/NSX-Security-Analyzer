@@ -208,5 +208,17 @@ search for more specific matches. External users still need to sign in once befo
 they can be selected. A second approval remains available to another eligible reviewer;
 it does not require reassigning the owner.
 
-Administration navigation is grouped into Access, Finding reviews, Collections &
-retention, and Operations. Open Finding reviews to change criteria or approval settings.
+Administration uses fixed category tabs: Access, Finding reviews, Collections, and
+Operations. A second row shows the pages in the selected category. Open Finding reviews to change criteria or approval settings.
+
+## Navigation and review feedback
+
+Administration Overview is a settings directory. Open **Collections → Environments &
+sync** for schedules; **Freshness & notifications** has the same name throughout the
+application. Environment analysis tabs highlight the current page, including Snapshots.
+Reviewer assignment uses one server-side search by name or email.
+
+A review queue distinguishes no eligible findings from no filter matches, and offers
+Clear filters for the latter. Comparisons show Queued, Preparing, Failed (with Retry),
+or Ready. Recent collections use aligned columns on desktop and labelled cards on
+mobile, retaining progress updates and stop controls for active collections.

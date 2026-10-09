@@ -1,6 +1,6 @@
 {% extends 'base.html' %}{% block content %}
 <div class="page-heading"><div><h1>Authentication providers</h1><p class="lead">Manage sign-in integrations. Local accounts remain available.</p></div></div>
-{% include 'inventory/admin_navigation.html' %}{% include 'inventory/authentication_tabs.html' %}
+{% include 'inventory/authentication_tabs.html' %}
 <h2>LDAPS</h2><p>Use a read-only service account and full group DNs. Direct memberOf groups are supported; nested and primary groups are not expanded. Administrator takes precedence over Operator, then Viewer.</p>
 <form method="post" class="form-card">{% csrf_token %}{{ form.non_field_errors }}<div class="form-grid">{% for field in form %}{% if field.name != 'trust_retrieved' and field.name != 'trust_secondary' %}{% include 'inventory/settings_field.html' %}{% endif %}{% endfor %}</div>
 <button class="button" name="action" value="retrieve" formnovalidate>Retrieve primary certificate</button>

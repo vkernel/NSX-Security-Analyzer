@@ -127,10 +127,6 @@ body #detail-body .technical-viewer .json-value{color:#edc282}
 .review-wrap {overflow-wrap:anywhere}
 @media(max-width:900px){.finding-workspace {grid-template-columns:minmax(0,1fr)}.review-facts {grid-template-columns:1fr}}
 
-.recent-activity {list-style:none;padding:0;border:1px solid var(--line);border-radius:10px;background:var(--app-surface)}
-.recent-activity li {padding:16px 20px;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;gap:16px;flex-wrap:wrap}
-.recent-activity li:last-child {border-bottom:0}.recent-activity li>div:first-child {display:flex;gap:12px;align-items:center;flex-wrap:wrap}
-.recent-activity small {color:var(--muted)}.comparison-method {margin:16px 0}
 
 .coverage-quiet {background:transparent!important;color:var(--muted)!important;font-weight:400!important;padding-left:0!important}
 .table-more {position:relative}.table-more-body {position:absolute;right:0;top:100%;z-index:30;width:min(340px,80vw);padding:16px;background:var(--app-surface);border:1px solid var(--line);border-radius:10px;box-shadow:0 8px 24px #0002;display:grid;gap:12px}
@@ -143,4 +139,22 @@ body[data-theme] .table-tools .table-more .search-options-body {position:static;
 .relationship-entry {padding:12px 0;border-bottom:1px solid var(--line);overflow-wrap:anywhere}
 .relationship-entry p {margin:4px 0;color:var(--muted);font-size:.85rem}
 
-.admin-groups{display:flex;flex-wrap:wrap;align-items:flex-start;gap:12px;margin:18px 0 24px}.admin-groups>details,.admin-groups>a{border:1px solid var(--line);border-radius:8px;padding:10px 14px;background:var(--app-surface)}.admin-groups summary{cursor:pointer;font-weight:600}.admin-groups details>div{display:flex;flex-wrap:wrap;gap:14px;padding-top:12px}.admin-groups a[aria-current=page]{font-weight:700;text-decoration:underline}
+/* Navigation, task states and activity tables share the same spacing and surfaces. */
+:root{--ui-space:16px;--ui-section-gap:24px;--ui-radius:10px;--ui-control-height:44px}
+.workspace-main :is(.admin-tabs,.admin-subtabs,.page-tabs,.history-navigation){display:flex;align-items:center;gap:24px;flex-wrap:nowrap;overflow-x:auto;border-bottom:1px solid var(--line);padding:0;margin:0 0 var(--ui-section-gap);min-height:var(--ui-control-height)}
+.workspace-main :is(.admin-tabs,.admin-subtabs,.page-tabs,.history-navigation)>a{display:inline-flex;align-items:center;flex-shrink:0;min-height:var(--ui-control-height);padding:0 2px;color:var(--muted);border-bottom:2px solid transparent;text-decoration:none;box-sizing:border-box}
+.workspace-main :is(.admin-tabs,.admin-subtabs,.page-tabs,.history-navigation)>a:is([aria-current=page],[aria-current=location]){color:var(--app-accent);border-bottom-color:var(--app-accent);font-weight:600}
+.workspace-main .admin-tabs{margin-bottom:0}.workspace-main .admin-subtabs{font-size:13px;min-height:48px}.admin-navigation{margin-bottom:var(--ui-section-gap)}
+.settings-directory{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:var(--ui-section-gap);margin-bottom:var(--ui-section-gap)}
+.settings-directory section,.task-state{background:var(--app-surface);border:1px solid var(--line);border-radius:var(--ui-radius);padding:24px}
+.settings-directory h2,.task-state h2{font-size:17px;margin:0 0 12px}.settings-directory ul{list-style:none;margin:0;padding:0}.settings-directory li+li{border-top:1px solid var(--line)}.settings-directory li a{display:flex;justify-content:space-between;gap:12px;padding:14px 0}.settings-directory li a span{color:var(--muted)}
+.application-version{margin-top:32px;color:var(--muted)}.application-version summary{cursor:pointer}.task-state{margin:var(--ui-space) 0}.task-state p{color:var(--muted);margin:0 0 var(--ui-space)}.task-heading{font-size:17px}
+.workspace-main .empty-state{text-align:center;padding:32px var(--ui-space)}.empty-state strong{display:block;font-size:15px}.empty-state p{color:var(--muted);margin:8px 0 16px}
+.recent-collections{table-layout:fixed;width:100%}.recent-environment{width:20%}.recent-status{width:12%}.recent-time{width:21%}.recent-outcome{width:29%}.recent-action{width:18%}
+.workspace-main .recent-collections :is(th,td){padding:16px;vertical-align:middle;overflow-wrap:anywhere}.table-action{text-align:right}.table-action form,.table-action p{margin:0}.table-timestamp{font-variant-numeric:tabular-nums}
+.workspace-main .recent-collections .job-progress{width:100%;min-width:0;max-width:none;margin:0}.recent-collections .progress-caption{font-size:12px;gap:12px}.recent-collections .stop-pending{font-size:12px}.recent-collections .stop-action{white-space:normal}
+@media(max-width:800px){.settings-directory{grid-template-columns:1fr}.settings-directory section,.task-state{padding:var(--ui-space)}.workspace-main :is(.admin-tabs,.admin-subtabs,.page-tabs,.history-navigation){gap:20px;max-width:100%}.recent-collections colgroup{display:none}.recent-collections thead{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%)}.recent-collections,.recent-collections tbody,.recent-collections tr{display:block}.recent-collections tr{padding:12px 16px;border-bottom:1px solid var(--line)}.recent-collections tr:last-child{border-bottom:0}.workspace-main .recent-collections td{display:grid;grid-template-columns:110px minmax(0,1fr);gap:12px;padding:8px 0;border:0;text-align:left}.recent-collections td::before{content:attr(data-label);font-size:12px;color:var(--muted)}.workspace-main .recent-collections .empty-state{display:block}.recent-collections .empty-state::before{content:none}.recent-collections .table-action>a,.recent-collections .table-action>form{justify-self:start}}
+.comparison-method{margin:16px 0}
+/* Activity cards use the page scroll, not the generic table's height/min-width. */
+.recent-collections-wrap{max-height:none}.recent-collections{min-width:0}
+@media(max-width:800px){.recent-collections .pill{justify-self:start;align-self:center}}

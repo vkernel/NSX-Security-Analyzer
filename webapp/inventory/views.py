@@ -35,7 +35,13 @@ def staff_required(view):
 
 @staff_required
 def administration(request):
-    return render(request, "inventory/administration.html", {"environments": page_queries.environments()})
+    return render(request, "inventory/administration.html")
+
+
+@staff_required
+@require_GET
+def environment_schedules(request):
+    return render(request, "inventory/environment_schedules.html", {"environments": page_queries.environments()})
 
 
 def snapshot_list():

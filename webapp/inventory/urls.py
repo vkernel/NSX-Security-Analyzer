@@ -2,6 +2,7 @@ from django.urls import path
 from . import authentication_settings, keycloak_settings, system_health, views, history_views, diagnostic_views, report_views
 
 urlpatterns = [
+    path('administration/environments/', views.environment_schedules, name='environment-schedules'),
     path('my-work/', history_views.my_work, name='my-work'),
     path('api/reviewers/', history_views.reviewer_search, name='reviewer-search'),
     path('comparisons/<int:comparison_id>/retry/', history_views.comparison_retry, name='comparison-retry'),

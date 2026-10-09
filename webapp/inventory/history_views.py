@@ -86,6 +86,7 @@ def findings(request, pk):
     params = request.GET.copy()
     params.pop('page', None)
     return render(request, 'inventory/findings.html', {'environment': environment, 'page': page,
+        'filters_active': any(request.GET.get(key, '').strip() for key in ('q', 'kind', 'review', 'owner')),
         'qualification_counts': qualification_counts, 'query': query, 'filter_form': form, 'query_string': params.urlencode(),
         'recalculation': environment.finding_recalculation if hasattr(environment, 'finding_recalculation') else None})
 

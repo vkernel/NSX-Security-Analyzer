@@ -265,7 +265,7 @@ class WorkspaceTests(TestCase):
 
     def test_administration_permissions_and_branding(self):
         response = self.client.get(reverse("administration"))
-        self.assertContains(response, "Automatic sync")
+        self.assertContains(response, reverse("environment-schedules"))
         self.assertContains(response, reverse("environment-new"))
         self.client.force_login(self.viewer)
         self.assertEqual(self.client.get(reverse("administration")).status_code, 403)

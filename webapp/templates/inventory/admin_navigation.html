@@ -1,8 +1,5 @@
-{% with current=request.resolver_match.url_name %}<nav class="admin-groups" aria-label="Administration sections">
-<a href="{% url 'administration' %}" {% if current == 'administration' %}aria-current="page"{% endif %}>Environments &amp; sync</a>
-{% if user.is_superuser %}
-<details {% if current == 'authentication-settings' or current == 'keycloak-settings' or current == 'ldap-settings' or request.resolver_match.namespace == 'admin' %}open{% endif %}><summary>Access</summary><div><a href="{% url 'admin:auth_user_changelist' %}">Users &amp; access</a><a href="{% url 'authentication-settings' %}">Authentication providers</a></div></details>
-<details {% if current == 'finding-policy' or current == 'review-approvals' %}open{% endif %}><summary>Finding reviews</summary><div><a href="{% url 'finding-policy' %}" {% if current == 'finding-policy' %}aria-current="page"{% endif %}>Finding review criteria</a><a href="{% url 'review-approvals' %}" {% if current == 'review-approvals' %}aria-current="page"{% endif %}>Review approvals</a></div></details>
-<details {% if current == 'retention-settings' or current == 'workspace-policy' %}open{% endif %}><summary>Collections &amp; retention</summary><div><a href="{% url 'workspace-policy' %}">Collection policies</a><a href="{% url 'retention-settings' %}">Retention</a></div></details>
-<details {% if current == 'audit-log' or current == 'system-health' %}open{% endif %}><summary>Operations</summary><div><a href="{% url 'system-health' %}">System health</a><a href="{% url 'audit-log' %}">Audit &amp; diagnostics</a></div></details>
-{% endif %}</nav>{% endwith %}
+{% load admin_sections %}{% admin_sections as sections %}
+<div class="admin-navigation">
+<nav class="admin-tabs" aria-label="Administration categories"><a href="{% url 'administration' %}" {% if request.resolver_match.url_name == 'administration' %}aria-current="page"{% endif %}>Overview</a>{% for section in sections %}<a href="{{ section.url }}" {% if section.active %}aria-current="location"{% endif %}>{{ section.label }}</a>{% endfor %}</nav>
+{% for section in sections %}{% if section.active %}<nav class="admin-subtabs" aria-label="Administration pages">{% for link in section.links %}<a href="{{ link.url }}" {% if link.active %}aria-current="page"{% endif %}>{{ link.label }}</a>{% endfor %}</nav>{% endif %}{% endfor %}
+</div>

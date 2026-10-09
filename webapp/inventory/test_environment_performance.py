@@ -52,7 +52,7 @@ class EnvironmentPerformanceTests(TestCase):
         params = {'before':self.before.pk, 'after':self.after.pk}
         from django.core.management import call_command
         with patch('inventory.comparison_cache.compare', side_effect=AssertionError('Web request performed comparison')), CaptureQueriesContext(connection) as queries:
-            self.assertContains(self.client.get(url, params), 'Preparing comparison')
+            self.assertContains(self.client.get(url, params), 'Comparison queued')
         self.assertFalse(any('\"report\"' in q['sql'] for q in queries))
         call_command('prepare_comparison', SnapshotComparison.objects.get().pk)
         self.assertContains(self.client.get(url, params), 'Updated group')
@@ -64,7 +64,7 @@ class EnvironmentPerformanceTests(TestCase):
         self.after.report['objects'][0]['name'] = 'Edited evidence'
         self.after.save(update_fields=['report'])
         self.assertFalse(SnapshotComparison.objects.exists())
-        self.assertContains(self.client.get(url, params), 'Preparing comparison')
+        self.assertContains(self.client.get(url, params), 'Comparison queued')
         call_command('prepare_comparison', SnapshotComparison.objects.get().pk)
         self.assertContains(self.client.get(url, params), 'Edited evidence')
 
