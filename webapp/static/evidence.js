@@ -35,14 +35,15 @@
   // Preserve DOM nodes/listeners so returning retains expanded sections and pagination.
   window.openRelatedEvidence=async(body,query,label)=>{
     const dialog=body.closest('dialog'),heading=dialog.querySelector('h2'),nodes=Array.from(body.childNodes),title=heading.textContent,scroll=dialog.scrollTop;
+    const previousRequest=dialog.reportRequest, previousGeneration=body.evidenceGeneration, previousPending=dialog.tagPending;
     const previousBack=dialog.querySelector('.evidence-back');if(previousBack)previousBack.hidden=true;
     const token={};dialog.reportRequest=token;
     const back=make('button','← Back to '+title.replace(/ —.*$/,''));back.type='button';back.className='evidence-back';
-    const restore=()=>{dialog.reportRequest=null;body.replaceChildren(...nodes);heading.textContent=title;back.remove();if(previousBack)previousBack.hidden=false;dialog.scrollTop=scroll;};
+    const restore=()=>{if(dialog.tagPending!==previousPending)dialog.tagPending?.abort();dialog.tagPending=previousPending;dialog.reportRequest=previousRequest;body.evidenceGeneration=previousGeneration;body.replaceChildren(...nodes);heading.textContent=title;back.remove();if(previousBack)previousBack.hidden=false;dialog.scrollTop=scroll;};
     back.onclick=restore;dialog.querySelector('.dialog-heading').after(back);heading.textContent=label;
     const open=async()=>{window.evidenceState(body,'Loading evidence…');try{
       const record=await window.reportData(null,{op:'resolve',...query});if(!dialog.open||dialog.reportRequest!==token)return;
-      const button=make('button');button.className='detail-button';button.dataset.title=label;
+      const button=make('button');button.className='detail-button';button.dataset.title=label;button.dataset.evidenceView=record.view;
       button.dataset[record.view==='tags'?'tagRow':'evidenceRow']=record.id;
       button.hidden=true;document.querySelector('main').append(button);button.click();dialog.addEventListener('close',()=>button.remove(),{once:true});back.addEventListener('click',()=>button.remove(),{once:true});
     }catch(error){if(dialog.open&&dialog.reportRequest===token)window.evidenceState(body,error.message,open);}};

@@ -3,6 +3,7 @@
 {% block content %}
 <div class="page-heading"><div><p class="eyebrow">ADMINISTRATION</p><h1>System health</h1><p class="lead">Resource usage for this web container and the connected database.</p></div><a class="button" href="{% url 'system-health' %}">Refresh measurements</a></div>
 <p class="muted">Measured {{ measured_at|date:"Y-m-d H:i:s T" }}. Refresh to take a new sample.</p>
+<h2>Processing services</h2><div class="table-scroll"><table><thead><tr><th>Service</th><th>Status</th><th>Last reported</th><th>Pod</th></tr></thead><tbody>{% for service in services %}<tr><td>{{ service.name|capfirst }}</td><td>{{ service.status }}</td><td>{{ service.seen_at|default:'Never' }}</td><td>{{ service.pod }}</td></tr>{% endfor %}</tbody></table></div><p class="muted">Heartbeats indicate supervisor activity, not collection progress. Long collections continue reporting. Recalculation also prepares queued comparisons. A scheduler performing lengthy cleanup may temporarily stop reporting.</p>
 <div class="collection-bar"><div><h2>Web container</h2><p>These measurements cover the container serving this request. Workers, scheduler, database pods and other web replicas have separate resource allocations.</p></div></div>
 <div class="table-scroll"><table><thead><tr><th>Resource</th><th>Usage</th><th>Capacity / scope</th></tr></thead><tbody>
 <tr><td>CPU</td><td>{% if metrics.cpu_cores != None %}{{ metrics.cpu_cores|floatformat:2 }} cores{% else %}Unavailable{% endif %}</td><td>Short sample across all processes in this container; 1.0 means one CPU core in use.</td></tr>

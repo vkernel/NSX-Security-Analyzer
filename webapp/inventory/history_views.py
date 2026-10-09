@@ -24,18 +24,20 @@ def comparison(request, pk):
     initial = {'before': latest[1], 'after': latest[0]} if len(latest) == 2 else {}
     data = request.GET if 'before' in request.GET or 'after' in request.GET else None
     form = SnapshotComparisonForm(data, initial=initial, environment=environment, choices_page=request.GET.get("choices_page", 1))
-    rows, selected = [], None
+    rows, selected, comparison_job = [], None, None
     if form.is_bound and form.is_valid():
-        from .comparison_cache import comparison_rows
+        from .models import SnapshotComparison
         selected = form.cleaned_data
-        rows = comparison_rows(selected['before'], selected['after'])
+        comparison_job, _ = SnapshotComparison.objects.get_or_create(before=selected['before'], after=selected['after'])
+        if comparison_job.ready:
+            rows = comparison_job.rows.values_list('data', flat=True)
     page = Paginator(rows, preferences(request).page_size).get_page(request.GET.get('page'))
     query = request.GET.copy()
     if selected:
         query['before'], query['after'] = str(selected['before'].pk), str(selected['after'].pk)
     query.pop('page', None)
     return render(request, 'inventory/comparison.html', {'environment': environment, 'form': form,
-        'selected': selected, 'page': page, 'query_string': query.urlencode(), 'count': page.paginator.count})
+        'selected': selected, 'comparison_job': comparison_job, 'page': page, 'query_string': query.urlencode(), 'count': page.paginator.count})
 
 
 @login_required
@@ -63,6 +65,7 @@ def findings(request, pk):
     from .forms import FindingFilterForm
     from django.db.models import F
     form = FindingFilterForm(request.GET or {'sort': 'name', 'direction': 'asc'})
+    if not request.user.is_staff: form.fields['owner'].widget.attrs.pop('data-user-search', None)
     query = request.GET.get('q', '').strip()
     if form.is_valid():
         values = form.cleaned_data
@@ -132,6 +135,8 @@ def finding_detail(request, pk, finding_id):
     can_decide = request.user.is_staff and ((finding.workflow_state == 'owner_review' and finding.owner_id == request.user.pk)
         or (finding.workflow_state == 'second_review' and finding.owner_id != request.user.pk))
     steps = [('unassigned','Assign owner'), ('owner_review','Owner review'), ('second_review','Independent review'), ('ready','Ready'), ('decommissioned','Decommissioned')]
+    if finding.required_approvals == 1:
+        steps = [(key, label) for key, label in steps if key != 'second_review']
     current_step = next((i for i, (key, _) in enumerate(steps) if key == finding.workflow_state), -1)
     progress = [{'label': label, 'current': i == current_step, 'done': i < current_step} for i, (_, label) in enumerate(steps)]
     facts = [(label, finding.evidence[key]) for key, label in [('usage','Reference status'), ('membership','Membership'), ('hit_status','Rule activity'), ('disabled','Disabled'), ('rule_count','Rule count')] if key in finding.evidence]
@@ -212,3 +217,67 @@ def finding_history_export(request, pk, finding_id):
     response = StreamingHttpResponse(content(), content_type='application/json')
     response['Content-Disposition'] = f'attachment; filename="finding-{finding.pk}-history.json"'
     return response
+
+
+@login_required
+@require_http_methods(['GET', 'POST'])
+def review_approvals(request):
+    from .models import WorkspacePolicy
+    from .forms import ReviewApprovalsForm
+    if not request.user.is_superuser:
+        return HttpResponseForbidden('Administrator access is required.')
+    with transaction.atomic():
+        policy = WorkspacePolicy.objects.select_for_update().filter(pk=1).first() or WorkspacePolicy(pk=1)
+        form = ReviewApprovalsForm(request.POST if request.method == 'POST' else None, instance=policy)
+        if request.method == 'POST' and form.is_valid():
+            form.save()
+            messages.success(request, 'Approval requirement saved. Existing reviews keep their assigned requirement.')
+            return redirect('review-approvals')
+    return render(request, 'inventory/review_approvals.html', {'form': form})
+
+
+@login_required
+@require_http_methods(['POST'])
+def comparison_retry(request, comparison_id):
+    from .models import SnapshotComparison
+    from django.urls import reverse
+    pair = get_object_or_404(SnapshotComparison, pk=comparison_id)
+    SnapshotComparison.objects.filter(pk=pair.pk, status='failed', ready=False).update(status='queued', error='')
+    return redirect(reverse('snapshot-comparison', args=[pair.after.environment_id]) + f'?before={pair.before_id}&after={pair.after_id}')
+
+
+@login_required
+@require_GET
+def reviewer_search(request):
+    from django.contrib.auth import get_user_model
+    from django.http import JsonResponse
+    from .user_labels import user_label, with_identities
+    if not request.user.is_staff:
+        return HttpResponseForbidden('Operator access required.')
+    term = request.GET.get('q', '').strip()[:100]
+    rows = get_user_model().objects.filter(is_active=True, is_staff=True)
+    for word in term.split():
+        rows = rows.filter(Q(first_name__icontains=word) | Q(last_name__icontains=word) | Q(email__icontains=word) | Q(username__icontains=word))
+    rows = list(with_identities(rows.order_by('first_name', 'last_name', 'username'))[:21])
+    response = JsonResponse({'items': [{'id': u.pk, 'label': user_label(u)} for u in rows[:20]], 'has_more': len(rows) > 20})
+    response['Cache-Control'] = 'private, no-store'
+    return response
+
+
+@login_required
+@require_GET
+def my_work(request):
+    if not request.user.is_staff:
+        return HttpResponseForbidden('Operator access required.')
+    queue = request.GET.get('queue', 'assigned')
+    if queue not in ('assigned', 'second', 'ready'): queue = 'assigned'
+    rows = Finding.objects.select_related('environment', 'owner__keycloakidentity', 'owner__ldapidentity').defer('evidence', 'approvals')
+    if queue == 'assigned': rows = rows.filter(owner=request.user, workflow_state='owner_review')
+    elif queue == 'second':
+        rows = rows.filter(workflow_state='second_review', required_approvals=2).exclude(owner=request.user).exclude(approvals__owner__actor_id=str(request.user.pk))
+    else: rows = rows.filter(workflow_state='ready')
+    term = request.GET.get('q', '').strip()[:255]
+    if term: rows = rows.filter(Q(name__icontains=term) | Q(environment__name__icontains=term))
+    page = Paginator(rows.order_by('last_seen', 'pk'), preferences(request).page_size).get_page(request.GET.get('page'))
+    from urllib.parse import urlencode
+    return render(request, 'inventory/my_work.html', {'page': page, 'queue': queue, 'query': term, 'query_string': urlencode({'queue': queue, 'q': term})})

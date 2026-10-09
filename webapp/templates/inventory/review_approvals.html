@@ -1,0 +1,9 @@
+{% extends 'base.html' %}{% block content %}
+<a class="breadcrumb" href="{% url 'administration' %}">← Administration</a>
+<div class="page-heading"><div><h1>Review approvals</h1><p class="lead">Choose who must approve a finding before decommissioning.</p></div></div>
+{% include 'inventory/admin_navigation.html' %}
+<form method="post" class="form-card">{% csrf_token %}{{ form.non_field_errors }}{% for field in form %}{% include 'inventory/settings_field.html' %}{% endfor %}
+<p><strong>Single approval:</strong> the assigned owner reviews the finding. Approval moves it directly to Ready for decommissioning.</p>
+<p><strong>Two-person approval (default):</strong> the owner approves first, then a different operator or administrator must independently approve.</p>
+<p>Applies when a review is assigned, reassigned or reopened. Existing reviews retain their requirement. Evidence checks, a completion ticket and audit history remain required in both modes. The application never deletes NSX objects.</p>
+<div class="form-actions"><button class="button primary">Save approval setting</button></div></form>{% endblock %}

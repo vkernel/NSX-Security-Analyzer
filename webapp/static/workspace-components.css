@@ -140,3 +140,7 @@ body #detail-body .technical-viewer .json-value{color:#edc282}
 body[data-theme] .table-tools .table-more .column-layout>div,
 body[data-theme] .table-tools .table-more .search-options-body {position:static;inset:auto;min-width:0;width:100%;max-width:100%;box-sizing:border-box;box-shadow:none;padding:8px}
 .table-more .column-choice {min-width:0;gap:4px}.table-more .column-choice label {min-width:0;overflow-wrap:anywhere}.table-more .column-choice button {min-width:30px;padding:4px}
+.relationship-entry {padding:12px 0;border-bottom:1px solid var(--line);overflow-wrap:anywhere}
+.relationship-entry p {margin:4px 0;color:var(--muted);font-size:.85rem}
+
+.admin-groups{display:flex;flex-wrap:wrap;align-items:flex-start;gap:12px;margin:18px 0 24px}.admin-groups>details,.admin-groups>a{border:1px solid var(--line);border-radius:8px;padding:10px 14px;background:var(--app-surface)}.admin-groups summary{cursor:pointer;font-weight:600}.admin-groups details>div{display:flex;flex-wrap:wrap;gap:14px;padding-top:12px}.admin-groups a[aria-current=page]{font-weight:700;text-decoration:underline}

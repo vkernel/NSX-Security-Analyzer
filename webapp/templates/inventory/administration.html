@@ -2,6 +2,7 @@
 <div class="page-heading"><div><p class="eyebrow">WORKSPACE SETTINGS</p><h1>Administration</h1><p class="lead">Manage environments, automatic syncs and access.</p></div><a class="button primary" href="{% url 'environment-new' %}">Add environment +</a></div>
 {% if user.is_superuser %}<div class="collection-bar"><div><h2>Users and access</h2><p>Manage workspace accounts and their permissions.</p></div><div class="actions"><a class="button" href="{% url 'admin:auth_user_changelist' %}">Manage users</a><a class="button" href="{% url 'admin:auth_group_changelist' %}">Permission groups</a></div></div>{% endif %}
 {% if user.is_superuser %}<section class="settings-catalog" aria-label="Workspace configuration">
+<a href="{% url 'review-approvals' %}"><h2>Review approvals</h2><p>Require one approval or two independent reviewers.</p></a>
 <a href="{% url 'finding-policy' %}"><h2>Finding criteria</h2><p>Choose when observed conditions enter the review queue.</p></a>
 <a href="{% url 'authentication-settings' %}"><h2>Authentication</h2><p>Configure Keycloak and LDAPS sign-in providers.</p></a>
 <a href="{% url 'retention-settings' %}"><h2>Retention</h2><p>Manage how long collected snapshots are kept.</p></a>

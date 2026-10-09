@@ -141,6 +141,9 @@ def snapshot_data(request, pk):
                 if row is None:
                     raise Http404('This object is not available in this snapshot.')
                 result = {'id': row.ordinal, 'view': row.view}
+            elif op == 'tag-relationships':
+                from .tag_relationships import read
+                result = read(pk, int(request.GET.get('id', '-1')), request.GET.get('section', 'summary'), int(request.GET.get('page', '0')))
             elif op == 'vm-relationships':
                 from .vm_relationships import read
                 result = read(pk, int(request.GET.get('id', '-1')), request.GET.get('section', 'summary'),

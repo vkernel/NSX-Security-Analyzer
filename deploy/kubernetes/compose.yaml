@@ -55,6 +55,12 @@ services:
     image: vkernel/nsx-security-analyzer:0.5.2
     restart: always
     command: ["python", "manage.py", "audit_worker"]
+    healthcheck:
+      test: ["CMD", "python", "manage.py", "check_heartbeat", "collection", "recalculation"]
+      interval: 30s
+      timeout: 10s
+      start_period: 60s
+      retries: 3
     environment:
       DJANGO_SECRET_KEY: ""
       DJANGO_ALLOWED_HOSTS: "localhost,127.0.0.1"
@@ -73,6 +79,12 @@ services:
     image: vkernel/nsx-security-analyzer:0.5.2
     restart: always
     command: ["python", "manage.py", "sync_scheduler"]
+    healthcheck:
+      test: ["CMD", "python", "manage.py", "check_heartbeat", "scheduler"]
+      interval: 30s
+      timeout: 10s
+      start_period: 60s
+      retries: 3
     environment:
       DJANGO_SECRET_KEY: ""
       DJANGO_ALLOWED_HOSTS: "localhost,127.0.0.1"

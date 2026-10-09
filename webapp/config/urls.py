@@ -4,8 +4,10 @@ from django.urls import include, path
 
 from inventory.views import administration
 from inventory import keycloak, ldap_settings
+from inventory.initial_password import ChangePasswordView
 
 urlpatterns = [
+    path("account/password/", ChangePasswordView.as_view(), name="password-change"),
     path("login/ldap/", ldap_settings.sign_in, name="ldap-login"),
     path("admin/", administration),
     path("admin/", admin.site.urls),

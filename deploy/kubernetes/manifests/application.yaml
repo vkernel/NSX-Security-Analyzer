@@ -79,6 +79,13 @@ spec:
       terminationGracePeriodSeconds: 60
       containers:
         - name: worker
+          readinessProbe:
+            exec:
+              command: [python, manage.py, check_heartbeat, collection, recalculation]
+            initialDelaySeconds: 30
+            periodSeconds: 30
+            timeoutSeconds: 10
+            failureThreshold: 3
           image: vkernel/nsx-security-analyzer:0.5.2
           imagePullPolicy: IfNotPresent
           env:
@@ -121,6 +128,13 @@ spec:
       terminationGracePeriodSeconds: 60
       containers:
         - name: scheduler
+          readinessProbe:
+            exec:
+              command: [python, manage.py, check_heartbeat, scheduler]
+            initialDelaySeconds: 30
+            periodSeconds: 30
+            timeoutSeconds: 10
+            failureThreshold: 3
           image: vkernel/nsx-security-analyzer:0.5.2
           imagePullPolicy: IfNotPresent
           env:

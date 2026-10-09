@@ -58,7 +58,8 @@ def comparison_rows(before, after):
                         SnapshotComparisonRow(comparison=saved, ordinal=offset+i, data=row)
                         for i, row in enumerate(rows[offset:offset+100])])
                 saved.ready = True
-                saved.save(update_fields=['ready'])
+                saved.status, saved.error = 'completed', ''
+                saved.save(update_fields=['ready', 'status', 'error'])
                 logging.getLogger('inventory.collection').info(
                     'Comparison pair=%s projection_seconds=%.3f compare_seconds=%.3f persist_seconds=%.3f changes=%d',
                     saved.pk, loaded-started, compared-loaded, perf_counter()-compared, len(rows))

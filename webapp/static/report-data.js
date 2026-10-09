@@ -160,3 +160,69 @@
     dialog.addEventListener('close',()=>{body.evidenceGeneration=null;button.isConnected&&button.focus({preventScroll:true});},{once:true});
   },true);
 })();
+
+/* Tags/scopes use current paged evidence, even when their saved HTML is older. */
+(() => {
+  const make=(tag,text)=>{const node=document.createElement(tag);if(text!=null)node.textContent=text;return node;};
+  document.addEventListener('click',async event=>{
+    const button=event.target.closest('.detail-button');
+    if(!button || !(button.dataset.tagRow!==undefined || button.dataset.evidenceView==='scopes' || button.closest('[data-server-table="tags-scopes"]')))return;
+    // Unindexed standalone reports retain their original evidence renderer.
+    if(!document.querySelector('[data-server-table]'))return;
+    event.preventDefault();event.stopImmediatePropagation();
+    const dialog=document.getElementById('detail-dialog'),body=document.getElementById('detail-body');
+    const token={},controller=new AbortController();if(!button.dataset.evidenceView)dialog.tagPending?.abort();dialog.tagPending=controller;
+    dialog.reportRequest=token;body.evidenceGeneration=token;
+    const id=Number(button.dataset.tagRow ?? button.dataset.evidenceRow);
+    document.getElementById('detail-title').textContent=button.dataset.title || 'Relationships';
+    if(!dialog.open)dialog.showModal();
+    const current=()=>dialog.open && dialog.reportRequest===token && body.evidenceGeneration===token;
+    dialog.addEventListener('close',()=>{controller.abort();body.evidenceGeneration=null;button.isConnected&&button.focus({preventScroll:true});},{once:true});
+    const load=(section,page=0)=>window.reportData(null,{op:'tag-relationships',id,section,page},controller.signal);
+    async function start(){
+      window.evidenceState(body,'Loading summary…');
+      try{
+        const summary=await load('summary');if(!current())return;body.replaceChildren();
+        const caveat=make('p','Visible configuration relationships only. Tags attached to groups are metadata, not proof of traffic matching. Search coverage and inventory gaps apply; absence of references does not establish non-use. Expand a section to load 25 records at a time.');caveat.dataset.evidenceSection='relationships';body.append(caveat);
+        function paged(section,label,technical=false){
+          const box=make('details'),content=make('div');box.dataset.evidenceSection=technical?'technical':'relationships';box.append(make('summary',label),content);body.append(box);
+          let ready=false,busy=false,sequence=0;
+          async function render(page=0){
+            if(busy)return;busy=true;const version=++sequence;window.evidenceState(content,'Loading…');
+            try{
+              const result=await load(section,page);if(!current()||version!==sequence)return;
+              content.replaceChildren();ready=true;
+              for(const item of result.items){
+                if(section==='notes'){content.append(make('p',item));continue;}
+                if(technical){const detail=make('details');detail.append(make('summary','Condition definition'));detail.addEventListener('toggle',()=>{if(detail.open&&detail.childElementCount===1)detail.append(window.technicalEvidence(item));});content.append(detail);continue;}
+                const entry=make('div');entry.className='relationship-entry';
+                const name=item?.name || item?.path || 'Reference unavailable';
+                if(section==='tags' || (item?.path?.startsWith('/infra/')&&section!=='vms')){
+                  const link=make('button',name);link.type='button';link.className='evidence-object-link';
+                  link.onclick=()=>window.openRelatedEvidence(body,section==='tags'?{view:'tags',tag:item.name,scope:summary.data.scope || ''}:{path:item.path},name);entry.append(link);
+                }else entry.append(make('strong',name));
+                if(item?.path)entry.append(make('p',item.path));
+                if(section==='tags')entry.append(make('p',`${item.vm_count || 0} VMs · ${item.group_count || 0} groups · ${item.other_count || 0} other resources`));
+                if(item?.via_group)entry.append(make('p','Via group: '+item.via_group+' · '+(item.tag_use==='condition'?'Membership condition':'Tag attached to group')));
+                if(item?.disabled)entry.append(make('p','Disabled rule'));
+                if(item?.resource_type)entry.append(make('p',item.resource_type));content.append(entry);
+              }
+              if(!result.items.length)content.append(make('p','No relationships recorded.'));
+              const prev=make('button','Previous'),next=make('button','Next');prev.type=next.type='button';prev.disabled=page===0;next.disabled=!result.has_next;
+              prev.onclick=()=>render(page-1);next.onclick=()=>render(page+1);content.append(prev,make('span',' Page '+(page+1)+' '),next);
+            }catch(error){if(current()&&error.name!=='AbortError')window.evidenceState(content,error.message,()=>render(page));}finally{busy=false;}
+          }
+          box.addEventListener('toggle',()=>{if(box.open&&!ready&&!busy)render();});
+        }
+        if(summary.view==='scopes')paged('tags','Tags in this scope');
+        else{
+          paged('notes','Collection notes');paged('vms','VM assignments');paged('group_conditions','Group conditions');paged('group_assignments','Tags attached to groups');paged('other_assignments','Other resource assignments');paged('firewall_references','Firewall references');
+          paged('condition_evidence','Matching condition definitions',true);paged('review_conditions','Conditions requiring review',true);
+        }
+        window.workspaceEvidence?.(body,document.getElementById('detail-title'),{...summary.data,inventory_type:summary.view==='scopes'?'Scope':'Tag',evidence_summary_only:true});
+
+      }catch(error){if(current()&&error.name!=='AbortError')window.evidenceState(body,error.message,start);}
+    }
+    await start();
+  },true);
+})();

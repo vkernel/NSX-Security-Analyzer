@@ -6,7 +6,7 @@
     const summary=make('dl',null,'evidence-facts');
     if(row){
       if(!row.inventory_type && row.kind)summary.append(make('dt','Type'),make('dd',row.kind.replaceAll('_',' ')));
-      for(const [key,label] of [['inventory_type','Type'],['usage','Usage'],['membership','Membership'],['hit_status','Activity'],['power_state','Power state'],['tag_count','Tags'],['group_count','Groups referencing tags'],['action','Action'],['disabled','Disabled'],['hit_count','Recorded hits'],['rule_count','Rules'],['category','Category']]){
+      for(const [key,label] of [['inventory_type','Type'],['scope','Scope'],['status','Assessment'],['other_count','Other resources'],['tagged_objects','NSX catalog assignments'],['usage','Usage'],['membership','Membership'],['hit_status','Activity'],['power_state','Power state'],['tag_count','Tags'],['group_count','Groups referencing tags'],['action','Action'],['disabled','Disabled'],['hit_count','Recorded hits'],['rule_count','Rules'],['category','Category']]){
         if(row[key]!==undefined && row[key]!==null && row[key]!=='')summary.append(make('dt',label),make('dd',String(row[key]).replaceAll('_',' ')));
       }
       if(row.referenced_by)summary.append(make('dt','Configuration references'),make('dd',String(row.referenced_by.length)));
@@ -24,7 +24,7 @@
       if(node.tagName==='DETAILS')node.open=key==='Overview';
       groups.get(key).push(node);
     }
-    if(row && !groups.get('Technical details').some(node=>node.matches('details,pre,.code-block')) && row.power_state===undefined){
+    if(row && !row.evidence_summary_only && !groups.get('Technical details').some(node=>node.matches('details,pre,.code-block')) && row.power_state===undefined){
       const source=make('details');source.append(make('summary','Saved object data'));const content=make('div');source.append(content);
       source.addEventListener('toggle',()=>{if(source.open&&!content.children.length)content.append(window.technicalEvidence(row));});groups.get('Technical details').push(source);
     }

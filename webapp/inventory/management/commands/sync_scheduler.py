@@ -20,6 +20,8 @@ class Command(BaseCommand):
             try:
                 with phase('scheduler', 'schedule_due', quiet=True):
                     count = schedule_due()
+                from inventory.heartbeats import beat
+                beat('scheduler')
                 with phase('scheduler', 'retention_cleanup', quiet=True):
                     cleanup_retention()
                 with phase('scheduler', 'audit_retention', quiet=True):

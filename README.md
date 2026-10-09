@@ -73,8 +73,7 @@ docker compose up --build -d
 ```
 
 On a fresh source deployment, database initialization creates username **`admin`**
-with password **`NSXSecurityA!`**. Change this password after signing in through
-**Administration → Users & access**. Existing administrators are left unchanged.
+with password **`NSXSecurityA!`**. The application requires you to replace this initial password immediately after signing in. Existing administrators are left unchanged.
 No manual account-creation command is needed with release **0.5.2**.
 
 Open **http://localhost:8000** and sign in. In **Administration**, add an

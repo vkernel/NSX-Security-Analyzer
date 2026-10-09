@@ -109,8 +109,7 @@ After `migrate` completes successfully and `web` is healthy, open
 - **Username:** `admin`
 - **Password:** `NSXSecurityA!`
 
-No manual account-creation command is needed. Change the password after signing in
-through **Administration → Users & access**.
+No manual account-creation command is needed. The application requires a password change immediately after sign-in when this initial credential is still in use.
 
 Provisioning runs once per database. If an account named `admin` (case insensitive)
 or any superuser already exists, it is left unchanged; use its existing login.

@@ -13,7 +13,7 @@ FIELDS = {
     'Environment': ('name', 'slug', 'manager', 'enabled', 'sync_interval_minutes', 'insecure', 'timeout', 'retries'),
     'RetentionPolicy': ('enabled', 'snapshot_days', 'testing_days', 'collection_days'),
     'FindingPolicy': ('scope', 'zero_hits_days', 'empty_group_days', 'unused_days', 'empty_policy_days', 'disabled_days', 'minimum_observations', 'maximum_gap_hours'),
-    'WorkspacePolicy': ('stale_hours', 'notify_failed', 'notify_completed', 'notify_coverage'),
+    'WorkspacePolicy': ('required_approvals', 'stale_hours', 'notify_failed', 'notify_completed', 'notify_coverage'),
     'UserPreferences': ('page_size', 'report_page_size', 'history_days', 'landing_page', 'remember_tables', 'remember_menus', 'density', 'refresh_seconds', 'timezone', 'date_format', 'theme', 'text_size', 'high_contrast', 'reduced_motion', 'preferred_environment_id'),
     'User': ('is_active', 'is_staff', 'is_superuser'),
     'Group': ('name',),
@@ -47,7 +47,6 @@ def after_save(sender, instance, created, raw=False, **kwargs):
                details={'changes': changes, 'credentials_or_trust_changed': private_changed})
 
 
-@receiver(post_delete)
 def after_delete(sender, instance, **kwargs):
     if sender._meta.apps is apps and sender.__name__ in ('Environment', 'User', 'Group', 'FindingPolicy'):
         record(sender.__name__.lower()+'.deleted', sender.__name__, instance.pk)
@@ -82,3 +81,11 @@ def permissions_changed(sender, instance, action, pk_set, reverse, **kwargs):
         record('access.membership_changed', type(instance).__name__, instance.pk,
                details={'operation': action, 'relation': sender.__name__, 'reverse': reverse,
                         'related_ids': sorted(pk_set or [])})
+
+
+# Derived snapshot rows are not audited individually. Scoped receivers allow
+# Django to delete their large relationship indexes directly in SQL.
+for _model in ('Environment', 'FindingPolicy'):
+    post_delete.connect(after_delete, sender=apps.get_model('inventory', _model), dispatch_uid='audit-delete-' + _model)
+post_delete.connect(after_delete, sender=get_user_model(), dispatch_uid='audit-delete-user')
+post_delete.connect(after_delete, sender=Group, dispatch_uid='audit-delete-group')

@@ -148,7 +148,7 @@ class FindingWorkflowTests(TestCase):
         self.owner.username='keycloak_internal_opaque_identifier'
         self.owner.first_name='Alex'; self.owner.last_name='Example'; self.owner.email='alex@example.com'; self.owner.save()
         KeycloakIdentity.objects.create(user=self.owner,issuer='https://sso.example/realms/test',subject='immutable-subject')
-        form=FindingReviewForm()
+        form=FindingReviewForm(initial={'owner': self.owner.pk})
         choices=dict((str(key),label) for key,label in form.fields['owner'].choices)
         self.assertEqual(choices[str(self.owner.pk)],'Alex Example · alex@example.com · Keycloak')
         self.assertNotIn(str(self.viewer.pk),choices)
@@ -286,3 +286,59 @@ class FindingWorkflowTests(TestCase):
         self.assertContains(response, 'Keep my reasoning')
         self.assertContains(response, 'Keep my dependency checks')
         self.assertContains(response, 'Confirm your independent dependency check')
+
+    def test_single_approval_and_completion(self):
+        from .models import WorkspacePolicy
+        WorkspacePolicy.objects.create(required_approvals=1)
+        self.assign()
+        with self.assertRaises(ValidationError):
+            decide(self.finding, self.reviewer, 'approve', 'Not owner')
+        decide(self.finding, self.owner, 'approve', 'Verified dependencies')
+        self.assertEqual(self.finding.workflow_state, 'ready')
+        self.assertEqual(self.finding.events.latest('pk').details['required_approvals'], 1)
+        decide(self.finding, self.owner, 'complete', 'Removed manually', ticket='CHG-1')
+        self.assertEqual(self.finding.workflow_state, 'decommissioned')
+
+    def test_setting_changes_only_on_new_assignment_or_reopen(self):
+        from .models import WorkspacePolicy
+        self.assign()
+        policy = WorkspacePolicy.objects.create(required_approvals=1)
+        decide(self.finding, self.owner, 'approve', 'Checked')
+        self.assertEqual(self.finding.workflow_state, 'second_review')
+        decide(self.finding, self.reviewer, 'reject', 'Needs another review')
+        decide(self.finding, self.admin, 'reopen', 'Restart with current policy')
+        self.assertEqual(self.finding.required_approvals, 1)
+        policy.required_approvals = 2
+        policy.save()
+        decide(self.finding, self.owner, 'approve', 'Checked again')
+        self.assertEqual(self.finding.workflow_state, 'ready')
+        decide(self.finding, self.admin, 'assign', 'Change owner', self.reviewer)
+        self.assertEqual(self.finding.required_approvals, 2)
+        self.assertEqual(self.finding.approvals, {})
+
+    def test_approval_setting_is_admin_only_and_validated(self):
+        from .models import WorkspacePolicy
+        url = reverse('review-approvals')
+        self.client.force_login(self.owner)
+        self.assertEqual(self.client.post(url, {'required_approvals': 1}).status_code, 403)
+        self.client.force_login(self.admin)
+        self.assertEqual(self.client.get(url).status_code, 200)
+        self.assertEqual(self.client.post(url, {'required_approvals': 3}).status_code, 200)
+        self.assertFalse(WorkspacePolicy.objects.exists())
+        self.assertEqual(self.client.post(url, {'required_approvals': 1}).status_code, 302)
+        self.assertEqual(WorkspacePolicy.objects.get(pk=1).required_approvals, 1)
+        self.assign()
+        self.client.force_login(self.owner)
+        response = self.client.get(self.url)
+        self.assertContains(response, 'Single approval')
+        self.assertNotContains(response, 'Independent review</')
+
+    def test_single_approval_preserves_evidence_guard(self):
+        from .models import WorkspacePolicy
+        WorkspacePolicy.objects.create(required_approvals=1)
+        self.assign()
+        self.record.delete()
+        with self.assertRaises(ValidationError):
+            decide(self.finding, self.owner, 'approve', 'Checked')
+        self.finding.refresh_from_db()
+        self.assertEqual(self.finding.workflow_state, 'owner_review')

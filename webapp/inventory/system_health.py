@@ -79,6 +79,8 @@ def database_usage():
 def health_page(request):
     if not request.user.is_superuser:
         return HttpResponseForbidden('Administrator access required.')
+    from .heartbeats import summary
     return render(request, 'inventory/system_health.html', {
+        'services': summary(),
         'metrics': resources(), 'database': database_usage(), 'measured_at': timezone.now(),
     })

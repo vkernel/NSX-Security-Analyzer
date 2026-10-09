@@ -1,9 +1,24 @@
-# Two-person finding reviews
+# Finding review approvals
 
 Finding reviews authorize a proposed decommissioning decision. They never delete
 or modify an NSX object. Operators and administrators can perform workflow
 actions; viewers can read the results. The same rules apply to local, Keycloak
 and LDAP accounts. Each person must use their own account.
+
+## Configure the approval requirement
+
+Open **Administration → Review approvals**, select **Single approval** or
+**Two-person approval (four-eyes principle)** and click **Save approval setting**.
+Only administrators can change this global setting. Two-person approval remains
+the default; existing reviews retain their original requirement. Assignment,
+reassignment and reopening capture the current setting for that review.
+
+With single approval, the assigned owner's approval moves the finding directly
+to **Ready for decommissioning**. All evidence checks and manual verification
+requirements still apply. Record completion with a change ticket as described
+below. Approval requirements and decisions are retained in the audit history.
+
+## Two-person workflow (default)
 
 1. Open an eligible finding and choose **Assign owner**. Select an active operator
    or administrator and provide a reason. The finding enters **Owner review**.
@@ -26,7 +41,7 @@ according to their owner; old acknowledgements never count as approvals.
 
 ## Evidence and validity
 
-Both approvals require an eligible, currently observed finding from the latest
+Every required approval requires an eligible, currently observed finding from the latest
 full, non-testing, non-imported snapshot. The snapshot must be within the shared
 freshness threshold (Administration → Freshness & notifications). Approval checks
 use the selected object's saved indexed evidence:
@@ -35,7 +50,7 @@ use the selected object's saved indexed evidence:
 | --- | --- |
 | Empty group | Membership successfully confirmed empty |
 | Zero-hit rule | Fresh zero counters with successful zero-hit status; no disabled rule |
-| Unused object | Unused candidate with unrestricted search, or successful compatibility search plus independent manual verification by both reviewers |
+| Unused object | Unused candidate with unrestricted search, or successful compatibility search plus independent manual verification by each required reviewer |
 | Disabled rule | Explicitly confirmed disabled state |
 | Empty policy | Successful empty status and exactly zero rules |
 
@@ -177,3 +192,21 @@ observation dates are expandable. Validation errors preserve entered notes.
 Owner and second approvals show their reasons and independent verification
 records. Review history is a chronological activity list with actor names and
 timestamps; use the JSON export for the complete retained decision records.
+
+## Daily review queue
+
+Open **My work** in the main menu to see tasks across environments:
+
+- **Assigned to me** contains your owner reviews.
+- **Available for second approval** excludes your own first approvals.
+- **Ready for decommissioning** contains approved findings awaiting a recorded change.
+
+The findings list shows whether each review requires one or two approvals. To assign
+an owner, expand the assignment section, search by name or email, choose a result and
+record a reason. Search returns up to 20 active operators/administrators; refine your
+search for more specific matches. External users still need to sign in once before
+they can be selected. A second approval remains available to another eligible reviewer;
+it does not require reassigning the owner.
+
+Administration navigation is grouped into Access, Finding reviews, Collections &
+retention, and Operations. Open Finding reviews to change criteria or approval settings.

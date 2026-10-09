@@ -55,6 +55,8 @@ class Command(BaseCommand):
             # Do not reconnect: losing this connection loses the exclusive lease.
             with owned.connection.cursor() as cursor:
                 cursor.execute('SELECT 1')
+        from inventory.heartbeats import beat
+        for lane in getattr(self, 'heartbeat_lanes', []): beat(lane)
 
     def supervise_lanes(self):
         processes = []
@@ -120,8 +122,32 @@ class Command(BaseCommand):
         except (OSError, subprocess.TimeoutExpired):
             fail(job.pk, job.token)
 
+    def run_comparison(self):
+        from inventory.models import SnapshotComparison
+        pair = SnapshotComparison.objects.filter(ready=False, status__in=['queued', 'running']).order_by('created_at').first()
+        if pair is None: return False
+        SnapshotComparison.objects.filter(pk=pair.pk).update(status='running')
+        try:
+            with subprocess.Popen([sys.executable, str(settings.BASE_DIR / 'manage.py'), 'prepare_comparison', str(pair.pk)]) as process:
+                try:
+                    deadline = time.monotonic() + settings.AUDIT_TIMEOUT
+                    while process.poll() is None:
+                        self.check_lease()
+                        if time.monotonic() >= deadline: raise subprocess.TimeoutExpired('prepare_comparison', settings.AUDIT_TIMEOUT)
+                        time.sleep(2)
+                finally:
+                    if process.poll() is None:
+                        process.kill()
+                        process.wait()
+        except (OSError, subprocess.TimeoutExpired) as exc:
+            log_failure('comparison', exc)
+        finally:
+            SnapshotComparison.objects.filter(pk=pair.pk, ready=False).update(status='failed', error='Comparison worker interrupted or failed. Retry after checking diagnostics.')
+        return True
+
     def run_worker(self, options):
         lane = options.get("lane", "both")
+        self.heartbeat_lanes = ('collection', 'recalculation') if lane == 'both' else (lane,)
         LOG.info("Collection worker started lane=%s timeout_seconds=%s", lane, settings.AUDIT_TIMEOUT)
         while True:
             self.check_lease()
@@ -130,6 +156,9 @@ class Command(BaseCommand):
             recalculation = claim_recalculation() if lane != "collection" else None
             if recalculation:
                 self.run_recalculation(recalculation)
+                if options['once']: return
+                continue
+            if lane != 'collection' and self.run_comparison():
                 if options['once']: return
                 continue
             if lane == 'recalculation':

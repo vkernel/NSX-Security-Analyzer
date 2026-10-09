@@ -2,6 +2,9 @@ from django.urls import path
 from . import authentication_settings, keycloak_settings, system_health, views, history_views, diagnostic_views, report_views
 
 urlpatterns = [
+    path('my-work/', history_views.my_work, name='my-work'),
+    path('api/reviewers/', history_views.reviewer_search, name='reviewer-search'),
+    path('comparisons/<int:comparison_id>/retry/', history_views.comparison_retry, name='comparison-retry'),
     path("administration/authentication/", authentication_settings.settings_page, name="authentication-settings"),
     path("administration/keycloak/", keycloak_settings.settings_page, name="keycloak-settings"),
     path("administration/health/", system_health.health_page, name="system-health"),
@@ -19,6 +22,7 @@ urlpatterns = [
     path('environments/', views.environment_directory, name='environment-directory'),
     path('collections/', views.all_collections, name='all-collections'),
     path('start/', views.landing, name='landing'),
+    path('administration/review-approvals/', history_views.review_approvals, name='review-approvals'),
     path('administration/finding-policy/', history_views.finding_policy, name='finding-policy'),
     path('administration/collection-policy/', views.workspace_policy, name='workspace-policy'),
     path('api/preferences/interface/', views.interface_preferences, name='interface-preferences'),

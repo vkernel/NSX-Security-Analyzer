@@ -50,6 +50,11 @@ class EnvironmentPerformanceTests(TestCase):
     def test_comparison_is_shared_and_paged_without_reloading_reports(self):
         url = reverse('snapshot-comparison', args=[self.env.pk])
         params = {'before':self.before.pk, 'after':self.after.pk}
+        from django.core.management import call_command
+        with patch('inventory.comparison_cache.compare', side_effect=AssertionError('Web request performed comparison')), CaptureQueriesContext(connection) as queries:
+            self.assertContains(self.client.get(url, params), 'Preparing comparison')
+        self.assertFalse(any('\"report\"' in q['sql'] for q in queries))
+        call_command('prepare_comparison', SnapshotComparison.objects.get().pk)
         self.assertContains(self.client.get(url, params), 'Updated group')
         with patch('inventory.comparison_cache.compare', side_effect=AssertionError('Recomputed pair')), CaptureQueriesContext(connection) as queries:
             response = self.client.get(url, params)
@@ -59,6 +64,8 @@ class EnvironmentPerformanceTests(TestCase):
         self.after.report['objects'][0]['name'] = 'Edited evidence'
         self.after.save(update_fields=['report'])
         self.assertFalse(SnapshotComparison.objects.exists())
+        self.assertContains(self.client.get(url, params), 'Preparing comparison')
+        call_command('prepare_comparison', SnapshotComparison.objects.get().pk)
         self.assertContains(self.client.get(url, params), 'Edited evidence')
 
     def test_findings_reads_do_not_synchronize_or_lock(self):

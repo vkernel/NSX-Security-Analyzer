@@ -257,8 +257,9 @@ Environment snapshot and collection lists use small database projections and pag
 queries. Collection history has an environment/time index for recent-job lookups.
 
 - **Compare snapshots** opens with selectors only. Select **Compare snapshots** to
-  calculate a pair; the first calculation still reads the two saved configuration
-  projections and can take time for large inventories. Results are saved in PostgreSQL,
+  queue a pair for background preparation in the recalculation worker lane. The page
+  returns immediately; refresh results after preparation. The worker reads the two
+  saved configuration projections and can take time for large inventories. Results are saved in PostgreSQL,
   shared across web pods and paginated in SQL on subsequent requests. Selector choices
   are also paginated (100 snapshots per page); older snapshots remain selectable.
   Cached differences consume database storage and cascade when either snapshot is
@@ -429,7 +430,7 @@ deleted with their snapshot and replaced atomically during an index refresh.
 
 ## Applying a snapshot comparison
 
-The first comparison of a pair still computes and caches its differences, but
+The first comparison of a pair queues background work to compute and cache its differences;
 PostgreSQL now returns only the fields used by comparison. Large resolved membership
 arrays, references and counter statistics are excluded before transfer to the web
 process. Legacy `objects` data is loaded only when full group/service inventory is
@@ -477,7 +478,7 @@ redirect to an unrelated list. VM relationships stay paginated and technical VM
 data loads only when its section opens. Failed requests can be retried inline.
 These relationships describe configuration, not verified effective policy.
 
-Finding reviews now use a [two-person approval workflow](finding-review-workflow.md).
+Finding reviews now use a [configurable approval workflow](finding-review-workflow.md).
 Review lists defer saved evidence and approval payloads; notification queries
 retrieve only event metadata. Full evidence is read for the selected finding or
 an explicit history export.
@@ -512,3 +513,47 @@ first; paths and counter-check timestamps are in Technical details. Review queue
 show owner names; assignment selectors retain email/provider details to distinguish
 accounts. Empty queues offer an explanation of review criteria. Configure criteria
 under **Administration → Finding review criteria**.
+
+## Large tag and scope relationships
+
+Tag evidence opens with a small summary. VM assignments, group conditions, group
+assignments, other resources and firewall references load only when expanded,
+25 records at a time. Scope evidence uses the same paging for its tags. Condition
+definitions are fetched in pages and formatted only when an individual definition
+is opened. Use Previous/Next to inspect all results; the page limit does not remove
+relationships from the saved snapshot.
+
+This applies to existing indexed snapshots without recollecting or refreshing the
+index. The browser no longer downloads or renders the entire relationship set on
+opening a tag/scope. PostgreSQL slices the requested section before returning it.
+Large JSON collections can still take database time to scan; this change bounds
+response size and browser rendering, rather than promising constant query time.
+Standalone/unindexed legacy reports retain their original evidence renderer.
+
+## Indexed tag and scope relationships
+
+Newly prepared snapshots store tag/scope relationships as indexed rows. Each request
+reads at most 26 rows (25 displayed plus a next-page check), using the relationship
+position index rather than sorting a large JSON document on every page. Existing
+snapshots retain the bounded JSON fallback until explicitly reindexed or replaced
+by a new collection. No historical snapshots are rebuilt by migrations.
+
+The additional index uses database space and is deleted with its snapshot. Retention
+uses SQL deletion for derived relationship rows rather than loading each into Python.
+The source evidence is retained for compatibility and audit inspection.
+
+## Background comparisons and service health
+
+Comparisons share the existing recalculation lane and run in a supervised subprocess.
+One collection can still run alongside one recalculation or comparison; comparison
+work does not add an unbounded third worker. Recalculations have priority. Completed
+pairs are reused; failed pairs show Retry comparison. An interrupted running pair can
+be picked up when the exclusive lane restarts. Retention may remove a queued pair if
+its source snapshot expires; select another retained pair in that case.
+
+Administration → Operations → System health displays collection, recalculation and
+scheduler heartbeats. Each progressing loop reports at most once every 15 seconds;
+a report older than 180 seconds is marked Not reporting. These are supervisor activity
+signals, not proof of collection progress or database disk health. Scheduler cleanup
+may delay its next report. Kubernetes readiness probes and Docker healthchecks read
+local heartbeat files; they do not restart services automatically or query PostgreSQL.

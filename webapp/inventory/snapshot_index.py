@@ -105,8 +105,9 @@ def clear_index(snapshot_id):
     panel = quote(SnapshotPanel._meta.db_table)
     record = quote(SnapshotRecord._meta.db_table)
     links = quote(SnapshotRecordPanel._meta.db_table)
-    from .models import SnapshotCoverage, SnapshotCoverageIssue
+    from .models import SnapshotCoverage, SnapshotCoverageIssue, SnapshotRelationship
     with connection.cursor() as cursor:
+        cursor.execute(f'DELETE FROM {quote(SnapshotRelationship._meta.db_table)} WHERE record_id IN (SELECT id FROM {record} WHERE snapshot_id = %s)', [snapshot_id])
         cursor.execute(f'DELETE FROM {quote(SnapshotCoverageIssue._meta.db_table)} WHERE coverage_id = %s', [snapshot_id])
         cursor.execute(f'DELETE FROM {quote(SnapshotCoverage._meta.db_table)} WHERE snapshot_id = %s', [snapshot_id])
         cursor.execute(f'DELETE FROM {links} WHERE panel_id IN (SELECT id FROM {panel} WHERE snapshot_id = %s) OR record_id IN (SELECT id FROM {record} WHERE snapshot_id = %s)', [snapshot_id, snapshot_id])
@@ -147,6 +148,10 @@ def build(snapshot, rendered=None):
             SnapshotVMRule.objects.bulk_create(shared_rules, batch_size=100)
             shared_rules.clear()
         SnapshotRecord.objects.bulk_create(rows, batch_size=500)
+        from .tag_relationships import index_record
+        for record in rows:
+            if record.view in ('tags', 'scopes'):
+                index_record(record, metadata)
         insert_seconds += perf_counter() - write_started
         batch_bytes = 0
         record_ids.extend(row.pk for row in rows)
@@ -185,7 +190,7 @@ def build(snapshot, rendered=None):
             flush()
         batch_bytes += size
         rows.append(SnapshotRecord(snapshot=snapshot, ordinal=ordinal, view=view, name=row['name'], sort_name=row['name'].casefold(),
-                    compact=compact, data=stored, columns=columns(view, stored, include_evidence=False), sort_values=sorts,
+                    relationships_ready=view in ('tags', 'scopes'), compact=compact, data=stored, columns=columns(view, stored, include_evidence=False), sort_values=sorts,
                     search_basic=row['name']+' '+row['path'],
                     search_evidence=flatten(row)+' '+flatten(extra)+' '+flatten([LABELS.get(row.get(k), '') for k in ['usage','membership','hit_status','status']])+(' Disabled' if row.get('disabled') else ' Enabled' if 'disabled' in row else '')))
         # Flush incrementally; never accumulate all expanded ORM records.

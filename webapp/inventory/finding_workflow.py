@@ -1,4 +1,4 @@
-"""Two-person decisions; callers serialize against collection using the environment lock."""
+"""Configurable approval decisions; callers serialize against collection using the environment lock."""
 from datetime import timedelta
 from django.core.exceptions import ValidationError
 from django.db import transaction
@@ -12,7 +12,7 @@ from .user_labels import user_label
 STATES = [('unassigned', 'Unassigned'), ('owner_review', 'Owner review'),
           ('second_review', 'Awaiting second approval'), ('ready', 'Ready for decommissioning'),
           ('decommissioned', 'Decommissioned'), ('rejected', 'Rejected')]
-FIELDS = ['workflow_state', 'approvals', 'change_ticket']
+FIELDS = ['workflow_state', 'approvals', 'change_ticket', 'required_approvals']
 
 
 def review_fingerprint(kind, evidence):
@@ -23,7 +23,7 @@ def review_fingerprint(kind, evidence):
 
 def event(finding, action, before, reason, actor=None, extra=None):
     details = {'action': action, 'from': before, 'to': finding.workflow_state,
-               'reason': reason, 'environment_id': finding.environment_id, 'kind': finding.kind,
+               'required_approvals': finding.required_approvals, 'reason': reason, 'environment_id': finding.environment_id, 'kind': finding.kind,
                'path': finding.path, 'name': finding.name, 'owner_id': finding.owner_id,
                'snapshot_id': str(finding.snapshot_id or ''), **(extra or {})}
     label = user_label(actor)[:255] if actor else 'System'
@@ -131,6 +131,8 @@ def decide(finding, actor, action, reason, owner=None, ticket='', manual_verifie
     if not reason:
         raise ValidationError('A reason is required for every workflow action.')
     before = finding.workflow_state
+    if finding.required_approvals not in (1, 2):
+        raise ValidationError('Invalid approval requirement.')
     extra = {}
     if action == 'assign':
         if not owner or not owner.is_active or not owner.is_staff:
@@ -140,11 +142,15 @@ def decide(finding, actor, action, reason, owner=None, ticket='', manual_verifie
         if finding.owner_id == owner.pk:
             raise ValidationError('This user is already the owner. Use Reopen review to restart a rejected review.')
         extra = {'previous_owner_id': finding.owner_id, 'prior_approvals': finding.approvals}
+        from .usability import policy
+        finding.required_approvals = policy().required_approvals
         finding.owner = owner
         finding.workflow_state, finding.approvals = 'owner_review', {}
     elif action == 'reopen':
         if before != 'rejected':
             raise ValidationError('Only rejected reviews can be reopened manually.')
+        from .usability import policy
+        finding.required_approvals = policy().required_approvals
         finding.workflow_state = 'owner_review' if finding.owner_id else 'unassigned'
         finding.approvals = {}
     elif action in ('approve', 'reject'):
@@ -152,6 +158,8 @@ def decide(finding, actor, action, reason, owner=None, ticket='', manual_verifie
             if actor.pk != finding.owner_id:
                 raise ValidationError('Only the assigned owner may make the first decision.')
         elif before == 'second_review':
+            if finding.required_approvals != 2:
+                raise ValidationError('This review does not require a second approval.')
             if actor.pk == finding.owner_id or str(actor.pk) == str(finding.approvals.get('owner', {}).get('actor_id')):
                 raise ValidationError('The second reviewer must be a different user from the owner and first approver.')
             if not finding.approvals.get('owner'):
@@ -173,7 +181,7 @@ def decide(finding, actor, action, reason, owner=None, ticket='', manual_verifie
             fingerprint = review_fingerprint(finding.kind, finding.evidence)
             if before == 'second_review' and finding.approvals['owner']['fingerprint'] != fingerprint:
                 raise ValidationError('Relevant evidence changed. A new owner review is required.')
-            decision = {'actor_id': str(actor.pk), 'actor_name': user_label(actor),
+            decision = {'required_approvals': finding.required_approvals, 'actor_id': str(actor.pk), 'actor_name': user_label(actor),
                         'at': timezone.now().isoformat(), 'reason': reason,
                         'snapshot_id': str(finding.snapshot_id), 'fingerprint': fingerprint,
                         'evidence': finding.evidence, 'coverage': readiness['coverage'], 'coverage_key': readiness['coverage_key'],
@@ -181,19 +189,22 @@ def decide(finding, actor, action, reason, owner=None, ticket='', manual_verifie
                         'evidence_reference': evidence_reference.strip() if manual else ''}
             finding.approvals = {**finding.approvals, 'owner' if before == 'owner_review' else 'second': decision}
             extra = {'decision': decision}
-            finding.workflow_state = 'second_review' if before == 'owner_review' else 'ready'
+            finding.workflow_state = 'second_review' if before == 'owner_review' and finding.required_approvals == 2 else 'ready'
     elif action == 'complete':
-        if before != 'ready' or not finding.approvals.get('second'):
-            raise ValidationError('Two approvals are required before recording decommissioning.')
+        stages = ('owner', 'second') if finding.required_approvals == 2 else ('owner',)
+        if before != 'ready' or not all(finding.approvals.get(stage) for stage in stages):
+            raise ValidationError('The required approvals must be recorded before decommissioning.')
+        if finding.required_approvals == 2 and finding.approvals['owner'].get('actor_id') == finding.approvals['second'].get('actor_id'):
+            raise ValidationError('Two different reviewers are required.')
         if not ticket:
             raise ValidationError('A change-ticket reference is required to record completion.')
         readiness = approval_readiness(finding)
         if readiness['status'] == 'blocked': raise ValidationError(readiness['message'])
         if coverage_changed(finding, readiness['coverage']):
             raise ValidationError('Reference-search coverage changed. A new owner review is required.')
-        if readiness['status'] == 'manual' and not all(finding.approvals.get(stage, {}).get('manual_verified') for stage in ('owner', 'second')):
-            raise ValidationError('Both reviewers must record independent manual verification before decommissioning.')
-        if finding.approvals['second']['fingerprint'] != review_fingerprint(finding.kind, finding.evidence):
+        if readiness['status'] == 'manual' and not all(finding.approvals.get(stage, {}).get('manual_verified') for stage in stages):
+            raise ValidationError('Each required reviewer must record independent manual verification before decommissioning.')
+        if finding.approvals[stages[-1]]['fingerprint'] != review_fingerprint(finding.kind, finding.evidence):
             raise ValidationError('Relevant evidence changed. A new owner review is required.')
         finding.change_ticket, finding.workflow_state = ticket, 'decommissioned'
         extra = {'change_ticket': ticket}

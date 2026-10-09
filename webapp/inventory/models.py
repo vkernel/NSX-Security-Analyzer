@@ -171,6 +171,7 @@ class RetentionPolicy(models.Model):
 
 
 class WorkspacePolicy(models.Model):
+    required_approvals = models.PositiveSmallIntegerField(default=2, choices=[(1, 'Single approval'), (2, 'Two-person approval (four-eyes principle)')])
     id = models.PositiveSmallIntegerField(primary_key=True, default=1, editable=False)
     stale_hours = models.PositiveIntegerField(default=24, validators=[MinValueValidator(1), MaxValueValidator(8760)])
     notify_failed = models.BooleanField(default=True)
@@ -192,6 +193,7 @@ class FindingPolicy(models.Model):
 
 
 class Finding(models.Model):
+    required_approvals = models.PositiveSmallIntegerField(default=2, choices=[(1, 'Single approval'), (2, 'Two-person approval (four-eyes principle)')])
     workflow_state = models.CharField(max_length=24, default='unassigned', choices=[
         ('unassigned', 'Unassigned'), ('owner_review', 'Owner review'),
         ('second_review', 'Awaiting second approval'), ('ready', 'Ready for decommissioning'),
@@ -277,6 +279,7 @@ class SnapshotPanel(models.Model):
 
 
 class SnapshotRecord(models.Model):
+    relationships_ready = models.BooleanField(default=False)
     snapshot = models.ForeignKey(Snapshot, on_delete=models.CASCADE)
     ordinal = models.PositiveIntegerField()
     view = models.CharField(max_length=20)
@@ -339,6 +342,8 @@ class SnapshotHistoryData(models.Model):
 
 
 class SnapshotComparison(models.Model):
+    status = models.CharField(max_length=16, default='queued', db_index=True)
+    error = models.CharField(max_length=255, blank=True)
     before = models.ForeignKey(Snapshot, on_delete=models.CASCADE, related_name='comparisons_before')
     after = models.ForeignKey(Snapshot, on_delete=models.CASCADE, related_name='comparisons_after')
     ready = models.BooleanField(default=False)
@@ -475,3 +480,23 @@ class SnapshotFindingEvidence(models.Model):
 class SnapshotFindingEvidenceIndex(models.Model):
     snapshot = models.OneToOneField(Snapshot, on_delete=models.CASCADE, primary_key=True)
     version = models.PositiveSmallIntegerField(default=1)
+
+
+class SnapshotRelationship(models.Model):
+    record = models.ForeignKey(SnapshotRecord, on_delete=models.CASCADE, related_name='relationships')
+    section = models.CharField(max_length=32)
+    position = models.PositiveIntegerField()
+    data = models.JSONField()
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=['record', 'section', 'position'], name='relationship_page_position')]
+
+
+class ServiceHeartbeat(models.Model):
+    name = models.CharField(max_length=32, primary_key=True)
+    pod = models.CharField(max_length=255)
+    seen_at = models.DateTimeField()
+
+
+class InitialPasswordChange(models.Model):
+    user = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, primary_key=True)

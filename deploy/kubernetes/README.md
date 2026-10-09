@@ -221,8 +221,7 @@ Database initialization creates the initial administrator automatically:
 - **Username:** `admin`
 - **Password:** `NSXSecurityA!`
 
-No manual account-creation command is needed. Change the password through
-**Administration → Users & access** after signing in. Provisioning runs once per
+No manual account-creation command is needed. The application requires a password change immediately after sign-in when this initial credential is still in use. Provisioning runs once per
 database and skips existing `admin` accounts or superusers. Existing passwords are
 never replaced, and deleting the initial account does not recreate it.
 
@@ -463,3 +462,13 @@ Version 0.5.2 adds **Inventory → VMs**. Refresh existing prepared reports with
 Configure optional single sign-on in **Administration → Keycloak integration**.
 The GUI stores credentials and approved certificate trust; no Keycloak YAML settings
 are needed for a new setup. See [Keycloak authentication setup](../../docs/keycloak.md).
+
+## Service readiness after upgrading
+
+Deploy migrations before starting the matching web, worker and scheduler images.
+The new heartbeat tables and relationship indexes are added without rebuilding saved
+snapshots. Worker and scheduler readiness probes check local supervisor heartbeats.
+Not-ready means the loop has not reported recently; a long scheduler cleanup can also
+cause this. Inspect System health and pod logs. Readiness does not terminate a running
+collection or automatically restart a pod. Keep the default worker `--lane both` so
+queued comparisons and finding recalculations are processed as well as collections.

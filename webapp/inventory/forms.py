@@ -182,7 +182,11 @@ class FindingReviewForm(forms.Form):
         from django.contrib.auth import get_user_model
         finding, actor = kwargs.pop('finding', None), kwargs.pop('actor', None)
         super().__init__(*args, **kwargs)
-        self.fields['owner'].queryset = get_user_model().objects.filter(is_active=True, is_staff=True).select_related('keycloakidentity', 'ldapidentity').order_by('first_name', 'last_name', 'email', 'username')
+        selected = self.data.get(self.add_prefix('owner')) if self.is_bound else self.initial.get('owner')
+        selected = int(selected) if str(selected or '').isdigit() and len(str(selected)) < 19 else None
+        self.fields['owner'].queryset = get_user_model().objects.filter(pk=selected, is_active=True, is_staff=True).select_related('keycloakidentity', 'ldapidentity')
+        from django.urls import reverse
+        self.fields['owner'].widget.attrs['data-user-search'] = reverse('reviewer-search')
         if finding and actor and not self.is_bound:
             allowed = ['assign']
             if finding.workflow_state == 'owner_review' and actor.pk == finding.owner_id:
@@ -225,4 +229,16 @@ class FindingFilterForm(forms.Form):
         super().__init__(*args, **kwargs)
         from django.contrib.auth import get_user_model
         from .user_labels import user_label, with_identities
-        self.fields['owner'].choices = [('', 'Anyone'), ('me', 'Assigned to me'), ('none', 'Unassigned')] + [(str(u.pk), user_label(u)) for u in with_identities(get_user_model().objects.order_by('first_name', 'last_name', 'username'))]
+        selected = self.data.get('owner', '')
+        users = get_user_model().objects.filter(pk=int(selected)) if str(selected).isdigit() and len(str(selected)) < 19 else get_user_model().objects.none()
+        self.fields['owner'].choices = [('', 'Anyone'), ('me', 'Assigned to me'), ('none', 'Unassigned')] + [(str(u.pk), user_label(u)) for u in with_identities(users)]
+        from django.urls import reverse
+        self.fields['owner'].widget.attrs['data-user-search'] = reverse('reviewer-search')
+
+
+class ReviewApprovalsForm(forms.ModelForm):
+    class Meta:
+        from .models import WorkspacePolicy
+        model = WorkspacePolicy
+        fields = ['required_approvals']
+        labels = {'required_approvals': 'Approval requirement'}
