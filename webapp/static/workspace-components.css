@@ -126,3 +126,8 @@ body #detail-body .technical-viewer .json-value{color:#edc282}
 .review-timeline li {padding:0 0 16px}.review-timeline li p {margin:6px 0}
 .review-wrap {overflow-wrap:anywhere}
 @media(max-width:900px){.finding-workspace {grid-template-columns:minmax(0,1fr)}.review-facts {grid-template-columns:1fr}}
+
+.recent-activity {list-style:none;padding:0;border:1px solid var(--line);border-radius:10px;background:var(--app-surface)}
+.recent-activity li {padding:16px 20px;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;gap:16px;flex-wrap:wrap}
+.recent-activity li:last-child {border-bottom:0}.recent-activity li>div:first-child {display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+.recent-activity small {color:var(--muted)}.comparison-method {margin:16px 0}

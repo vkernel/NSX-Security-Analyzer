@@ -481,3 +481,18 @@ Finding reviews now use a [two-person approval workflow](finding-review-workflow
 Review lists defer saved evidence and approval payloads; notification queries
 retrieve only event metadata. Full evidence is read for the selected finding or
 an explicit history export.
+
+## Where to find collection statistics
+
+Inventory and Firewall pages focus on collected objects and findings. Open
+**Collections → Diagnostics** on the relevant collection to inspect request
+statistics, retries, concurrency and stage timings (Operator or Administrator
+access required). Request statistics are available while the source snapshot is
+retained; live or interrupted work may require worker logs.
+
+Main pages retain current collection activity, status, Stop controls and warnings
+about stale data or limited evidence. Detailed methodology and technical errors
+are expandable. Percentages indicate completed phases, not time remaining.
+Finding-review recalculation outcomes remain available in **Administration →
+Finding review criteria**; completed recalculations no longer occupy the review
+queue. This presentation change does not alter logs, audit records or coverage.

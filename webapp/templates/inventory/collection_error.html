@@ -5,8 +5,8 @@
     <p>{{ explanation.summary }}</p>
     <p><strong>What to check</strong><br>{{ explanation.action }}</p>
     <p class="muted">Earlier saved snapshots remain available. A failed collection does not refresh the environment data.</p>
-    <strong>Technical details</strong>
-    <pre>{{ job.error|default:'No additional error detail was recorded.' }}</pre>
+    <details><summary>Technical details</summary>
+    <pre>{{ job.error|default:'No additional error detail was recorded.' }}</pre></details>
   </div>
 </details>
 {% endwith %}

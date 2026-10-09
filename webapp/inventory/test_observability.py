@@ -111,6 +111,27 @@ class AuditTests(TestCase):
         self.client.force_login(self.viewer)
         self.assertEqual(self.client.get(response.url).status_code, 403)
 
+    def test_collection_statistics_are_staff_only_and_do_not_load_full_report(self):
+        from .models import Snapshot
+        from django.db import connection
+        from django.test.utils import CaptureQueriesContext
+        snapshot = Snapshot.objects.create(environment=self.env, generated_at=timezone.now(), report={
+            'performance': {'http': {'requests': 123, 'retries': 2}},
+            'dfw': {'collection_diagnostics': {'bulk_successes': 10}},
+            'objects': [{'name': 'unrelated-inventory-data'}]})
+        job = AuditJob.objects.create(environment=self.env, status='succeeded')
+        Snapshot.objects.filter(pk=snapshot.pk).update(job=job)
+        url = reverse('collection-diagnostics', args=[job.pk])
+        self.client.force_login(self.admin)
+        with CaptureQueriesContext(connection) as queries:
+            response = self.client.get(url)
+        self.assertContains(response, 'Request statistics and concurrency')
+        self.assertContains(response, '123')
+        self.assertNotContains(response, 'unrelated-inventory-data')
+        self.assertFalse(any('SELECT "inventory_snapshot"."report" FROM' in q['sql'] for q in queries))
+        self.client.force_login(self.viewer)
+        self.assertEqual(self.client.get(url).status_code, 403)
+
     def test_failed_auth_has_no_submitted_secret(self):
         self.client.post(reverse('login'), {'username': 'unknown', 'password': 'not-for-logs'})
         event = AuditEvent.objects.filter(action='auth.login', outcome='failed').first()

@@ -33,14 +33,14 @@
           widget.querySelector('[data-progress-stage]').textContent = progress.stage;
           widget.querySelector('[data-progress-percent]').textContent = progress.percent + '%';
           const detail = progress.completed + ' of ' + progress.total + ' phases complete';
-          widget.querySelector('[data-progress-detail]').textContent = detail;
+
           const bar = widget.querySelector('progress');
           bar.max = progress.total;
           bar.value = progress.completed;
           bar.setAttribute('aria-valuetext', progress.stage + '; ' + detail);
         });
       });
-      if (status) status.textContent = 'Collection status updates automatically every '+refreshSeconds+' seconds.';
+      if (status) status.textContent = '';
     } catch (_) {
       if (status) status.textContent = 'Unable to refresh collection status. Retrying shortly; reload if your session has expired.';
     }

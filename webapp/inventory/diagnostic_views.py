@@ -55,9 +55,12 @@ def collection_diagnostics(request, pk):
     if not request.user.is_staff:
         return HttpResponseForbidden('Staff access required.')
     job = get_object_or_404(AuditJob.objects.defer('config','environment__password_ciphertext','environment__ca_certificate').select_related('environment'), pk=pk)
+    from .models import Snapshot
+    diagnostics = Snapshot.objects.filter(job_id=job.pk).values('report__performance', 'report__dfw__collection_diagnostics').first()
     response = render(request, 'inventory/collection_diagnostics.html', {
         'job': job, 'timeline': job.diagnostics.get('timeline', []),
         'error_detail': json.dumps(job.diagnostics.get('error', {}), indent=2),
+        'request_statistics': json.dumps(diagnostics, indent=2) if diagnostics else '',
     })
     response['Cache-Control'] = 'private, no-store'
     return response

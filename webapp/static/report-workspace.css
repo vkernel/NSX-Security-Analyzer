@@ -30,3 +30,7 @@
 .snapshot-page .report-content td .path{display:block}
 @media(max-width:1150px){.snapshot-page .workspace-main{padding:28px 24px}}
 @media(max-width:800px){.snapshot-page .workspace-main{margin-left:0;padding:24px 18px}.snapshot-page .report-navigation{display:block;max-height:280px;overflow:auto}.snapshot-page .report-nav-label{display:block;margin-top:20px}.snapshot-page .report-navigation .submenu{display:block}.snapshot-page .workspace-sidebar{position:relative}.snapshot-page .report-toolbar{gap:16px}}
+
+/* Saved legacy report shells may still contain retrieval metrics. Diagnostics live on the collection page. */
+.snapshot-page .report-content > p.muted:first-child,
+.snapshot-page .report-content > .report-performance {display:none}

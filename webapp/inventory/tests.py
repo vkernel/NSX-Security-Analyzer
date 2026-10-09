@@ -158,6 +158,9 @@ class WorkspaceTests(TestCase):
         job.status, job.error = "failed", "<script>bad()</script>"
         job.save()
         response = self.client.get(reverse("dashboard"))
+        self.assertContains(response, "Review failure")
+        self.assertNotContains(response, "bad()")
+        response = self.client.get(reverse("collection-history", args=[self.environment.pk]))
         self.assertContains(response, "&lt;script&gt;bad()&lt;/script&gt;")
         self.assertNotIn("config", self.client.get(reverse("api-jobs")).json()["jobs"][0])
 
