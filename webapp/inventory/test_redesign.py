@@ -47,5 +47,8 @@ class RedesignTests(TestCase):
     def test_latest_and_historical_snapshot_labels(self):
         one=prepare_snapshot(self.env,sample_report());one.save()
         two=prepare_snapshot(self.env,sample_report());two.save()
-        self.assertContains(self.client.get(reverse('snapshot',args=[one.pk])),'HISTORICAL SNAPSHOT')
-        self.assertContains(self.client.get(reverse('snapshot',args=[two.pk])),'LATEST SNAPSHOT')
+        self.assertContains(self.client.get(reverse('snapshot',args=[one.pk])),'Historical snapshot')
+        response = self.client.get(reverse('snapshot',args=[two.pk]))
+        self.assertContains(response, 'Data collected:')
+        self.assertNotContains(response, 'LATEST SNAPSHOT')
+        self.assertNotContains(response, 'index_snapshots')

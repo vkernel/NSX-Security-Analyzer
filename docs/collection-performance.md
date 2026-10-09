@@ -496,3 +496,19 @@ are expandable. Percentages indicate completed phases, not time remaining.
 Finding-review recalculation outcomes remain available in **Administration →
 Finding review criteria**; completed recalculations no longer occupy the review
 queue. This presentation change does not alter logs, audit records or coverage.
+
+### Everyday pages and advanced tools
+
+Inventory and Firewall headers show one data timestamp, mark historical/testing/
+imported snapshots, and keep incomplete-coverage warnings visible. Collection
+request details are removed from these pages, including older saved reports; use
+**Collections → Diagnostics** instead. Administrators also find saved-report
+maintenance guidance there. No recollection or index rebuild is required for the
+header cleanup. Version and build information remains under **Administration**.
+
+Tables keep **Search**, **Filters** and **Sort** accessible. **More options** holds
+Columns, advanced search and Export. Evidence shows the condition and relationships
+first; paths and counter-check timestamps are in Technical details. Review queues
+show owner names; assignment selectors retain email/provider details to distinguish
+accounts. Empty queues offer an explanation of review criteria. Configure criteria
+under **Administration → Finding review criteria**.

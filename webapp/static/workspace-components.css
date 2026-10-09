@@ -131,3 +131,12 @@ body #detail-body .technical-viewer .json-value{color:#edc282}
 .recent-activity li {padding:16px 20px;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;gap:16px;flex-wrap:wrap}
 .recent-activity li:last-child {border-bottom:0}.recent-activity li>div:first-child {display:flex;gap:12px;align-items:center;flex-wrap:wrap}
 .recent-activity small {color:var(--muted)}.comparison-method {margin:16px 0}
+
+.coverage-quiet {background:transparent!important;color:var(--muted)!important;font-weight:400!important;padding-left:0!important}
+.table-more {position:relative}.table-more-body {position:absolute;right:0;top:100%;z-index:30;width:min(340px,80vw);padding:16px;background:var(--app-surface);border:1px solid var(--line);border-radius:10px;box-shadow:0 8px 24px #0002;display:grid;gap:12px}
+.table-more:not([open])>.table-more-body {display:none}
+.table-more-body .search-options-body,.table-more-body .column-popup {position:static;max-width:100%;width:auto;box-shadow:none}
+@media(max-width:600px){.table-more-body {position:static;width:auto}.table-tools:has(.table-more){display:flex!important;flex-wrap:wrap!important;gap:8px!important}.table-tools:has(.table-more)>label:first-child{flex-basis:100%}.table-more[open]{flex-basis:100%}}
+body[data-theme] .table-tools .table-more .column-layout>div,
+body[data-theme] .table-tools .table-more .search-options-body {position:static;inset:auto;min-width:0;width:100%;max-width:100%;box-sizing:border-box;box-shadow:none;padding:8px}
+.table-more .column-choice {min-width:0;gap:4px}.table-more .column-choice label {min-width:0;overflow-wrap:anywhere}.table-more .column-choice button {min-width:30px;padding:4px}

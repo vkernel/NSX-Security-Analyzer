@@ -6,13 +6,14 @@
     const summary=make('dl',null,'evidence-facts');
     if(row){
       if(!row.inventory_type && row.kind)summary.append(make('dt','Type'),make('dd',row.kind.replaceAll('_',' ')));
-      for(const [key,label] of [['inventory_type','Type'],['usage','Usage'],['membership','Membership'],['hit_status','Activity'],['power_state','Power state'],['tag_count','Tags'],['group_count','Groups referencing tags'],['action','Action'],['disabled','Disabled'],['hit_count','Recorded hits'],['rule_count','Rules'],['statistics_checked_at','Counters checked'],['category','Category']]){
+      for(const [key,label] of [['inventory_type','Type'],['usage','Usage'],['membership','Membership'],['hit_status','Activity'],['power_state','Power state'],['tag_count','Tags'],['group_count','Groups referencing tags'],['action','Action'],['disabled','Disabled'],['hit_count','Recorded hits'],['rule_count','Rules'],['category','Category']]){
         if(row[key]!==undefined && row[key]!==null && row[key]!=='')summary.append(make('dt',label),make('dd',String(row[key]).replaceAll('_',' ')));
       }
       if(row.referenced_by)summary.append(make('dt','Configuration references'),make('dd',String(row.referenced_by.length)));
-      if(row.membership_definition?.methods?.length)summary.append(make('dt','Membership method'),make('dd',row.membership_definition.methods.join(', ')));
+      if(row.membership_definition?.methods?.length)groups.get('Technical details').push(make('p','Membership method: '+row.membership_definition.methods.join(', ')));
       if(row.path){const identity=make('div',null,'evidence-identity');identity.append(make('code',row.path));const copy=make('button','Copy path');copy.type='button';copy.dataset.copyPath=row.path;identity.append(copy);groups.get('Technical details').push(identity);}
     }
+    if(row?.statistics_checked_at){const timing=make('p','Counters checked: '+(window.workspaceTime?window.workspaceTime(row.statistics_checked_at):row.statistics_checked_at));groups.get('Technical details').push(timing);}
     if(summary.children.length)groups.get('Overview').push(summary);
     for(const node of nodes){
       // Explicit sections are emitted by new reports. Keep older saved reports readable.
@@ -113,8 +114,12 @@
       const slot=document.querySelector('.report-view-selector');tabs.after(slot);slot.replaceChildren();if(kind){const label=make('label','View'),select=make('select');select.setAttribute('aria-label','Filter '+kind);for(const [text,value] of filters[kind]){const option=new Option(text,value);option.selected=value===id;select.add(option);}select.addEventListener('change',()=>location.hash=select.value);label.append(select);slot.append(label);const tools=selected?.querySelector('.table-tools');if(tools)tools.append(slot);}
     }
     reportNavigation();window.addEventListener('hashchange',reportNavigation);
-    const performance=document.querySelector('.report-content > p.muted');
-    if(performance){const info=make('details',null,'snapshot-information');info.append(make('summary','Collection details'),performance);document.querySelector('.report-toolbar')?.after(info);}
+    // Older stored shells contain a retrieval paragraph; newer shells use a details block.
+    // Remove both before layout enhancement can relocate them into the report header.
+    document.querySelectorAll('.report-content > .report-performance').forEach(node=>node.remove());
+    document.querySelectorAll('.report-content > p.muted').forEach(node=>{
+      if(/^(Fresh retrieval:|Saved audit retrieval:|Previously imported snapshot:|TESTING SAMPLE)/.test(node.textContent.trim()))node.remove();
+    });
     document.querySelectorAll('#dfw-rules > p.muted,#zero-hit-rules > p.muted').forEach(note=>{const details=make('details',null,'snapshot-information');note.before(details);details.append(make('summary','How to interpret rule counters'),note);});
 
     function rememberMenu(details,key){
@@ -136,11 +141,10 @@
       const choices=make('div',null,'filter-picker');widget.querySelectorAll('.header-filter').forEach(header=>{const button=make('button',header.textContent.replace(/[●▾]/g,'').trim());button.type='button';button.addEventListener('click',()=>{filter.open=false;header.click();});choices.append(button);});filter.append(choices);tools.append(filter);
       const menuPrefix='menu:'+document.body.dataset.tableScope+':'+widget.closest('[data-panel]').id;rememberMenu(advanced,menuPrefix+':search');if(columns)rememberMenu(columns,menuPrefix+':columns');
       const exportButton=Array.from(tools.querySelectorAll(':scope > button')).find(button=>button.textContent==='Export CSV');if(exportButton){exportButton.textContent='Export';exportButton.setAttribute('aria-label','Export CSV');tools.append(exportButton);}
-      const mobileOptions=make('details',null,'table-options'),mobileBody=make('div',null,'table-options-body');
-      mobileOptions.append(make('summary','Table options'),mobileBody);tools.after(mobileOptions);
-      const actions=[filter,sorting,columns,advanced,exportButton].filter(Boolean);
-      const placeOptions=()=>{actions.forEach(control=>(narrow.matches?mobileBody:tools).append(control));if(!narrow.matches)mobileOptions.open=false;};
-      narrow.addEventListener('change',placeOptions);placeOptions();
+      const more=make('details',null,'filter-control table-more'), moreBody=make('div',null,'table-more-body');
+      more.append(make('summary','More options'),moreBody);tools.append(more);
+      [columns,advanced,exportButton].filter(Boolean).forEach(control=>moreBody.append(control));
+
     }
     function enhanceRows(widget){widget.querySelectorAll('.previous,.next').forEach(button=>button.title=button.disabled?(button.classList.contains('previous')?'You are on the first page.':'There are no more results.'):'');widget.querySelectorAll('code.path').forEach(path=>path.title=path.textContent);widget.querySelectorAll('tbody tr').forEach(row=>{const cell=row.querySelector('td[data-column-index="0"]')||row.cells[0],trigger=row.querySelector('.detail-button');if(!cell||!trigger||cell.querySelector('.row-open'))return;const name=cell.querySelector('strong')||cell.firstChild;if(!name)return;const button=make('button',name.textContent,'row-open');button.type='button';button.setAttribute('aria-label','Inspect '+name.textContent);button.addEventListener('click',()=>trigger.click());name.replaceWith(button);});}
     function bindReportTables(){document.querySelectorAll('.table-widget').forEach(widget=>{if(widget.dataset.boundReport)return;widget.dataset.boundReport='true';widget.addEventListener('table-render',()=>{streamline(widget);enhanceRows(widget);});streamline(widget);enhanceRows(widget);});}
