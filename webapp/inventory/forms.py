@@ -168,8 +168,11 @@ class ReviewerChoiceField(forms.ModelChoiceField):
 
 
 class FindingReviewForm(forms.Form):
-    action = forms.ChoiceField(choices=[('assign', 'Assign owner'), ('approve', 'Approve'),
-        ('reject', 'Reject'), ('reopen', 'Reopen review'), ('complete', 'Record decommissioning')])
+    manual_verified = forms.BooleanField(required=False, label='I independently checked dependencies outside the collected search results.')
+    manual_checks = forms.CharField(required=False, max_length=5000, widget=forms.Textarea(attrs={'rows': 3}), label='Dependencies and systems checked')
+    evidence_reference = forms.CharField(required=False, max_length=255, label='Ticket or evidence reference')
+    action = forms.ChoiceField(choices=[('assign', 'Assign owner'), ('approve', 'Approve review'),
+        ('reject', 'Reject finding'), ('reopen', 'Reopen review'), ('complete', 'Record decommissioning')])
     owner = ReviewerChoiceField(queryset=None, required=False)
     note = forms.CharField(max_length=5000, widget=forms.Textarea(attrs={'rows': 4}), label='Reason / manual checks performed')
     change_ticket = forms.CharField(required=False, max_length=255, label='Change-ticket reference')

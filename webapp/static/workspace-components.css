@@ -100,3 +100,29 @@ body #detail-body .technical-viewer .json-value{color:#edc282}
 .review-layout>*{min-width:0}.review-layout textarea{width:100%;max-width:100%;min-width:0;box-sizing:border-box}
 .review-layout .form-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
 @media(max-width:800px){.review-layout{grid-template-columns:minmax(0,1fr)}.review-layout .form-grid{grid-template-columns:minmax(0,1fr)}}
+
+/* Finding decisions: evidence first, clear independent approval steps. */
+.review-progress {display:flex;list-style:none;padding:0;gap:12px;margin:24px 0;flex-wrap:wrap}
+.review-progress li {display:flex;align-items:center;gap:8px;color:var(--muted);font-size:.85rem}
+.review-progress li span {display:grid;place-items:center;border:1px solid var(--line);border-radius:50%;width:28px;height:28px}
+.review-progress .current {font-weight:700;color:var(--app-accent)}
+.review-progress .current span {background:var(--app-accent);color:white;border-color:transparent}
+.review-progress .done span {background:var(--app-surface-soft);color:var(--ink)}
+.finding-workspace {display:grid;grid-template-columns:minmax(0,1.4fr) minmax(320px,1fr);gap:24px;align-items:start}
+.finding-workspace .form-card {width:auto;max-width:none;margin:0;min-width:0}
+.finding-workspace p,.review-history p {overflow-wrap:anywhere}
+.finding-decision textarea,.finding-decision select,.finding-decision input:not([type=checkbox]) {width:100%;min-width:0;max-width:100%;box-sizing:border-box}
+.review-facts {display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}
+.review-facts dt {color:var(--muted);font-size:.85rem}.review-facts dd {margin:4px 0 0;font-weight:600}
+.review-readiness {border-left:4px solid var(--app-accent);background:var(--app-surface-soft);padding:16px;margin:20px 0;border-radius:8px}
+.review-readiness.manual {border-left-color:#b7791f}.review-readiness.blocked {border-left-color:#c53030}
+.review-readiness h3 {margin:0 0 8px}.review-readiness p {margin:0}
+.review-disclosure,.review-approval {margin-top:24px;padding-top:20px;border-top:1px solid var(--line)}
+.review-disclosure summary {margin-bottom:12px;cursor:pointer;font-weight:600}
+.review-buttons {display:flex;gap:10px;flex-wrap:wrap;margin:20px 0}
+.review-manual {border:1px solid var(--line);border-radius:8px;padding:16px;margin:20px 0;min-width:0}
+.review-manual legend {font-weight:600}.review-history {margin-top:24px;max-width:none}
+.review-timeline {list-style:none;padding-left:20px;border-left:2px solid var(--line)}
+.review-timeline li {padding:0 0 16px}.review-timeline li p {margin:6px 0}
+.review-wrap {overflow-wrap:anywhere}
+@media(max-width:900px){.finding-workspace {grid-template-columns:minmax(0,1fr)}.review-facts {grid-template-columns:1fr}}

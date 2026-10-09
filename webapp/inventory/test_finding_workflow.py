@@ -215,3 +215,74 @@ class FindingWorkflowTests(TestCase):
         with CaptureQueriesContext(connection) as queries:
             self.assertEqual(evidence_error(self.finding),'')
         self.assertFalse(any('"report"' in item['sql'] or '"data"' in item['sql'] for item in queries))
+
+    def prepare_compatibility(self):
+        self.finding.kind = 'unused'
+        self.finding.evidence = {'usage': 'unused_candidate'}
+        self.finding.save()
+        self.record.compact = {'path': self.finding.path, 'usage': 'unused_candidate'}
+        self.record.save()
+        Snapshot.objects.filter(pk=self.snapshot.pk).update(report={'search_coverage': {
+            'mode': 'explicit_types', 'resource_types': ['Group', 'Service']}})
+
+    def test_manual_route_requires_independent_attestations_and_audits_them(self):
+        self.prepare_compatibility()
+        self.assign()
+        checks = dict(manual_verified=True, manual_checks='Checked external policies and service dependencies.', evidence_reference='CHG-42')
+        for missing in checks:
+            invalid = {**checks, missing: False if missing == 'manual_verified' else ''}
+            with self.assertRaises(ValidationError):
+                decide(self.finding, self.owner, 'approve', 'Owner checks', **invalid)
+        decide(self.finding, self.owner, 'approve', 'Owner checks', **checks)
+        with self.assertRaises(ValidationError):
+            decide(self.finding, self.owner, 'approve', 'Cannot approve twice', **checks)
+        with self.assertRaises(ValidationError):
+            decide(self.finding, self.reviewer, 'approve', 'Needs own checks')
+        decide(self.finding, self.reviewer, 'approve', 'Independent checks', **{**checks, 'evidence_reference': 'CHG-43'})
+        self.assertEqual(self.finding.workflow_state, 'ready')
+        decision = self.finding.events.filter(details__action='approve', details__to='ready').get().details['decision']
+        self.assertTrue(decision['manual_verified'])
+        self.assertEqual(decision['evidence_reference'], 'CHG-43')
+        self.assertEqual(decision['coverage']['mode'], 'explicit_types')
+        self.snapshot.refresh_from_db()
+        self.assertEqual(self.snapshot.report['search_coverage']['mode'], 'explicit_types')
+        decide(self.finding, self.reviewer, 'complete', 'Change completed', ticket='CHG-43')
+        self.assertEqual(self.finding.workflow_state, 'decommissioned')
+
+    def test_manual_route_never_overrides_failed_missing_or_contradictory_evidence(self):
+        from .finding_workflow import approval_readiness
+        self.prepare_compatibility()
+        for coverage in ({}, {'mode':'explicit_types'}, {'mode':'explicit_types','resource_types':['Group'],'errors':['timeout']}, {'mode':'all_types','failed':True}):
+            Snapshot.objects.filter(pk=self.snapshot.pk).update(report={'search_coverage':coverage})
+            self.assertEqual(approval_readiness(self.finding)['status'], 'blocked')
+        self.prepare_compatibility()
+        self.record.compact['usage'] = 'used'
+        self.record.save()
+        self.assertEqual(approval_readiness(self.finding)['status'], 'blocked')
+
+    def test_scope_change_requires_new_owner_review(self):
+        from .finding_workflow import coverage_changed, coverage_key
+        self.prepare_compatibility()
+        self.assign()
+        checks = dict(manual_verified=True, manual_checks='Independent dependency check', evidence_reference='CHG-42')
+        decide(self.finding, self.owner, 'approve', 'Checked', **checks)
+        self.assertFalse(coverage_changed(self.finding, {'mode':'explicit_types','resource_types':['Service','Group','Group']}))
+        new_scope = {'mode':'explicit_types','resource_types':['Group']}
+        self.assertTrue(coverage_changed(self.finding, new_scope))
+        Snapshot.objects.filter(pk=self.snapshot.pk).update(report={'search_coverage':new_scope})
+        with self.assertRaisesMessage(ValidationError, 'coverage changed'):
+            decide(self.finding, self.reviewer, 'approve', 'Checked', **checks)
+        coverage_key({'resource_types': [None, 1, 'Group']})
+
+    def test_preflight_and_failed_form_preserve_manual_notes(self):
+        self.prepare_compatibility()
+        self.assign()
+        self.client.force_login(self.owner)
+        response = self.client.get(self.url)
+        self.assertContains(response, 'Manual verification required')
+        self.assertContains(response, 'Approve review')
+        self.assertNotContains(response, 'name="action" id="id_action"')
+        response = self.client.post(self.url, {'revision':self.finding.revision, 'action':'approve', 'note':'Keep my reasoning', 'manual_checks':'Keep my dependency checks'})
+        self.assertContains(response, 'Keep my reasoning')
+        self.assertContains(response, 'Keep my dependency checks')
+        self.assertContains(response, 'Confirm your independent dependency check')

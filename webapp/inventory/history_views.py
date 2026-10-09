@@ -110,7 +110,7 @@ def finding_detail(request, pk, finding_id):
                 form.add_error(None, 'This finding changed while you were reviewing it. Reload the page before saving.')
             else:
                 try:
-                    decide(finding, request.user, data['action'], data['note'], data['owner'], data['change_ticket'])
+                    decide(finding, request.user, data['action'], data['note'], data['owner'], data['change_ticket'], data['manual_verified'], data['manual_checks'], data['evidence_reference'])
                 except ValidationError as exc:
                     from .audit_events import record
                     record('finding.action_denied', 'Finding', finding.pk, outcome='denied', details={'action': data['action'], 'reason': '; '.join(exc.messages)})
@@ -127,9 +127,22 @@ def finding_detail(request, pk, finding_id):
     for decision in decisions.values():
         actor = legacy_users.get(str(decision.get('actor_id')))
         decision['display_name'] = user_label(actor) if actor else decision.get('actor_name', 'Former reviewer')
+    from .finding_workflow import approval_readiness
+    readiness = approval_readiness(finding)
+    can_decide = request.user.is_staff and ((finding.workflow_state == 'owner_review' and finding.owner_id == request.user.pk)
+        or (finding.workflow_state == 'second_review' and finding.owner_id != request.user.pk))
+    steps = [('unassigned','Assign owner'), ('owner_review','Owner review'), ('second_review','Independent review'), ('ready','Ready'), ('decommissioned','Decommissioned')]
+    current_step = next((i for i, (key, _) in enumerate(steps) if key == finding.workflow_state), -1)
+    progress = [{'label': label, 'current': i == current_step, 'done': i < current_step} for i, (_, label) in enumerate(steps)]
+    facts = [(label, finding.evidence[key]) for key, label in [('usage','Reference status'), ('membership','Membership'), ('hit_status','Rule activity'), ('disabled','Disabled'), ('rule_count','Rule count')] if key in finding.evidence]
+    fact_labels = {'unused_candidate': 'No references found within collected scope', 'empty': 'Confirmed empty',
+                   'zero_hits': 'Zero recorded hits', 'True': 'Yes', 'False': 'No'}
+    facts = [(label, fact_labels.get(str(value), str(value).replace('_', ' '))) for label, value in facts]
+    owner_label = user_label(finding.owner)
+    owner_name, _, owner_detail = owner_label.partition(' · ')
     page = Paginator(finding.events.select_related('actor__keycloakidentity', 'actor__ldapidentity').defer('details'), 20).get_page(request.GET.get('page'))
     return render(request, 'inventory/finding_detail.html', {'environment': environment, 'finding': finding,
-        'label': LABELS.get(finding.kind, finding.kind), 'form': form, 'page': page, 'approval_decisions': decisions,
+        'label': LABELS.get(finding.kind, finding.kind), 'form': form, 'page': page, 'approval_decisions': decisions, 'readiness': readiness, 'can_decide': can_decide, 'progress': progress, 'facts': facts, 'owner_name': owner_name, 'owner_detail': owner_detail,
         'evidence': json.dumps(finding.evidence, indent=2, ensure_ascii=False) if request.GET.get('evidence') == '1' else None})
 
 

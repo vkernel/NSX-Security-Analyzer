@@ -6,7 +6,7 @@ from django.db import transaction
 from .diagnostics import LOG
 from .models import Environment, Finding, FindingEvent, SnapshotFindingAssessment
 from . import observation
-from .finding_workflow import invalidate, review_fingerprint, relevant_evidence_error, FIELDS as WORKFLOW_FIELDS
+from .finding_workflow import invalidate, review_fingerprint, relevant_evidence_error, coverage_changed, FIELDS as WORKFLOW_FIELDS
 
 LABELS = {'unused': 'Unused object candidate', 'empty_group': 'Empty group',
           'membership': 'Unknown group membership', 'zero_hits': 'Zero recorded hits',
@@ -99,6 +99,8 @@ def synchronize(environment_id):
             continue
         if not finding.present or review_fingerprint(kind, evidence) != review_fingerprint(kind, finding.evidence):
             invalidate(finding, 'Relevant evidence changed or the condition was observed again.')
+        if coverage_changed(finding, report.get('search_coverage')):
+            invalidate(finding, 'Reference-search coverage changed; repeat the owner review.')
         prior_qualification = finding.qualification
         observation.advance(finding, policy, environment, snapshot.generated_at, reset=observation.condition_fingerprint(kind, evidence) != observation.condition_fingerprint(kind, finding.evidence) or not finding.present, row=source_rows.get(path, {}))
         relevant_error = relevant_evidence_error(kind, source_rows.get(path), report.get('search_coverage'), snapshot.generated_at, environment.sync_interval_minutes)
