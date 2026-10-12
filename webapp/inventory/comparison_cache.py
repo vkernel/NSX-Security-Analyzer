@@ -39,6 +39,7 @@ def configuration(snapshot):
     # Missing inventory must remain missing, so presence changes retain uncertainty.
     if data['report__inventory'] is not None:
         result['inventory'] = data['report__inventory']
+    result['inventory_warnings'] = Snapshot.objects.filter(pk=snapshot.pk).values_list('report__inventory_warnings', flat=True).get() or []
     return result
 
 

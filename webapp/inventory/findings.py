@@ -54,6 +54,9 @@ def synchronize(environment_id):
         return
     policy = observation.policy_for(environment)
     report = snapshot.report
+    if report.get('inventory_warnings'):
+        LOG.warning("findings environment_id=%s paused: inventory verification incomplete", environment_id)
+        return
     source_rows = {r['path']: r for r in report.get('objects', []) + report.get('dfw', {}).get('rules', []) + report.get('dfw', {}).get('policies', [])}
     existing = {(f.kind, f.path): f for f in environment.findings.all()}
     LOG.info("findings environment_id=%s existing_count=%s", environment_id, len(existing))

@@ -5,6 +5,10 @@ from .models import SnapshotCoverage, SnapshotCoverageIssue
 
 def report_issues(report, needs_review=False):
     found = False
+    for warning in report.get("inventory_warnings", []):
+        found = True
+        yield {"area": "Inventory verification", "name": warning["endpoint"],
+               "detail": warning["detail"] + "; inventory changed during collection. Finding evaluation and approval are paused; run another collection."}
     for rows, field, area, fallback in (
         (report.get('objects', []), 'membership', 'Group membership', 'Membership is unknown.'),
         (report.get('dfw', {}).get('rules', []), 'hit_status', 'Rule counters', 'Evidence is unknown.'),

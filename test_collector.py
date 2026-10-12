@@ -1209,14 +1209,15 @@ examples.forEach((_,index) => {
         resources, coverage = nsx.search_configuration(client)
         self.assertEqual(resources, [{"path": "/fresh"}])
         self.assertNotIn("cursor", calls[2])
-        self.assertEqual(coverage["inventory_retries"], 1)
+        self.assertEqual(len(calls), 3)
         sleep.assert_called_once_with(2)
 
     @patch.object(nsx.time, "sleep")
-    def test_changing_search_has_bounded_retries_and_never_returns_partial_data(self, sleep):
+    def test_changing_search_has_bounded_retries_and_returns_warning(self, sleep):
         client = self.client_with_pages([{"results": [{"path": "/partial"}], "result_count": 2}] * 3)
-        with self.assertRaisesRegex(nsx.InventoryChanged, "after 3 attempt"):
-            nsx.search_configuration(client)
+        resources, coverage = nsx.search_configuration(client)
+        self.assertEqual(resources, [{"path": "/partial"}])
+        self.assertEqual(client.inventory_warnings[0]["attempts"], 3)
         self.assertEqual(client.get.call_count, 3)
         self.assertEqual([call.args[0] for call in sleep.call_args_list], [2, 4])
 
@@ -1458,10 +1459,11 @@ examples.forEach((_,index) => {
         self.assertEqual(client.get.call_args.args[1]["cursor"], "opaque+/=")
         self.assertEqual(client.get.call_args.args[1]["query"], "resource_type:*")
 
-    def test_truncated_inventory_fails(self):
-        client = self.client_with_pages([{"results": [1], "result_count": 2}])
-        with self.assertRaises(nsx.AuditError):
-            list(client.items("/search/query"))
+    @patch.object(nsx.time, "sleep")
+    def test_truncated_inventory_warns(self, sleep):
+        client = self.client_with_pages([{"results": [1], "result_count": 2}] * 3)
+        self.assertEqual(list(client.items("/search/query")), [1])
+        self.assertEqual(len(client.inventory_warnings), 1)
 
     def test_repeated_cursor_fails(self):
         client = self.client_with_pages([

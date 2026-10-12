@@ -91,7 +91,7 @@ class AuditJob(models.Model):
     @property
     def progress(self):
         completed = 7 if self.status == "succeeded" else min(self.progress_completed, 6)
-        stage = ("Completed" if self.status == "succeeded" else
+        stage = (("Completed with coverage warnings" if self.progress_stage == "Completed with coverage warnings" else "Completed") if self.status == "succeeded" else
                  "Stopped · " + self.progress_stage if self.status == "failed" else self.progress_stage)
         stage = stage.replace("Waiting for an audit worker", "Waiting for a collection worker")
         return {"completed": completed, "total": 7, "percent": completed * 100 // 7, "stage": stage}

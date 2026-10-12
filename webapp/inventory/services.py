@@ -201,7 +201,7 @@ def prepare_snapshot(environment, report, imported=False):
         rendered = None  # Index builder prepares and inserts rows incrementally.
         review = bool(audit.needs_review(report))
         dfw = report.get("dfw", {})
-        summary = {"groups": report["groups_scanned"], "services": report["custom_services_scanned"],
+        summary = {"inventory_warnings": bool(report.get("inventory_warnings")), "groups": report["groups_scanned"], "services": report["custom_services_scanned"],
                    "policies": len(dfw.get("policies", [])), "rules": len(dfw.get("rules", [])),
                    "tags": len(report.get("tags", {}).get("objects", []))}
         from .usability import coverage_keys
@@ -320,7 +320,7 @@ def execute_job(job_id):
             current.status = "succeeded"
             current.finished_at = timezone.now()
             current.progress_completed = 7
-            current.progress_stage = "Completed"
+            current.progress_stage = "Completed with coverage warnings" if report.get("inventory_warnings") else "Completed"
             with phase(job.pk, "mark_collection_completed"):
                 current.save(update_fields=["status", "finished_at", "progress_completed", "progress_stage"])
             LOG.info("job=%s transaction ready_to_commit", job.pk)

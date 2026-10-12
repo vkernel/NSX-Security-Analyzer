@@ -48,6 +48,7 @@ def compare(before, after):
             # Inventory omissions under partial coverage do not establish creation/deletion.
             complete = 'inventory' in before and 'inventory' in after if kind != 'Rule' else (
                 'dfw' in before and 'dfw' in after and not before['dfw'].get('errors') and not after['dfw'].get('errors'))
+            complete = complete and not before.get('inventory_warnings') and not after.get('inventory_warnings')
             status = ('Added' if old is None else 'Removed') if complete else 'Presence uncertain'
             changes = []
         else:

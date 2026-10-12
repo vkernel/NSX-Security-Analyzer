@@ -81,6 +81,11 @@ def parse_retry_after(value):
 class InventoryChanged(AuditError):
     """A paginated inventory did not match its advertised total."""
 
+    def __init__(self, message, reported_total=None, returned_count=None):
+        super().__init__(message)
+        self.reported_total = reported_total
+        self.returned_count = returned_count
+
 
 class NSXClient:
     def __init__(self, manager, username, password, timeout=30, ca_bundle=None,
@@ -110,6 +115,7 @@ class NSXClient:
         self.headers = {"Authorization": "Basic " + token, "Accept": "application/json"}
         self.retries = retries
         self.testing = False
+        self.inventory_warnings = []
         self.context = context
         self.metrics_lock = threading.Lock()
         self.metrics = {"requests": 0, "retries": 0}
@@ -186,6 +192,41 @@ class NSXClient:
         return data
 
     def items(self, path, params=None, page_size=1000):
+        """Restart only count mismatches; never hide failed pages or broken cursors."""
+        for attempt in range(3):
+            records = []
+            identities = set()
+            duplicates = 0
+            try:
+                for record in self._items_once(path, params, page_size):
+                    identity = (record.get("path") or record.get("id") or record.get("external_id")) if isinstance(record, dict) else None
+                    if identity is not None:
+                        if identity in identities:
+                            duplicates += 1
+                            continue
+                        identities.add(identity)
+                    records.append(record)
+                if duplicates:
+                    raise InventoryChanged("GET {}: duplicate objects during pagination".format(path))
+            except InventoryChanged as exc:
+                LOG.warning("Inventory verification endpoint=%s attempt=%s unique=%s duplicates=%s reason=%s",
+                            path, attempt + 1, len(records), duplicates, exc)
+                if attempt < 2:
+                    time.sleep(2 ** (attempt + 1))
+                    continue
+                warning = {"endpoint": path, "detail": str(exc), "unique_count": len(records),
+                           "duplicate_count": duplicates, "attempts": attempt + 1,
+                           "reason": "inventory_changed", "pagination_complete": True,
+                           "reported_total": exc.reported_total, "returned_count": exc.returned_count}
+                # Collection workers share this client. A list append is atomic;
+                # report construction occurs after all workers have completed.
+                if not hasattr(self, "inventory_warnings"):
+                    self.inventory_warnings = []
+                self.inventory_warnings.append(warning)
+            yield from records
+            return
+
+    def _items_once(self, path, params=None, page_size=1000):
         params = dict(params or {})
         if getattr(self, "testing", False) is True:
             # Statistics endpoints may not accept page_size. Preserve their API
@@ -222,7 +263,7 @@ class NSXClient:
             if not cursor:
                 if expected is not None and total != expected:
                     raise InventoryChanged("GET {}: incomplete/changing inventory ({}/{})".format(
-                        path, total, expected))
+                        path, total, expected), reported_total=expected, returned_count=total)
                 return
             if cursor in seen:
                 raise AuditError("GET {}: repeated pagination cursor".format(path))
@@ -1177,7 +1218,7 @@ def add_tag_firewall_references(tags, groups, resources):
 
 def needs_review(report):
     dfw = report.get("dfw", {})
-    return (any(r["membership"] == "unknown" for r in report["objects"])
+    return (bool(report.get("inventory_warnings")) or any(r["membership"] == "unknown" for r in report["objects"])
             or bool(report.get("tags", {}).get("errors"))
             or bool(report.get("tags", {}).get("unsupported_conditions"))
             or any(r["status"] == "unknown" for r in report.get("tags", {}).get("objects", []))
@@ -1403,7 +1444,8 @@ def audit(client, workers=4, testing=False, progress=None):
     tags["search_coverage"] = search_coverage
     add_tag_firewall_references(tags, all_groups, resources + all_groups + dfw_configuration)
     phases["tags"] = round(time.perf_counter() - tag_started, 2)
-    return {"inventory": inventory, "tags": tags, "testing": testing, "generated_at": datetime.now(timezone.utc).isoformat(),
+    return {"inventory_warnings": getattr(client, "inventory_warnings", []) if isinstance(getattr(client, "inventory_warnings", []), list) else [],
+            "inventory": inventory, "tags": tags, "testing": testing, "generated_at": datetime.now(timezone.utc).isoformat(),
             "performance": {"workers": workers, "elapsed_seconds": round(time.perf_counter() - started, 2),
                             "phases_seconds": phases,
                             "http": dict(client.metrics) if isinstance(getattr(client, "metrics", None), dict) else {}},
@@ -1907,6 +1949,8 @@ def _render_report(report, *, fragments, indexed=False, row_sink=None):
         if report.get("testing"):
             description = "Testing sample only. " + description
         sections += '<section data-panel id="{}" tabindex="-1"><h2>{} <span class="count">{}</span></h2><p class="muted">{}</p>{}</section>'.format(anchor, title, display_number(len(items)), description, table(items))
+    inventory_notice = ('<h3>Inventory verification warnings</h3><p>Inventory changed during collection. Finding evaluation and approval are paused; run another collection.</p><ul>' + ''.join(
+        '<li>{}: {}</li>'.format(safe(w['endpoint']), safe(w['detail'])) for w in report.get('inventory_warnings', [])) + '</ul>') if report.get('inventory_warnings') else ''
     coverage_errors = "".join('<li>{}</li>'.format(safe(error)) for error in dfw["errors"])
     coverage_notice = ('<p><strong>DFW inventory incomplete.</strong> Some policy/rule lists could not be read. '
                        '<a href="#coverage">Review errors</a>.</p>' if dfw["errors"] else '')
@@ -2072,13 +2116,13 @@ table{min-width:760px}th{line-height:1.5}td{padding:15px 14px}.path{line-height:
 <div class="overview"><p><strong>''' + display_number(review_count) + ''' unique object(s) to review</strong></p>
 <details><summary>Collection scope</summary><p>''' + safe(report["groups_scanned"]) + ''' groups and ''' + safe(report["custom_services_scanned"]) + ''' custom services scanned · ''' + safe(report["system_groups_excluded"]) + ''' default/system groups excluded.</p>
 <p>''' + display_number(len(dfw["policies"])) + ''' DFW policies and ''' + display_number(len(dfw["rules"])) + ''' DFW rules inventoried.</p>
-<p>Categories can overlap: an unused group can also be empty. Unknown membership is counted separately from empty.</p></details>''' + coverage_notice + '''</div></div>
+<p>Categories can overlap: an unused group can also be empty. Unknown membership is counted separately from empty.</p></details>''' + inventory_notice + coverage_notice + '''</div></div>
 ''' + sections + tag_panels + '''
 <section data-panel id="inventory" tabindex="-1"><h2>Groups &amp; services <span class="count">''' + display_number(len(rows)) + '''</span></h2>
 <p class="muted">All included groups and custom services. Open reference evidence to see the consuming objects and firewall rule IDs.</p>''' + table(rows) + '''</section>
 <section data-panel id="dfw-policies" tabindex="-1"><h2>All DFW policies</h2>''' + dfw_table(dfw["policies"]) + '''</section>
 <section data-panel id="dfw-rules" tabindex="-1"><h2>All DFW rules</h2><p class="muted">''' + safe(DFW_COUNTER_NOTE) + '''</p>''' + dfw_table(dfw["rules"]) + '''</section>
-<section data-panel id="coverage" tabindex="-1"><h2>Coverage &amp; definitions</h2>''' + (
+<section data-panel id="coverage" tabindex="-1"><h2>Coverage &amp; definitions</h2>''' + inventory_notice + (
     '<h3>DFW inventory errors</h3><ul>' + coverage_errors + '</ul>' if coverage_errors else '') + '''<p><strong>Unused candidate:</strong> ''' + safe(report["usage_definition"]) + '''.</p>
 <p><strong>DFW counters:</strong> ''' + safe(DFW_COUNTER_NOTE) + ''' Rules with positive packet, byte or session counters are not zero-activity candidates, even if hit_count is zero. Disabled rules have their own section.</p>
 <p><strong>Empty DFW policy:</strong> No non-deleted rules in its complete rule list. Rule-list failures are unknown. DFW policies and rules include system-owned objects, which are labeled for review. Gateway firewall policies are outside this check.</p>

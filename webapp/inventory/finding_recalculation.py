@@ -16,6 +16,8 @@ from .diagnostics import LOG
 
 def snapshots(environment_id):
     return Snapshot.objects.filter(environment_id=environment_id, testing=False, imported=False).filter(
+        Q(report__inventory_warnings__isnull=True) | Q(report__inventory_warnings=[])
+    ).filter(
         Q(job__isnull=True) | Q(job__status='succeeded')).order_by('generated_at', 'created_at', 'pk')
 
 

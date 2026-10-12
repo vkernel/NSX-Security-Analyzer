@@ -1,6 +1,7 @@
 """Small prior-run hints and hit-history projection; never reuse live membership."""
 import json
 from django.db import connection
+from django.db.models import Q
 
 RULE_FIELDS = ('path', 'rule_id', 'policy_rule_id', 'unique_id', 'created_at',
     'hit_status', 'statistics_checked_at', 'hit_count', 'last_positive_observation',
@@ -8,7 +9,7 @@ RULE_FIELDS = ('path', 'rule_id', 'policy_rule_id', 'unique_id', 'created_at',
 
 
 def load(environment):
-    pk = environment.snapshots.filter(testing=False).values_list('pk', flat=True).first()
+    pk = environment.snapshots.filter(testing=False).filter(Q(report__inventory_warnings__isnull=True) | Q(report__inventory_warnings=[])).values_list('pk', flat=True).first()
     if pk is None:
         return None
     if connection.vendor != 'postgresql':

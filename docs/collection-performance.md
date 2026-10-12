@@ -557,3 +557,32 @@ a report older than 180 seconds is marked Not reporting. These are supervisor ac
 signals, not proof of collection progress or database disk health. Scheduler cleanup
 may delay its next report. Kubernetes readiness probes and Docker healthchecks read
 local heartbeat files; they do not restart services automatically or query PostgreSQL.
+
+
+## Inventory changes during collection
+
+Creating or deleting objects while the collector pages through NSX inventory can
+change its reported count. A count mismatch now retries only that inventory query
+from its first page, twice, with 2- and 4-second delays. Each attempt discards the
+previous attempt's results and deduplicates objects by Policy path or ID. Requests
+continue through the normal shared NSX rate limiter.
+
+If the final attempt still disagrees, the collection finishes with **coverage
+warnings**. Inventory remains available to browse. Open its report and **Coverage**
+to see the affected endpoints; worker logs include attempt, received and reported
+counts, and duplicate counts. No percentage of missing objects is silently accepted.
+Failed requests, invalid responses, repeated cursors and deadline exhaustion remain
+retrieval errors and retain their existing error/unknown-coverage handling.
+
+Because references cross inventory areas, a snapshot with an inventory verification
+warning conservatively pauses all finding evaluation and approval for that environment.
+Existing finding presence and observations remain unchanged; historical recalculation
+skips these snapshots. Snapshot comparisons label missing objects **Presence uncertain**,
+not Added/Removed. Retention preserves the last verified full snapshot as a baseline,
+and prior-run hints use a snapshot without inventory verification warnings.
+
+Allow changes to settle, then collect again. A verified collection resumes normal
+finding evaluation. Persistent mismatches in a quiet environment warrant checking
+NSX search health and API visibility. This verification checks counts and duplicate
+identities; it cannot guarantee a transactionally consistent NSX snapshot or detect
+every same-count replacement of an object.

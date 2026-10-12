@@ -15,6 +15,10 @@ def eligible(environment, policy, now):
     # Always preserve the latest full snapshot and the latest testing snapshot.
     protected = [pk for testing in (False, True) for pk in
                  snapshots.filter(testing=testing).values_list('pk', flat=True)[:1]]
+    # Keep the last verified baseline when newer collections have count warnings.
+    protected += list(snapshots.filter(testing=False, imported=False).filter(
+        Q(report__inventory_warnings__isnull=True) | Q(report__inventory_warnings=[])
+    ).values_list("pk", flat=True)[:1])
     condition = Q(pk__in=[])
     for testing, days in ((False, policy.snapshot_days), (True, policy.testing_days)):
         if days:
