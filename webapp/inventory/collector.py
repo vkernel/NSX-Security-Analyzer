@@ -1339,6 +1339,39 @@ def search_configuration(client):
     raise AuditError("NSX rejected all search query variants. " + rejected[-1]["error"], status_code=400)
 
 
+def verified_configuration_search(client, groups, services, testing=False):
+    """Verify search coverage against direct inventory; discard incomplete attempts."""
+    expected_groups = {obj["path"] for obj in groups}
+    expected_services = {obj["path"] for obj in services}
+    attempts = 1 if testing else 3
+    for attempt in range(attempts):
+        resources, coverage = search_configuration(client)
+        found = {obj.get("path") for obj in resources if obj.get("path")}
+        missing_groups = expected_groups - found
+        missing_services = expected_services - found
+        missing = missing_groups | missing_services
+        if not missing or testing:
+            coverage["inventory_coverage_retries"] = attempt
+            return resources, coverage
+        # Do not presume index lag: query behavior and path differences can
+        # produce the same symptom. Keep the task error useful and bounded.
+        sample = ", ".join(path[:200] for path in sorted(missing)[:3])
+        detail = (
+            "Search results are missing {} inventory objects "
+            "(groups={}/{}, services={}/{}; returned={} records, {} distinct paths). "
+            "Query: {}. Missing path samples: {}."
+        ).format(len(missing), len(missing_groups), len(expected_groups),
+                 len(missing_services), len(expected_services), len(resources),
+                 len(found), coverage.get("query", "<unknown>"), sample)
+        if attempt == attempts - 1:
+            raise AuditError(detail + " Coverage could not be verified after {} attempts; "
+                             "possible search query, indexing, or path-scope mismatch.".format(attempts))
+        delay = 2 ** (attempt + 1)
+        LOG.warning("%s Restarting the complete search in %ss (attempt %d/%d).",
+                    detail, delay, attempt + 2, attempts)
+        time.sleep(delay)
+
+
 def audit(client, workers=4, testing=False, progress=None):
     # Phase notifications for the background worker.
     progress = progress or (lambda completed, stage: None)
@@ -1379,11 +1412,7 @@ def audit(client, workers=4, testing=False, progress=None):
     progress(1, "Scanning references and collecting firewall counters")
     def read_search():
         started = time.perf_counter()
-        resources, coverage = search_configuration(client)
-        # Validate the full index before accepting any audit results.
-        missing = {obj["path"] for obj in all_groups + services} - {obj.get("path") for obj in resources}
-        if missing and not testing:
-            raise AuditError("Search index is missing {} inventory objects; retry after indexing".format(len(missing)))
+        resources, coverage = verified_configuration_search(client, all_groups, services, testing=testing)
         return resources, coverage, round(time.perf_counter() - started, 2)
 
     def read_dfw():

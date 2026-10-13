@@ -19,6 +19,55 @@ def rendered_document(report):
 
 
 class InventoryTests(unittest.TestCase):
+    @patch.object(nsx.time, 'sleep')
+    def test_search_coverage_retries_discard_incomplete_attempts(self, sleep):
+        groups = [{'path': '/infra/domains/default/groups/g'}]
+        services = [{'path': '/infra/services/s'}]
+        complete = groups + services
+        with patch.object(nsx, 'search_configuration', side_effect=[
+            (groups + [{'path': '/stale'}], {'query': 'q'}), (complete, {'query': 'q'})
+        ]) as search:
+            resources, coverage = nsx.verified_configuration_search(Mock(), groups, services)
+        self.assertEqual(resources, complete)
+        self.assertEqual(coverage['inventory_coverage_retries'], 1)
+        self.assertEqual(search.call_count, 2)
+        sleep.assert_called_once_with(2)
+
+    @patch.object(nsx.time, 'sleep')
+    def test_search_coverage_failure_reports_counts_query_and_bounded_samples(self, sleep):
+        groups = [{'path': '/groups/g' + str(i)} for i in range(4)]
+        services = [{'path': '/services/s'}]
+        with patch.object(nsx, 'search_configuration', return_value=([], {'query': 'filtered-query'})) as search:
+            with self.assertRaises(nsx.AuditError) as raised:
+                nsx.verified_configuration_search(Mock(), groups, services)
+        message = str(raised.exception)
+        self.assertIn('missing 5 inventory objects', message)
+        self.assertIn('groups=4/4, services=1/1', message)
+        self.assertIn('returned=0 records, 0 distinct paths', message)
+        self.assertIn('Query: filtered-query', message)
+        self.assertIn('/groups/g2', message)
+        self.assertNotIn('/groups/g3', message)
+        self.assertIn('after 3 attempts', message)
+        self.assertEqual(search.call_count, 3)
+        self.assertEqual([call.args[0] for call in sleep.call_args_list], [2, 4])
+
+    @patch.object(nsx.time, 'sleep')
+    def test_search_coverage_does_not_retry_api_errors(self, sleep):
+        with patch.object(nsx, 'search_configuration', side_effect=nsx.AuditError('denied', 403)) as search:
+            with self.assertRaisesRegex(nsx.AuditError, 'denied'):
+                nsx.verified_configuration_search(Mock(), [{'path': '/g'}], [])
+        search.assert_called_once()
+        sleep.assert_not_called()
+
+    @patch.object(nsx.time, 'sleep')
+    def test_search_coverage_testing_sample_is_not_retried(self, sleep):
+        with patch.object(nsx, 'search_configuration', return_value=([], {'query': 'q'})) as search:
+            resources, coverage = nsx.verified_configuration_search(Mock(), [{'path': '/g'}], [], testing=True)
+        self.assertEqual(resources, [])
+        self.assertEqual(coverage['inventory_coverage_retries'], 0)
+        search.assert_called_once()
+        sleep.assert_not_called()
+
     def test_search_and_dfw_overlap_and_search_failure_discards_audit(self):
         import threading
         for fails in (False, True):

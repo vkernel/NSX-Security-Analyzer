@@ -12,6 +12,16 @@ Development builds from 0.2.2-dev retain fresh inventory and counter checks whil
 
 ## Diagnostics
 
+Search coverage is checked against the directly collected groups and services.
+If any paths are absent, collection retries the complete search up to three times
+(waiting two and four seconds), discarding each incomplete result rather than
+merging attempts. Persistent gaps fail the task and report missing group/service
+counts, returned record/path counts, the query, and up to three missing path
+samples. A gap alone does not establish indexing lag: query behavior or path
+scope may also explain it. Testing samples skip this completeness check; HTTP
+errors are not retried by this coverage check. Existing pagination warnings
+remain in force even if a subsequent coverage attempt finds every expected path.
+
 New snapshots save DFW strategy counts in `dfw.collection_diagnostics`: policies evaluated, fully successful bulk policies, policies skipped during cooldown, fallback rules and categorized reasons (counted per rule). Empty policies are excluded.
 
 `performance.concurrency.endpoints` includes successful and failed attempts, failure counts by HTTP status, total request time, maximum latency, and p95 latency from the most recent 512 attempts per endpoint family. Timing excludes waiting for the adaptive limiter but includes transport time. Request durations can overlap; their sum is not collection elapsed time. Existing phase timings remain the wall-clock reference.
