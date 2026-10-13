@@ -614,3 +614,11 @@ Use these diagnostics to distinguish configuration changes from runtime or
 metadata differences before changing the verification rules. A difference in
 any field still triggers verification retries; diagnostics do not waive coverage
 warnings or approval safeguards.
+
+Configuration reference searches now exclude `VirtualMachine`,
+`VirtualNetworkInterface`, and `GenericPolicyRealizedResource` in the NSX query.
+This avoids mixing frequently changing runtime inventory and realization records
+with configuration consumers. Exclusion happens before pagination, so the count
+check uses the filtered query's reported total. VM tag assignments still use the
+dedicated VM inventory endpoint, with its verification checks intact. Search
+coverage records the excluded types; configuration conflicts continue to warn.

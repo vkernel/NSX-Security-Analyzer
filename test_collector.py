@@ -1184,7 +1184,8 @@ examples.forEach((_,index) => {
         client.items.side_effect = [nsx.AuditError("unsupported wildcard field", 400), iter([self.group])]
         resources, coverage = nsx.search_configuration(client)
         self.assertEqual(coverage["mode"], "all_types")
-        self.assertEqual(coverage["query"], "*")
+        self.assertEqual(coverage["query"], "* AND NOT (resource_type:VirtualMachine OR "
+                         "resource_type:VirtualNetworkInterface OR resource_type:GenericPolicyRealizedResource)")
         self.assertEqual(resources, [self.group])
 
     def test_search_does_not_retry_authentication_or_pagination_failures(self):

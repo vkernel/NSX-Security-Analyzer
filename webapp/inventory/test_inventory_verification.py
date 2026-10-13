@@ -1,7 +1,7 @@
 from unittest.mock import Mock, patch
 from django.test import TestCase, SimpleTestCase
 from django.utils import timezone
-from .collector import NSXClient, AuditError, needs_review
+from .collector import NSXClient, AuditError, needs_review, search_configuration
 from .coverage_index import report_issues
 from .comparison import compare
 from .models import Environment, Snapshot, Finding
@@ -11,6 +11,25 @@ from .finding_workflow import approval_readiness
 
 
 class PaginationVerificationTests(SimpleTestCase):
+    def test_configuration_search_excludes_runtime_types_on_server(self):
+        client = self.nsx_client([{'results': [{'path': '/infra/groups/g',
+                                              'resource_type': 'Group'}], 'result_count': 1}])
+        resources, coverage = search_configuration(client)
+        query = client.get.call_args.args[1]['query']
+        self.assertEqual(query, 'resource_type:* AND NOT (resource_type:VirtualMachine OR '
+                         'resource_type:VirtualNetworkInterface OR resource_type:GenericPolicyRealizedResource)')
+        self.assertEqual(resources[0]['resource_type'], 'Group')
+        self.assertEqual(len(coverage['excluded_resource_types']), 3)
+
+    @patch('inventory.collector.time.sleep')
+    def test_configuration_conflicts_still_warn_with_runtime_exclusions(self, sleep):
+        client = self.nsx_client([{'results': [
+            {'path': '/infra/groups/g', 'expression': []},
+            {'path': '/infra/groups/g', 'expression': [{'resource_type': 'PathExpression', 'paths': ['/x']}]},
+        ], 'result_count': 1}] * 3)
+        search_configuration(client)
+        self.assertEqual(client.inventory_warnings[0]['conflicts'][0]['changed_fields'], ['expression'])
+
     def nsx_client(self, pages):
         client = object.__new__(NSXClient)
         client.get = Mock(side_effect=pages)

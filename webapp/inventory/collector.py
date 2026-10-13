@@ -1293,11 +1293,20 @@ REFERENCE_SEARCH_TYPES = (
 )
 
 
+# Runtime inventory is collected separately where needed. Realization records
+# are not configuration consumers (see collect_references).
+REFERENCE_SEARCH_EXCLUDED_TYPES = (
+    "VirtualMachine", "VirtualNetworkInterface", "GenericPolicyRealizedResource",
+)
+
+
 def search_configuration(client):
     """Retry changing search inventories from page one; never accept partial results."""
     rejected = []
     inventory_retries = 0
-    queries = ("resource_type:*", "*", " OR ".join(
+    runtime_filter = " AND NOT (" + " OR ".join(
+        "resource_type:" + kind for kind in REFERENCE_SEARCH_EXCLUDED_TYPES) + ")"
+    queries = ("resource_type:*" + runtime_filter, "*" + runtime_filter, " OR ".join(
         "resource_type:" + kind for kind in REFERENCE_SEARCH_TYPES))
     for index, query in enumerate(queries):
         try:
@@ -1318,6 +1327,7 @@ def search_configuration(client):
             if any(not isinstance(obj, dict) for obj in resources):
                 raise AuditError("Search returned a non-object result")
             return resources, {"query": query, "mode": "explicit_types" if index == 2 else "all_types",
+                               "excluded_resource_types": list(REFERENCE_SEARCH_EXCLUDED_TYPES),
                                "resource_types": list(REFERENCE_SEARCH_TYPES) if index == 2 else [],
                                "rejected_queries": rejected, "inventory_retries": inventory_retries}
         except AuditError as exc:
@@ -1486,6 +1496,8 @@ def audit(client, workers=4, testing=False, progress=None):
             inventory[key].append(row)
     phases["references"] = round(time.perf_counter() - phase, 2)
     limitations = "Search is eventually consistent; non-indexed and RBAC-hidden references may be absent."
+    limitations += (" Configuration reference search excludes VirtualMachine, VirtualNetworkInterface and "
+                    "GenericPolicyRealizedResource runtime records. VM tag assignments use the dedicated VM inventory.")
     if testing:
         limitations += " TESTING ONLY: one record per list and no pagination. No unused-object, policy-emptiness or rule-activity conclusions. Empty or excluded samples can leave checks unexercised."
         for row in rows:
