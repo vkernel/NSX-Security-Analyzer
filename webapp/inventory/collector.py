@@ -192,7 +192,7 @@ class NSXClient:
         return data
 
     def items(self, path, params=None, page_size=1000):
-        """Restart only count mismatches; never hide failed pages or broken cursors."""
+        """Retry inconsistent inventories; never hide failed pages or broken cursors."""
         for attempt in range(3):
             records = []
             identities = set()
@@ -212,8 +212,6 @@ class NSXClient:
                             continue
                         identities.add(identity)
                     records.append(record)
-                if duplicates:
-                    raise InventoryChanged("GET {}: duplicate objects during pagination".format(path))
             except InventoryChanged as exc:
                 LOG.warning("Inventory verification endpoint=%s attempt=%s unique=%s duplicates=%s reason=%s",
                             path, attempt + 1, len(records), duplicates, exc)
@@ -252,6 +250,9 @@ class NSXClient:
         seen = set()
         total = 0
         expected = None
+        unique_records = {}
+        duplicate_count = 0
+        conflicting = False
         while True:
             try:
                 page = self.get(path, params)
@@ -270,17 +271,36 @@ class NSXClient:
                 expected = page["result_count"]
                 if not isinstance(expected, int) or expected < 0:
                     raise AuditError("GET {}: invalid result_count".format(path))
-            total += len(results)
+            for record in results:
+                identity = None
+                if isinstance(record, dict):
+                    locator = record.get("path") or record.get("id") or record.get("external_id")
+                    if locator is not None:
+                        identity = (record.get("resource_type"), record.get("origin_site_id"),
+                                    None if record.get("path") else record.get("parent_path"), locator)
+                if identity is not None:
+                    if identity in unique_records:
+                        duplicate_count += 1
+                        conflicting = conflicting or unique_records[identity] != record
+                        continue
+                    unique_records[identity] = record
+                total += 1
             LOG.debug("Inventory %s: page=%d total=%d expected=%s continuation=%s",
                       path, len(results), total, expected, bool(page.get("cursor")))
             yield from results
+            if conflicting and (total == expected or not page.get("cursor")):
+                raise InventoryChanged("GET {}: conflicting versions of objects during pagination".format(path),
+                                       reported_total=expected, returned_count=total)
             if expected is not None and total == expected:
                 return
             cursor = page.get("cursor")
             if not cursor:
                 if expected is not None and total != expected:
-                    raise InventoryChanged("GET {}: incomplete/changing inventory ({}/{})".format(
-                        path, total, expected), reported_total=expected, returned_count=total)
+                    raise InventoryChanged("GET {}: incomplete/changing inventory ({}/{} unique objects; {} duplicate rows)".format(
+                        path, total, expected, duplicate_count), reported_total=expected, returned_count=total)
+                if expected is None and duplicate_count:
+                    raise InventoryChanged("GET {}: duplicate objects during pagination; no reported total to verify completeness".format(path),
+                                           returned_count=total)
                 return
             if cursor in seen:
                 raise AuditError("GET {}: repeated pagination cursor".format(path))

@@ -598,8 +598,11 @@ Sorting reduces one source of instability; it does not freeze the search index.
 
 Duplicate detection distinguishes resource type and origin site, plus the full
 Policy path or parent-scoped ID. Objects with the same short ID in different types
-or parents are not automatically duplicates. Genuine duplicate results and missing
-results still retry and produce coverage warnings if unresolved. For example,
+or parents are not automatically duplicates. Identical repeats are deduplicated,
+and pagination continues until the unique count matches NSX's reported total or
+the cursor ends. Raw rows, including repeats, no longer cause an early stop.
+Conflicting versions of the same object, duplicates without a reported total,
+and missing results still retry and produce coverage warnings if unresolved. For example,
 38,399 received versus 38,409 reported is still an unverified inventory; the small
 percentage alone does not make it safe for unused-object approval. Run a new
 collection after changes settle. Existing snapshots retain their original coverage
