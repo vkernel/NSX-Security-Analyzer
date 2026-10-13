@@ -13,6 +13,13 @@ Development builds from 0.2.2-dev retain fresh inventory and counter checks whil
 ## Diagnostics
 
 Search coverage is checked against the directly collected groups and services.
+When that inventory is non-empty but a broad search returns zero results, the
+collector tries the next query syntax, including the existing explicit
+configuration-type fallback. This also handles HTTP 200 empty responses, not
+just HTTP 400 query rejections. Each alternative starts from page one; rejected
+queries and the successful query scope are recorded. The explicit-type fallback
+retains its narrower coverage limitation. An actually empty direct inventory
+does not trigger this compatibility fallback.
 If any paths are absent, collection retries the complete search up to three times
 (waiting two and four seconds), discarding each incomplete result rather than
 merging attempts. Persistent gaps fail the task and report missing group/service

@@ -74,7 +74,7 @@ class InventoryTests(unittest.TestCase):
             dfw_started = threading.Event()
             client = Mock()
             client.items.return_value = []
-            def search(_):
+            def search(_, **kwargs):
                 self.assertTrue(dfw_started.wait(2))
                 if fails: raise nsx.AuditError('incomplete search')
                 return [], {'mode':'all_types'}
@@ -1227,6 +1227,52 @@ examples.forEach((_,index) => {
         self.assertEqual(len(coverage["rejected_queries"]), 2)
         self.assertIn("resource_type:Rule", coverage["query"])
         self.assertNotIn("*", coverage["query"])
+
+    def test_empty_filtered_search_falls_back_and_verifies_known_inventory(self):
+        client = self.client_with_pages([
+            {'results': [], 'result_count': 0},
+            {'results': [], 'result_count': 0},
+            {'results': [self.group], 'result_count': 1},
+        ])
+        calls = []
+        get = client.get
+        client.get = lambda path, params: (calls.append(dict(params)), get(path, params))[1]
+        resources, coverage = nsx.verified_configuration_search(client, [self.group], [])
+        self.assertEqual(resources, [self.group])
+        self.assertEqual(coverage['mode'], 'explicit_types')
+        self.assertEqual(len(coverage['rejected_queries']), 2)
+        self.assertTrue(all(row['reason'] == 'empty_with_known_inventory'
+                            for row in coverage['rejected_queries']))
+        self.assertEqual(len(calls), 3)
+        self.assertTrue(all('cursor' not in call for call in calls))
+        self.assertNotIn('NOT', coverage['query'])
+        self.assertEqual(coverage['resource_types'], list(nsx.REFERENCE_SEARCH_TYPES))
+
+    def test_empty_filtered_search_uses_broad_alternative_when_possible(self):
+        client = Mock()
+        client.items.side_effect = [[], [self.group]]
+        resources, coverage = nsx.verified_configuration_search(client, [self.group], [])
+        self.assertEqual(resources, [self.group])
+        self.assertEqual(coverage['mode'], 'all_types')
+        self.assertEqual(client.items.call_count, 2)
+
+    def test_truly_empty_inventory_does_not_trigger_query_fallback(self):
+        client = Mock()
+        client.items.return_value = []
+        resources, coverage = nsx.verified_configuration_search(client, [], [])
+        self.assertEqual(resources, [])
+        self.assertEqual(coverage['rejected_queries'], [])
+        client.items.assert_called_once()
+
+    @patch.object(nsx.time, 'sleep')
+    def test_empty_query_fallback_cannot_bypass_missing_inventory(self, sleep):
+        for fallback in ([], [self.group]):
+            with self.subTest(fallback=fallback):
+                client = Mock()
+                client.items.side_effect = [[], [], fallback] * 3
+                with self.assertRaisesRegex(nsx.AuditError, 'services=1/1'):
+                    nsx.verified_configuration_search(client, [self.group], [{'path': '/infra/services/s'}])
+                self.assertEqual(client.items.call_count, 9)
 
     def test_search_compatibility_preserves_broad_scope_when_possible(self):
         client = Mock()

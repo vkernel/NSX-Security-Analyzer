@@ -1300,7 +1300,7 @@ REFERENCE_SEARCH_EXCLUDED_TYPES = (
 )
 
 
-def search_configuration(client):
+def search_configuration(client, expect_resources=False):
     """Retry changing search inventories from page one; never accept partial results."""
     rejected = []
     inventory_retries = 0
@@ -1326,6 +1326,14 @@ def search_configuration(client):
                     time.sleep(delay)
             if any(not isinstance(obj, dict) for obj in resources):
                 raise AuditError("Search returned a non-object result")
+            if not resources and expect_resources and index < len(queries) - 1:
+                # Some managers accept a query but return an empty result. Direct
+                # group/service inventory proves that an empty search is not
+                # sufficient. Try the next syntax, then validate its coverage.
+                rejected.append({"query": query, "reason": "empty_with_known_inventory",
+                                 "error": "No results despite non-empty group/service inventory"})
+                LOG.warning("Search returned no results despite known inventory; trying compatible query syntax.")
+                continue
             return resources, {"query": query, "mode": "explicit_types" if index == 2 else "all_types",
                                "excluded_resource_types": list(REFERENCE_SEARCH_EXCLUDED_TYPES),
                                "resource_types": list(REFERENCE_SEARCH_TYPES) if index == 2 else [],
@@ -1345,7 +1353,8 @@ def verified_configuration_search(client, groups, services, testing=False):
     expected_services = {obj["path"] for obj in services}
     attempts = 1 if testing else 3
     for attempt in range(attempts):
-        resources, coverage = search_configuration(client)
+        resources, coverage = search_configuration(
+            client, expect_resources=bool(expected_groups or expected_services))
         found = {obj.get("path") for obj in resources if obj.get("path")}
         missing_groups = expected_groups - found
         missing_services = expected_services - found
