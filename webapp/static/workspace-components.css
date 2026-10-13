@@ -1,4 +1,5 @@
 /* Shared workspace components; report exports retain their standalone styles. */
+.workspace-sidebar .brand-logo{display:block;width:208px;max-width:100%;height:auto}
 body #detail-dialog{width:min(760px,92vw);padding:0 28px 28px;overflow:auto}
 body #detail-dialog.evidence-expanded{width:min(1100px,96vw)}
 body #detail-dialog .dialog-heading{top:0;margin:0;padding:20px 0;z-index:4;background:var(--app-surface);gap:12px}
