@@ -95,6 +95,23 @@ class PaginationVerificationTests(SimpleTestCase):
         list(client.items('/search/query'))
         self.assertIn('conflicting versions', client.inventory_warnings[0]['detail'])
         self.assertEqual(client.get.call_count, 3)
+        self.assertEqual(client.inventory_warnings[0]['conflicts'], [
+            {'resource_type': None, 'locator': 'a', 'changed_fields': ['_revision']},
+        ])
+
+    @patch('inventory.collector.time.sleep')
+    def test_conflict_diagnostics_are_bounded_and_omit_values(self, sleep):
+        records = [{'path': '/infra/groups/{}'.format(i), 'description': 'old-secret'}
+                   for i in range(5)]
+        changed = [dict(record, description='new-secret', status={}) for record in records]
+        client = self.nsx_client([{'results': records + changed, 'result_count': 5}] * 3)
+        list(client.items('/search/query'))
+        warning = client.inventory_warnings[0]
+        self.assertEqual(len(warning['conflicts']), 3)
+        self.assertEqual(warning['conflicts'][0]['changed_fields'], ['description', 'status'])
+        self.assertIn('/infra/groups/0', warning['detail'])
+        self.assertNotIn('old-secret', str(warning))
+        self.assertNotIn('new-secret', str(warning))
 
     @patch('inventory.collector.time.sleep')
     def test_duplicate_without_reported_total_remains_unverified(self, sleep):

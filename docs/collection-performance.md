@@ -607,3 +607,10 @@ and missing results still retry and produce coverage warnings if unresolved. For
 percentage alone does not make it safe for unused-object approval. Run a new
 collection after changes settle. Existing snapshots retain their original coverage
 warnings; a software update does not retroactively verify them.
+
+Conflicting-version warnings include up to three object identities and up to
+20 changed top-level field names per object. Field values are not included.
+Use these diagnostics to distinguish configuration changes from runtime or
+metadata differences before changing the verification rules. A difference in
+any field still triggers verification retries; diagnostics do not waive coverage
+warnings or approval safeguards.

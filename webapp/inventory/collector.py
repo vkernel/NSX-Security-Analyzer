@@ -81,10 +81,11 @@ def parse_retry_after(value):
 class InventoryChanged(AuditError):
     """A paginated inventory did not match its advertised total."""
 
-    def __init__(self, message, reported_total=None, returned_count=None):
+    def __init__(self, message, reported_total=None, returned_count=None, conflicts=None):
         super().__init__(message)
         self.reported_total = reported_total
         self.returned_count = returned_count
+        self.conflicts = conflicts or []
 
 
 class NSXClient:
@@ -222,6 +223,8 @@ class NSXClient:
                            "duplicate_count": duplicates, "attempts": attempt + 1,
                            "reason": "inventory_changed", "pagination_complete": True,
                            "reported_total": exc.reported_total, "returned_count": exc.returned_count}
+                if exc.conflicts:
+                    warning["conflicts"] = exc.conflicts
                 # Collection workers share this client. A list append is atomic;
                 # report construction occurs after all workers have completed.
                 if not hasattr(self, "inventory_warnings"):
@@ -253,6 +256,7 @@ class NSXClient:
         unique_records = {}
         duplicate_count = 0
         conflicting = False
+        conflicts = {}
         while True:
             try:
                 page = self.get(path, params)
@@ -281,7 +285,19 @@ class NSXClient:
                 if identity is not None:
                     if identity in unique_records:
                         duplicate_count += 1
-                        conflicting = conflicting or unique_records[identity] != record
+                        previous = unique_records[identity]
+                        if previous != record:
+                            conflicting = True
+                            # Bounded diagnostics: record field names, never values.
+                            if identity in conflicts or len(conflicts) < 3:
+                                fields = sorted(key for key in previous.keys() | record.keys()
+                                                if key not in previous or key not in record
+                                                or previous[key] != record[key])
+                                sample = conflicts.setdefault(identity, {
+                                    "resource_type": record.get("resource_type"),
+                                    "locator": locator, "changed_fields": [],
+                                })
+                                sample["changed_fields"] = sorted(set(sample["changed_fields"]) | set(fields))[:20]
                         continue
                     unique_records[identity] = record
                 total += 1
@@ -289,8 +305,12 @@ class NSXClient:
                       path, len(results), total, expected, bool(page.get("cursor")))
             yield from results
             if conflicting and (total == expected or not page.get("cursor")):
-                raise InventoryChanged("GET {}: conflicting versions of objects during pagination".format(path),
-                                       reported_total=expected, returned_count=total)
+                samples = list(conflicts.values())
+                detail = "; ".join("{} {} changed fields: {}".format(
+                    sample["resource_type"] or "Object", sample["locator"],
+                    ", ".join(sample["changed_fields"])) for sample in samples)
+                raise InventoryChanged("GET {}: conflicting versions of objects during pagination; {}".format(path, detail),
+                                       reported_total=expected, returned_count=total, conflicts=samples)
             if expected is not None and total == expected:
                 return
             cursor = page.get("cursor")
