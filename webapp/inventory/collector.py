@@ -286,13 +286,22 @@ class NSXClient:
                     if identity in unique_records:
                         duplicate_count += 1
                         previous = unique_records[identity]
-                        if previous != record:
+                        ignored_fields = set()
+                        if (path == "/infra/realized-state/virtual-machines"
+                                and record.get("resource_type") == "VirtualMachine"):
+                            # Tag decisions use identity, display_name, tags and
+                            # marked_for_delete. Runtime values retained for the
+                            # inventory display are first-observed, not atomic.
+                            # Keep every other field strict, including new fields.
+                            ignored_fields = {"_last_sync_time", "compute_ids", "guest_info",
+                                              "host_id", "local_id_on_host", "power_state", "source"}
+                        fields = sorted(key for key in (previous.keys() | record.keys()) - ignored_fields
+                                        if key not in previous or key not in record
+                                        or previous[key] != record[key])
+                        if fields:
                             conflicting = True
                             # Bounded diagnostics: record field names, never values.
                             if identity in conflicts or len(conflicts) < 3:
-                                fields = sorted(key for key in previous.keys() | record.keys()
-                                                if key not in previous or key not in record
-                                                or previous[key] != record[key])
                                 sample = conflicts.setdefault(identity, {
                                     "resource_type": record.get("resource_type"),
                                     "locator": locator, "changed_fields": [],
@@ -1536,6 +1545,9 @@ def audit(client, workers=4, testing=False, progress=None):
     limitations = "Search is eventually consistent; non-indexed and RBAC-hidden references may be absent."
     limitations += (" Configuration reference search excludes VirtualMachine, VirtualNetworkInterface and "
                     "GenericPolicyRealizedResource runtime records. VM tag assignments use the dedicated VM inventory.")
+    limitations += (" VM runtime details are first-observed values, not an atomic snapshot. "
+                    "Runtime-only changes during duplicate VM reads do not invalidate tag verification; "
+                    "tag, identity and deletion-state changes remain subject to verification.")
     if testing:
         limitations += " TESTING ONLY: one record per list and no pagination. No unused-object, policy-emptiness or rule-activity conclusions. Empty or excluded samples can leave checks unexercised."
         for row in rows:

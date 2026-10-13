@@ -12,6 +12,14 @@ Development builds from 0.2.2-dev retain fresh inventory and counter checks whil
 
 ## Diagnostics
 
+Duplicate `VirtualMachine` records from `/infra/realized-state/virtual-machines`
+are compared for tag-inventory consistency. Changes only to `_last_sync_time`,
+`compute_ids`, `guest_info`, `host_id`, `local_id_on_host`, `power_state`, or
+`source` do not invalidate tag verification. Those runtime details remain
+first-observed display values, not an atomic VM snapshot. Tags, deletion state,
+names and all other fields still undergo conflict detection; identity and count
+checks remain enforced. This exception does not apply to other endpoints.
+
 Search coverage is checked against the directly collected groups and services.
 When that inventory is non-empty but a broad search returns zero results, the
 collector tries the next query syntax, including the existing explicit

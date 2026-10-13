@@ -95,17 +95,58 @@ class PaginationVerificationTests(SimpleTestCase):
         self.assertFalse(getattr(client, 'inventory_warnings', []))
 
     @patch('inventory.collector.time.sleep')
-    def test_vm_changed_state_across_pages_remains_unverified(self, sleep):
+    def test_vm_runtime_changes_do_not_invalidate_tag_inventory(self, sleep):
         vm = {'resource_type': 'VirtualMachine', 'external_id': 'vm-1'}
+        runtime = {key: 'changed' for key in ('_last_sync_time', 'compute_ids', 'guest_info',
+                   'host_id', 'local_id_on_host', 'power_state', 'source')}
         client = self.nsx_client([
             {'results': [dict(vm, power_state='VM_RUNNING')],
              'result_count': 2, 'cursor': 'next'},
-            {'results': [dict(vm, power_state='VM_STOPPED'),
+            {'results': [dict(vm, **runtime),
                          {'resource_type': 'VirtualMachine', 'external_id': 'vm-2'}]},
-        ] * 3)
+        ])
+        records = list(client.items('/infra/realized-state/virtual-machines'))
+        self.assertEqual(len(records), 2)
+        self.assertEqual(records[0]['power_state'], 'VM_RUNNING')
+        self.assertFalse(getattr(client, 'inventory_warnings', []))
+        self.assertEqual(client.get.call_count, 2)
+        sleep.assert_not_called()
+
+    @patch('inventory.collector.time.sleep')
+    def test_vm_audit_fields_and_unknown_fields_still_conflict(self, sleep):
+        vm = {'resource_type': 'VirtualMachine', 'external_id': 'vm-1'}
+        for field, value in (('tags', [{'scope': 's', 'tag': 't'}]),
+                             ('marked_for_delete', True), ('display_name', 'new'),
+                             ('new_unknown_field', 'value')):
+            with self.subTest(field=field):
+                client = self.nsx_client([{'results': [vm, dict(vm, **{field: value, 'host_id': 'new-host'})],
+                                          'result_count': 1}] * 3)
+                list(client.items('/infra/realized-state/virtual-machines'))
+                self.assertEqual(client.inventory_warnings[0]['conflicts'][0]['changed_fields'], [field])
+                self.assertEqual(client.get.call_count, 3)
+
+    @patch('inventory.collector.time.sleep')
+    def test_vm_changed_identity_is_not_collapsed_as_runtime_churn(self, sleep):
+        vm = {'resource_type': 'VirtualMachine', 'external_id': 'vm-1'}
+        client = self.nsx_client([{'results': [vm, dict(vm, external_id='vm-2')], 'result_count': 1}] * 3)
+        records = list(client.items('/infra/realized-state/virtual-machines'))
+        self.assertEqual(len(records), 2)
+        self.assertEqual(client.inventory_warnings[0]['unique_count'], 2)
+
+    @patch('inventory.collector.time.sleep')
+    def test_vm_runtime_exception_does_not_apply_to_other_endpoints(self, sleep):
+        vm = {'resource_type': 'VirtualMachine', 'external_id': 'vm-1'}
+        client = self.nsx_client([{'results': [vm, dict(vm, host_id='new')], 'result_count': 1}] * 3)
+        list(client.items('/search/query'))
+        self.assertEqual(client.inventory_warnings[0]['conflicts'][0]['changed_fields'], ['host_id'])
+
+    @patch('inventory.collector.time.sleep')
+    def test_vm_runtime_duplicates_still_require_complete_counts(self, sleep):
+        vm = {'resource_type': 'VirtualMachine', 'external_id': 'vm-1'}
+        client = self.nsx_client([{'results': [vm, dict(vm, host_id='new')], 'result_count': 2}] * 3)
         list(client.items('/infra/realized-state/virtual-machines'))
-        self.assertIn('conflicting versions', client.inventory_warnings[0]['detail'])
-        self.assertEqual(client.get.call_count, 6)
+        self.assertEqual(client.inventory_warnings[0]['unique_count'], 1)
+        self.assertEqual(client.inventory_warnings[0]['reported_total'], 2)
 
     @patch('inventory.collector.time.sleep')
     def test_conflicting_duplicate_versions_remain_unverified(self, sleep):
