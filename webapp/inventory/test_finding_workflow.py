@@ -333,6 +333,31 @@ class FindingWorkflowTests(TestCase):
         self.assertContains(response, 'Single approval')
         self.assertNotContains(response, 'Independent review</')
 
+    def test_unassigned_page_previews_current_approval_policy_without_writes(self):
+        from .models import WorkspacePolicy
+        WorkspacePolicy.objects.create(required_approvals=1)
+        self.client.force_login(self.owner)
+        revision = self.finding.revision
+        response = self.client.get(self.url)
+        self.assertContains(response, 'Single approval')
+        self.assertNotContains(response, 'Two-person approval')
+        self.assertNotContains(response, 'Independent review</')
+        self.finding.refresh_from_db()
+        self.assertEqual(self.finding.required_approvals, 2)
+        self.assertEqual(self.finding.revision, revision)
+        self.assertFalse(self.finding.events.exists())
+        self.assign()
+        self.assertEqual(self.finding.required_approvals, 1)
+
+    def test_assigned_page_keeps_captured_approval_policy(self):
+        from .models import WorkspacePolicy
+        self.assign()
+        WorkspacePolicy.objects.update_or_create(pk=1, defaults={'required_approvals': 1})
+        self.client.force_login(self.owner)
+        response = self.client.get(self.url)
+        self.assertContains(response, 'Two-person approval')
+        self.assertContains(response, 'Independent review</')
+
     def test_setting_restarts_existing_review_and_archives_approval(self):
         self.assign()
         decide(self.finding, self.owner, 'approve', 'Original owner checks')

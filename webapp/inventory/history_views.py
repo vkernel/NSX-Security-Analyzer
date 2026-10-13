@@ -136,7 +136,14 @@ def finding_detail(request, pk, finding_id):
     can_decide = request.user.is_staff and ((finding.workflow_state == 'owner_review' and finding.owner_id == request.user.pk)
         or (finding.workflow_state == 'second_review' and finding.owner_id != request.user.pk))
     steps = [('unassigned','Assign owner'), ('owner_review','Owner review'), ('second_review','Independent review'), ('ready','Ready'), ('decommissioned','Decommissioned')]
-    if finding.required_approvals == 1:
+    # Assignment captures the current policy; preview that policy before a
+    # review starts without rewriting saved decisions during a page read.
+    required_approvals = finding.required_approvals
+    if finding.workflow_state == 'unassigned':
+        from .usability import policy
+        required_approvals = policy().required_approvals
+    approval_label = dict(Finding._meta.get_field('required_approvals').choices)[required_approvals]
+    if required_approvals == 1:
         steps = [(key, label) for key, label in steps if key != 'second_review']
     current_step = next((i for i, (key, _) in enumerate(steps) if key == finding.workflow_state), -1)
     progress = [{'label': label, 'current': i == current_step, 'done': i < current_step} for i, (_, label) in enumerate(steps)]
@@ -148,6 +155,7 @@ def finding_detail(request, pk, finding_id):
     owner_name, _, owner_detail = owner_label.partition(' · ')
     page = Paginator(finding.events.select_related('actor__keycloakidentity', 'actor__ldapidentity').defer('details'), 20).get_page(request.GET.get('page'))
     return render(request, 'inventory/finding_detail.html', {'environment': environment, 'finding': finding,
+        'required_approvals': required_approvals, 'approval_label': approval_label,
         'label': LABELS.get(finding.kind, finding.kind), 'form': form, 'page': page, 'approval_decisions': decisions, 'readiness': readiness, 'can_decide': can_decide, 'progress': progress, 'facts': facts, 'owner_name': owner_name, 'owner_detail': owner_detail,
         'evidence': json.dumps(finding.evidence, indent=2, ensure_ascii=False) if request.GET.get('evidence') == '1' else None})
 
