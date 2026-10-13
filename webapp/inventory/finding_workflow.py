@@ -162,7 +162,19 @@ def decide(finding, actor, action, reason, owner=None, ticket='', manual_verifie
     if finding.required_approvals not in (1, 2):
         raise ValidationError('Invalid approval requirement.')
     extra = {}
-    if action == 'assign':
+    if action == 'unassign':
+        if not finding.owner_id:
+            raise ValidationError('This finding is already unassigned.')
+        if actor.pk != finding.owner_id and not actor.is_superuser:
+            raise ValidationError('Only the current assignee or an administrator can return this finding to unassigned.')
+        if before == 'decommissioned':
+            raise ValidationError('Reopen the completed finding before returning it to unassigned.')
+        extra = {'previous_owner_id': finding.owner_id, 'previous_owner': user_label(finding.owner)}
+        finding.owner = None
+        # Assignment and review progress are separate: preserve recorded decisions.
+        if before == 'owner_review':
+            finding.workflow_state = 'unassigned'
+    elif action == 'assign':
         if not owner or not owner.is_active or not owner.is_staff:
             raise ValidationError('Choose an active operator or administrator as owner.')
         if before == 'decommissioned':
@@ -171,17 +183,27 @@ def decide(finding, actor, action, reason, owner=None, ticket='', manual_verifie
             raise ValidationError('This user is already the owner. Use Reopen review to restart a rejected review.')
         extra = {'previous_owner_id': finding.owner_id, 'prior_approvals': finding.approvals}
         from .usability import policy
-        finding.required_approvals = policy().required_approvals
+        resume = finding.owner_id is None and before in ('second_review', 'ready', 'rejected')
+        if not resume:
+            finding.required_approvals = policy().required_approvals
         finding.owner = owner
-        finding.workflow_state, finding.approvals = 'owner_review', {}
+        if not resume:
+            finding.workflow_state, finding.approvals = 'owner_review', {}
     elif action == 'reopen':
-        if before != 'rejected':
-            raise ValidationError('Only rejected reviews can be reopened manually.')
+        if before == 'decommissioned':
+            if not actor.is_superuser:
+                raise ValidationError('Only an administrator can reopen a completed finding.')
+            extra = {'prior_approvals': finding.approvals, 'previous_change_ticket': finding.change_ticket}
+            finding.change_ticket = ''
+        elif before != 'rejected':
+            raise ValidationError('Only rejected or completed reviews can be reopened manually.')
         from .usability import policy
         finding.required_approvals = policy().required_approvals
         finding.workflow_state = 'owner_review' if finding.owner_id else 'unassigned'
         finding.approvals = {}
     elif action in ('approve', 'reject'):
+        if not finding.owner_id:
+            raise ValidationError('Assign an owner before continuing the review.')
         if before == 'owner_review':
             if actor.pk != finding.owner_id:
                 raise ValidationError('Only the assigned owner may make the first decision.')
@@ -219,6 +241,8 @@ def decide(finding, actor, action, reason, owner=None, ticket='', manual_verifie
             extra = {'decision': decision}
             finding.workflow_state = 'second_review' if before == 'owner_review' and finding.required_approvals == 2 else 'ready'
     elif action == 'complete':
+        if not finding.owner_id:
+            raise ValidationError('Assign an owner before recording completion.')
         stages = ('owner', 'second') if finding.required_approvals == 2 else ('owner',)
         if before != 'ready' or not all(finding.approvals.get(stage) for stage in stages):
             raise ValidationError('The required approvals must be recorded before decommissioning.')

@@ -29,6 +29,122 @@ class FindingWorkflowTests(TestCase):
     def assign(self, owner=None):
         decide(self.finding, self.admin, 'assign', 'Please check dependencies.', owner or self.owner)
 
+    def test_release_preserves_approval_and_resume_prevents_self_approval(self):
+        self.approve_owner()
+        approvals = self.finding.approvals.copy()
+        revision = self.finding.revision
+        decide(self.finding, self.owner, 'unassign', 'Unavailable this week')
+        self.assertIsNone(self.finding.owner_id)
+        self.assertEqual(self.finding.approvals, approvals)
+        self.assertEqual(self.finding.workflow_state, 'second_review')
+        self.assertEqual(self.finding.revision, revision + 1)
+        event = self.finding.events.get(details__action='unassign')
+        self.assertEqual(event.details['previous_owner_id'], self.owner.pk)
+        with self.assertRaises(ValidationError):
+            decide(self.finding, self.reviewer, 'approve', 'Checked')
+        decide(self.finding, self.admin, 'assign', 'New owner', self.reviewer)
+        self.assertEqual(self.finding.approvals, approvals)
+        with self.assertRaises(ValidationError):
+            decide(self.finding, self.owner, 'approve', 'Cannot approve twice')
+
+    def test_release_permissions_reason_and_admin_override(self):
+        self.assign()
+        for actor, reason in ((self.reviewer, 'Not mine'), (self.viewer, 'No access'), (self.owner, '  ')):
+            with self.assertRaises(ValidationError):
+                decide(self.finding, actor, 'unassign', reason)
+        decide(self.finding, self.admin, 'unassign', 'Wrong assignment')
+        self.assertIsNone(self.finding.owner_id)
+        self.assertEqual(self.finding.workflow_state, 'unassigned')
+        with self.assertRaises(ValidationError):
+            decide(self.finding, self.admin, 'unassign', 'Already released')
+
+    def test_release_keeps_evidence_invalidation_active(self):
+        self.approve_owner()
+        decide(self.finding, self.owner, 'unassign', 'Unavailable')
+        invalidate(self.finding, 'Evidence changed')
+        self.assertEqual(self.finding.approvals, {})
+        self.assertEqual(self.finding.workflow_state, 'unassigned')
+
+    def test_completed_release_requires_admin_reopen(self):
+        self.approve_owner()
+        decide(self.finding, self.reviewer, 'approve', 'Checked')
+        decide(self.finding, self.owner, 'complete', 'Completed', ticket='CHG-1')
+        with self.assertRaises(ValidationError):
+            decide(self.finding, self.admin, 'unassign', 'Release')
+        with self.assertRaises(ValidationError):
+            decide(self.finding, self.owner, 'reopen', 'Reopen')
+        decide(self.finding, self.admin, 'reopen', 'Completion recorded incorrectly')
+        decide(self.finding, self.admin, 'unassign', 'Needs another owner')
+        self.assertIsNone(self.finding.owner_id)
+        self.assertEqual(self.finding.events.get(details__action='reopen').details['previous_change_ticket'], 'CHG-1')
+
+    def test_single_release_rejects_stale_revision(self):
+        self.assign()
+        self.client.force_login(self.owner)
+        response = self.client.post(self.url, {'action': 'unassign', 'note': 'Unavailable', 'revision': self.finding.revision - 1})
+        self.assertContains(response, 'changed while you were reviewing')
+        self.finding.refresh_from_db()
+        self.assertEqual(self.finding.owner_id, self.owner.pk)
+        response = self.client.post(self.url, {'action': 'unassign', 'note': 'Unavailable', 'revision': self.finding.revision})
+        self.assertEqual(response.status_code, 302)
+        self.finding.refresh_from_db()
+        self.assertIsNone(self.finding.owner_id)
+
+    def test_bulk_release_skips_stale_and_unauthorized_findings(self):
+        self.assign()
+        other = Finding.objects.create(environment=self.env, kind='unused', path='/other', name='Other',
+            owner=self.reviewer, workflow_state='owner_review', first_seen=timezone.now(), last_seen=timezone.now(), evaluated_at=timezone.now())
+        self.client.force_login(self.owner)
+        url = reverse('findings', args=[self.env.pk])
+        response = self.client.post(url, {'action': 'unassign', 'reason': 'Unavailable',
+            'selected': [f'{self.finding.pk}:{self.finding.revision - 1}', f'{other.pk}:{other.revision}']}, follow=True)
+        self.assertContains(response, 'skipped 2')
+        self.finding.refresh_from_db()
+        self.assertEqual(self.finding.owner_id, self.owner.pk)
+        response = self.client.post(url, {'action': 'unassign', 'reason': 'Unavailable',
+            'selected': [f'{self.finding.pk}:{self.finding.revision}', f'{other.pk}:{other.revision}']}, follow=True)
+        self.assertContains(response, 'Returned 1 finding(s)')
+        self.assertContains(response, 'skipped 1')
+        self.finding.refresh_from_db(); other.refresh_from_db()
+        self.assertIsNone(self.finding.owner_id)
+        self.assertEqual(other.owner_id, self.reviewer.pk)
+
+    def test_bulk_release_requires_staff_reason_and_environment_match(self):
+        self.assign()
+        url = reverse('findings', args=[self.env.pk])
+        payload = {'action': 'unassign', 'reason': 'Unavailable',
+                   'selected': [f'{self.finding.pk}:{self.finding.revision}']}
+        self.client.force_login(self.viewer)
+        self.assertEqual(self.client.post(url, payload).status_code, 403)
+        self.client.force_login(self.owner)
+        self.client.post(url, {**payload, 'reason': '  '})
+        other = Environment.objects.create(name='Other', slug='other-env', manager='https://other.test')
+        self.client.post(reverse('findings', args=[other.pk]), payload)
+        self.finding.refresh_from_db()
+        self.assertEqual(self.finding.owner_id, self.owner.pk)
+        self.assertFalse(self.finding.events.filter(details__action='unassign').exists())
+        self.assertContains(self.client.get(url), '1 finding(s) on this page')
+
+    def test_ready_release_and_reassignment_preserve_both_approvals(self):
+        self.approve_owner()
+        decide(self.finding, self.reviewer, 'approve', 'Independent check')
+        approvals = self.finding.approvals.copy()
+        decide(self.finding, self.owner, 'unassign', 'Unavailable')
+        with self.assertRaises(ValidationError):
+            decide(self.finding, self.admin, 'complete', 'Done', ticket='CHG-2')
+        decide(self.finding, self.admin, 'assign', 'Take over completion', self.admin)
+        self.assertEqual(self.finding.workflow_state, 'ready')
+        self.assertEqual(self.finding.approvals, approvals)
+        decide(self.finding, self.admin, 'complete', 'Done', ticket='CHG-2')
+
+    def test_completed_page_offers_reopen_only_to_admin(self):
+        self.finding.workflow_state = 'decommissioned'
+        self.finding.save(update_fields=['workflow_state'])
+        self.client.force_login(self.admin)
+        self.assertContains(self.client.get(self.url), 'Reopen completed review')
+        self.client.force_login(self.owner)
+        self.assertNotContains(self.client.get(self.url), 'Reopen completed review')
+
     def approve_owner(self):
         self.assign()
         decide(self.finding, self.owner, 'approve', 'Checked membership and change impact.')

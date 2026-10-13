@@ -171,7 +171,7 @@ class FindingReviewForm(forms.Form):
     manual_verified = forms.BooleanField(required=False, label='I independently checked dependencies outside the collected search results.')
     manual_checks = forms.CharField(required=False, max_length=5000, widget=forms.Textarea(attrs={'rows': 3}), label='Dependencies and systems checked')
     evidence_reference = forms.CharField(required=False, max_length=255, label='Ticket or evidence reference')
-    action = forms.ChoiceField(choices=[('assign', 'Assign owner'), ('approve', 'Approve review'),
+    action = forms.ChoiceField(choices=[('assign', 'Assign owner'), ('unassign', 'Return to unassigned'), ('approve', 'Approve review'),
         ('reject', 'Reject finding'), ('reopen', 'Reopen review'), ('complete', 'Record decommissioning')])
     owner = ReviewerChoiceField(queryset=None, required=False)
     note = forms.CharField(max_length=5000, widget=forms.Textarea(attrs={'rows': 4}), label='Reason / manual checks performed')
@@ -195,9 +195,12 @@ class FindingReviewForm(forms.Form):
                 allowed = ['approve', 'reject', 'assign']
             elif finding.workflow_state == 'ready': allowed = ['complete', 'assign']
             elif finding.workflow_state == 'rejected': allowed = ['reopen', 'assign']
+            elif finding.workflow_state == 'decommissioned' and actor.is_superuser: allowed = ['reopen']
+            if finding.owner_id and finding.workflow_state != 'decommissioned' and (actor.pk == finding.owner_id or actor.is_superuser):
+                allowed.append('unassign')
             labels = dict(self.fields['action'].choices)
             self.fields['action'].choices = [(key, labels[key]) for key in allowed]
-        self.fields['owner'].help_text = 'Search by name or email. Only active operators and administrators can own reviews. Keycloak and LDAP users must sign in once before appearing here. Reassignment resets approvals.'
+        self.fields['owner'].help_text = 'Search by name or email. Only active operators and administrators can own reviews. Keycloak and LDAP users must sign in once before appearing here. Reassigning owned work resets approvals. Assigning released work preserves its existing review progress.'
         self.fields['change_ticket'].help_text = 'Required when recording decommissioning. This application does not delete NSX objects.'
 
 

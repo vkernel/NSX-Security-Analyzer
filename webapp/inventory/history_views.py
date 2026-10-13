@@ -55,9 +55,45 @@ def coverage(request, pk):
 
 
 @login_required
-@require_GET
+@require_http_methods(['GET', 'POST'])
 def findings(request, pk):
     environment = get_object_or_404(page_queries.environments(), pk=pk)
+    if request.method == 'POST':
+        if not request.user.is_staff:
+            return HttpResponseForbidden('Operator or administrator access is required.')
+        from django.core.exceptions import ValidationError
+        from .finding_workflow import decide
+        selections = request.POST.getlist('selected')
+        reason = request.POST.get('reason', '').strip()
+        if request.POST.get('action') != 'unassign' or not reason or len(reason) > 5000 or not 1 <= len(selections) <= 100:
+            messages.error(request, 'Select 1–100 findings and provide a reason of at most 5000 characters.')
+            return redirect('findings', pk=pk)
+        released, skipped = 0, []
+        with transaction.atomic():
+            Environment.objects.select_for_update().only('pk').get(pk=pk)
+            for value in dict.fromkeys(selections):
+                try:
+                    finding_id, revision = (int(part) for part in value.split(':'))
+                    if not 0 < finding_id < 2**63 or not 0 <= revision < 2**63: raise ValueError
+                except (ValueError, TypeError):
+                    skipped.append('Invalid selection; reload the page.')
+                    continue
+                finding = Finding.objects.select_for_update().filter(pk=finding_id, environment=environment).first()
+                if finding is None:
+                    skipped.append('Finding no longer available in this environment.')
+                elif finding.revision != revision:
+                    skipped.append(f'{finding.name}: changed since selection; reload before retrying.')
+                else:
+                    try:
+                        decide(finding, request.user, 'unassign', reason)
+                    except ValidationError as exc:
+                        skipped.append(f'{finding.name}: {"; ".join(exc.messages)}')
+                    else:
+                        released += 1
+        messages.success(request, f'Returned {released} finding(s) to unassigned; skipped {len(skipped)}.')
+        for detail in skipped:
+            messages.warning(request, detail)
+        return redirect('findings', pk=pk)
     # Only findings that met the administration policy enter the review queue.
     from django.db.models import Count
     qualification_counts = list(environment.findings.values('qualification').annotate(total=Count('pk')).order_by('qualification'))
@@ -81,11 +117,16 @@ def findings(request, pk):
     else:
         rows = rows.none()
     page = Paginator(rows, preferences(request).page_size).get_page(request.GET.get('page'))
+    release_eligible = 0
     for row in page:
         row.label = LABELS.get(row.kind, row.kind)
+        row.can_release = bool(request.user.is_staff and row.owner_id and row.workflow_state != 'decommissioned'
+                               and (row.owner_id == request.user.pk or request.user.is_superuser))
+        release_eligible += int(row.can_release)
     params = request.GET.copy()
     params.pop('page', None)
     return render(request, 'inventory/findings.html', {'environment': environment, 'page': page,
+        'release_eligible': release_eligible,
         'filters_active': any(request.GET.get(key, '').strip() for key in ('q', 'kind', 'review', 'owner')),
         'qualification_counts': qualification_counts, 'query': query, 'filter_form': form, 'query_string': params.urlencode(),
         'recalculation': environment.finding_recalculation if hasattr(environment, 'finding_recalculation') else None})
@@ -133,7 +174,7 @@ def finding_detail(request, pk, finding_id):
         decision['display_name'] = user_label(actor) if actor else decision.get('actor_name', 'Former reviewer')
     from .finding_workflow import approval_readiness
     readiness = approval_readiness(finding)
-    can_decide = request.user.is_staff and ((finding.workflow_state == 'owner_review' and finding.owner_id == request.user.pk)
+    can_decide = request.user.is_staff and bool(finding.owner_id) and ((finding.workflow_state == 'owner_review' and finding.owner_id == request.user.pk)
         or (finding.workflow_state == 'second_review' and finding.owner_id != request.user.pk))
     steps = [('unassigned','Assign owner'), ('owner_review','Owner review'), ('second_review','Independent review'), ('ready','Ready'), ('decommissioned','Decommissioned')]
     # Assignment captures the current policy; preview that policy before a
@@ -155,6 +196,8 @@ def finding_detail(request, pk, finding_id):
     owner_name, _, owner_detail = owner_label.partition(' · ')
     page = Paginator(finding.events.select_related('actor__keycloakidentity', 'actor__ldapidentity').defer('details'), 20).get_page(request.GET.get('page'))
     return render(request, 'inventory/finding_detail.html', {'environment': environment, 'finding': finding,
+        'can_unassign': bool(request.user.is_staff and finding.owner_id and finding.workflow_state != 'decommissioned'
+                             and (finding.owner_id == request.user.pk or request.user.is_superuser)),
         'required_approvals': required_approvals, 'approval_label': approval_label,
         'label': LABELS.get(finding.kind, finding.kind), 'form': form, 'page': page, 'approval_decisions': decisions, 'readiness': readiness, 'can_decide': can_decide, 'progress': progress, 'facts': facts, 'owner_name': owner_name, 'owner_detail': owner_detail,
         'evidence': json.dumps(finding.evidence, indent=2, ensure_ascii=False) if request.GET.get('evidence') == '1' else None})

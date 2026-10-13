@@ -228,3 +228,22 @@ A review queue distinguishes no eligible findings from no filter matches, and of
 Clear filters for the latter. Comparisons show Queued, Preparing, Failed (with Retry),
 or Ready. Recent collections use aligned columns on desktop and labelled cards on
 mobile, retaining progress updates and stop controls for active collections.
+
+### Returning assigned work to the queue
+
+Operators can use **Return to unassigned** on their own finding reviews;
+administrators can release anyone's assignment. A reason is required and the
+history records the actor, previous owner and reason. The **Unassigned** queue
+filters by owner, independently of review stage. Existing approvals, comments
+and collected evidence remain intact. Assigning a released review resumes its
+saved stage; another approval or completion requires an owner, and the original
+reviewer still cannot provide the second approval. Evidence and policy changes
+continue to invalidate approvals normally.
+
+On the Finding reviews page, select eligible rows and use **Return selected to
+unassigned** with a shared reason. The page shows eligible counts and explains
+unavailable selections. The server checks each finding's revision and permission;
+changed or ineligible rows are skipped and individually explained. A completed
+finding must first be reopened by an administrator, with a reason. Reopening
+archives the prior approvals and change reference in history and starts a new
+review; it does not undo any NSX changes.
