@@ -174,3 +174,6 @@ class FindingRecalculationTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn('Why some findings are not listed', response.json()['html'])
         self.assertIn('minimum of 24 hours', response.json()['html'])
+        for text in ('Return to unassigned', 'Compare selected', '1237/1238',
+                     'three attempts in total', 'Start diagnostic collection'):
+            self.assertIn(text, response.json()['html'])

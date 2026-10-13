@@ -1,11 +1,17 @@
 # Snapshot history, finding reviews and coverage
 
-Available from each **Environment** page in version **0.2.0**.
+Available from each **Environment** page. This guide describes the current development
+build; historical release behavior is recorded in the changelog.
 
 ## Compare snapshots
 
 Choose **Compare snapshots**, then select earlier and later full snapshots from
-that environment. Results list added, removed and changed rules, groups and
+that environment using the compact Earlier snapshot → Later snapshot toolbar.
+Alternatively, select two eligible rows on one Snapshot history page and choose
+**Compare selected**. The older timestamp is Before and the newer is After; a
+third selection is disabled until one is cleared. Equal timestamps cannot be
+compared. For snapshots on different pages, use the comparison selectors.
+The selection bar disappears when cleared. Results list added, removed and changed rules, groups and
 services with field-level before/after values. Testing and imported snapshots
 cannot be used. Counters and observation timestamps are excluded from configuration
 comparisons; use Historical firewall activity to investigate traffic counters.
@@ -29,25 +35,32 @@ zero-hit firewall rules, empty firewall policies and disabled rules only after t
 meet the configured waiting period. Use Search, Finding type, Review state and
 Owner to filter; sort by Name, Finding type or Review status in either direction.
 Use **Filters** for finding type, review state and owner, and **Sort** for ordering.
-Select **Apply** to update the list; remove individual active filters using the chips
-below the toolbar, or use **Reset**. Date and observation controls are not part of this page. Unknown or excluded
+Select **Apply** to update the list or **Reset** to clear the filters. Date and observation controls are not part of this page. Unknown or excluded
 checks remain in Collection coverage rather than this review queue.
 
-Staff can assign an active user, acknowledge/reopen a finding, set a review date
-and append a note in its detail page. Viewers can read reviews. Results are paginated.
-Objects still accumulating observations remain visible in inventory, but are not
-listed for review. Existing notes are preserved when an object leaves the queue.
+Operators and administrators assign active reviewers and record reasoned approvals,
+rejections and completion. The default is two-person approval; administrators can
+choose single approval. Use **Actions** on the detail page to assign/reassign,
+return work to unassigned, or reopen a review when permitted. These actions open
+focused dialogs. Approval checks and evidence remain visible on the review page.
+Viewers can read reviews; all results are paginated.
 
-Each full collection updates review evidence. Pre-upgrade snapshots establish a
-baseline when the review page is first opened. Repeated equivalent evidence
-preserves acknowledgement. Relevant configuration/classification changes, or a
-finding returning after absence, reopen it while preserving its owner, due date
-and notes. New evidence fields collected after an upgrade may also reopen reviews.
-A stale edit form is rejected rather than overwriting another review or collection.
+Relevant changes, loss of eligibility or incomplete relevant evidence invalidate
+pending approvals. Unchanged verified collections preserve them. Returning work to
+unassigned preserves its stage and valid approvals; assigning that released work
+resumes it. Reassigning already-owned work resets approvals. Stale edits are rejected.
+A missing object is not proof of deletion. Completion records a manual attestation
+with a change ticket; the analyzer does not change NSX. There are no current
+acknowledgement or review-due-date controls. See the
+[approval workflow](finding-review-workflow.md) for permissions and evidence rules.
 
-Acknowledgement is a workflow decision, not deletion approval or complete audit
-coverage. A finding missing from a subsequent snapshot is **not observed**, not
-resolved: unavailable inventory can hide findings. Due dates are review reminders; no email notifications are sent.
+On **Finding reviews**, select eligible rows to reveal the compact selection bar.
+**Return to unassigned** opens a required-reason dialog; **Clear selection** clears
+the page selection. Operators release their own work; administrators can release
+anyone's. The server rechecks revisions and permissions and reports skipped rows.
+Selection applies only to the displayed page, up to 100 findings per submission.
+The Unassigned view hides the Select column and bulk-return controls; mixed views
+show checkboxes only for findings you can release.
 
 Review evidence and notes survive snapshot retention. The link to an expired
 source snapshot is removed; the original historical evidence may no longer be
@@ -71,21 +84,13 @@ The dashboard makes collection limitations visible; it is not a percentage of
 workload coverage or continuous traffic monitoring. NSX search indexing and RBAC
 restrictions still apply even when no failed checks are recorded.
 
-## Upgrade from 0.1.0
+## Upgrading
 
-Back up PostgreSQL and `.env`, and let active collections finish. Set
-`NSX_IMAGE_TAG=0.2.0` in your installation's `.env`, then run:
-
-```sh
-docker compose pull
-docker compose stop web worker scheduler
-docker compose run --rm migrate
-docker compose up -d
-```
-
-Use your usual Compose file arguments if using the remote database or source
-installation. Source installations build the new image first. Migration 0011 adds
-review tables and leaves existing snapshot JSON unchanged. Do not delete volumes.
+Use the [operations upgrade guide](operations.md) for your deployment. Preserve
+the database and Django secret, apply all migrations from the selected image,
+and deploy matching web, worker and scheduler builds. The original 0.2.0 history
+feature is no longer a current upgrade target. Existing indexed snapshots receive
+the current Help & coverage text without a refresh; saved evidence is unchanged.
 
 ## Observation periods and finding qualification
 
@@ -111,7 +116,7 @@ Ensure retention and collection frequency support the history you need.
 configured duration and observation count were reached. **Insufficient evidence**
 means the condition cannot be established. **Condition cleared** requires positive
 opposite evidence (for example members or recorded hits); a missing object alone
-never proves resolution. Legacy **Qualification disabled** assessments remain unchanged in historical snapshots. Review state (Open/Acknowledged) remains independent.
+never proves resolution. Legacy **Qualification disabled** assessments remain unchanged in historical snapshots. Review stage and assignment remain independent of qualification.
 
 Periods restart on relevant evidence/configuration changes, reappearance, or gaps beyond the limit. Changing criteria re-evaluates retained evidence instead of requiring new observations. Unknown and excluded observations break the
 period. Failed collections and demo/imported snapshots do not add observations.
@@ -146,7 +151,7 @@ is removed with its snapshot by retention. Memory holds current candidate state 
 environment; size workers for your inventory. A task is bounded by `NSX_AUDIT_TIMEOUT`.
 A superseded request cannot publish old results; a newer completed collection causes a retry.
 
-Review owners, acknowledgement, due dates and notes are preserved. Historical snapshot
+Review owners and notes are preserved. Pending approvals are invalidated if replay removes eligibility; historical decisions remain in the audit trail. Historical snapshot
 assessments are not rewritten. If retained observations do not meet the new duration,
 count or continuity requirements, the finding remains observing/insufficient. Its detail
 page shows the reason and observed duration. Retention limits how far back evidence can be
@@ -256,4 +261,4 @@ The command name remains `audit_worker` for deployment compatibility; UI labels 
 “collection worker.” `--lane collection`, `--lane recalculation` and `--lane comparison` are available
 for separate process deployments. `--once` processes at most one job and exits;
 with its default lane it conservatively reserves all three lanes for that invocation.
-Stop old worker replicas during upgrade, then start the new build and run migrations.
+Stop old worker replicas during upgrade, apply migrations, then start the matching new build.

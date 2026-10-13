@@ -16,8 +16,9 @@ existing unassigned findings. Affected reviews restart at **Owner review** (or
 must be repeated. Rejected reviews stay rejected, and completed decommissioning
 records keep their original requirement. Saving the same value again also updates
 older reviews that still have a different requirement. After upgrading, save this
-setting once to apply it to those reviews. Assignment, reassignment and reopening
-also capture the current setting.
+setting once to apply it to those reviews. New assignment, reassignment of owned work and reopening capture the current
+setting. Assigning released work preserves its existing stage and approval requirement;
+policy and evidence invalidation still apply.
 
 With single approval, the assigned owner's approval moves the finding directly
 to **Ready for decommissioning**. All evidence checks and manual verification
@@ -70,8 +71,10 @@ Coverage remains limited; approval does not relabel it as complete. Search
 remains eventually consistent and visibility depends on permissions; unrestricted
 search is not proof that every possible dependency is visible.
 
-Warnings about unrelated objects and an unprepared global coverage summary no
-longer block a finding whose own relevant evidence is complete. They remain visible
+Inventory verification warnings pause all finding evaluation and approval for the
+environment until a later verified full collection is available. This is distinct
+from an unrelated object-check warning: warnings about unrelated objects and an
+unprepared global coverage summary do not block a finding whose own relevant evidence is complete. They remain visible
 on Collection coverage. These same finding-specific checks apply when a new
 collection revalidates pending approvals. Existing indexed snapshots benefit without
 a new collection; missing object indexes must still be prepared or recollected.
@@ -87,7 +90,7 @@ blocks final approval and completion until a fresh full collection is available.
 
 ## Queues, notifications and audit
 
-Use **My reviews**, **Awaiting second approval**, **Ready for decommissioning**,
+Use **My reviews**, **Unassigned**, **Awaiting second approval**, **Ready for decommissioning**,
 **Rejected** and **Decommissioned** above the filters. Status sorting uses workflow
 stage. Assigned findings remain visible if their evidence stops qualifying, so the
 owner can see why a new collection or review is needed. Rejected and completed decisions remain available even if the condition
@@ -128,7 +131,7 @@ the identity-provider profile/claims and sign in again to refresh the profile.
 
 1. Open **Environments**, select your environment, then click **Finding reviews**.
 2. Click the finding's name to open its detail page.
-3. In the right-hand decision panel, expand **Assign owner** (or **Reassign owner**).
+3. In the right-hand decision panel, choose **Actions → Assign owner** (or **Reassign owner**).
 4. Type the person's name or email in **Search owners**, then select the correct
    person in **Owner**. Search filters the list; it does not choose an owner for
    you. A previously selected owner remains selected until explicitly changed.
@@ -181,7 +184,7 @@ approver check. Existing historical identity values are preserved in the export;
 the page resolves older internal Keycloak identifiers to readable names when the
 account still exists.
 
-The owner selector is in the expandable assignment section. **Change-ticket reference**
+The owner selector is in the assignment dialog opened from **Actions**. **Change-ticket reference**
 appears only when recording completion. To change notification preferences, open your user menu →
 **Personal settings → Notifications** and change **Finding assignments and second
 approvals**.
@@ -208,7 +211,7 @@ Open **My work** in the main menu to see tasks across environments:
 - **Ready for decommissioning** contains approved findings awaiting a recorded change.
 
 The findings list shows whether each review requires one or two approvals. To assign
-an owner, expand the assignment section, search by name or email, choose a result and
+an owner, choose **Actions → Assign owner**, search by name or email, choose a result and
 record a reason. Search returns up to 20 active operators/administrators; refine your
 search for more specific matches. External users still need to sign in once before
 they can be selected. A second approval remains available to another eligible reviewer;
@@ -240,9 +243,15 @@ saved stage; another approval or completion requires an owner, and the original
 reviewer still cannot provide the second approval. Evidence and policy changes
 continue to invalidate approvals normally.
 
-On the Finding reviews page, select eligible rows and use **Return selected to
-unassigned** with a shared reason. The page shows eligible counts and explains
-unavailable selections. The server checks each finding's revision and permission;
+On the Finding reviews page, select eligible rows to reveal a compact selection
+bar showing the selected count. Choose **Return to unassigned**, enter a shared
+required reason in the dialog, then submit. **Clear selection** deselects all rows.
+Only the displayed page is selected, with a maximum of 100 per submission.
+The Unassigned view hides the Select column and bulk-return controls. In mixed
+views, only eligible findings have checkboxes; other selection cells stay empty. Cancel or Escape
+closes the dialog without submitting; the selection remains. On a finding detail
+page, use **Actions → Return to unassigned**. Without JavaScript, use the detail
+page’s original action form; bulk release requires JavaScript. The server checks each finding's revision and permission;
 changed or ineligible rows are skipped and individually explained. A completed
 finding must first be reopened by an administrator, with a reason. Reopening
 archives the prior approvals and change reference in history and starts a new

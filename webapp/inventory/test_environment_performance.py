@@ -117,6 +117,8 @@ class EnvironmentPerformanceTests(TestCase):
         with CaptureQueriesContext(connection) as queries:
             response = self.client.get(reverse('collection-coverage', args=[self.env.pk]))
         self.assertContains(response, 'Coverage summary not prepared')
+        self.assertContains(response, 'Inventory verification warnings and paused reviews')
+        self.assertContains(response, '1237/1238')
         self.assertNotContains(response, 'No incomplete checks were identified')
         self.assertFalse(any('"report"' in q['sql'] or 'inventory_snapshotrecord' in q['sql'] for q in queries))
 

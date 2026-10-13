@@ -1,7 +1,15 @@
 # NSX Security Analyzer
 
+> **Development versus release:** current development includes compact review actions,
+> returning assignments to the unassigned queue, and independent collection, finding
+> recalculation and comparison lanes. These are not implied by the `0.5.2` version
+> label alone. Match the image build across web, worker, scheduler and migrations.
+> See [current workflow](https://github.com/vkernel/NSX-Security-Analyzer/blob/development/docs/finding-review-workflow.md) and
+> [development deployment](https://github.com/vkernel/NSX-Security-Analyzer/blob/development/docs/operations.md#development-builds-and-worker-queues).
+
+
 > Release **0.5.2** adds Inventory → VMs and faster environment and collection pages.
-> After updating, run `python manage.py index_snapshots --refresh` in the web container
+> After updating, run `python manage.py index_snapshots --refresh` in a separate maintenance container
 > and collect a new snapshot for complete returned VM details, including untagged VMs.
 > Group/rule/service relationships are configuration evidence, not verified membership or traffic.
 
@@ -127,8 +135,14 @@ and Kubernetes deployment support. Experimental IPFIX functionality is deferred.
 After upgrading and running migrations, prepare existing snapshots with:
 
 ```sh
-docker compose exec web python manage.py index_snapshots
+docker compose run --rm --no-deps web python manage.py index_snapshots
 ```
+
+This command creates a separate one-off container; it does not execute inside the
+running web container. Size its resources for the largest snapshot. If your Compose
+file includes the separately sized `snapshot-refresh` service, use that service
+instead of `web`. Pause collections during maintenance as described in the
+[maintenance guide](https://github.com/vkernel/NSX-Security-Analyzer/blob/development/docs/snapshot-maintenance.md).
 
 This uses saved PostgreSQL data without contacting NSX and can be restarted safely.
 New collections prepare their report indexes automatically. Indexes require additional

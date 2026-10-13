@@ -2,7 +2,15 @@
 
 ## Unreleased — development
 
-- Use “collection worker” throughout user-facing queue status; enforce one global collection and one independently running finding-history recalculation with PostgreSQL worker-lane leases.
+- Add compact finding Actions dialogs and contextual bulk return to unassigned, preserving permissions, revision checks, review history and valid approvals.
+- Add a compact comparison toolbar and two-snapshot selection shortcut; simplify audit filters, diagnostic collection and approval-setting explanations.
+- Run collection, finding recalculation and comparison in independent lanes; correct the comparison lease collision with finding task claiming.
+- Retry empty broad configuration searches against alternative syntax and explicit resource types while retaining coverage checks and limited-scope warnings.
+- Tolerate seven known VM runtime-field changes on the dedicated VM endpoint; retain identity, tag and completeness checks. Persistent inventory verification warnings pause finding evaluation and approval.
+- Refresh documentation and Help & coverage for current review controls, worker queues, deployment identity and collection verification. Historical release entries below describe their original behavior.
+
+
+- Use “collection worker” throughout user-facing queue status; enforce one global collection and one independently running finding-history recalculation and one snapshot comparison with PostgreSQL worker-lane leases.
 
 - Fix finding-history replay to restore current presence and evidence; separate condition continuity from review fingerprints and upgrade cached historical evidence during replay.
 - Use a 24-hour minimum automatic finding-observation gap, preserve explicit overrides, and explain withheld findings in the review queue.
@@ -37,7 +45,7 @@
 - Add staff-only collection stop controls with persistent requests, worker process termination, rollback of unfinished snapshots and audit events.
 - Add small/medium/large resource sizing and maintenance instructions.
 
-Upgrade: apply migration `0021`, then deploy the updated web, worker and scheduler images. Older workers do not process stop requests. See [snapshot maintenance](docs/snapshot-maintenance.md).
+Upgrade development: apply all pending migrations from the selected image (currently through `0040`), then deploy matching web, worker and scheduler images. Stop old worker replicas before switching lane implementations. Older workers do not process all current tasks and stop requests. See [snapshot maintenance](docs/snapshot-maintenance.md).
 
 ## 0.5.2 — 2026-10-01
 

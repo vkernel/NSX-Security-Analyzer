@@ -12,3 +12,9 @@ addresses, tokens and configuration details that should remain private.
 Do not attach `.env`, `.admin-credentials`, raw production snapshots or database
 backups. Security vulnerabilities belong in the private reporting process described
 in [SECURITY.md](SECURITY.md).
+
+For inventory-verification warnings, include the affected endpoint, reported and
+unique counts, duplicate count, attempt number and job ID. Include the actual
+worker image/build as well as the web build; they can differ after an incomplete
+rollout. Sanitize object paths before sharing. See
+[inventory troubleshooting](docs/operations.md#inventory-changes-during-collection).

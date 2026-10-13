@@ -429,8 +429,8 @@ Index writes use up to 500 records and an estimated 4 MiB payload budget per bat
 The budget is based on serialized evidence with a multiplier for derived fields; it
 is an estimate, not a hard memory bound. A single oversized record is written alone.
 Finding updates and their review events use batches of 100 under the existing
-transaction and environment lock. Ownership, acknowledgements and review dates are
-preserved; changed evidence still reopens a finding.
+transaction and environment lock. Ownership and review history are preserved; relevant evidence changes invalidate
+pending approvals. The current workflow uses approvals, not acknowledgements or due dates.
 
 Logs report index preparation plus insertion time, insertion time separately, finding
 synchronization time and final snapshot commit time. Compare those stages and overall
@@ -644,7 +644,7 @@ warnings; a software update does not retroactively verify them.
 Conflicting-version warnings include up to three object identities and up to
 20 changed top-level field names per object. Field values are not included.
 Use these diagnostics to distinguish configuration changes from runtime or
-metadata differences before changing the verification rules. A difference in
+metadata differences before changing the verification rules. Outside the seven-field VM runtime exception described above, a difference in
 any field still triggers verification retries; diagnostics do not waive coverage
 warnings or approval safeguards.
 

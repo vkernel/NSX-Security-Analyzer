@@ -16,7 +16,11 @@ report data is stored as JSONB. The viewer renders from that saved data. Legacy 
 storage remains for database compatibility and is not used by the viewer.
 
 The scheduler checks enabled environments and their sync intervals. The worker
-claims queued jobs, calls the internal collection module, updates progress and saves a snapshot.
+supervises three independent lanes: collection, finding-history recalculation and
+snapshot comparison. PostgreSQL advisory leases allow one task of each type
+globally across replicas. Collection calls NSX, updates progress and saves a snapshot;
+the other lanes use saved database evidence. Same-environment publication briefly
+serializes on a database lock. All subprocesses share the worker container resources.
 A conditional database constraint prevents two active collections for one environment.
 Job configuration captures the environment settings at queue time. Collection
 concurrency adapts internally; it is not an environment form setting.

@@ -1,5 +1,13 @@
 # NSX Security Analyzer
 
+> **Development versus release:** current development includes compact review actions,
+> returning assignments to the unassigned queue, and independent collection, finding
+> recalculation and comparison lanes. These are not implied by the `0.5.2` version
+> label alone. Match the image build across web, worker, scheduler and migrations.
+> See [current workflow](docs/finding-review-workflow.md) and
+> [development deployment](docs/operations.md#development-builds-and-worker-queues).
+
+
 See [snapshot maintenance and stopping collections](docs/snapshot-maintenance.md) for optional refresh jobs and collection cancellation.
 
 A read-only NSX Policy inventory and security review workspace. Collect inventory

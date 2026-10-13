@@ -103,16 +103,35 @@ Retention is not a replacement for backups.
 
 ## Inventory changes during collection
 
-If NSX search returns a different number of objects from its advertised total,
-the collector retries the search from page one after 2 and then 4 seconds. Each
-failed attempt is discarded. After three unsuccessful attempts the collection
-fails rather than publishing a partial snapshot; previous reports remain intact.
-Authentication errors and unrelated pagination failures are not retried by this
-mechanism. Search metadata records `inventory_retries` for successful collections.
-Concurrent policy/object changes and eventual search indexing can cause this
-condition. If it persists, allow changes and indexing to settle before collecting
-again. Successful pagination does not guarantee a transactional point-in-time
-snapshot of NSX. No counters or configuration are modified.
+Paginated inventory is checked for unique identities, conflicting object versions
+and the reported total. A verification mismatch restarts that endpoint from page
+one after 2 and then 4 seconds. Attempts are not merged. After three unsuccessful
+attempts, the final deduplicated inventory may be saved with coverage warnings;
+it is available to browse, but finding evaluation and approval are paused for the
+environment. Existing finding presence and observation progress are not advanced.
+Historical recalculation skips these unverified snapshots. A later verified full
+collection is required to resume normal evaluation; rebuilding an index does not
+verify missing NSX evidence.
+
+For example, `1237/1238 unique objects; 1 duplicate rows` on
+`/infra/realized-state/virtual-machines` means the response contains 1,237 distinct
+VM identities against a reported total of 1,238. A duplicate does not fill the gap.
+The message does not establish whether the cause is inventory churn, page overlap
+or an inconsistent NSX count. VM runtime-only differences are tolerated for seven
+known fields, but missing identities, tag changes and count checks remain strict.
+See [verification details](collection-performance.md#diagnostics).
+
+This differs from the cross-check that every directly collected group/service path
+appears in configuration search. Persistent missing search paths after three
+coverage attempts fail the collection; no new snapshot is published. Empty broad
+search results with nonempty direct inventory trigger alternative query syntax,
+including a limited explicit-type fallback. Limited scope remains visible.
+
+Run another collection after changes settle. If the warning repeats, open
+Collections → Diagnostics and capture the endpoint, reported/unique/duplicate
+counts, attempt count, NSX version, job ID and actual worker build. Inspect the
+worker logs and NSX API visibility/search health; do not treat a small discrepancy
+as verified coverage. No counters or configuration are modified.
 
 ## Logging, audit trail and collection diagnostics
 
@@ -160,8 +179,8 @@ SQLSTATE where available but suppress driver messages that could contain SQL or
 report contents. Timeout/exit/stale-job events do not claim an underlying cause;
 correlate exit signals with Kubernetes termination reasons before concluding OOM.
 
-Superusers can queue a **Diagnostic collection** in **Administration → Audit &
-diagnostics**. It enables NSX DEBUG requests only for that job, for up to 15 minutes
+Superusers can select **Start diagnostic collection** in **Administration → Audit &
+diagnostics**, choose the environment in the dialog and submit it. It enables NSX DEBUG requests only for that job, for up to 15 minutes
 from submission. It does not restart a running collection or enable Django DEBUG.
 Warnings and errors remain enabled after expiry. Detailed logs can contain Policy
 object paths; restrict access. Credentials, authorization values, connection secrets,
@@ -267,3 +286,33 @@ results or infer parent membership from child literals, preserving parent criter
 Missing references, cycles and traversal depth limits remain **Unknown**. Nested
 unsupported member types remain **Not supported**. Non-group paths not available in
 the group inventory remain unknown rather than being assumed empty.
+
+
+## Development builds and worker queues
+
+The development branch can still display version 0.5.2 with a newer commit build.
+Use `vkernel/nsx-security-analyzer:development-<commit>` for a pinned development
+build, or the mutable `development` tag for testing. Pin the same published build
+for migration, web, worker and scheduler; changing only the web image does not
+update background processing. Release installation defaults remain pinned to 0.5.2.
+
+The default `audit_worker --lane all` supervises three independent queues, allowing
+one collection, one finding-review indexing/recalculation and one comparison to run
+side by side. Extra tasks of each type wait. PostgreSQL leases enforce these limits
+across replicas; same-environment publication can briefly wait on a database lock.
+See System health for each lane's heartbeat and worker logs for actual progress.
+
+An older three-lane development build reused the comparison lease ID for finding
+task claiming. The correction is included from build `0764747`. Stop old worker
+replicas before starting corrected workers so their PostgreSQL session locks are
+released. A correct image tag in YAML alone does not prove the running worker has
+that image; inspect its pod image/imageID. In Kubernetes, update the manifests
+actually used by the deployment or Argo CD, not just the converter compose.yaml.
+For mutable tags, ensure new pods pull the intended image; a pinned commit tag
+makes the rollout easier to verify. Coordinate worker restarts between active jobs.
+
+The compact controls introduced in build `c90842f` need no snapshot refresh and
+add no NSX calls. They include finding Actions dialogs, contextual bulk release,
+a compact comparison toolbar, two-snapshot selection, a diagnostic collection
+dialog and collapsible approval explanations. JavaScript is required for selection
+shortcuts; direct finding forms and comparison selectors remain available.

@@ -1,5 +1,13 @@
 # Install the complete Docker Hub stack
 
+> **Development versus release:** current development includes compact review actions,
+> returning assignments to the unassigned queue, and independent collection, finding
+> recalculation and comparison lanes. These are not implied by the `0.5.2` version
+> label alone. Match the image build across web, worker, scheduler and migrations.
+> See [current workflow](finding-review-workflow.md) and
+> [development deployment](operations.md#development-builds-and-worker-queues).
+
+
 See [snapshot maintenance and stopping collections](snapshot-maintenance.md) for optional refresh jobs and collection cancellation.
 
 For CPU, memory and capacity planning, see [small, medium and large resource sizing](resource-sizing.md).
@@ -125,11 +133,17 @@ an image is not a database rollback; retain the pre-upgrade backup.
 For version 0.5.2, after the updated web service starts, prepare existing snapshots:
 
 ```sh
-docker compose exec web python manage.py index_snapshots --refresh
+docker compose run --rm --no-deps web python manage.py index_snapshots --refresh
 ```
 
-This reads saved snapshots from PostgreSQL without contacting NSX. It skips snapshots
-already indexed and is safe to rerun after interruption. New collections are indexed
+This command creates a separate one-off container; it does not execute inside the
+running web container. Size its resources for the largest snapshot. If your Compose
+file includes the separately sized `snapshot-refresh` service, use that service
+instead of `web`. Pause collections during maintenance as described in the
+[maintenance guide](snapshot-maintenance.md).
+
+This reads saved snapshots from PostgreSQL without contacting NSX. `--refresh` rebuilds already-indexed snapshots too. Without `--refresh`, the
+command prepares only missing derived data. Both modes can be rerun after interruption. New collections are indexed
 automatically. Until prepared, older reports use the previous viewer path.
 
 

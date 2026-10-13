@@ -1,5 +1,13 @@
 # Install on Kubernetes
 
+> **Development versus release:** current development includes compact review actions,
+> returning assignments to the unassigned queue, and independent collection, finding
+> recalculation and comparison lanes. These are not implied by the `0.5.2` version
+> label alone. Match the image build across web, worker, scheduler and migrations.
+> See [current workflow](../../docs/finding-review-workflow.md) and
+> [development deployment](../../docs/operations.md#development-builds-and-worker-queues).
+
+
 Use the supplied `manifests/` files. You do **not** need an online converter.
 These files deploy the database, a migration Job, the website, a collection
 worker and a scheduler. They expose the website inside the cluster only.
@@ -389,7 +397,9 @@ Build the checkout and publish a unique tag to a registry your cluster can reach
 
 ```sh
 # From the repository root; replace YOUR_ACCOUNT and YOUR_TAG.
-docker build -f webapp/Dockerfile -t YOUR_ACCOUNT/nsx-security-analyzer:YOUR_TAG .
+docker build -f webapp/Dockerfile --build-arg APP_REVISION="$(git rev-parse HEAD)" \
+  --build-arg APP_BUILD_DATE="$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+  -t YOUR_ACCOUNT/nsx-security-analyzer:YOUR_TAG .
 docker push YOUR_ACCOUNT/nsx-security-analyzer:YOUR_TAG
 ```
 
@@ -459,7 +469,7 @@ for search, pagination, storage and export behavior.
 
 Version 0.5.2 adds **Inventory → VMs**. Refresh existing prepared reports with the command above, then run a new collection for complete returned VM inventory, including untagged VMs. Older snapshots only contain VMs recoverable from their saved tag assignments. Group and service links describe configuration relationships, not confirmed membership or observed traffic.
 
-Configure optional single sign-on in **Administration → Keycloak integration**.
+Configure optional single sign-on in **Administration → Authentication providers → Keycloak**.
 The GUI stores credentials and approved certificate trust; no Keycloak YAML settings
 are needed for a new setup. See [Keycloak authentication setup](../../docs/keycloak.md).
 

@@ -1,5 +1,13 @@
 # NSX Security Analyzer workspace
 
+> **Development versus release:** current development includes compact review actions,
+> returning assignments to the unassigned queue, and independent collection, finding
+> recalculation and comparison lanes. These are not implied by the `0.5.2` version
+> label alone. Match the image build across web, worker, scheduler and migrations.
+> See [current workflow](../docs/finding-review-workflow.md) and
+> [development deployment](../docs/operations.md#development-builds-and-worker-queues).
+
+
 See [snapshot maintenance and stopping collections](../docs/snapshot-maintenance.md) for the optional refresh container and staff-only stop controls.
 
 A web application for read-only NSX security analysis. PostgreSQL
@@ -183,8 +191,9 @@ configuration, so keep database backups and CSV exports appropriately protected.
 ## Worker operation
 
 One queued/running audit is permitted per environment, enforced in PostgreSQL.
-Workers claim jobs using row locks with `skip_locked`. Each worker runs one audit
-at a time; request concurrency adapts automatically within that audit.
+Workers claim jobs using row locks with `skip_locked`. The default worker supervises three independent lanes: one collection, one finding
+recalculation and one snapshot comparison can run simultaneously. PostgreSQL leases
+enforce one task per type across all replicas. Request concurrency adapts within a collection.
 Requests start at two in flight and may grow to eight when work is waiting.
 HTTP throttling, server errors and network failures reduce concurrency immediately.
 Successful requests use separate latency baselines for inventory, search,
@@ -197,16 +206,16 @@ cumulative request seconds (overlapping requests are summed), and latency baseli
 Bulk-counter fallback reasons are retained on the affected rules for troubleshooting.
 When a policy statistics request fails, its individual rules still get fresh
 counter checks. Subsequent collections for the same manager bypass that failing
-bulk endpoint until a fixed 30-minute retry time, derived from the previous
-snapshot. Skipped attempts do not extend the deadline. Bulk retrieval is tried
-again after expiry. No old counters, membership results or classifications are
+bulk endpoint until its saved cooldown expires. Transient failures start at one hour;
+HTTP 400/404/405/501 start at six hours. Repeated failures double the delay up to
+24 hours. A successful complete response clears the failure history. No old counters, membership results or classifications are
 reused. Missing/unmapped counters in a successful bulk response do not trigger
 this cooldown.
-To process multiple environments concurrently:
-
-```sh
-docker compose up -d --scale worker=2
-```
+Additional worker replicas do not increase the global one-collection limit. Keep
+`audit_worker --lane all` (the default) for all three task queues, or use separately
+sized `collection`, `recalculation` and `comparison` lane processes with the same
+image and database. Account for their combined memory usage. See
+[resource sizing](../docs/resource-sizing.md#concurrent-collection-and-finding-history-replay).
 
 The default whole-audit timeout is 3,600 seconds (`NSX_AUDIT_TIMEOUT` in `.env`).
 Each audit runs in a child process. Timeout or graceful shutdown kills that process
@@ -263,8 +272,9 @@ chmod 600 nsx-workspace.dump
 
 For a planned restore into an empty database, stop web, worker and scheduler first, restore
 with `pg_restore`, and run migrations before resuming them. Keep `.env` (including the credential encryption secret) separately; database
-backups do not include it. Automatic retention cleanup is disabled by default; administrators can enable it
-under Administration → Data retention policies.
+backups do not include it. Automatic retention cleanup is enabled by default for new installations with
+180-day full snapshots, 7-day testing snapshots and 180-day collection history.
+Review the saved policy under Administration → Retention.
 
 ## HTTPS deployment
 
@@ -363,7 +373,7 @@ automatic deletion.
 
 Environment settings no longer expose a worker count. Full web collections start
 with two concurrent NSX requests and can grow gradually to eight when requests
-complete quickly and checks are waiting. Responses taking five seconds or more,
+complete quickly and checks are waiting. Sustained latency degradation against each endpoint family’s learned baseline,
 HTTP 429/502/503/504, and network failures reduce the limit. Growth resumes only
 after 30 seconds of recovery and sufficient fast responses. Existing in-flight
 requests finish when the limit is reduced; subsequent requests wait for capacity.
@@ -385,15 +395,16 @@ or the environment's automatic collection schedule.
 Snapshot history is paginated (20 rows by default). Recent collections link to a
 complete, separately paginated collection history. The report switcher lists 50
 recent snapshots plus the selected snapshot if older; it is not a retention limit.
-Changing display settings never removes historical data. Storage grows until an
-administrator enables age-based retention; there is no fixed maximum stored count.
+Changing display settings never removes historical data. Storage depends on collection frequency, retained snapshot size and the saved
+age-based retention policy; there is no fixed maximum stored count.
 
 ## Data retention
 
 Superusers can open **Administration → Data retention policies** to configure
 full snapshot, testing snapshot, and completed collection-history retention.
-Cleanup is disabled by default. Suggested values are 180 days for full snapshots
-and collections and 30 days for testing snapshots. Each category also supports
+Cleanup is enabled by default for new installations: 180 days for full snapshots
+and collections and 7 days for testing snapshots. Migration `0028` enables older
+disabled policies once while preserving their saved periods; later user choices persist. Each category also supports
 Keep forever. Preview changes shows eligible counts without saving or deleting;
 Save policy persists the settings in PostgreSQL.
 
@@ -472,9 +483,8 @@ observed coverage issues, with links to the relevant records.
 
 Report tables use a compact toolbar: search, search options, columns, filters and
 export. Sorting is available beside column headings; pagination and row count
-are below the table. Object names open an evidence side panel with Summary,
-References, Definition, Statistics and Advanced tabs as applicable. Raw JSON
-remains copyable under Advanced. Mobile tables prioritize essential columns;
+are below the table. Object names open an evidence side panel with Overview, Relationships and
+Technical details tabs. Raw definitions remain copyable under Technical details. Mobile tables prioritize essential columns;
 inspect an object for its remaining details. User-hidden columns and export data
 remain governed by the existing saved table preferences and export rules.
 
@@ -493,6 +503,6 @@ The main Docker service definitions are explicit. For online conversion, use
 Docker-only startup/build/profile features and contains no deployment credentials.
 Follow the [Kubernetes conversion guide](../deploy/kubernetes/README.md) before deployment.
 
-Configure optional single sign-on in **Administration → Keycloak integration**.
+Configure optional single sign-on in **Administration → Authentication providers → Keycloak**.
 The GUI stores credentials and approved certificate trust; no Keycloak YAML settings
 are needed for a new setup. See [Keycloak authentication setup](../docs/keycloak.md).

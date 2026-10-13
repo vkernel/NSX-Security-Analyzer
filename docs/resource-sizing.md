@@ -15,8 +15,8 @@ count is the combined number of groups, services and DFW rules, not resolved mem
 | Profile | Illustrative deployment | Collection concurrency to start with |
 | --- | --- | --- |
 | Small | 1–2 Managers; up to 1,000 VMs and 5,000 objects per environment; a few users | 1 worker replica |
-| Medium | 3–5 Managers, or up to 10,000 VMs and 25,000 objects per environment | 1 worker; consider 2 if queues persist |
-| Large | More than 5 Managers, over 10,000 VMs or 25,000 objects, or dense tag/group/rule relationships | Size one worker for the largest environment first; add replicas only after measuring |
+| Medium | 3–5 Managers, or up to 10,000 VMs and 25,000 objects per environment | 1 worker; size for the three concurrent task types |
+| Large | More than 5 Managers, over 10,000 VMs or 25,000 objects, or dense tag/group/rule relationships | Size for the largest collection plus concurrent recalculation and comparison |
 
 Move up a tier if actual peak memory approaches the limit, even if object counts are
 small. Many shared tags linking thousands of VMs to many groups/rules can create large
@@ -47,9 +47,10 @@ memory or further application optimization. For an existing/shared PostgreSQL se
 ask the DBA to size total workload, connection counts, cache and maintenance memory;
 do not apply this dedicated-instance table to an entire shared database blindly.
 
-A worker processes one collection at a time and launches a collector subprocess in
-its container. Both processes share the same limit. Additional worker replicas permit
-more concurrent environments; they do not provide extra memory to a single collection.
+The default worker supervises collection, finding recalculation and comparison
+subprocesses in one container. All share its resource limits. PostgreSQL permits
+one active task per type globally; additional replicas do not enable concurrent
+collections of different environments or add memory to a single collection.
 Keep one scheduler replica initially. Adding Gunicorn processes or web replicas also
 increases total memory and database connections; measure before increasing either.
 

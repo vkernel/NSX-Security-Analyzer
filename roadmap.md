@@ -10,7 +10,7 @@ change after compatibility testing and feedback.
 | Priority | Capability | Practical value |
 | --- | --- | --- |
 | 1 | Snapshot comparison | Show rules, groups, services and memberships added, removed or changed between collections. |
-| 1 | Finding review workflow | Assign owners, add notes, acknowledge findings, set review dates and reopen findings when evidence changes. |
+| 1 | Finding review workflow | Assign or release owners, record approvals and notes, and invalidate pending approvals when evidence changes. |
 | 1 | Collection coverage dashboard | Show gaps, failed checks, stale data and observation windows before drawing conclusions. |
 | 2 | Traffic analysis (deferred) | Search observed communications by source, destination, protocol, port and time. |
 | 2 | Traffic-to-rule correlation | Inspect a rule's observed communications alongside its configuration history. |
@@ -22,7 +22,8 @@ change after compatibility testing and feedback.
 ## Phase 1: History and review foundations — delivered in 0.2.0
 
 - Compare two saved snapshots and explain configuration changes.
-- Track findings through ownership, notes, review dates and acknowledgement.
+- Track findings through ownership and notes. The current development workflow replaces
+  legacy acknowledgement/review dates with configurable approvals and recorded completion.
 - Reopen reviewed findings when relevant evidence changes.
 - Make incomplete collection, stale data and observation gaps visible.
 - Preserve unknown states rather than interpreting missing evidence as zero activity.
@@ -96,11 +97,11 @@ so that traffic volume does not overwhelm snapshot storage or the application UI
 
 Develop these alongside the analysis roadmap:
 
-- Keycloak/OpenID Connect authentication.
-- Environment-scoped access permissions.
-- An audit trail for application configuration and review actions.
+- **Implemented:** Keycloak/OpenID Connect and verified primary/secondary LDAPS authentication.
+- **Implemented:** application audit events and finding review decision history.
+- **Planned:** environment-scoped access permissions.
 
-These are planned enhancements; the current workspace's shared environment
+Environment-scoped permissions remain a planned enhancement; the current workspace's shared environment
 visibility must not be presented as tenant isolation.
 
 ## Deferred scope
