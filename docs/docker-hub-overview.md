@@ -1,11 +1,9 @@
 # NSX Security Analyzer
 
-> **Development versus release:** current development includes compact review actions,
-> returning assignments to the unassigned queue, and independent collection, finding
-> recalculation and comparison lanes. These are not implied by the `0.5.2` version
-> label alone. Match the image build across web, worker, scheduler and migrations.
-> See [current workflow](https://github.com/vkernel/NSX-Security-Analyzer/blob/development/docs/finding-review-workflow.md) and
-> [development deployment](https://github.com/vkernel/NSX-Security-Analyzer/blob/development/docs/operations.md#development-builds-and-worker-queues).
+> **Release 0.5.3** includes compact review actions, returning assignments to
+> unassigned, and independent collection, finding recalculation and comparison lanes.
+> Deploy matching images for web, worker, scheduler and migrations. Stop old worker
+> replicas before starting the new workers; apply all pending migrations first.
 
 
 > Release **0.5.2** adds Inventory → VMs and faster environment and collection pages.
@@ -30,9 +28,9 @@ The application image is used by web, migration, collection worker and scheduler
 containers. PostgreSQL runs separately with persistent storage. Pulling or running
 this image alone does not start the complete product.
 
-- [Installation instructions](https://github.com/vkernel/NSX-Security-Analyzer/blob/v0.5.2/docs/docker-hub.md)
-- [Download Compose file](https://raw.githubusercontent.com/vkernel/NSX-Security-Analyzer/v0.5.2/deploy/compose.yaml)
-- [Configuration example](https://raw.githubusercontent.com/vkernel/NSX-Security-Analyzer/v0.5.2/deploy/.env.example)
+- [Installation instructions](https://github.com/vkernel/NSX-Security-Analyzer/blob/v0.5.3/docs/docker-hub.md)
+- [Download Compose file](https://raw.githubusercontent.com/vkernel/NSX-Security-Analyzer/v0.5.3/deploy/compose.yaml)
+- [Configuration example](https://raw.githubusercontent.com/vkernel/NSX-Security-Analyzer/v0.5.3/deploy/.env.example)
 - [Source code](https://github.com/vkernel/NSX-Security-Analyzer)
 
 ## Required application services
@@ -75,7 +73,7 @@ Docker Desktop's Run dialog and plain `docker run` do not automatically load it.
 | `POSTGRES_PORT` | Database port; defaults to `5432`. |
 | `DJANGO_ALLOWED_HOSTS` | Hostnames/IPs used to access the application, comma-separated and without schemes or ports. Local Compose defaults: `localhost,127.0.0.1,[::1]`. Configure your hostname for remote access. |
 | `WEB_PORT` | Compose-only host port; defaults to `8000`. The web process listens on container port `8000`. |
-| `NSX_IMAGE_TAG` | Compose-only image selection; defaults to `0.5.2`. |
+| `NSX_IMAGE_TAG` | Compose-only image selection; defaults to `0.5.3`. |
 
 For an HTTPS reverse proxy, also configure `DJANGO_CSRF_TRUSTED_ORIGINS`
 (full HTTPS origins), `DJANGO_HTTPS` and, only behind a trusted proxy,
@@ -91,9 +89,9 @@ Start in a **new directory**; do not overwrite an existing installation's `.env`
 ```sh
 mkdir nsx-security-analyzer
 cd nsx-security-analyzer
-curl -fSL https://raw.githubusercontent.com/vkernel/NSX-Security-Analyzer/v0.5.2/deploy/compose.yaml -o compose.yaml
+curl -fSL https://raw.githubusercontent.com/vkernel/NSX-Security-Analyzer/v0.5.3/deploy/compose.yaml -o compose.yaml
 
-export NSX_IMAGE_TAG=0.5.2
+export NSX_IMAGE_TAG=0.5.3
 docker pull "vkernel/nsx-security-analyzer:$NSX_IMAGE_TAG"
 umask 077
 docker run --rm --network none --entrypoint python "vkernel/nsx-security-analyzer:$NSX_IMAGE_TAG" -c 'import secrets; print("DJANGO_SECRET_KEY="+secrets.token_hex(32)); print("POSTGRES_PASSWORD="+secrets.token_hex(32)); print("WEB_PORT=8000")' > .env

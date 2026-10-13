@@ -1,11 +1,9 @@
 # NSX Security Analyzer
 
-> **Development versus release:** current development includes compact review actions,
-> returning assignments to the unassigned queue, and independent collection, finding
-> recalculation and comparison lanes. These are not implied by the `0.5.2` version
-> label alone. Match the image build across web, worker, scheduler and migrations.
-> See [current workflow](docs/finding-review-workflow.md) and
-> [development deployment](docs/operations.md#development-builds-and-worker-queues).
+> **Release 0.5.3** includes compact review actions, returning assignments to
+> unassigned, and independent collection, finding recalculation and comparison lanes.
+> Deploy matching images for web, worker, scheduler and migrations. Stop old worker
+> replicas before starting the new workers; apply all pending migrations first.
 
 
 See [snapshot maintenance and stopping collections](docs/snapshot-maintenance.md) for optional refresh jobs and collection cancellation.
@@ -53,8 +51,9 @@ also start PostgreSQL, database migrations, the worker and the scheduler.** The
 provided deployment files include these components. The migration container exits
 successfully after initialization; this is expected.
 
-Release **0.5.2** includes automatic initial admin creation, structured logging
-and audit diagnostics, and native Kubernetes deployment manifests.
+Release **0.5.3** includes configurable finding approvals, compact review controls,
+independent background task queues, improved inventory verification, Keycloak/LDAPS
+authentication and updated operating guidance.
 
 ## Quick start from source
 

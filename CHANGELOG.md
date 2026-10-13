@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased — development
+## 0.5.3 — 2026-10-13
 
 - Add compact finding Actions dialogs and contextual bulk return to unassigned, preserving permissions, revision checks, review history and valid approvals.
 - Add a compact comparison toolbar and two-snapshot selection shortcut; simplify audit filters, diagnostic collection and approval-setting explanations.
@@ -45,7 +45,7 @@
 - Add staff-only collection stop controls with persistent requests, worker process termination, rollback of unfinished snapshots and audit events.
 - Add small/medium/large resource sizing and maintenance instructions.
 
-Upgrade development: apply all pending migrations from the selected image (currently through `0040`), then deploy matching web, worker and scheduler images. Stop old worker replicas before switching lane implementations. Older workers do not process all current tasks and stop requests. See [snapshot maintenance](docs/snapshot-maintenance.md).
+Upgrade from 0.5.2 or development: apply all pending migrations from the selected image (currently through `0040`), then deploy matching web, worker and scheduler images. Stop old worker replicas before switching lane implementations. Older workers do not process all current tasks and stop requests. See [snapshot maintenance](docs/snapshot-maintenance.md).
 
 ## 0.5.2 — 2026-10-01
 

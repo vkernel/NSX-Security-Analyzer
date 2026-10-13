@@ -290,11 +290,12 @@ the group inventory remain unknown rather than being assumed empty.
 
 ## Development builds and worker queues
 
-The development branch can still display version 0.5.2 with a newer commit build.
+Development builds before release 0.5.3 displayed version 0.5.2 with a newer commit build.
+Release 0.5.3 incorporates those changes; always check both version and build.
 Use `vkernel/nsx-security-analyzer:development-<commit>` for a pinned development
 build, or the mutable `development` tag for testing. Pin the same published build
 for migration, web, worker and scheduler; changing only the web image does not
-update background processing. Release installation defaults remain pinned to 0.5.2.
+update background processing. Release installation defaults are pinned to 0.5.3.
 
 The default `audit_worker --lane all` supervises three independent queues, allowing
 one collection, one finding-review indexing/recalculation and one comparison to run

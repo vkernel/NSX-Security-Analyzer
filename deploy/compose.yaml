@@ -18,7 +18,7 @@ services:
       timeout: 5s
       retries: 20
   migrate:
-    image: vkernel/nsx-security-analyzer:${NSX_IMAGE_TAG:-0.5.2}
+    image: vkernel/nsx-security-analyzer:${NSX_IMAGE_TAG:-0.5.3}
     init: true
     environment:
       DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY:?Set DJANGO_SECRET_KEY in .env}
@@ -42,7 +42,7 @@ services:
       db:
         condition: service_healthy
   web:
-    image: vkernel/nsx-security-analyzer:${NSX_IMAGE_TAG:-0.5.2}
+    image: vkernel/nsx-security-analyzer:${NSX_IMAGE_TAG:-0.5.3}
     init: true
     environment:
       NSX_KEYCLOAK_ENABLED: ${NSX_KEYCLOAK_ENABLED:-0}
@@ -78,7 +78,7 @@ services:
       timeout: 5s
       retries: 3
   worker:
-    image: vkernel/nsx-security-analyzer:${NSX_IMAGE_TAG:-0.5.2}
+    image: vkernel/nsx-security-analyzer:${NSX_IMAGE_TAG:-0.5.3}
     init: true
     environment:
       DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY:?Set DJANGO_SECRET_KEY in .env}
@@ -110,7 +110,7 @@ services:
         condition: service_completed_successfully
 
   scheduler:
-    image: vkernel/nsx-security-analyzer:${NSX_IMAGE_TAG:-0.5.2}
+    image: vkernel/nsx-security-analyzer:${NSX_IMAGE_TAG:-0.5.3}
     init: true
     environment:
       DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY:?Set DJANGO_SECRET_KEY in .env}
@@ -143,7 +143,7 @@ services:
 
   # Optional one-off container; never started by a normal compose up.
   snapshot-refresh:
-    image: vkernel/nsx-security-analyzer:${NSX_IMAGE_TAG:-0.5.2}
+    image: vkernel/nsx-security-analyzer:${NSX_IMAGE_TAG:-0.5.3}
     profiles: [maintenance]
     mem_limit: 16g
     cpus: "2"

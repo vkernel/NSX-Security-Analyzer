@@ -1,18 +1,16 @@
 # Install on Kubernetes
 
-> **Development versus release:** current development includes compact review actions,
-> returning assignments to the unassigned queue, and independent collection, finding
-> recalculation and comparison lanes. These are not implied by the `0.5.2` version
-> label alone. Match the image build across web, worker, scheduler and migrations.
-> See [current workflow](../../docs/finding-review-workflow.md) and
-> [development deployment](../../docs/operations.md#development-builds-and-worker-queues).
+> **Release 0.5.3** includes compact review actions, returning assignments to
+> unassigned, and independent collection, finding recalculation and comparison lanes.
+> Deploy matching images for web, worker, scheduler and migrations. Stop old worker
+> replicas before starting the new workers; apply all pending migrations first.
 
 
 Use the supplied `manifests/` files. You do **not** need an online converter.
 These files deploy the database, a migration Job, the website, a collection
 worker and a scheduler. They expose the website inside the cluster only.
 
-The manifests use **0.5.2** for migrations, web, worker and scheduler. Database
+The manifests use **0.5.3** for migrations, web, worker and scheduler. Database
 initialization automatically provisions the initial administrator.
 
 Using Argo CD? Follow the configuration and Secret prerequisites below, then use

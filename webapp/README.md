@@ -1,11 +1,9 @@
 # NSX Security Analyzer workspace
 
-> **Development versus release:** current development includes compact review actions,
-> returning assignments to the unassigned queue, and independent collection, finding
-> recalculation and comparison lanes. These are not implied by the `0.5.2` version
-> label alone. Match the image build across web, worker, scheduler and migrations.
-> See [current workflow](../docs/finding-review-workflow.md) and
-> [development deployment](../docs/operations.md#development-builds-and-worker-queues).
+> **Release 0.5.3** includes compact review actions, returning assignments to
+> unassigned, and independent collection, finding recalculation and comparison lanes.
+> Deploy matching images for web, worker, scheduler and migrations. Stop old worker
+> replicas before starting the new workers; apply all pending migrations first.
 
 
 See [snapshot maintenance and stopping collections](../docs/snapshot-maintenance.md) for the optional refresh container and staff-only stop controls.

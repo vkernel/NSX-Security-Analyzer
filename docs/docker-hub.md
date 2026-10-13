@@ -1,11 +1,9 @@
 # Install the complete Docker Hub stack
 
-> **Development versus release:** current development includes compact review actions,
-> returning assignments to the unassigned queue, and independent collection, finding
-> recalculation and comparison lanes. These are not implied by the `0.5.2` version
-> label alone. Match the image build across web, worker, scheduler and migrations.
-> See [current workflow](finding-review-workflow.md) and
-> [development deployment](operations.md#development-builds-and-worker-queues).
+> **Release 0.5.3** includes compact review actions, returning assignments to
+> unassigned, and independent collection, finding recalculation and comparison lanes.
+> Deploy matching images for web, worker, scheduler and migrations. Stop old worker
+> replicas before starting the new workers; apply all pending migrations first.
 
 
 See [snapshot maintenance and stopping collections](snapshot-maintenance.md) for optional refresh jobs and collection cancellation.
@@ -49,7 +47,7 @@ Use a new directory. Do not overwrite an existing installation's `.env`.
 ```sh
 mkdir nsx-security-analyzer
 cd nsx-security-analyzer
-curl -fSL https://raw.githubusercontent.com/vkernel/NSX-Security-Analyzer/v0.5.2/deploy/compose.yaml -o compose.yaml
+curl -fSL https://raw.githubusercontent.com/vkernel/NSX-Security-Analyzer/v0.5.3/deploy/compose.yaml -o compose.yaml
 ```
 
 ## 2. Generate installation secrets
@@ -58,7 +56,7 @@ Run these commands in the same directory. They create `.env`; only do this on a
 fresh installation. Docker supplies Python, so you do not need Python installed.
 
 ```sh
-export NSX_IMAGE_TAG=0.5.2
+export NSX_IMAGE_TAG=0.5.3
 docker pull "vkernel/nsx-security-analyzer:$NSX_IMAGE_TAG"
 umask 077
 docker run --rm --network none --entrypoint python "vkernel/nsx-security-analyzer:$NSX_IMAGE_TAG" -c 'import secrets; print("DJANGO_SECRET_KEY="+secrets.token_hex(32)); print("POSTGRES_PASSWORD="+secrets.token_hex(32)); print("WEB_PORT=8000")' > .env
@@ -130,7 +128,9 @@ Proceed with `up` only if migration succeeds. Review failures before restarting
 workers. Never use `down -v` unless intentionally deleting the database. Reverting
 an image is not a database rollback; retain the pre-upgrade backup.
 
-For version 0.5.2, after the updated web service starts, prepare existing snapshots:
+For an upgrade from before indexed reports were available, prepare existing snapshots
+in a separate maintenance container. An upgrade from a recent development build
+does not require a refresh just for compact controls or updated help:
 
 ```sh
 docker compose run --rm --no-deps web python manage.py index_snapshots --refresh
@@ -171,7 +171,7 @@ image does not initialize its dependencies when run alone.
 
 The sidebar and Administration show the running image's version, source revision
 and build time. Pin an explicit image tag for controlled upgrades; `latest` is mutable.
-The supplied Compose file defaults to `0.5.2`; `NSX_IMAGE_TAG` overrides it.
+The supplied Compose file defaults to `0.5.3`; `NSX_IMAGE_TAG` overrides it.
 
 - [Docker Hub](https://hub.docker.com/r/vkernel/nsx-security-analyzer)
 - [Release source](https://github.com/vkernel/NSX-Security-Analyzer/tree/v0.5.2)
