@@ -114,6 +114,8 @@ def run(pk, token):
         history = history[-1:]
     current = FindingRecalculation.objects.filter(pk=pk, token=token, status='running')
     if not current.update(total=len(history)): return
+    from .usability import policy as workspace_policy
+    required_approvals = workspace_policy().required_approvals
     states = {}
     for number, (snapshot_id, stamp) in enumerate(history, 1):
         if not current.exists(): return
@@ -126,7 +128,7 @@ def run(pk, token):
             state = states.get(key)
             new = state is None
             if new:
-                state = Finding(environment=env, kind=row.kind, path=row.path, first_seen=stamp, last_seen=stamp)
+                state = Finding(environment=env, required_approvals=required_approvals, kind=row.kind, path=row.path, first_seen=stamp, last_seen=stamp)
             reset = new or not state.present or state.fingerprint != row.fingerprint
             observation.advance(state, policy, env, stamp, reset=reset,
                                 row={'hit_count': 0 if row.zero_counter else None, 'statistics_checked_at': row.checked_at})
@@ -160,6 +162,7 @@ def run(pk, token):
                 report = {'objects': [row]} if section == 'objects' else {'dfw': {section: [row]}}
                 for kind, path, name, evidence in candidates(report):
                     if (kind, path) in restore: restored[(kind, path)] = evidence
+        required_approvals = workspace_policy().required_approvals
         creates, updates, restored_updates = [], [], []
         for key, state in states.items():
             target = existing.pop(key, None)
@@ -178,6 +181,7 @@ def run(pk, token):
             else:
                 state.evidence = restored[key]
                 state.fingerprint = hashlib.sha256(json.dumps(state.evidence, sort_keys=True, separators=(',', ':')).encode()).hexdigest()
+                state.required_approvals = required_approvals
                 creates.append(state)
         for target in existing.values():
             target.qualification = 'insufficient'

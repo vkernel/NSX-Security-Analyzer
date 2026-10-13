@@ -199,7 +199,13 @@ class NSXClient:
             duplicates = 0
             try:
                 for record in self._items_once(path, params, page_size):
-                    identity = (record.get("path") or record.get("id") or record.get("external_id")) if isinstance(record, dict) else None
+                    identity = None
+                    if isinstance(record, dict):
+                        # IDs can repeat across resource types and parent objects.
+                        locator = record.get("path") or record.get("id") or record.get("external_id")
+                        if locator is not None:
+                            identity = (record.get("resource_type"), record.get("origin_site_id"),
+                                        None if record.get("path") else record.get("parent_path"), locator)
                     if identity is not None:
                         if identity in identities:
                             duplicates += 1
@@ -228,6 +234,8 @@ class NSXClient:
 
     def _items_once(self, path, params=None, page_size=1000):
         params = dict(params or {})
+        if path == "/search/query" and "sort_by" not in params:
+            params.update(sort_by="path", sort_ascending="true")
         if getattr(self, "testing", False) is True:
             # Statistics endpoints may not accept page_size. Preserve their API
             # parameters but bound the records processed and never follow cursors.
@@ -245,7 +253,16 @@ class NSXClient:
         total = 0
         expected = None
         while True:
-            page = self.get(path, params)
+            try:
+                page = self.get(path, params)
+            except AuditError as exc:
+                if path == "/search/query" and not seen and exc.status_code == 400 and params.get("sort_by") == "path":
+                    LOG.warning("NSX rejected sorted search; retrying the same query without sort parameters")
+                    params.pop("sort_by", None)
+                    params.pop("sort_ascending", None)
+                    page = self.get(path, params)
+                else:
+                    raise
             results = page.get("results")
             if not isinstance(results, list):
                 raise AuditError("GET {}: missing results array".format(path))
@@ -1623,7 +1640,7 @@ def feature_guide():
 <p>Finding reviews lists eligible findings and retains pending, rejected and completed decisions. Expand <strong>Why some findings are not listed</strong> for counts and explanations. Observing means time/count requirements are pending; insufficient evidence means qualification cannot be established. Retention limits the history available. Recalculation preserves owners, review decisions and notes and does not rewrite historical snapshot assessments. After upgrading, save criteria again to replay history using the corrected rules.</p>
 <h3>Finding approvals</h3>
 <p>Open My work for assigned reviews, available second approvals and approved changes across environments. Reviewer selection searches by name or email; lists show each review’s required approval count.</p>
-<p>Administrators choose Single approval or Two-person approval (default) in Administration → Review approvals. Single approval moves the assigned owner's approved finding directly to Ready for decommissioning. The setting is captured on assignment, reassignment or reopening; existing reviews keep their requirement.</p>
+<p>Administrators choose Single approval or Two-person approval (default) in Administration → Review approvals. Single approval moves the assigned owner's approved finding directly to Ready for decommissioning. Saving also updates open reviews; changed requirements restart the owner review and preserve previous approvals in audit history. Rejected reviews stay rejected; completed decommissioning records keep their original requirement. After upgrading, save the setting once to update older reviews.</p>
 <p>Assign an active operator or administrator as owner. The owner manually checks the finding and approves or rejects it with a reason. In two-person mode, approval then requires a different operator or administrator; administrators cannot approve their own first decision. Two approvals mark the finding Ready for decommissioning. Perform the change outside this application and record completion with a change-ticket reference. No NSX objects are deleted automatically.</p>
 <p>Approvals require fresh, eligible evidence from the latest full collection. Coverage is checked for the finding: confirmed empty membership, fresh zero counters, explicit disabled state, or a confirmed empty policy. Unused-object approvals require unrestricted reference search or successful compatibility search with independent, documented dependency checks and an evidence reference from each required reviewer. Failed or unrecorded searches remain blocked; manual approval does not make limited coverage complete. The review page shows readiness before submission, stage-specific decision buttons, evidence and a review-history timeline. Unrelated coverage warnings do not block approval; missing indexed evidence and relevant incomplete checks still do. Relevant changes, disappearance or loss of eligibility reset pending approvals. Unchanged new collections preserve them. Reassignment clears approvals; rejected reviews can be reopened with a reason. Use the review queue tabs and notification bell for pending work. Export audit history from a finding to retain its decisions and reviewed evidence independently of snapshot retention.</p>
 <h3>Workspace controls, evidence and administration</h3><p>Main pages show collection status, current activity and relevant warnings. Tables keep Search, Filters and Sort visible; Columns, advanced search and Export are under More options. Version/build details are under Administration. Environment addresses and next collection times are on the environment detail page. Open a collection’s Diagnostics for request counts, retries, concurrency and stage timings. Observation methodology, technical evidence and detailed error information are expandable. Freshness, limited coverage and approval blockers remain visible. Finding review recalculation outcomes remain available under Administration → Finding review criteria.</p>

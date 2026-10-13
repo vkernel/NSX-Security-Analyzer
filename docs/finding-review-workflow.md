@@ -10,8 +10,14 @@ and LDAP accounts. Each person must use their own account.
 Open **Administration → Review approvals**, select **Single approval** or
 **Two-person approval (four-eyes principle)** and click **Save approval setting**.
 Only administrators can change this global setting. Two-person approval remains
-the default; existing reviews retain their original requirement. Assignment,
-reassignment and reopening capture the current setting for that review.
+the default. Saving updates open reviews to the selected requirement, including
+existing unassigned findings. Affected reviews restart at **Owner review** (or
+**Unassigned** if no owner exists); previous approvals remain in audit history and
+must be repeated. Rejected reviews stay rejected, and completed decommissioning
+records keep their original requirement. Saving the same value again also updates
+older reviews that still have a different requirement. After upgrading, save this
+setting once to apply it to those reviews. Assignment, reassignment and reopening
+also capture the current setting.
 
 With single approval, the assigned owner's approval moves the finding directly
 to **Ready for decommissioning**. All evidence checks and manual verification

@@ -586,3 +586,21 @@ finding evaluation. Persistent mismatches in a quiet environment warrant checkin
 NSX search health and API visibility. This verification checks counts and duplicate
 identities; it cannot guarantee a transactionally consistent NSX snapshot or detect
 every same-count replacement of an object.
+
+
+### Repeated search coverage warnings
+
+Search requests use ascending `path` sorting to reduce page overlap caused by
+unspecified ordering. If NSX rejects sorting with HTTP 400, the collector retries
+the same query without sorting before trying a compatibility query. The parameters
+are documented in the [NSX Search API](https://developer.broadcom.com/xapis/nsx-t-data-center-rest-api/latest/method_QuerySearch.html).
+Sorting reduces one source of instability; it does not freeze the search index.
+
+Duplicate detection distinguishes resource type and origin site, plus the full
+Policy path or parent-scoped ID. Objects with the same short ID in different types
+or parents are not automatically duplicates. Genuine duplicate results and missing
+results still retry and produce coverage warnings if unresolved. For example,
+38,399 received versus 38,409 reported is still an unverified inventory; the small
+percentage alone does not make it safe for unused-object approval. Run a new
+collection after changes settle. Existing snapshots retain their original coverage
+warnings; a software update does not retroactively verify them.

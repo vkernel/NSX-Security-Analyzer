@@ -15,6 +15,32 @@ STATES = [('unassigned', 'Unassigned'), ('owner_review', 'Owner review'),
 FIELDS = ['workflow_state', 'approvals', 'change_ticket', 'required_approvals']
 
 
+@transaction.atomic
+def apply_approval_policy(required, actor):
+    """Restart open reviews under the new policy without manufacturing approval."""
+    from .models import Environment, Finding
+    count = 0
+    # Match the environment -> finding lock order used by review decisions.
+    for env in Environment.objects.order_by('pk').select_for_update():
+        findings = Finding.objects.select_for_update().defer('evidence').filter(environment=env).exclude(
+            workflow_state='decommissioned').exclude(required_approvals=required)
+        for finding in findings.iterator(chunk_size=100):
+            before = finding.workflow_state
+            prior = {'previous_required_approvals': finding.required_approvals,
+                     'prior_approvals': finding.approvals}
+            finding.required_approvals = required
+            finding.approvals = {}
+            if before != 'rejected':
+                finding.workflow_state = 'owner_review' if finding.owner_id else 'unassigned'
+            finding.revision += 1
+            finding.save(update_fields=['required_approvals', 'approvals', 'workflow_state', 'revision'])
+            event(finding, 'approval_policy_changed', before,
+                  'Administrator changed the approval requirement; any prior approvals must be repeated.',
+                  actor=actor, extra=prior)
+            count += 1
+    return count
+
+
 def review_fingerprint(kind, evidence):
     # Counter acquisition method can change without changing configuration or condition.
     stable = {key: value for key, value in evidence.items() if key != 'statistics_source'}

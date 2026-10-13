@@ -58,6 +58,8 @@ def synchronize(environment_id):
         LOG.warning("findings environment_id=%s paused: inventory verification incomplete", environment_id)
         return
     source_rows = {r['path']: r for r in report.get('objects', []) + report.get('dfw', {}).get('rules', []) + report.get('dfw', {}).get('policies', [])}
+    from .usability import policy as workspace_policy
+    required_approvals = workspace_policy().required_approvals
     existing = {(f.kind, f.path): f for f in environment.findings.all()}
     LOG.info("findings environment_id=%s existing_count=%s", environment_id, len(existing))
     started = perf_counter()
@@ -91,7 +93,7 @@ def synchronize(environment_id):
         digest = hashlib.sha256(json.dumps(evidence, sort_keys=True, separators=(',', ':')).encode()).hexdigest()
         finding = existing.get(key)
         if finding is None:
-            finding = Finding(environment=environment, kind=kind, path=path, name=name[:255],
+            finding = Finding(environment=environment, required_approvals=required_approvals, kind=kind, path=path, name=name[:255],
                 evidence=evidence, fingerprint=digest, first_seen=snapshot.generated_at,
                 last_seen=snapshot.generated_at, evaluated_at=snapshot.generated_at, snapshot=snapshot)
             observation.advance(finding, policy, environment, snapshot.generated_at, reset=True, row=source_rows.get(path, {}))

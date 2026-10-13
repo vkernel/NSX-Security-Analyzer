@@ -333,6 +333,37 @@ class FindingWorkflowTests(TestCase):
         self.assertContains(response, 'Single approval')
         self.assertNotContains(response, 'Independent review</')
 
+    def test_setting_restarts_existing_review_and_archives_approval(self):
+        self.assign()
+        decide(self.finding, self.owner, 'approve', 'Original owner checks')
+        self.finding.refresh_from_db()
+        self.assertEqual(self.finding.workflow_state, 'second_review')
+        prior = self.finding.approvals.copy()
+        self.client.force_login(self.admin)
+        self.assertEqual(self.client.post(reverse('review-approvals'), {'required_approvals': 1}).status_code, 302)
+        self.finding.refresh_from_db()
+        self.assertEqual(self.finding.required_approvals, 1)
+        self.assertEqual(self.finding.workflow_state, 'owner_review')
+        self.assertEqual(self.finding.approvals, {})
+        event = self.finding.events.latest('pk')
+        self.assertEqual(event.details['prior_approvals'], prior)
+        self.assertEqual(event.details['previous_required_approvals'], 2)
+        self.assertContains(self.client.get(self.url), 'Single approval')
+        decide(self.finding, self.owner, 'approve', 'Fresh owner checks')
+        self.assertEqual(self.finding.workflow_state, 'ready')
+
+    def test_setting_does_not_rewrite_completed_reviews(self):
+        self.assign()
+        decide(self.finding, self.owner, 'approve', 'Owner checks')
+        decide(self.finding, self.reviewer, 'approve', 'Second checks')
+        decide(self.finding, self.owner, 'complete', 'Removed', ticket='CHG-2')
+        self.client.force_login(self.admin)
+        self.client.post(reverse('review-approvals'), {'required_approvals': 1})
+        self.finding.refresh_from_db()
+        self.assertEqual(self.finding.required_approvals, 2)
+        self.assertEqual(self.finding.workflow_state, 'decommissioned')
+        self.assertEqual(len(self.finding.approvals), 2)
+
     def test_single_approval_preserves_evidence_guard(self):
         from .models import WorkspacePolicy
         WorkspacePolicy.objects.create(required_approvals=1)

@@ -232,7 +232,9 @@ def review_approvals(request):
         form = ReviewApprovalsForm(request.POST if request.method == 'POST' else None, instance=policy)
         if request.method == 'POST' and form.is_valid():
             form.save()
-            messages.success(request, 'Approval requirement saved. Existing reviews keep their assigned requirement.')
+            from .finding_workflow import apply_approval_policy
+            changed = apply_approval_policy(policy.required_approvals, request.user)
+            messages.success(request, f'Approval requirement saved. Updated {changed} open reviews; affected approvals must be repeated.')
             return redirect('review-approvals')
     return render(request, 'inventory/review_approvals.html', {'form': form})
 

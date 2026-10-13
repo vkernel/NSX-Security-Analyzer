@@ -38,6 +38,24 @@ class PaginationVerificationTests(SimpleTestCase):
         self.assertEqual(list(client.items('/infra/groups')), [{'id': 'a'}])
         self.assertEqual(client.inventory_warnings[0]['duplicate_count'], 1)
 
+    def test_shared_ids_across_types_or_parents_are_not_duplicates(self):
+        records = [{'id': 'same', 'resource_type': 'Group'},
+                   {'id': 'same', 'resource_type': 'Service'},
+                   {'id': 'same', 'resource_type': 'Rule', 'parent_path': '/policy/a'},
+                   {'id': 'same', 'resource_type': 'Rule', 'parent_path': '/policy/b'}]
+        client = self.nsx_client([{'results': records, 'result_count': 4}])
+        self.assertEqual(list(client.items('/search/query')), records)
+        self.assertFalse(getattr(client, 'inventory_warnings', []))
+        self.assertEqual(client.get.call_args.args[1]['sort_by'], 'path')
+
+    def test_sort_rejection_retries_same_query_without_sort(self):
+        client = self.nsx_client([AuditError('unsupported sort', status_code=400),
+                                 {'results': [], 'result_count': 0}])
+        self.assertEqual(list(client.items('/search/query', {'query': '*'})), [])
+        self.assertEqual(client.get.call_count, 2)
+        self.assertEqual(client.get.call_args.args[1]['query'], '*')
+        self.assertNotIn('sort_by', client.get.call_args.args[1])
+
     def test_failed_page_and_repeated_cursor_stay_errors(self):
         for pages in ([{'results': [], 'cursor': 'x'}, AuditError('deadline reached')],
                       [{'results': [], 'cursor': 'x'}, {'results': [], 'cursor': 'x'}]):
