@@ -1,14 +1,31 @@
 from unittest.mock import patch, MagicMock
+from contextlib import ExitStack
 from django.test import TestCase, SimpleTestCase
 from django.db import connection
 from .models import Environment, AuditJob
 from .services import claim_job
 from . import finding_recalculation
-from .worker_lanes import lease
+from .worker_lanes import lease, LANES
 from .management.commands.audit_worker import Command
 
 
 class LaneClaimsTests(TestCase):
+    def test_claims_succeed_while_all_worker_leases_are_held(self):
+        if connection.vendor != 'postgresql': self.skipTest('PostgreSQL advisory locks')
+        env = Environment.objects.create(name='Concurrent', slug='concurrent', manager='https://example.test')
+        AuditJob.objects.create(environment=env)
+        finding_recalculation.queue([env.pk], ['empty_group'])
+        with ExitStack() as stack:
+            for lane in LANES:
+                self.assertIsNot(stack.enter_context(lease(lane)), False)
+            # Fail quickly if a lifetime lease collides with a claim lock.
+            with connection.cursor() as cursor:
+                cursor.execute("SET LOCAL lock_timeout = '1s'")
+            self.assertIsNotNone(claim_job())
+            self.assertIsNotNone(finding_recalculation.claim())
+            self.assertIsNone(claim_job())
+            self.assertIsNone(finding_recalculation.claim())
+
     def test_one_collection_and_one_recalculation_can_be_claimed(self):
         a=Environment.objects.create(name='A',slug='lane-a',manager='https://a.example')
         b=Environment.objects.create(name='B',slug='lane-b',manager='https://b.example')

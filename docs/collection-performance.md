@@ -570,6 +570,12 @@ The source evidence is retained for compatibility and audit inspection.
 
 ## Background comparisons and service health
 
+The comparison worker lease uses a distinct advisory-lock ID from finding-review
+task claiming. An earlier three-lane development build reused that claim-lock ID,
+which could block recalculations for the lifetime of the comparison worker.
+Stop old worker pods before starting the corrected build so their session locks
+are released and old/new comparison leases cannot run together.
+
 Comparisons have a dedicated, leased worker lane and run in a supervised subprocess.
 One collection, one finding-review indexing/recalculation task and one comparison
 can run simultaneously. Each lane processes its own queue; comparisons no longer

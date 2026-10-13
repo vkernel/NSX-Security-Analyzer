@@ -2,7 +2,10 @@
 from contextlib import contextmanager
 from django.db import connection
 
-LANES = {'collection': 781249311, 'recalculation': 781249312, 'comparison': 781249313}
+# Session leases and transaction claim locks share PostgreSQL's advisory-lock
+# namespace. 310 is the collection claim lock; 313 is the recalculation claim
+# lock. Never reuse either for a worker's lifetime lease.
+LANES = {'collection': 781249311, 'recalculation': 781249312, 'comparison': 781249314}
 
 
 @contextmanager
