@@ -17,7 +17,7 @@ def beat(name):
 def summary():
     saved = {row.name: row for row in ServiceHeartbeat.objects.all()}
     result = []
-    for name in ('collection', 'recalculation', 'scheduler'):
+    for name in ('collection', 'recalculation', 'comparison', 'scheduler'):
         row = saved.get(name)
         age = (timezone.now() - row.seen_at).total_seconds() if row else None
         result.append({'name': name, 'pod': row.pod if row else '', 'seen_at': row.seen_at if row else None,

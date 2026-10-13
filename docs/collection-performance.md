@@ -282,7 +282,7 @@ Environment snapshot and collection lists use small database projections and pag
 queries. Collection history has an environment/time index for recent-job lookups.
 
 - **Compare snapshots** opens with selectors only. Select **Compare snapshots** to
-  queue a pair for background preparation in the recalculation worker lane. The page
+  queue a pair for background preparation in the comparison worker lane. The page
   returns immediately; refresh results after preparation. The worker reads the two
   saved configuration projections and can take time for large inventories. Results are saved in PostgreSQL,
   shared across web pods and paginated in SQL on subsequent requests. Selector choices
@@ -374,11 +374,12 @@ separate coverage limitations, not pacing failures. The collector preserves thos
 limitations when the available endpoints cannot verify the evidence; resolving a
 request timeout does not make unsupported membership checks complete.
 
-The collection worker supervises two independent subprocess lanes: at most one
-collection across all environments and one finding-review recalculation. PostgreSQL
+The collection worker supervises three independent subprocess lanes: at most one
+collection across all environments, one finding-review indexing/recalculation task,
+and one snapshot comparison. PostgreSQL
 session advisory locks enforce each lane across worker replicas, including while a
 recalculation is superseded by newly saved criteria. The work queues are independent;
-a recalculation can run alongside a collection. Publication for the same environment
+a recalculation and a comparison can run alongside a collection. Publication for the same environment
 still briefly serializes on its environment lock, and a newly saved snapshot can
 cause recalculation to retry against the new history. Separate Analyzer databases
 do not share these limits. Stop old worker replicas before starting the upgraded
@@ -569,14 +570,15 @@ The source evidence is retained for compatibility and audit inspection.
 
 ## Background comparisons and service health
 
-Comparisons share the existing recalculation lane and run in a supervised subprocess.
-One collection can still run alongside one recalculation or comparison; comparison
-work does not add an unbounded third worker. Recalculations have priority. Completed
+Comparisons have a dedicated, leased worker lane and run in a supervised subprocess.
+One collection, one finding-review indexing/recalculation task and one comparison
+can run simultaneously. Each lane processes its own queue; comparisons no longer
+wait behind recalculations. Completed
 pairs are reused; failed pairs show Retry comparison. An interrupted running pair can
 be picked up when the exclusive lane restarts. Retention may remove a queued pair if
 its source snapshot expires; select another retained pair in that case.
 
-Administration → Operations → System health displays collection, recalculation and
+Administration → Operations → System health displays collection, recalculation, comparison and
 scheduler heartbeats. Each progressing loop reports at most once every 15 seconds;
 a report older than 180 seconds is marked Not reporting. These are supervisor activity
 signals, not proof of collection progress or database disk health. Scheduler cleanup

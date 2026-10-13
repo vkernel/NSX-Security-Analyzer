@@ -470,5 +470,5 @@ The new heartbeat tables and relationship indexes are added without rebuilding s
 snapshots. Worker and scheduler readiness probes check local supervisor heartbeats.
 Not-ready means the loop has not reported recently; a long scheduler cleanup can also
 cause this. Inspect System health and pod logs. Readiness does not terminate a running
-collection or automatically restart a pod. Keep the default worker `--lane both` so
+collection or automatically restart a pod. Keep the default worker `--lane all` (`both` remains a compatibility alias) so
 queued comparisons and finding recalculations are processed as well as collections.

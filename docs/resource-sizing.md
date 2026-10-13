@@ -323,11 +323,12 @@ loading more history on page requests.
 
 ### Concurrent collection and finding-history replay
 
-The worker runs at most one collection plus one finding-review recalculation at a
-time. These subprocesses share the worker container's memory and CPU limits. Size
+The worker runs at most one collection, one finding-review indexing/recalculation
+task and one snapshot comparison at a time. These subprocesses share the worker container's memory and CPU limits. Size
 the worker for their combined measured peak, including the supervisors; adding
-worker replicas does not raise either global concurrency limit when sharing the
+worker replicas does not raise any of the three global concurrency limits when sharing the
 same PostgreSQL database. For independent resource limits, deploy the same image
 with `python manage.py audit_worker --lane collection` and a separate worker with
-`python manage.py audit_worker --lane recalculation` instead of the default combined
-supervisor. Both need the same database/application configuration.
+`python manage.py audit_worker --lane recalculation`, plus a third worker with
+`python manage.py audit_worker --lane comparison`, instead of the default combined
+supervisor. All three need the same database/application configuration.

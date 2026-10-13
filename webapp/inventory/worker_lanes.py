@@ -1,8 +1,8 @@
-"""Independent PostgreSQL leases for collection and finding-recalculation workers."""
+"""Independent PostgreSQL leases for collection, finding-review and comparison workers."""
 from contextlib import contextmanager
 from django.db import connection
 
-LANES = {'collection': 781249311, 'recalculation': 781249312}
+LANES = {'collection': 781249311, 'recalculation': 781249312, 'comparison': 781249313}
 
 
 @contextmanager

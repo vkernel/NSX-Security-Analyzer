@@ -8,14 +8,15 @@ from django.conf import settings
 from django.core.management.base import BaseCommand
 from django.db import close_old_connections, DatabaseError
 from inventory.diagnostics import LOG, log_failure, phase
+from inventory.worker_lanes import LANES
 from inventory.services import claim_job, expire_jobs, fail_job, stop_requested, finish_stopped_job
 
 
 class Command(BaseCommand):
-    help = "Run one collection lane and one finding-recalculation lane."
+    help = "Run independent collection, finding-review indexing and snapshot-comparison lanes."
 
     def add_arguments(self, parser):
-        parser.add_argument("--lane", choices=["both", "collection", "recalculation"], default="both", help="Select a work lane; default supervises both independently.")
+        parser.add_argument("--lane", choices=["all", "both", *LANES], default="all", help="Default supervises all three lanes independently; both is a legacy alias for all.")
         parser.add_argument("--once", action="store_true", help="Process at most one queued job, then exit.")
 
     def handle(self, *args, **options):
@@ -26,13 +27,13 @@ class Command(BaseCommand):
         try:
             if options['once']:
                 from inventory.worker_lanes import lease
-                lanes = ('collection', 'recalculation') if options['lane'] == 'both' else (options['lane'],)
+                lanes = tuple(LANES) if options['lane'] in ('all', 'both') else (options['lane'],)
                 with ExitStack() as stack:
                     owned = [stack.enter_context(lease(lane)) for lane in lanes]
                     if any(item is False for item in owned): return
                     self.lane_connections = [item for item in owned if item is not None]
                     self.run_worker(options)
-            elif options['lane'] == 'both':
+            elif options['lane'] in ('all', 'both'):
                 self.supervise_lanes()
             else:
                 from inventory.worker_lanes import lease
@@ -61,7 +62,7 @@ class Command(BaseCommand):
     def supervise_lanes(self):
         processes = []
         try:
-            for lane in ('collection', 'recalculation'):
+            for lane in LANES:
                 processes.append(subprocess.Popen([sys.executable, str(settings.BASE_DIR / 'manage.py'),
                                                    'audit_worker', '--lane', lane]))
             while True:
@@ -146,22 +147,22 @@ class Command(BaseCommand):
         return True
 
     def run_worker(self, options):
-        lane = options.get("lane", "both")
-        self.heartbeat_lanes = ('collection', 'recalculation') if lane == 'both' else (lane,)
+        lane = options.get("lane", "all")
+        self.heartbeat_lanes = tuple(LANES) if lane in ('all', 'both') else (lane,)
         LOG.info("Collection worker started lane=%s timeout_seconds=%s", lane, settings.AUDIT_TIMEOUT)
         while True:
             self.check_lease()
             close_old_connections()
             from inventory.finding_recalculation import claim as claim_recalculation
-            recalculation = claim_recalculation() if lane != "collection" else None
+            recalculation = claim_recalculation() if lane in ("all", "both", "recalculation") else None
             if recalculation:
                 self.run_recalculation(recalculation)
                 if options['once']: return
                 continue
-            if lane != 'collection' and self.run_comparison():
+            if lane in ('all', 'both', 'comparison') and self.run_comparison():
                 if options['once']: return
                 continue
-            if lane == 'recalculation':
+            if lane in ('recalculation', 'comparison'):
                 if options['once']: return
                 time.sleep(2)
                 continue
