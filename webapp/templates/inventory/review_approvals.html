@@ -3,7 +3,6 @@
 <div class="page-heading"><div><h1>Review approvals</h1><p class="lead">Choose who must approve a finding before decommissioning.</p></div></div>
 
 <form method="post" class="form-card">{% csrf_token %}{{ form.non_field_errors }}{% for field in form %}{% include 'inventory/settings_field.html' %}{% endfor %}
-<p><strong>Single approval:</strong> the assigned owner reviews the finding. Approval moves it directly to Ready for decommissioning.</p>
-<p><strong>Two-person approval (default):</strong> the owner approves first, then a different operator or administrator must independently approve.</p>
-<p>Saving also updates existing open reviews. If the requirement changes, prior approvals are retained in audit history and the review returns to its owner for a new decision. Rejected reviews stay rejected; completed decommissioning records remain unchanged. Evidence checks, a completion ticket and audit history remain required in both modes. The application never deletes NSX objects.</p>
+<details class="review-disclosure"><summary>How approvals work</summary><p><strong>Single approval:</strong> the assigned owner approves. <strong>Two-person approval (default):</strong> a different operator or administrator must also approve independently.</p><p>Evidence checks, a completion ticket and audit history remain required. The application never deletes NSX objects.</p></details>
+<p>Changing this setting returns affected open reviews to their owner for a new decision. Prior approvals remain in audit history. Rejected and completed reviews stay unchanged.</p>
 <div class="form-actions"><button class="button primary">Save approval setting</button></div></form>{% endblock %}

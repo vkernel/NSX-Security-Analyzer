@@ -159,3 +159,27 @@ body[data-theme] .table-tools .table-more .search-options-body {position:static;
 /* Activity cards use the page scroll, not the generic table's height/min-width. */
 .recent-collections-wrap{max-height:none}.recent-collections{min-width:0}
 @media(max-width:800px){.recent-collections .pill{justify-self:start;align-self:center}}
+
+/* Contextual finding actions stay attached to the review table. */
+.finding-selection-bar{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 16px;border:1px solid var(--line);border-bottom:0;border-radius:10px 10px 0 0;background:var(--app-surface-soft);background:color-mix(in srgb,var(--app-accent) 7%,var(--app-surface));font-size:14px}
+.finding-selection-bar[hidden]{display:none}
+.finding-selection-actions,.finding-release-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+body[data-theme] .finding-selection-clear{background:transparent;border-color:transparent;color:var(--muted)}
+.workspace-main .finding-selection-bar:not([hidden])~.table-scroll{border-top-left-radius:0;border-top-right-radius:0}
+body #finding-release-dialog{width:min(480px,calc(100vw - 32px));max-height:calc(100dvh - 32px);box-sizing:border-box;padding:24px;border:1px solid var(--line);border-radius:12px;box-shadow:0 16px 48px #10182830}
+#finding-release-dialog::backdrop{background:#10182860}
+#finding-release-dialog h2{font-size:20px;line-height:1.4;margin:0 0 8px}
+#finding-release-dialog p{color:var(--muted);font-size:14px;margin:0 0 20px}
+#finding-release-dialog label{display:block;font-weight:600;margin-bottom:8px}
+#finding-release-dialog .release-required{font-weight:400;color:var(--muted)}
+#finding-release-dialog textarea{display:block;width:100%;box-sizing:border-box;resize:vertical;padding:10px 12px;font-family:inherit}
+.finding-release-actions{justify-content:flex-end;margin-top:20px}
+@media(max-width:600px){.finding-selection-bar{align-items:flex-start;flex-direction:column}.finding-selection-actions{width:100%}body #finding-release-dialog{padding:20px}.finding-release-actions .button{flex:1}}
+
+.comparison-toolbar>.form-field{flex:1;min-width:200px}.comparison-toolbar select{width:100%;max-width:100%}.comparison-arrow{align-self:center}.comparison-toolbar>.errorlist{flex-basis:100%}
+body .compact-action-dialog{width:min(520px,calc(100vw - 32px));max-height:calc(100dvh - 32px);box-sizing:border-box;padding:24px;border:1px solid var(--line);border-radius:12px;box-shadow:0 16px 48px #10182830}
+.compact-action-dialog::backdrop{background:#10182860}.compact-action-dialog h2{font-size:20px;margin:0 0 16px}.compact-action-dialog .form-field{margin-bottom:16px}.compact-action-dialog :is(textarea,select){width:100%;box-sizing:border-box}.compact-action-dialog p{color:var(--muted);line-height:1.6}.compact-action-dialog .form-actions{display:flex;justify-content:flex-end;gap:8px}
+.compact-action-menu{position:relative}.compact-action-menu>summary{cursor:pointer;list-style:none}.compact-action-menu>div{position:absolute;right:0;top:calc(100% + 6px);z-index:5;min-width:220px;display:grid;gap:4px;padding:8px;background:var(--app-surface);border:1px solid var(--line);border-radius:8px;box-shadow:0 8px 24px #10182820}.compact-action-menu>div button{text-align:left}
+[data-finding-review] [hidden]{display:none!important}[data-snapshot-compare][aria-disabled=true]{opacity:.5;cursor:default}
+@media(max-width:600px){.comparison-arrow{display:none}.comparison-toolbar>.form-field{flex-basis:100%}.compact-action-dialog .form-actions{flex-wrap:wrap}}
+.directory-toolbar>.form-actions{margin:0;padding:0;border:0;align-self:end}.compact-action-dialog textarea{font-family:inherit;padding:10px;resize:vertical}

@@ -123,7 +123,11 @@ class FindingWorkflowTests(TestCase):
         self.finding.refresh_from_db()
         self.assertEqual(self.finding.owner_id, self.owner.pk)
         self.assertFalse(self.finding.events.filter(details__action='unassign').exists())
-        self.assertContains(self.client.get(url), '1 finding(s) on this page')
+        response = self.client.get(url)
+        self.assertContains(response, 'id="finding-selection-bar" hidden')
+        self.assertContains(response, 'aria-labelledby="release-title"')
+        self.assertContains(response, 'form="bulk-release" name="selected"')
+        self.assertContains(response, 'finding-release.js')
 
     def test_ready_release_and_reassignment_preserve_both_approvals(self):
         self.approve_owner()
