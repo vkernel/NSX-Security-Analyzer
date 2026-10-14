@@ -518,3 +518,43 @@ class FindingWorkflowTests(TestCase):
             decide(self.finding, self.owner, 'approve', 'Checked')
         self.finding.refresh_from_db()
         self.assertEqual(self.finding.workflow_state, 'owner_review')
+
+    def test_recalculation_blocks_approvals_and_completion_for_affected_kinds(self):
+        from .models import FindingRecalculation
+        from .finding_workflow import approval_readiness
+        self.assign()
+        job = FindingRecalculation.objects.create(environment=self.env, kinds=['empty_group'])
+        for status in ('queued', 'running', 'failed'):
+            job.status = status; job.save()
+            with self.subTest(status=status):
+                self.assertEqual(approval_readiness(self.finding)['status'], 'blocked')
+                with self.assertRaisesMessage(ValidationError, 'recalculation'):
+                    decide(self.finding, self.owner, 'approve', 'Checked')
+                self.finding.refresh_from_db()
+                self.assertEqual(self.finding.workflow_state, 'owner_review')
+        job.status = 'completed'; job.save()
+        decide(self.finding, self.owner, 'approve', 'Checked')
+        job.status = 'queued'; job.save()
+        with self.assertRaisesMessage(ValidationError, 'recalculation'):
+            decide(self.finding, self.reviewer, 'approve', 'Checked')
+        job.status = 'completed'; job.save()
+        decide(self.finding, self.reviewer, 'approve', 'Checked')
+        job.status = 'failed'; job.save()
+        with self.assertRaisesMessage(ValidationError, 'recalculation'):
+            decide(self.finding, self.owner, 'complete', 'Completed', ticket='CHG-test')
+        self.finding.refresh_from_db()
+        self.assertEqual(self.finding.workflow_state, 'ready')
+        job.status = 'completed'; job.save()
+        decide(self.finding, self.owner, 'complete', 'Completed', ticket='CHG-test')
+        self.assertEqual(self.finding.workflow_state, 'decommissioned')
+
+    def test_unrelated_recalculation_does_not_block_and_rejection_remains_available(self):
+        from .models import FindingRecalculation
+        from .finding_workflow import approval_readiness
+        self.assign()
+        job = FindingRecalculation.objects.create(environment=self.env, kinds=['zero_hits'], status='running')
+        self.assertEqual(approval_readiness(self.finding)['status'], 'ready')
+        decide(self.finding, self.owner, 'approve', 'Checked')
+        job.kinds = ['empty_group']; job.save()
+        decide(self.finding, self.reviewer, 'reject', 'Do not remove')
+        self.assertEqual(self.finding.workflow_state, 'rejected')

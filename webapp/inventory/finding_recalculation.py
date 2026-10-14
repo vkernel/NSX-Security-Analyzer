@@ -22,8 +22,10 @@ def snapshots(environment_id):
 
 
 def queue(environment_ids, kinds):
-    for environment_id in environment_ids:
+    for environment_id in sorted(set(environment_ids)):
         with transaction.atomic():
+            # Serialize criteria changes with review decisions and replay commits.
+            Environment.objects.select_for_update().only('pk').get(pk=environment_id)
             row, _ = FindingRecalculation.objects.select_for_update().get_or_create(environment_id=environment_id)
             row.kinds = sorted(set(kinds) | (set(row.kinds) if row.status in ('queued', 'running', 'failed') else set()))
             row.token = uuid.uuid4()

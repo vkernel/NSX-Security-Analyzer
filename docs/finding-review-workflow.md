@@ -5,6 +5,43 @@ or modify an NSX object. Operators and administrators can perform workflow
 actions; viewers can read the results. The same rules apply to local, Keycloak
 and LDAP accounts. Each person must use their own account.
 
+## Reading observation badges
+
+A badge such as **zero hits: Eligible for review** describes whether the finding
+meets the configured evidence requirements. The line below it shows **complete
+observed days / required days · successful observations**.
+
+| Example | Meaning |
+|---|---|
+| **zero hits: Eligible for review — 8 / 7 days · 192 observations** | The current qualifying sequence spans 8 complete days, exceeding the required 7 days. Its 192 successful checks also satisfy the configured minimum observation count. The finding can enter review. |
+| **zero hits: Observing — 0 / 7 days · 19 observations** | There are 19 qualifying checks, but less than 24 hours between the first and latest checks in the current sequence. The day count rounds down to 0; the required 7 days have not elapsed. |
+
+**Observations are checks, not traffic hits.** Each qualifying zero-hit check
+supports the zero-counter condition. Many checks in one day cannot replace a
+seven-day observation period: both elapsed time and the minimum count must be met.
+Seven days means at least 168 hours between qualifying snapshots. Time after the
+latest snapshot does not count; waiting without further collections does not
+advance the assessment.
+
+Relevant rule changes or excessive collection gaps restart the period. Missing,
+unknown or opposite evidence interrupts continuity. A low day count alone does
+not tell you which of these happened. Open the finding's **Observation history**
+for the period start, last observation and qualification explanation. Historical
+report badges reflect the assessment saved with that snapshot.
+
+**Eligible for review is not approval to delete.** Review the rule's purpose,
+dependencies and evidence before making a decision. Zero recorded counters do not
+prove that no traffic occurred between checks. Configure the required period in
+**Administration → Finding review criteria**; environment overrides take precedence
+over global defaults.
+
+While criteria recalculation is queued, running or failed, affected finding types
+cannot receive first or second approval or record decommissioning completion.
+Previously saved eligibility is not sufficient during this interval. Unaffected
+finding types remain reviewable, and rejection remains available. If recalculation
+fails, an administrator must save the criteria again and wait for successful
+completion; the recalculated finding must still satisfy normal evidence checks.
+
 ## Configure the approval requirement
 
 ![Review approval settings with expandable explanation](images/review-approval-settings.png)

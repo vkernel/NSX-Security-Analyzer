@@ -24,6 +24,10 @@ Open the finding name to inspect evidence, readiness and review progress. Follow
 [finding review guide](finding-review-workflow.md) for assignment, required checks,
 independent approvals and manual completion.
 
+For badges such as **8 / 7 days · 192 observations**, see
+[Reading observation badges](finding-review-workflow.md#reading-observation-badges).
+Observations count successful checks, not traffic hits.
+
 ## Return work to the queue
 
 ![Required-reason dialog for returning selected work](images/return-to-unassigned.png)

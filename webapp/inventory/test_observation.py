@@ -223,3 +223,51 @@ class ObservationTests(TestCase):
         data['dfw']['rules'][0]['statistics_checked_at']=(self.now+timedelta(days=3)).isoformat()
         self.collect(3,data)
         f.refresh_from_db(); self.assertEqual(f.observation_count,1)
+
+    def test_all_five_eight_day_settings_require_time_and_minimum_checks(self):
+        from .observation import KINDS
+        for kind in KINDS:
+            setattr(self.policy, kind + '_days', 8)
+        self.policy.minimum_observations = 10
+        self.policy.save()
+
+        def collect_all(day):
+            data = report()
+            data['dfw']['rules'] = [
+                {'path': '/rules/zero', 'name': 'Zero', 'disabled': False,
+                 'hit_status': 'zero_hits', 'hit_count': 0,
+                 'statistics_checked_at': (self.now + timedelta(days=day)).isoformat()},
+                {'path': '/rules/disabled', 'name': 'Disabled', 'disabled': True},
+            ]
+            data['dfw']['policies'] = [
+                {'path': '/policies/empty', 'name': 'Empty', 'status': 'empty', 'rule_count': 0},
+            ]
+            self.collect(day, data)
+
+        def assert_all(status, count):
+            findings = Finding.objects.filter(kind__in=KINDS)
+            self.assertEqual(set(findings.values_list('kind', flat=True)), set(KINDS))
+            for finding in findings:
+                with self.subTest(kind=finding.kind, status=status, count=count):
+                    self.assertEqual(finding.required_days, 8)
+                    self.assertEqual(finding.qualification, status)
+                    self.assertEqual(finding.observation_count, count)
+
+        for day in range(8):
+            collect_all(day)
+        collect_all(8 - 1 / 86400)  # One second short of 192 hours.
+        assert_all('observing', 9)
+        collect_all(8)
+        assert_all('eligible', 10)
+        # Enough elapsed time alone must not bypass the minimum check count.
+        self.policy.minimum_observations = 11
+        self.policy.save()
+        from . import finding_recalculation as replay
+        replay.queue([self.env.pk], KINDS)
+        job = replay.claim()
+        replay.run(job.pk, job.token)
+        job.refresh_from_db()
+        self.assertEqual(job.status, 'completed')
+        assert_all('observing', 10)
+        collect_all(8.5)
+        assert_all('eligible', 11)
