@@ -76,6 +76,12 @@ and `migrate` shows Exited (0). If startup fails, use the troubleshooting sectio
 
 ## 4. Sign in with the initial administrator
 
+![Administration directory in NSX Security Analyzer](images/administration.png)
+
+*Version 0.5.3 with synthetic data; this is the administration area after sign-in.*
+For everyday tasks, see the [visual walkthrough](screenshots.md).
+
+
 After `migrate` completes successfully and `web` is healthy, open
 **http://localhost:8000** and sign in:
 

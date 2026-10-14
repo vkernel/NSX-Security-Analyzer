@@ -18,6 +18,12 @@ The collector sends GET requests to NSX; it does not change rules or reset count
 
 ## What it does
 
+![Finding reviews showing owners, review stages and compact controls](docs/images/finding-reviews.png)
+
+*Finding reviews in the current interface, using synthetic data.* See the
+[visual walkthrough](docs/screenshots.md) for assignment, comparison and coverage examples.
+
+
 - Inventory VMs, groups, services, distributed firewall policies, rules, tags and scopes.
 - Explore VM tags and related groups, firewall rules and configured services; relationships are configuration evidence, not verified membership or traffic.
 - Identify empty groups, unreferenced custom objects, disabled rules and zero recorded counters.

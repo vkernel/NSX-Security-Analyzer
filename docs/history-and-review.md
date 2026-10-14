@@ -5,6 +5,17 @@ build; historical release behavior is recorded in the changelog.
 
 ## Compare snapshots
 
+Screenshots show version 0.5.3 with synthetic documentation data. Names, counts and timestamps are illustrative; available actions depend on your role and review state.
+
+![Snapshot history with two selected snapshots labelled Before and After](images/snapshot-selection.png)
+
+*Select two eligible snapshots on the same page, then choose Compare selected.*
+
+![Compact earlier and later snapshot comparison selectors](images/compare-snapshots.png)
+
+*Use these selectors for any retained eligible pair, including snapshots on different history pages.*
+
+
 Choose **Compare snapshots**, then select earlier and later full snapshots from
 that environment using the compact Earlier snapshot → Later snapshot toolbar.
 Alternatively, select two eligible rows on one Snapshot history page and choose
@@ -69,6 +80,11 @@ deletion explicitly removes its review history. Testing/demo and imported
 snapshots never establish operational reviews.
 
 ## Collection coverage
+
+![Collection coverage with observation totals, gaps and checks needing attention](images/collection-coverage.png)
+
+*Synthetic coverage example. Check the latest snapshot and expand the methodology or inventory-verification explanation before interpreting findings.*
+
 
 Choose a 7-, 30- or 90-day window to see available observations, failed
 collections, active jobs and observation gaps. Incomplete checks always describe

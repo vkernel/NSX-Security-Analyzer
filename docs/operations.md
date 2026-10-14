@@ -161,6 +161,12 @@ inside this application image. Configure your platform's log collection separate
 
 ### Troubleshoot a collection
 
+![Diagnostic collection dialog with environment selection](images/diagnostic-collection.png)
+
+*Synthetic administrator view: Audit & diagnostics → Start diagnostic collection.
+Selecting an environment and submitting starts a real diagnostic collection in your installation; the screenshot is illustrative only.*
+
+
 Staff can open **Diagnostics** in collection history. The page shows the job ID,
 saved stage durations, diagnostic expiry and sanitized exception chain. Live stage
 starts, ends and 30-second heartbeats appear in terminal logs. Heartbeats indicate

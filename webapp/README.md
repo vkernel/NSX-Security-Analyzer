@@ -149,6 +149,12 @@ migration between databases.
 
 ## First audit
 
+![Administration directory with access, finding review, collection and operation settings](../docs/images/administration.png)
+
+*Version 0.5.3, synthetic data. Open the relevant administration category to configure your installation.*
+See the [visual walkthrough](../docs/screenshots.md) for review and snapshot workflows.
+
+
 1. Add an environment with its name, stable ID and HTTPS manager origin.
 2. Enter the NSX Manager username and password directly. Password input is masked.
    When editing, leave Password blank to keep the saved password, or enter a new

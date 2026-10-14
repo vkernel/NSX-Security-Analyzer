@@ -7,6 +7,11 @@ and LDAP accounts. Each person must use their own account.
 
 ## Configure the approval requirement
 
+![Review approval settings with expandable explanation](images/review-approval-settings.png)
+
+*Synthetic administrator view. The effect on open reviews remains visible beside the setting.*
+
+
 Open **Administration → Review approvals**, select **Single approval** or
 **Two-person approval (four-eyes principle)** and click **Save approval setting**.
 Only administrators can change this global setting. Two-person approval remains
@@ -191,6 +196,17 @@ approvals**.
 
 ## Reading the review page
 
+Screenshots show version 0.5.3 with synthetic documentation data. Names, counts and timestamps are illustrative; available actions depend on your role and review state.
+
+![Finding detail with evidence, readiness and review actions](images/finding-detail.png)
+
+*Evidence and readiness stay beside the decision panel. Use Actions for ownership changes.*
+
+![Reassign owner dialog with reviewer selection and reason](images/assign-owner.png)
+
+*Actions → Reassign owner opens a focused dialog. Reassigning owned work resets approvals; assigning released work preserves valid progress.*
+
+
 The progress indicator shows the current stage. Evidence and dependencies appear
 on the left; the owner, next action and decision controls appear on the right
 (or below on smaller screens). Observation criteria being met does not mean
@@ -233,6 +249,19 @@ or Ready. Recent collections use aligned columns on desktop and labelled cards o
 mobile, retaining progress updates and stop controls for active collections.
 
 ### Returning assigned work to the queue
+
+![Selected finding with contextual return-to-unassigned toolbar](images/finding-selection.png)
+
+*Select an eligible row to reveal the action bar. Selection applies to this page.*
+
+![Return-to-unassigned dialog asking for a required reason](images/return-to-unassigned.png)
+
+*Enter the shared reason, then submit. Cancel keeps the rows selected without changing assignments.*
+
+![Unassigned review queue without a Select column](images/unassigned-reviews.png)
+
+*The Unassigned queue has no release checkboxes. Open a finding to assign an owner.*
+
 
 Operators can use **Return to unassigned** on their own finding reviews;
 administrators can release anyone's assignment. A reason is required and the

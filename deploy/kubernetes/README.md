@@ -233,6 +233,14 @@ never replaced, and deleting the initial account does not recreate it.
 
 ## 6. Open the website
 
+After signing in, the same interface is available on Kubernetes and Docker Compose:
+
+![Finding review interface with synthetic example findings](../../docs/images/finding-reviews.png)
+
+*Version 0.5.3, synthetic data. Your inventory appears after collection; this screenshot is not evidence of a live Kubernetes deployment.*
+See the [visual walkthrough](../../docs/screenshots.md) for the main user tasks.
+
+
 ```sh
 kubectl -n nsx-security-analyzer port-forward service/web 8000:8000
 ```
