@@ -303,7 +303,11 @@ mobile, retaining progress updates and stop controls for active collections.
 Operators can use **Return to unassigned** on their own finding reviews;
 administrators can release anyone's assignment. A reason is required and the
 history records the actor, previous owner and reason. The **Unassigned** queue
-filters by owner, independently of review stage. Existing approvals, comments
+filters by owner, independently of the preserved review stage. Ownerless findings
+are excluded from Awaiting second approval and Ready for decommissioning queues,
+including My work. They show “Awaiting assignment · owner approval preserved” or
+“Awaiting assignment · approvals preserved” in Unassigned and on the detail page.
+Assigning an owner restores the finding to its saved stage's queue. Existing approvals, comments
 and collected evidence remain intact. Assigning a released review resumes its
 saved stage; another approval or completion requires an owner, and the original
 reviewer still cannot provide the second approval. Evidence and policy changes

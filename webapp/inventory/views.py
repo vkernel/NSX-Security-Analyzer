@@ -543,7 +543,7 @@ def notifications(request):
         from .models import FindingEvent
         review_events = FindingEvent.objects.filter(created_at__gte=timezone.now()-timedelta(days=days)).filter(
             Q(details__action='assign', finding__owner=request.user, finding__workflow_state='owner_review') |
-            Q(details__to='second_review', finding__workflow_state='second_review')).exclude(
+            Q(details__to='second_review', finding__workflow_state='second_review', finding__owner__isnull=False)).exclude(
                 Q(details__to='second_review', finding__owner=request.user))
         from django.db.models import OuterRef, Subquery
         latest_event = FindingEvent.objects.filter(finding_id=OuterRef('finding_id')).order_by('-pk').values('pk')[:1]

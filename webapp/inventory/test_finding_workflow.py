@@ -558,3 +558,32 @@ class FindingWorkflowTests(TestCase):
         job.kinds = ['empty_group']; job.save()
         decide(self.finding, self.reviewer, 'reject', 'Do not remove')
         self.assertEqual(self.finding.workflow_state, 'rejected')
+
+    def test_released_reviews_leave_actionable_queues_and_resume_on_assignment(self):
+        self.approve_owner()
+        self.client.force_login(self.reviewer)
+        for stage, queue, label in (
+            ('second_review', 'second', 'Awaiting assignment · owner approval preserved'),
+            ('ready', 'ready', 'Awaiting assignment · approvals preserved'),
+        ):
+            with self.subTest(stage=stage):
+                approvals = self.finding.approvals.copy()
+                decide(self.finding, self.owner, 'unassign', 'Unavailable')
+                self.finding.refresh_from_db()
+                self.assertEqual(self.finding.workflow_state, stage)
+                self.assertEqual(self.finding.approvals, approvals)
+                review_url = reverse('findings', args=[self.env.pk])
+                self.assertEqual(self.client.get(review_url, {'review': stage}).context['page'].paginator.count, 0)
+                self.assertEqual(self.client.get(reverse('my-work'), {'queue': queue}).context['page'].paginator.count, 0)
+                response = self.client.get(review_url, {'owner': 'none'})
+                self.assertContains(response, label)
+                self.assertEqual(response.context['page'].paginator.count, 1)
+                self.assertContains(self.client.get(self.url), label)
+                self.assertFalse(any('independent' in item['label'] for item in self.client.get(reverse('notifications')).json()['items']))
+                decide(self.finding, self.admin, 'assign', 'Resume work', self.owner)
+                self.assertEqual(self.finding.approvals, approvals)
+                self.assertEqual(self.client.get(review_url, {'review': stage}).context['page'].paginator.count, 1)
+                self.assertEqual(self.client.get(reverse('my-work'), {'queue': queue}).context['page'].paginator.count, 1)
+                self.assertEqual(self.client.get(review_url, {'owner': 'none'}).context['page'].paginator.count, 0)
+                if stage == 'second_review':
+                    decide(self.finding, self.reviewer, 'approve', 'Independent checks complete')

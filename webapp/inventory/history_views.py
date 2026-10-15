@@ -108,7 +108,10 @@ def findings(request, pk):
         if values['q']:
             rows = rows.filter(Q(name__icontains=values['q']) | Q(path__icontains=values['q']))
         if values['kind']: rows = rows.filter(kind=values['kind'])
-        if values['review']: rows = rows.filter(workflow_state=values['review'])
+        if values['review']:
+            rows = rows.filter(workflow_state=values['review'])
+            if values['review'] in ('second_review', 'ready'):
+                rows = rows.filter(owner__isnull=False)
         owner = values['owner']
         if owner == 'none': rows = rows.filter(owner__isnull=True)
         elif owner: rows = rows.filter(owner_id=request.user.pk if owner == 'me' else int(owner))
@@ -329,8 +332,8 @@ def my_work(request):
     rows = Finding.objects.select_related('environment', 'owner__keycloakidentity', 'owner__ldapidentity').defer('evidence', 'approvals')
     if queue == 'assigned': rows = rows.filter(owner=request.user, workflow_state='owner_review')
     elif queue == 'second':
-        rows = rows.filter(workflow_state='second_review', required_approvals=2).exclude(owner=request.user).exclude(approvals__owner__actor_id=str(request.user.pk))
-    else: rows = rows.filter(workflow_state='ready')
+        rows = rows.filter(workflow_state='second_review', required_approvals=2, owner__isnull=False).exclude(owner=request.user).exclude(approvals__owner__actor_id=str(request.user.pk))
+    else: rows = rows.filter(workflow_state='ready', owner__isnull=False)
     term = request.GET.get('q', '').strip()[:255]
     if term: rows = rows.filter(Q(name__icontains=term) | Q(environment__name__icontains=term))
     page = Paginator(rows.order_by('last_seen', 'pk'), preferences(request).page_size).get_page(request.GET.get('page'))
