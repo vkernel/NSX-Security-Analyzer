@@ -64,3 +64,18 @@ class ReportNavigationTests(TestCase):
                 self.client.get(self.url)
                 self.client.get(self.url)
             self.assertEqual(render.call_count, 4)
+
+    def test_finding_link_is_bound_to_evaluated_snapshot(self):
+        from django.utils import timezone
+        from .models import Finding
+        finding = Finding.objects.create(environment=self.environment, snapshot=self.snapshot,
+            kind='empty_group', path='/infra/groups/exact', name='Same name',
+            first_seen=timezone.now(), last_seen=timezone.now(), evaluated_at=timezone.now(), fingerprint='test')
+        response = self.client.get(self.url, {'finding': finding.pk})
+        self.assertContains(response, 'Back to finding review')
+        self.assertContains(response, 'data-path="/infra/groups/exact"')
+        self.assertContains(response, 'finding-snapshot.js')
+        other = self.create_snapshot()
+        response = self.client.get(reverse('snapshot', args=[other.pk]), {'finding': finding.pk})
+        self.assertContains(response, 'no longer linked to this snapshot')
+        self.assertNotContains(response, 'data-path="/infra/groups/exact"')

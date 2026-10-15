@@ -58,3 +58,18 @@ class InterfaceConsistencyTests(TestCase):
             self.assertContains(response,'Retry comparison' if state == 'failed' else 'Refresh status')
         pair.ready=True; pair.save(update_fields=['ready'])
         self.assertContains(self.client.get(url,params),'Comparison ready')
+
+    def test_editing_forms_have_shared_guard_and_grouped_authentication(self):
+        for name in ('finding-policy','review-approvals','workspace-policy','retention-settings','environment-new'):
+            response=self.client.get(reverse(name))
+            self.assertContains(response,'data-edit-form')
+            self.assertContains(response,'form-experience.js')
+        response=self.client.get(reverse('authentication-settings'))
+        for heading in ('Connection','Role mapping','Certificate trust'):
+            self.assertContains(response,'<legend>'+heading+'</legend>')
+        self.assertContains(response,'name="client_secret"',count=1)
+        response=self.client.get(reverse('authentication-settings'),{'provider':'ldap'})
+        for heading in ('Directory connection','User lookup','Role mapping','Certificate trust'):
+            self.assertContains(response,'<legend>'+heading+'</legend>')
+        self.assertContains(response,'name="bind_password"',count=1)
+        self.assertContains(response,'aria-current="page">LDAPS')

@@ -230,6 +230,13 @@ def snapshot_detail(request, pk):
         Snapshot.objects.select_related("environment").only(
             "id", "environment_id", "environment__id", "environment__name",
             "generated_at", "created_at", "testing", "needs_review", "imported"), pk=pk)
+    from .models import Finding
+    from .review_navigation import return_url
+    review_return = return_url(request, snapshot.environment_id)
+    finding_link = None
+    finding_id = request.GET.get('finding', '')
+    if finding_id.isdecimal():
+        finding_link = Finding.objects.filter(pk=finding_id, environment_id=snapshot.environment_id, snapshot_id=snapshot.pk).first()
     request.session['selected_environment'] = snapshot.environment_id
     history = list(Snapshot.objects.filter(environment_id=snapshot.environment_id)
                    .only("id", "generated_at", "testing")[:50])
@@ -246,7 +253,7 @@ def snapshot_detail(request, pk):
         report, report_diagnostics = presentation(snapshot, engine().render_html_report)
     presentation_seconds = perf_counter() - started - metadata_seconds
     response = render(request, "inventory/snapshot.html", {
-        "snapshot": snapshot, "environment": snapshot.environment, "history": history, "report": report, "report_diagnostics": report_diagnostics, "is_latest": bool(history and history[0].pk == snapshot.pk), "legacy_report": indexed is None})
+        "review_return": review_return, "finding_link": finding_link, "snapshot": snapshot, "environment": snapshot.environment, "history": history, "report": report, "report_diagnostics": report_diagnostics, "is_latest": bool(history and history[0].pk == snapshot.pk), "legacy_report": indexed is None})
     logging.getLogger("inventory.web").info(
         "Snapshot page snapshot=%s mode=%s metadata_seconds=%.3f presentation_seconds=%.3f render_seconds=%.3f response_bytes=%d",
         snapshot.pk, "indexed" if indexed is not None else "legacy", metadata_seconds,
@@ -283,7 +290,8 @@ def api_jobs(request):
     else:
         jobs = jobs[:50]
     response = JsonResponse({"jobs": [{"id": str(job.pk), "environment": job.environment.name,
-        "status": job.status, "progress": job.progress,
+        "status": job.status, "label": job.get_status_display(), "progress": job.progress,
+        "result_url": f"/collections/{job.pk}/result/",
         "created_at": job.created_at.isoformat(), "error": job.error} for job in jobs]})
     response["Cache-Control"] = "private, no-store"
     return response
@@ -543,7 +551,7 @@ def notifications(request):
         from .models import FindingEvent
         review_events = FindingEvent.objects.filter(created_at__gte=timezone.now()-timedelta(days=days)).filter(
             Q(details__action='assign', finding__owner=request.user, finding__workflow_state='owner_review') |
-            Q(details__to='second_review', finding__workflow_state='second_review')).exclude(
+            Q(details__to='second_review', finding__workflow_state='second_review', finding__owner__isnull=False)).exclude(
                 Q(details__to='second_review', finding__owner=request.user))
         from django.db.models import OuterRef, Subquery
         latest_event = FindingEvent.objects.filter(finding_id=OuterRef('finding_id')).order_by('-pk').values('pk')[:1]

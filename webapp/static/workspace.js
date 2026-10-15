@@ -22,12 +22,22 @@
       if (!response.ok || response.redirected) throw new Error('Session unavailable');
       const data = await response.json();
       const states = new Map(data.jobs.map(job => [job.id, job]));
-      if (active.some(row => states.has(row.dataset.job) && states.get(row.dataset.job).status !== row.dataset.status)) {
-        window.location.reload(); return;
-      }
       active.forEach(row => {
         const job = states.get(row.dataset.job);
         if (!job?.progress) return;
+        if (job.status !== row.dataset.status) {
+          row.dataset.status = job.status;
+          row.querySelectorAll('.pill').forEach(pill => { pill.textContent=job.label; pill.className='pill '+job.status; });
+          if (!['queued','running'].includes(job.status)) {
+            const outcome=document.createElement('p');outcome.setAttribute('role','status');outcome.textContent=job.progress.stage;
+            const link=document.createElement('a');link.href=job.result_url || location.href;link.textContent=job.status==='succeeded'?'View collection result':'View environment and collection details';
+            const target=row.querySelector('.collection-details,.table-action') || row;
+            target.replaceChildren(outcome,link);
+            row.querySelectorAll('.job-progress').forEach(widget=>widget.replaceWith(outcome.cloneNode(true)));
+            return;
+          }
+        }
+
         row.querySelectorAll('.job-progress').forEach(widget => {
           const progress = job.progress;
           widget.querySelector('[data-progress-stage]').textContent = progress.stage;
@@ -44,7 +54,7 @@
     } catch (_) {
       if (status) status.textContent = 'Unable to refresh collection status. Retrying shortly; reload if your session has expired.';
     }
-    setTimeout(poll, refreshSeconds * 1000);
+    if (active.some(row => ['queued','running'].includes(row.dataset.status))) setTimeout(poll, refreshSeconds * 1000);
   }
   setTimeout(poll, refreshSeconds * 1000);
 })();

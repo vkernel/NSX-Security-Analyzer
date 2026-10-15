@@ -183,3 +183,56 @@ body .compact-action-dialog{width:min(520px,calc(100vw - 32px));max-height:calc(
 [data-finding-review] [hidden]{display:none!important}[data-snapshot-compare][aria-disabled=true]{opacity:.5;cursor:default}
 @media(max-width:600px){.comparison-arrow{display:none}.comparison-toolbar>.form-field{flex-basis:100%}.compact-action-dialog .form-actions{flex-wrap:wrap}}
 .directory-toolbar>.form-actions{margin:0;padding:0;border:0;align-self:end}.compact-action-dialog textarea{font-family:inherit;padding:10px;resize:vertical}
+
+/* Shared sign-in shell uses the same logo and navy as the application sidebar. */
+.login-main .login-panel{padding:0;max-width:440px;overflow:hidden;border-radius:12px}
+.login-brand{display:flex;justify-content:center;background:#111827;padding:28px 24px;border-bottom:3px solid #2563eb}
+.login-brand img{display:block;width:208px;max-width:100%;height:auto}
+.login-content{padding:28px 32px 24px}
+.login-panel h1{font-size:26px;margin:0 0 8px;line-height:1.25}
+.login-panel .lead{font-size:14px;line-height:1.6;margin:0 0 24px;color:var(--muted)}
+.login-panel form{margin-top:0}
+.login-panel form p{margin:0 0 18px}
+.login-providers{display:grid;gap:10px}
+.login-divider{display:flex;align-items:center;gap:12px;margin:22px 0;color:var(--muted);font-size:12px}
+.login-divider::before,.login-divider::after{content:"";height:1px;background:var(--line);flex:1}
+.login-note{margin:22px 0 0;padding-top:18px;border-top:1px solid var(--line);font-size:12px;line-height:1.6;color:var(--muted);text-align:center}
+@media(max-width:480px){.login-main{padding:18px}.login-content{padding:24px}.login-brand{padding:24px}}
+.reviewer-combobox{position:relative}
+.reviewer-options{position:absolute;top:44px;left:0;right:0;z-index:20;max-height:200px;overflow:auto;list-style:none;margin:0;padding:4px;background:var(--app-surface,#fff);border:1px solid var(--line);border-radius:7px;box-shadow:0 8px 24px #132c4320}
+.reviewer-options li{padding:10px;border-radius:4px;cursor:pointer;font-size:13px;overflow-wrap:anywhere}
+.reviewer-options li:hover,.reviewer-options li[aria-selected=true]{background:var(--app-surface-soft,#edf3ff)}
+.reviewer-combobox>small{display:block;margin-top:6px}
+select[data-reviewer-combobox][hidden]{display:none}
+/* Fixed action header/footer; only the middle region scrolls on short screens. */
+body dialog.action-dialog{padding:0!important;overflow:hidden;width:min(520px,calc(100vw - 32px));max-height:calc(100dvh - 32px);border:1px solid var(--line);border-radius:14px;background:var(--app-surface,#fff);color:var(--ink);box-shadow:0 24px 64px #10182840}
+body dialog.action-dialog[open]{display:flex;flex-direction:column}
+.action-dialog::backdrop{background:#10182870}
+.action-dialog-header{display:flex;align-items:center;justify-content:space-between;gap:20px;padding:20px 24px;border-bottom:1px solid var(--line);flex:none}
+body .action-dialog-header h2{margin:0;font-size:20px;line-height:1.3}
+.action-dialog-close{border:0;background:transparent;color:var(--muted);font-size:26px;line-height:1;padding:4px 8px;cursor:pointer}
+.action-dialog-body{padding:20px 24px;min-height:0;overflow:auto;overscroll-behavior:contain}
+body .action-dialog-footer{display:flex;justify-content:flex-end;gap:10px;flex:none;margin:0;padding:16px 24px;border-top:1px solid var(--line);background:var(--app-surface,#fff)}
+.action-dialog-body .reviewer-options{position:static;max-height:240px;margin:8px 0 0;box-shadow:none;padding:4px}
+.reviewer-options li{box-sizing:border-box;min-height:56px;display:flex;flex-direction:column;justify-content:center;gap:3px}
+.reviewer-options li small{font-weight:400;color:var(--muted)}
+.reviewer-selection{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px;border:1px solid var(--line);border-radius:8px;background:var(--app-surface-soft,#edf3ff)}
+.reviewer-selection span{overflow-wrap:anywhere;min-width:0}.reviewer-selection button{flex:none}
+.reviewer-help{margin-top:12px;font-size:12px;color:var(--muted)}.reviewer-help summary{cursor:pointer}.reviewer-help small{display:block;margin-top:8px;line-height:1.6}
+.reviewer-selection[hidden],.reviewer-combobox input[hidden],.reviewer-options[hidden]{display:none!important}
+@media(max-width:480px){.action-dialog-header,.action-dialog-body{padding:16px}.action-dialog-footer{padding:12px 16px!important}}
+
+@media(max-height:600px){.action-dialog-body .reviewer-options{max-height:none;overflow:visible}}
+
+.finding-target-row{outline:2px solid var(--app-accent,#2563eb);outline-offset:-2px}
+
+.review-neighbours{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;margin:12px 0}.review-neighbours:empty{display:none}
+
+/* Shared administrative editing and validation feedback. */
+[data-edit-form]>.unsaved-status{font-size:13px;color:var(--muted);margin:0 0 16px}
+.form-error-summary{padding:16px;margin-bottom:20px;border:2px solid #b42318;border-radius:8px;background:var(--app-surface,#fff)}
+.form-error-summary ul{margin:8px 0 0;padding-left:20px}.form-error-summary a{text-decoration:underline}
+[data-edit-form]>.form-actions,[data-edit-form]>.settings-savebar{position:sticky;bottom:0;z-index:3;background:var(--app-surface,#fff);padding:16px 0;border-top:1px solid var(--line);display:flex;gap:12px;flex-wrap:wrap}
+.action-dialog-body [data-edit-form]>.form-actions{position:static}
+.settings-section legend{font-size:16px;font-weight:600;padding:0 8px}
+@media(max-width:600px){[data-edit-form]>.form-actions,[data-edit-form]>.settings-savebar{position:static}.form-error-summary{padding:12px}.topbar-actions{gap:6px}}

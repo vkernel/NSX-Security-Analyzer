@@ -52,7 +52,8 @@ class OverlappingRetrievalTests(SimpleTestCase):
         group = {'path':'/infra/domains/default/groups/g', 'id':'g'}
         def objects(client, path):
             return [{'path':'/infra/domains/default'}] if path == '/infra/domains' else [group] if path.endswith('/groups') else []
-        def search(client):
+        def search(client, expect_resources=False):
+            self.assertTrue(expect_resources)
             barrier.wait()
             return [group], {'mode':'all_types'}
         def firewall(*args, **kwargs):

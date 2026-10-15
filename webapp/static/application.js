@@ -13,7 +13,7 @@
       if(row.membership_definition?.methods?.length)groups.get('Technical details').push(make('p','Membership method: '+row.membership_definition.methods.join(', ')));
       if(row.path){const identity=make('div',null,'evidence-identity');identity.append(make('code',row.path));const copy=make('button','Copy path');copy.type='button';copy.dataset.copyPath=row.path;identity.append(copy);groups.get('Technical details').push(identity);}
     }
-    if(row?.statistics_checked_at){const timing=make('p','Counters checked: '+(window.workspaceTime?window.workspaceTime(row.statistics_checked_at):row.statistics_checked_at));groups.get('Technical details').push(timing);}
+    if(row?.statistics_checked_at){const timing=make('p','Counters checked: '),time=make('time');time.dateTime=row.statistics_checked_at;time.textContent=new Date(row.statistics_checked_at).toString();if(window.workspaceTime){const template=document.createElement('template');template.innerHTML=window.workspaceTime(row.statistics_checked_at);timing.append(template.content);}else timing.append(time);groups.get('Technical details').push(timing);}
     if(summary.children.length)groups.get('Overview').push(summary);
     for(const node of nodes){
       // Explicit sections are emitted by new reports. Keep older saved reports readable.
@@ -174,10 +174,10 @@
     });
     window.addEventListener('pageshow',()=>{document.querySelectorAll('form[data-submitting]').forEach(form=>delete form.dataset.submitting);document.querySelectorAll('[data-original-label]').forEach(button=>{button.textContent=button.dataset.originalLabel;button.removeAttribute('aria-disabled');button.removeAttribute('aria-busy');});});
     const form=document.querySelector('[data-settings-form]');
-    if(form){let dirty=false;const status=form.querySelector('.unsaved-status');form.addEventListener('change',()=>{dirty=true;status.textContent='Unsaved changes';
+    if(form){form.addEventListener('change',()=>{
       for(const name of ['theme','timezone','date_format']){const control=form.elements.namedItem(name);if(control)document.body.dataset[name==='date_format'?'dateFormat':name]=control.value;}
       for(const [name,prefix] of [['density','display-'],['text_size','text-']]){const control=form.elements.namedItem(name);if(control){Array.from(document.body.classList).filter(c=>c.startsWith(prefix)).forEach(c=>document.body.classList.remove(c));document.body.classList.add(prefix+control.value);}}
       for(const [name,cls] of [['high_contrast','high-contrast'],['reduced_motion','reduced-motion']]){const control=form.elements.namedItem(name);if(control)document.body.classList.toggle(cls,control.checked);}
-    });form.addEventListener('submit',()=>dirty=false);window.addEventListener('beforeunload',event=>{if(dirty){event.preventDefault();event.returnValue='';}});}
+    });}
   });
 })();

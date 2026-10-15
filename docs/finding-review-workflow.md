@@ -5,6 +5,43 @@ or modify an NSX object. Operators and administrators can perform workflow
 actions; viewers can read the results. The same rules apply to local, Keycloak
 and LDAP accounts. Each person must use their own account.
 
+## Reading observation badges
+
+A badge such as **zero hits: Eligible for review** describes whether the finding
+meets the configured evidence requirements. The line below it shows **complete
+observed days / required days · successful observations**.
+
+| Example | Meaning |
+|---|---|
+| **zero hits: Eligible for review — 8 / 7 days · 192 observations** | The current qualifying sequence spans 8 complete days, exceeding the required 7 days. Its 192 successful checks also satisfy the configured minimum observation count. The finding can enter review. |
+| **zero hits: Observing — 0 / 7 days · 19 observations** | There are 19 qualifying checks, but less than 24 hours between the first and latest checks in the current sequence. The day count rounds down to 0; the required 7 days have not elapsed. |
+
+**Observations are checks, not traffic hits.** Each qualifying zero-hit check
+supports the zero-counter condition. Many checks in one day cannot replace a
+seven-day observation period: both elapsed time and the minimum count must be met.
+Seven days means at least 168 hours between qualifying snapshots. Time after the
+latest snapshot does not count; waiting without further collections does not
+advance the assessment.
+
+Relevant rule changes or excessive collection gaps restart the period. Missing,
+unknown or opposite evidence interrupts continuity. A low day count alone does
+not tell you which of these happened. Open the finding's **Observation history**
+for the period start, last observation and qualification explanation. Historical
+report badges reflect the assessment saved with that snapshot.
+
+**Eligible for review is not approval to delete.** Review the rule's purpose,
+dependencies and evidence before making a decision. Zero recorded counters do not
+prove that no traffic occurred between checks. Configure the required period in
+**Administration → Finding review criteria**; environment overrides take precedence
+over global defaults.
+
+While criteria recalculation is queued, running or failed, affected finding types
+cannot receive first or second approval or record decommissioning completion.
+Previously saved eligibility is not sufficient during this interval. Unaffected
+finding types remain reviewable, and rejection remains available. If recalculation
+fails, an administrator must save the criteria again and wait for successful
+completion; the recalculated finding must still satisfy normal evidence checks.
+
 ## Configure the approval requirement
 
 ![Review approval settings with expandable explanation](images/review-approval-settings.png)
@@ -33,7 +70,7 @@ below. Approval requirements and decisions are retained in the audit history.
 ## Two-person workflow (default)
 
 1. Open an eligible finding and choose **Assign owner**. Select an active operator
-   or administrator and provide a reason. The finding enters **Owner review**.
+   or administrator. No reason is required to assign an unassigned finding. The finding enters **Owner review**.
 2. The owner manually checks dependencies, coverage and change impact. Choose
    **Approve review** or **Reject finding** and describe the checks and decision.
 3. An approval enters **Awaiting second approval**. A different operator or
@@ -136,12 +173,14 @@ the identity-provider profile/claims and sign in again to refresh the profile.
 
 1. Open **Environments**, select your environment, then click **Finding reviews**.
 2. Click the finding's name to open its detail page.
-3. In the right-hand decision panel, choose **Actions → Assign owner** (or **Reassign owner**).
-4. Type the person's name or email in **Search owners**, then select the correct
-   person in **Owner**. Search filters the list; it does not choose an owner for
-   you. A previously selected owner remains selected until explicitly changed.
-5. Enter the assignment reason in **Reason / manual checks performed** and click
-   **Assign owner**. The stage becomes **Owner review**.
+3. Choose **Assign owner** directly when it is the only available action; otherwise
+   use **Actions → Assign owner** (or **Reassign owner**).
+4. Search by name or email in the single **Owner** field and select a suggestion.
+   Typing new text clears the prior selection; select a matching reviewer before submitting.
+   You can use the arrow keys and Enter to select a result.
+5. Click **Assign owner**. No reason is required for an unassigned finding, including
+   released work. Reassigning already-owned work still requires a reason and resets
+   approvals. Assignment is recorded in the audit history with the actor and new owner.
 
 ### 2. Owner performs the first review
 
@@ -182,14 +221,14 @@ the identity-provider profile/claims and sign in again to refresh the profile.
 ### 5. Inspect the audit trail
 
 Scroll to **Review history** on the finding page. It shows the actor, time and
-reason for each action. Operators and administrators can click **Export audit
+action and its reason where required. Assignment without a note is recorded as “Owner assigned.” Operators and administrators can click **Export audit
 history (JSON)** to download the decisions with saved evidence and stable actor
 IDs. Names are for display; changing a name or email cannot bypass the different-
 approver check. Existing historical identity values are preserved in the export;
 the page resolves older internal Keycloak identifiers to readable names when the
 account still exists.
 
-The owner selector is in the assignment dialog opened from **Actions**. **Change-ticket reference**
+The searchable owner selector is in the **Assign owner** dialog (under **Actions** when multiple actions are available). **Change-ticket reference**
 appears only when recording completion. To change notification preferences, open your user menu →
 **Personal settings → Notifications** and change **Finding assignments and second
 approvals**.
@@ -204,7 +243,7 @@ Screenshots show version 0.5.3 with synthetic documentation data. Names, counts 
 
 ![Reassign owner dialog with reviewer selection and reason](images/assign-owner.png)
 
-*Actions → Reassign owner opens a focused dialog. Reassigning owned work resets approvals; assigning released work preserves valid progress.*
+*Reassign owner opens a focused dialog with one searchable user selector. Reassigning owned work resets approvals; assigning released work preserves valid progress.*
 
 
 The progress indicator shows the current stage. Evidence and dependencies appear
@@ -227,8 +266,8 @@ Open **My work** in the main menu to see tasks across environments:
 - **Ready for decommissioning** contains approved findings awaiting a recorded change.
 
 The findings list shows whether each review requires one or two approvals. To assign
-an owner, choose **Actions → Assign owner**, search by name or email, choose a result and
-record a reason. Search returns up to 20 active operators/administrators; refine your
+an owner, choose **Assign owner**, search by name or email and select a result.
+No reason is required for assigning unassigned work. Search returns up to 20 active operators/administrators; refine your
 search for more specific matches. External users still need to sign in once before
 they can be selected. A second approval remains available to another eligible reviewer;
 it does not require reassigning the owner.
@@ -266,7 +305,11 @@ mobile, retaining progress updates and stop controls for active collections.
 Operators can use **Return to unassigned** on their own finding reviews;
 administrators can release anyone's assignment. A reason is required and the
 history records the actor, previous owner and reason. The **Unassigned** queue
-filters by owner, independently of review stage. Existing approvals, comments
+filters by owner, independently of the preserved review stage. Ownerless findings
+are excluded from Awaiting second approval and Ready for decommissioning queues,
+including My work. They show “Awaiting assignment · owner approval preserved” or
+“Awaiting assignment · approvals preserved” in Unassigned and on the detail page.
+Assigning an owner restores the finding to its saved stage's queue. Existing approvals, comments
 and collected evidence remain intact. Assigning a released review resumes its
 saved stage; another approval or completion requires an owner, and the original
 reviewer still cannot provide the second approval. Evidence and policy changes
@@ -285,3 +328,19 @@ changed or ineligible rows are skipped and individually explained. A completed
 finding must first be reopened by an administrator, with a reason. Reopening
 archives the prior approvals and change reference in history and starts a new
 review; it does not undo any NSX changes.
+
+### Compact action dialogs
+
+Assignment, reassignment, reopening and return-to-unassigned dialogs share a compact header and an always-visible action footer. Close with **Cancel**, the **×** button or Escape. On short screens, the content scrolls while the buttons remain visible.
+
+The owner picker uses one search field with a short results list. Selecting a reviewer replaces the list with a selected-user summary; choose **Change** to search again. Assignment is enabled only after selecting a reviewer. Expand **Who can be assigned?** for eligibility details. Reasons remain required for reassignment and other review actions, but not for assigning unassigned work.
+
+### Open the evaluated object
+
+Choose **View object in evaluated snapshot** to open the exact NSX path in the snapshot used for evaluation. Its inventory or firewall tab opens with the object details; a matching visible table row is highlighted. **Back to finding review** returns to the review. Missing objects show an explicit message, and retained review evidence remains available. This link uses the evaluated snapshot, which may differ from the newest collection.
+
+### Keeping your place in a review queue
+
+The active queue is highlighted. Assignment and review progress are separate: an unassigned finding may retain its first or final approvals, but needs an owner before approval or completion can continue. The decision panel explains the next step and any evidence blocker beside the action.
+
+Open a finding from Finding reviews or My work to retain the originating search, filters and page in its back link. Finding reviews also offers Previous/Next within the filtered order, including adjacent pages. If a decision removes the finding from those results, return to the list to continue. Returning in the same browser tab restores the saved list scroll position for up to one hour. The evaluated-snapshot round trip preserves this return link.

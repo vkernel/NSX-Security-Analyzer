@@ -1,5 +1,86 @@
 document.addEventListener('DOMContentLoaded', () => {
   document.querySelectorAll('select[data-user-search]').forEach(select => {
+    if (select.hasAttribute('data-reviewer-combobox')) {
+      const wrapper = document.createElement('div'); wrapper.className = 'reviewer-combobox';
+      const input = document.createElement('input'); input.type = 'text'; input.autocomplete = 'off';
+      input.id = select.id + '-search'; input.placeholder = 'Search and select by name or email';
+      input.setAttribute('role', 'combobox'); input.setAttribute('aria-autocomplete', 'list');
+      input.setAttribute('aria-expanded', 'false');
+      const list = document.createElement('ul'); list.id = select.id + '-results';
+      list.className = 'reviewer-options'; list.setAttribute('role', 'listbox'); list.hidden = true;
+      input.setAttribute('aria-controls', list.id);
+      const label = document.querySelector(`label[for="${select.id}"]`);
+      if (label) label.htmlFor = input.id;
+      const help = select.getAttribute('aria-describedby'); if (help) input.setAttribute('aria-describedby', help);
+      input.value = select.value ? select.selectedOptions[0].textContent : '';
+      const status = document.createElement('small'); status.setAttribute('role', 'status');
+      select.before(wrapper); wrapper.append(input, list, status); select.hidden = true;
+      const selection = document.createElement('div'); selection.className = 'reviewer-selection'; selection.hidden = true;
+      const selectedLabel = document.createElement('span');
+      const change = document.createElement('button'); change.type = 'button'; change.className = 'button'; change.textContent = 'Change';
+      selection.append(selectedLabel, change); wrapper.prepend(selection);
+      const showSelection = () => { selectedLabel.textContent = input.value; selection.hidden = false; input.hidden = true; status.textContent = ''; };
+      change.addEventListener('click', () => { selection.hidden = true; input.hidden = false; input.value = ''; select.value = ''; select.dispatchEvent(new Event('change', {bubbles:true})); input.focus(); });
+      const helpNode = select.closest('.form-field')?.querySelector(':scope > .helptext, :scope > small');
+      if (helpNode && helpNode !== status && !wrapper.contains(helpNode)) {
+        const disclosure = document.createElement('details'); disclosure.className = 'reviewer-help';
+        const summary = document.createElement('summary'); summary.textContent = 'Who can be assigned?';
+        helpNode.before(disclosure); disclosure.append(summary, helpNode);
+      }
+      if (select.value) showSelection();
+      let timer, pending, generation = 0, active = -1, options = [];
+      const close = () => { list.hidden = true; input.setAttribute('aria-expanded', 'false'); input.removeAttribute('aria-activedescendant'); active = -1; };
+      const choose = item => {
+        ++generation; clearTimeout(timer); pending?.abort();
+        const value = String(item.id);
+        if (!Array.from(select.options).some(option => option.value === value)) select.add(new Option(item.label, value));
+        select.value = value; input.value = item.label; select.dispatchEvent(new Event('change', {bubbles:true}));
+        close(); showSelection(); change.focus();
+      };
+      const highlight = () => {
+        [...list.children].forEach((node, index) => node.setAttribute('aria-selected', String(index === active)));
+        if (active >= 0) { input.setAttribute('aria-activedescendant', list.children[active].id); list.children[active].scrollIntoView({block:'nearest'}); }
+      };
+      async function search() {
+        const token = ++generation; pending?.abort(); pending = new AbortController();
+        status.textContent = 'Searching…'; close();
+        try {
+          const response = await fetch(select.dataset.userSearch + '?q=' + encodeURIComponent(input.value), {signal:pending.signal, headers:{Accept:'application/json'}});
+          if (!response.ok) throw new Error('Search unavailable. Try again.');
+          const data = await response.json(); if (token !== generation) return;
+          options = data.items; list.replaceChildren();
+          options.forEach((item, index) => {
+            const option = document.createElement('li'); option.id = list.id + '-' + index;
+            option.setAttribute('role', 'option'); option.setAttribute('aria-selected', 'false');
+            const parts = item.label.split(' · '); const name = document.createElement('strong'); name.textContent = parts.shift();
+            const detail = document.createElement('small'); detail.textContent = parts.join(' · '); option.append(name, detail);
+            option.addEventListener('mousedown', event => event.preventDefault());
+            option.addEventListener('click', () => choose(item)); list.append(option);
+          });
+          list.hidden = !options.length; input.setAttribute('aria-expanded', String(options.length > 0));
+          status.textContent = data.has_more ? 'First 20 matches. Refine your search.' : options.length ? 'Select a matching reviewer.' : 'No matching reviewers.';
+        } catch (error) { if (error.name !== 'AbortError' && token === generation) status.textContent = error.message; }
+      }
+      input.addEventListener('input', () => { select.value = ''; select.dispatchEvent(new Event('change', {bubbles:true})); ++generation; pending?.abort(); close(); clearTimeout(timer); timer = setTimeout(search, 250); });
+      input.addEventListener('focus', () => { if (!select.value) search(); });
+      input.addEventListener('blur', event => {
+        ++generation; clearTimeout(timer); pending?.abort();
+        // Keep the dialog stable until its button receives the click. Collapsing
+        // results on mousedown would move Cancel/Close away from the pointer.
+        if (!event.relatedTarget?.closest('dialog')) close();
+      });
+      input.addEventListener('keydown', event => {
+        if (event.key === 'Escape' && !list.hidden) { event.preventDefault(); event.stopPropagation(); close(); }
+        else if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+          event.preventDefault();
+          if (list.hidden) { search(); return; }
+          active = (active + (event.key === 'ArrowDown' ? 1 : -1) + options.length) % options.length; highlight();
+        } else if (event.key === 'Enter' && !list.hidden) {
+          event.preventDefault(); if (active >= 0) choose(options[active]);
+        }
+      });
+      return;
+    }
     const input = document.createElement('input'); input.type = 'search'; input.placeholder = 'Search by name or email'; input.setAttribute('aria-label', 'Search reviewers by name or email');
     const status = document.createElement('small'); status.setAttribute('role', 'status');
     select.before(input); select.after(status);

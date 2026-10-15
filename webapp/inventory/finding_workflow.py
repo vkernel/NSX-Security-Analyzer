@@ -3,7 +3,7 @@ from datetime import timedelta
 from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.utils import timezone
-from .models import FindingEvent, SnapshotRecord, Snapshot
+from .models import FindingEvent, SnapshotRecord, Snapshot, FindingRecalculation
 import hashlib
 import json
 from .audit_events import record
@@ -123,6 +123,12 @@ def relevant_evidence_error(kind, row, search_coverage, stamp, interval_minutes)
 def approval_readiness(finding):
     def blocked(message): return {'status': 'blocked', 'message': message}
     from .usability import policy
+    recalculation = FindingRecalculation.objects.filter(environment_id=finding.environment_id).values('status', 'kinds').first()
+    if (recalculation and recalculation['status'] in ('queued', 'running', 'failed')
+            and finding.kind in recalculation['kinds']):
+        if recalculation['status'] == 'failed':
+            return blocked('Finding criteria recalculation failed. Ask an administrator to save the criteria again and wait for recalculation to complete before approval or recording completion.')
+        return blocked('Finding criteria recalculation is pending or running. Wait for it to complete before approval or recording completion.')
     if not finding.present or finding.qualification != 'eligible':
         return blocked('The finding must be currently observed and eligible for review.')
     latest = finding.environment.snapshots.filter(testing=False, imported=False).only('pk', 'generated_at').first()
@@ -157,7 +163,10 @@ def decide(finding, actor, action, reason, owner=None, ticket='', manual_verifie
         raise ValidationError('Operator or administrator access is required.')
     reason, ticket = reason.strip(), ticket.strip()
     if not reason:
-        raise ValidationError('A reason is required for every workflow action.')
+        if action == 'assign' and not finding.owner_id:
+            reason = 'Owner assigned.'
+        else:
+            raise ValidationError('A reason is required for this workflow action.')
     before = finding.workflow_state
     if finding.required_approvals not in (1, 2):
         raise ValidationError('Invalid approval requirement.')

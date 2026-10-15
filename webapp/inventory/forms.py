@@ -187,6 +187,9 @@ class FindingReviewForm(forms.Form):
         self.fields['owner'].queryset = get_user_model().objects.filter(pk=selected, is_active=True, is_staff=True).select_related('keycloakidentity', 'ldapidentity')
         from django.urls import reverse
         self.fields['owner'].widget.attrs['data-user-search'] = reverse('reviewer-search')
+        self.fields['owner'].widget.attrs['data-reviewer-combobox'] = 'true'
+        if finding and not finding.owner_id and (not self.is_bound or self.data.get('action') == 'assign'):
+            self.fields['note'].required = False
         if finding and actor and not self.is_bound:
             allowed = ['assign']
             if finding.workflow_state == 'owner_review' and actor.pk == finding.owner_id:

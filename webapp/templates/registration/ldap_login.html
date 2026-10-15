@@ -1,1 +1,18 @@
-{% extends 'base.html' %}{% block content %}<div class="login-card"><h1>Sign in with LDAPS</h1><form method="post">{% csrf_token %}{{ form.as_p }}<input type="hidden" name="next" value="{{ next }}"><button class="button primary">Sign in</button></form><a href="{% url 'login' %}">Back to local or Keycloak sign-in</a></div>{% endblock %}
+{% extends 'base.html' %}
+{% block title %}Sign in with LDAPS · NSX Security Analyzer{% endblock %}
+{% block content %}
+<section class="login-card login-panel" aria-labelledby="login-title">
+  {% include 'registration/login_brand.html' %}
+  <div class="login-content">
+    <h1 id="login-title">Sign in with LDAPS</h1>
+    <p class="lead">Use your organization’s directory account.</p>
+    <form method="post">
+      {% csrf_token %}
+      {{ form.as_p }}
+      <input type="hidden" name="next" value="{{ next }}">
+      <button class="button primary full-width" type="submit">Sign in</button>
+    </form>
+    <p class="login-note"><a href="{% url 'login' %}?next={{ next|urlencode }}">Back to sign-in options</a></p>
+  </div>
+</section>
+{% endblock %}

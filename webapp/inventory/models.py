@@ -233,6 +233,16 @@ class Finding(models.Model):
         ordering = ['status', 'name', 'pk']
         indexes = [models.Index(fields=['environment', 'present', 'status', 'name', 'id'], name='finding_environment_list'), models.Index(fields=['environment', 'qualification', 'kind', 'observation_days'], name='finding_qualification')]
 
+    @property
+    def review_state_label(self):
+        if not self.owner_id:
+            if self.workflow_state == 'second_review':
+                return 'Awaiting assignment · owner approval preserved'
+            if self.workflow_state == 'ready':
+                return 'Awaiting assignment · approvals preserved'
+        return self.get_workflow_state_display()
+
+
 
 class FindingEvent(models.Model):
     actor_label = models.CharField(max_length=255, blank=True)

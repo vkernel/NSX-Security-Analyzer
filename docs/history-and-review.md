@@ -278,3 +278,9 @@ The command name remains `audit_worker` for deployment compatibility; UI labels 
 for separate process deployments. `--once` processes at most one job and exits;
 with its default lane it conservatively reserves all three lanes for that invocation.
 Stop old worker replicas during upgrade, apply migrations, then start the matching new build.
+
+### Filtering comparisons and personal work
+
+A prepared comparison shows totals by change type. Search by object name or exact path text, and filter Added, Removed, Changed, Presence uncertain or Evidence incomplete. Totals describe the whole pair; the result count describes the current filters. No matching differences does not mean the whole pair is unchanged. Preparing comparisons update automatically without replacing the filter form.
+
+**My work** supports environment filtering and sorting by assignment age, name or environment. Each row shows review stage, recorded approval count and the same evidence-readiness assessment used by the review page. Expand **Why?** for a blocker or independent-check requirement. Readiness is checked again when submitting a decision. Assignment age uses the most recent recorded assignment event; older work without one shows Not recorded.

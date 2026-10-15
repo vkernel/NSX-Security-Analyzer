@@ -39,34 +39,44 @@
       const summary = document.createElement('summary'); summary.className = 'button'; summary.textContent = 'Actions';
       menu.append(summary);
       const items = document.createElement('div'); menu.append(items);
-      review.querySelector('.review-buttons').append(menu);
+      const direct = secondary.length === 1 && secondary[0].value === 'assign';
+      const buttonRow = review.querySelector('.review-buttons');
+      if (!direct) buttonRow.append(menu);
+      let opener = summary;
       const dialog = makeDialog('Review action'); review.append(dialog);
       const fields = document.createElement('div'); dialog.append(fields);
       const footer = document.createElement('div'); footer.className = 'finding-release-actions';
       const submit = document.createElement('button'); submit.type = 'submit'; submit.name = 'action'; submit.className = 'button primary';
       footer.append(cancelButton(dialog), submit); dialog.append(footer);
-      const note = review.querySelector('[name="note"]').closest('.form-field');
+      const note = review.querySelector('[name="note"]')?.closest('.form-field');
       const owner = review.querySelector('[name="owner"]')?.closest('.form-field');
       const ownerDisclosure = owner?.closest('details');
-      const notePosition = document.createComment('review note'); note.before(notePosition);
+      const updateSubmit = () => { submit.disabled = submit.value === 'assign' && !owner?.querySelector('[name="owner"]').value; };
+      owner?.addEventListener('change', updateSubmit);
+      const notePosition = document.createComment('review note'); if (note) note.before(notePosition);
       const ownerPosition = document.createComment('review owner'); if (owner) owner.before(ownerPosition);
       secondary.forEach(original => {
         const trigger = document.createElement('button'); trigger.type = 'button'; trigger.className = 'button'; trigger.textContent = original.textContent;
-        original.hidden = true; items.append(trigger);
+        original.hidden = true; (direct ? buttonRow : items).append(trigger);
         trigger.addEventListener('click', () => {
-          menu.open = false;
+          menu.open = false; opener = trigger;
           dialog.querySelector('h2').textContent = original.textContent;
           submit.textContent = original.textContent; submit.value = original.value;
           if (original.value === 'assign' && owner) fields.append(owner);
-          fields.append(note);
+          if (note) {
+            note.hidden = original.hasAttribute('data-no-reason');
+            note.querySelector('[name="note"]').disabled = note.hidden;
+            fields.append(note);
+          }
+          updateSubmit();
           dialog.showModal();
         });
       });
       if (ownerDisclosure) ownerDisclosure.hidden = true;
       dialog.addEventListener('close', () => {
-        notePosition.after(note);
+        if (note) { note.hidden = false; note.querySelector('[name="note"]').disabled = false; notePosition.after(note); }
         if (owner) ownerPosition.after(owner);
-        summary.focus();
+        opener.focus();
       });
     }
   }
