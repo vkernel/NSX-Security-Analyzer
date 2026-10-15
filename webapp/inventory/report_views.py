@@ -139,7 +139,7 @@ def snapshot_data(request, pk):
                     rows = rows.filter(compact__path=path).exclude(view='vms')
                 row = rows.only('ordinal', 'view').order_by('ordinal').first()
                 if row is None:
-                    raise Http404('This object is not available in this snapshot.')
+                    return JsonResponse({'error': 'This object is not available in this evaluated snapshot. Saved finding evidence remains available in the review.'}, status=404)
                 result = {'id': row.ordinal, 'view': row.view}
             elif op == 'tag-relationships':
                 from .tag_relationships import read

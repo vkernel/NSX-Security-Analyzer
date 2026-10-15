@@ -230,6 +230,11 @@ def snapshot_detail(request, pk):
         Snapshot.objects.select_related("environment").only(
             "id", "environment_id", "environment__id", "environment__name",
             "generated_at", "created_at", "testing", "needs_review", "imported"), pk=pk)
+    from .models import Finding
+    finding_link = None
+    finding_id = request.GET.get('finding', '')
+    if finding_id.isdecimal():
+        finding_link = Finding.objects.filter(pk=finding_id, environment_id=snapshot.environment_id, snapshot_id=snapshot.pk).first()
     request.session['selected_environment'] = snapshot.environment_id
     history = list(Snapshot.objects.filter(environment_id=snapshot.environment_id)
                    .only("id", "generated_at", "testing")[:50])
@@ -246,7 +251,7 @@ def snapshot_detail(request, pk):
         report, report_diagnostics = presentation(snapshot, engine().render_html_report)
     presentation_seconds = perf_counter() - started - metadata_seconds
     response = render(request, "inventory/snapshot.html", {
-        "snapshot": snapshot, "environment": snapshot.environment, "history": history, "report": report, "report_diagnostics": report_diagnostics, "is_latest": bool(history and history[0].pk == snapshot.pk), "legacy_report": indexed is None})
+        "finding_link": finding_link, "snapshot": snapshot, "environment": snapshot.environment, "history": history, "report": report, "report_diagnostics": report_diagnostics, "is_latest": bool(history and history[0].pk == snapshot.pk), "legacy_report": indexed is None})
     logging.getLogger("inventory.web").info(
         "Snapshot page snapshot=%s mode=%s metadata_seconds=%.3f presentation_seconds=%.3f render_seconds=%.3f response_bytes=%d",
         snapshot.pk, "indexed" if indexed is not None else "legacy", metadata_seconds,

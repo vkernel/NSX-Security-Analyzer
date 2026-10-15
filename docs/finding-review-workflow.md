@@ -334,3 +334,7 @@ review; it does not undo any NSX changes.
 Assignment, reassignment, reopening and return-to-unassigned dialogs share a compact header and an always-visible action footer. Close with **Cancel**, the **×** button or Escape. On short screens, the content scrolls while the buttons remain visible.
 
 The owner picker uses one search field with a short results list. Selecting a reviewer replaces the list with a selected-user summary; choose **Change** to search again. Assignment is enabled only after selecting a reviewer. Expand **Who can be assigned?** for eligibility details. Reasons remain required for reassignment and other review actions, but not for assigning unassigned work.
+
+### Open the evaluated object
+
+Choose **View object in evaluated snapshot** to open the exact NSX path in the snapshot used for evaluation. Its inventory or firewall tab opens with the object details; a matching visible table row is highlighted. **Back to finding review** returns to the review. Missing objects show an explicit message, and retained review evidence remains available. This link uses the evaluated snapshot, which may differ from the newest collection.

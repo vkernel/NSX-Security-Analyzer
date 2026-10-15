@@ -1746,6 +1746,7 @@ def feature_guide():
 <p>Use this guide to understand what the report checks, how to explore its results and what each finding means. This report displays a saved database snapshot. Opening it or filtering it does not modify NSX.</p>
 
 <h3>Finding review criteria and retained history</h3>
+<p>From a finding review, <strong>View object in evaluated snapshot</strong> opens the exact object path and its details in the saved evaluation snapshot. Use <strong>Back to finding review</strong> to return. Missing objects are reported explicitly; this may be a historical snapshot rather than the newest collection.</p>
 <p>Open <strong>Administration → Finding review criteria</strong>, select global defaults or an environment override, set days and save. A worker replays retained successful full snapshots; no fresh collection is needed. Wait for the recalculation to complete, then clear review filters. Environment overrides take precedence over global defaults.</p>
 <p><strong>0 days</strong> means one confirmed observation with no waiting period. <strong>2 days</strong> requires at least 48 hours and <strong>3 days</strong> at least 72 hours between qualifying snapshots, plus the minimum observations (three by default). Time after the latest snapshot does not count. The start is the earliest observation in the current supported sequence, not necessarily the first collection ever saved.</p>
 <p>The automatic maximum gap is twice the current collection interval, with a minimum of 24 hours. An explicit nonzero gap setting overrides this. Unknown, excluded, missing or opposite evidence interrupts a sequence; gaps beyond the allowance and relevant identity/configuration changes restart it. Empty-group continuity ignores unrelated reference/usage changes; zero-hit continuity ignores statistics-source changes but still requires fresh zero counters.</p>
@@ -2293,6 +2294,7 @@ table{min-width:760px}th{line-height:1.5}td{padding:15px 14px}.path{line-height:
   const dataElement = document.getElementById('report-rows');
   const payload = JSON.parse(dataElement.textContent);
   const rowPool = payload.rows;
+  if (!payload.remote) window.reportIdentityRows = rowPool;
   dataElement.remove();
   const textCache = new Map();
   const numberFormat = new Intl.NumberFormat('en-US', {maximumFractionDigits:20});

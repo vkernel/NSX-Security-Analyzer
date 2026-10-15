@@ -34,7 +34,9 @@ class IndexedReportTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json(), {'id':row.ordinal, 'view':row.view})
         self.assertFalse(any('"report"' in q['sql'] or '"data"' in q['sql'] for q in queries))
-        self.assertEqual(self.client.get(self.url, {'op':'resolve','path':'/missing'}).status_code,404)
+        missing = self.client.get(self.url, {'op':'resolve','path':'/missing'})
+        self.assertEqual(missing.status_code,404)
+        self.assertIn('not available in this evaluated snapshot', missing.json()['error'])
         other = prepare_snapshot(self.snapshot.environment, sample_report())
         other.save()
         self.assertEqual(self.client.get(reverse('snapshot-data',args=[other.pk]),
