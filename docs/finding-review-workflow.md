@@ -328,3 +328,9 @@ changed or ineligible rows are skipped and individually explained. A completed
 finding must first be reopened by an administrator, with a reason. Reopening
 archives the prior approvals and change reference in history and starts a new
 review; it does not undo any NSX changes.
+
+### Compact action dialogs
+
+Assignment, reassignment, reopening and return-to-unassigned dialogs share a compact header and an always-visible action footer. Close with **Cancel**, the **×** button or Escape. On short screens, the content scrolls while the buttons remain visible.
+
+The owner picker uses one search field with a short results list. Selecting a reviewer replaces the list with a selected-user summary; choose **Change** to search again. Assignment is enabled only after selecting a reviewer. Expand **Who can be assigned?** for eligibility details. Reasons remain required for reassignment and other review actions, but not for assigning unassigned work.

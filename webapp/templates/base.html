@@ -22,4 +22,4 @@
 <main id="main" class="{% if user.is_authenticated %}workspace-main{% else %}login-main{% endif %}">
 {% for message in messages %}<div class="notice {{ message.tags }}" role="status">{{ message }}</div>{% endfor %}
 {% if request.path|slice:':16' == '/administration/' or request.resolver_match.url_name == 'administration' or request.resolver_match.url_name == 'environment-edit' or request.resolver_match.url_name == 'environment-new' or request.resolver_match.namespace == 'admin' %}{% include 'inventory/admin_navigation.html' %}{% endif %}
-{% block workspace_content %}{% block content %}{% endblock %}{% endblock %}</main>{% block scripts %}{% endblock %}</body></html>
+{% block workspace_content %}{% block content %}{% endblock %}{% endblock %}</main>{% block scripts %}{% endblock %}<script src="{% static 'dialog-layout.js' %}" defer></script></body></html>

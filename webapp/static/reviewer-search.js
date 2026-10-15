@@ -15,6 +15,19 @@ document.addEventListener('DOMContentLoaded', () => {
       input.value = select.value ? select.selectedOptions[0].textContent : '';
       const status = document.createElement('small'); status.setAttribute('role', 'status');
       select.before(wrapper); wrapper.append(input, list, status); select.hidden = true;
+      const selection = document.createElement('div'); selection.className = 'reviewer-selection'; selection.hidden = true;
+      const selectedLabel = document.createElement('span');
+      const change = document.createElement('button'); change.type = 'button'; change.className = 'button'; change.textContent = 'Change';
+      selection.append(selectedLabel, change); wrapper.prepend(selection);
+      const showSelection = () => { selectedLabel.textContent = input.value; selection.hidden = false; input.hidden = true; status.textContent = ''; };
+      change.addEventListener('click', () => { selection.hidden = true; input.hidden = false; input.value = ''; select.value = ''; select.dispatchEvent(new Event('change', {bubbles:true})); input.focus(); });
+      const helpNode = select.closest('.form-field')?.querySelector(':scope > .helptext, :scope > small');
+      if (helpNode && helpNode !== status && !wrapper.contains(helpNode)) {
+        const disclosure = document.createElement('details'); disclosure.className = 'reviewer-help';
+        const summary = document.createElement('summary'); summary.textContent = 'Who can be assigned?';
+        helpNode.before(disclosure); disclosure.append(summary, helpNode);
+      }
+      if (select.value) showSelection();
       let timer, pending, generation = 0, active = -1, options = [];
       const close = () => { list.hidden = true; input.setAttribute('aria-expanded', 'false'); input.removeAttribute('aria-activedescendant'); active = -1; };
       const choose = item => {
@@ -22,7 +35,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const value = String(item.id);
         if (!Array.from(select.options).some(option => option.value === value)) select.add(new Option(item.label, value));
         select.value = value; input.value = item.label; select.dispatchEvent(new Event('change', {bubbles:true}));
-        status.textContent = 'Reviewer selected.'; close(); input.focus();
+        close(); showSelection(); change.focus();
       };
       const highlight = () => {
         [...list.children].forEach((node, index) => node.setAttribute('aria-selected', String(index === active)));
@@ -38,7 +51,9 @@ document.addEventListener('DOMContentLoaded', () => {
           options = data.items; list.replaceChildren();
           options.forEach((item, index) => {
             const option = document.createElement('li'); option.id = list.id + '-' + index;
-            option.setAttribute('role', 'option'); option.setAttribute('aria-selected', 'false'); option.textContent = item.label;
+            option.setAttribute('role', 'option'); option.setAttribute('aria-selected', 'false');
+            const parts = item.label.split(' · '); const name = document.createElement('strong'); name.textContent = parts.shift();
+            const detail = document.createElement('small'); detail.textContent = parts.join(' · '); option.append(name, detail);
             option.addEventListener('mousedown', event => event.preventDefault());
             option.addEventListener('click', () => choose(item)); list.append(option);
           });
@@ -46,9 +61,14 @@ document.addEventListener('DOMContentLoaded', () => {
           status.textContent = data.has_more ? 'First 20 matches. Refine your search.' : options.length ? 'Select a matching reviewer.' : 'No matching reviewers.';
         } catch (error) { if (error.name !== 'AbortError' && token === generation) status.textContent = error.message; }
       }
-      input.addEventListener('input', () => { select.value = ''; ++generation; pending?.abort(); close(); clearTimeout(timer); timer = setTimeout(search, 250); });
+      input.addEventListener('input', () => { select.value = ''; select.dispatchEvent(new Event('change', {bubbles:true})); ++generation; pending?.abort(); close(); clearTimeout(timer); timer = setTimeout(search, 250); });
       input.addEventListener('focus', () => { if (!select.value) search(); });
-      input.addEventListener('blur', () => { ++generation; clearTimeout(timer); pending?.abort(); close(); });
+      input.addEventListener('blur', event => {
+        ++generation; clearTimeout(timer); pending?.abort();
+        // Keep the dialog stable until its button receives the click. Collapsing
+        // results on mousedown would move Cancel/Close away from the pointer.
+        if (!event.relatedTarget?.closest('dialog')) close();
+      });
       input.addEventListener('keydown', event => {
         if (event.key === 'Escape' && !list.hidden) { event.preventDefault(); event.stopPropagation(); close(); }
         else if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {

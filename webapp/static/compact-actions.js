@@ -51,6 +51,8 @@
       const note = review.querySelector('[name="note"]')?.closest('.form-field');
       const owner = review.querySelector('[name="owner"]')?.closest('.form-field');
       const ownerDisclosure = owner?.closest('details');
+      const updateSubmit = () => { submit.disabled = submit.value === 'assign' && !owner?.querySelector('[name="owner"]').value; };
+      owner?.addEventListener('change', updateSubmit);
       const notePosition = document.createComment('review note'); if (note) note.before(notePosition);
       const ownerPosition = document.createComment('review owner'); if (owner) owner.before(ownerPosition);
       secondary.forEach(original => {
@@ -66,6 +68,7 @@
             note.querySelector('[name="note"]').disabled = note.hidden;
             fields.append(note);
           }
+          updateSubmit();
           dialog.showModal();
         });
       });

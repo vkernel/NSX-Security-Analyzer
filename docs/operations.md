@@ -339,3 +339,5 @@ conflict detection and three independent attempts remain required. A persistent
 mismatch still pauses evaluation and approval; duplicates are never counted as
 missing distinct VMs. If failures continue, retain the worker's three inventory
 verification entries and the sort-rejection warning, if present, for diagnosis.
+
+Action dialogs, including diagnostic collection and table column filters, use a consistent compact header, close button and fixed action footer. On short screens only the content area scrolls, keeping Cancel and the primary action accessible.
