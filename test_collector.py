@@ -805,12 +805,12 @@ examples.forEach((_,index) => {
                          "expression": [{"resource_type": "Condition", "member_type": member}]}
                 client = Mock()
                 client.get.return_value = {"results": []}
-                self.assertEqual(nsx.membership(client, group)[0], "unknown")
+                self.assertEqual(nsx.membership(client, group)[0], "not_supported")
                 client.get.return_value = {"results": ["192.0.2.1"]}
                 self.assertEqual(nsx.membership(client, group)[0], "nonempty")
         client = Mock()
         client.get.return_value = {"results": []}
-        self.assertEqual(nsx.membership(client, {"path": "/groups/a", "group_type": "ANTREA"})[0], "unknown")
+        self.assertEqual(nsx.membership(client, {"path": "/groups/a", "group_type": "ANTREA"})[0], "not_supported")
 
     def test_antrea_and_container_groups_are_audited(self):
         included = {"path": "/infra/domains/default/groups/g", "expression": []}
@@ -834,7 +834,7 @@ examples.forEach((_,index) => {
         self.assertEqual(len(report["inventory"]["groups"]), 3)
         for row in report["inventory"]["groups"][1:]:
             self.assertEqual(row["usage"], "unused_candidate")
-            self.assertEqual(row["membership"], "unknown")
+            self.assertEqual(row["membership"], "not_supported")
             self.assertEqual(row["audit_exclusions"], [])
         self.assertEqual(report["objects"][0]["referenced_by"], [antrea["path"]])
         self.assertEqual(client.get.call_count, 12)
@@ -867,7 +867,11 @@ examples.forEach((_,index) => {
         self.assertTrue(report["testing"])
         self.assertEqual(report["performance"]["workers"], 1)
         self.assertEqual(client.retries, 0)
-        self.assertEqual(client.get.call_count, 13)
+        # Empty search results try all three compatible query variants, once each.
+        self.assertEqual(client.get.call_count, 15)
+        searches = [call for call in client.get.call_args_list if call.args[0] == "/search/query"]
+        self.assertEqual(len(searches), 3)
+        self.assertEqual(len({call.args[1]["query"] for call in searches}), 3)
         self.assertEqual(report["groups_scanned"], 1)
         self.assertEqual(report["custom_services_scanned"], 1)
         self.assertTrue(all(r["usage"] == "unknown" for r in report["objects"]))
@@ -1535,11 +1539,11 @@ examples.forEach((_,index) => {
                                      "ip_addresses": ["192.0.2.0/24"]}]
         self.assertEqual(nsx.membership(Mock(), self.group)[0], "nonempty")
 
-    def test_unsupported_members_are_unknown(self):
+    def test_unsupported_members_are_not_supported(self):
         self.group["expression"] = [{"resource_type": "Condition", "member_type": "IdentityGroup"}]
         client = Mock()
         client.get.return_value = {"results": []}
-        self.assertEqual(nsx.membership(client, self.group)[0], "unknown")
+        self.assertEqual(nsx.membership(client, self.group)[0], "not_supported")
 
     def client_with_pages(self, pages):
         client = object.__new__(nsx.NSXClient)
