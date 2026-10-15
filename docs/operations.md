@@ -25,6 +25,20 @@ with bundled and external PostgreSQL; it does not provision a PostgreSQL login.
 
 No manual account-creation command is needed with release **0.5.2**.
 
+## Editing settings
+
+Environment, review-policy, retention, authentication and personal-settings forms
+show whether you have unsaved changes. With JavaScript enabled, leaving a changed
+form prompts the browser to confirm navigation. This is a warning, not autosave:
+save explicitly before leaving. Values remain in page memory and are not stored
+by this feature in browser storage. Finding review drafts receive the same protection.
+
+After server validation fails, an error summary links to the affected fields and
+opens their collapsed sections. Authentication settings are grouped by connection,
+user lookup (LDAPS), role mapping and certificate trust. Desktop save controls stay
+visible while scrolling; on narrow screens they remain in the normal page flow.
+Connection tests and certificate previews do not count as saving changes.
+
 ## Routine checks
 
 ```sh
@@ -341,3 +355,9 @@ missing distinct VMs. If failures continue, retain the worker's three inventory
 verification entries and the sort-rejection warning, if present, for diagnosis.
 
 Action dialogs, including diagnostic collection and table column filters, use a consistent compact header, close button and fixed action footer. On short screens only the content area scrolls, keeping Cancel and the primary action accessible.
+
+### Activity and automatic task updates
+
+Open **Activity** in the top bar to follow collections, finding review indexing and snapshot comparisons together. Filter by environment, task type or active/failed status. Each type has its own worker queue. The view is bounded to 30 active and 30 recent tasks per type (60 when filtering by status); finding indexing shows the latest task per environment. Comparison age is time since its original request, not measured processing duration.
+
+Activity, comparison preparation and finding recalculation status refresh while their page is visible, using your refresh interval. Updates pause inside a focused task region or an expanded detail to avoid interrupting reading. Collection state changes update in place instead of reloading the page, preserving snapshot selections. Follow **View collection result** when finished. Refresh the finding list after recalculation to load its new membership.

@@ -231,6 +231,8 @@ def snapshot_detail(request, pk):
             "id", "environment_id", "environment__id", "environment__name",
             "generated_at", "created_at", "testing", "needs_review", "imported"), pk=pk)
     from .models import Finding
+    from .review_navigation import return_url
+    review_return = return_url(request, snapshot.environment_id)
     finding_link = None
     finding_id = request.GET.get('finding', '')
     if finding_id.isdecimal():
@@ -251,7 +253,7 @@ def snapshot_detail(request, pk):
         report, report_diagnostics = presentation(snapshot, engine().render_html_report)
     presentation_seconds = perf_counter() - started - metadata_seconds
     response = render(request, "inventory/snapshot.html", {
-        "finding_link": finding_link, "snapshot": snapshot, "environment": snapshot.environment, "history": history, "report": report, "report_diagnostics": report_diagnostics, "is_latest": bool(history and history[0].pk == snapshot.pk), "legacy_report": indexed is None})
+        "review_return": review_return, "finding_link": finding_link, "snapshot": snapshot, "environment": snapshot.environment, "history": history, "report": report, "report_diagnostics": report_diagnostics, "is_latest": bool(history and history[0].pk == snapshot.pk), "legacy_report": indexed is None})
     logging.getLogger("inventory.web").info(
         "Snapshot page snapshot=%s mode=%s metadata_seconds=%.3f presentation_seconds=%.3f render_seconds=%.3f response_bytes=%d",
         snapshot.pk, "indexed" if indexed is not None else "legacy", metadata_seconds,
@@ -288,7 +290,8 @@ def api_jobs(request):
     else:
         jobs = jobs[:50]
     response = JsonResponse({"jobs": [{"id": str(job.pk), "environment": job.environment.name,
-        "status": job.status, "progress": job.progress,
+        "status": job.status, "label": job.get_status_display(), "progress": job.progress,
+        "result_url": f"/collections/{job.pk}/result/",
         "created_at": job.created_at.isoformat(), "error": job.error} for job in jobs]})
     response["Cache-Control"] = "private, no-store"
     return response

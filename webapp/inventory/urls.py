@@ -1,7 +1,9 @@
 from django.urls import path
-from . import authentication_settings, keycloak_settings, system_health, views, history_views, diagnostic_views, report_views
+from . import activity_views, authentication_settings, keycloak_settings, system_health, views, history_views, diagnostic_views, report_views
 
 urlpatterns = [
+    path('collections/<uuid:pk>/result/', activity_views.collection_result, name='collection-result'),
+    path('activity/', activity_views.activity, name='activity'),
     path('administration/environments/', views.environment_schedules, name='environment-schedules'),
     path('my-work/', history_views.my_work, name='my-work'),
     path('api/reviewers/', history_views.reviewer_search, name='reviewer-search'),

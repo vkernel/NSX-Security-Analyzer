@@ -563,8 +563,8 @@ class FindingWorkflowTests(TestCase):
         self.approve_owner()
         self.client.force_login(self.reviewer)
         for stage, queue, label in (
-            ('second_review', 'second', 'Awaiting assignment · owner approval preserved'),
-            ('ready', 'ready', 'Awaiting assignment · approvals preserved'),
+            ('second_review', 'second', 'Awaiting second approval'),
+            ('ready', 'ready', 'Ready for decommissioning'),
         ):
             with self.subTest(stage=stage):
                 approvals = self.finding.approvals.copy()
@@ -606,3 +606,55 @@ class FindingWorkflowTests(TestCase):
         decide(self.finding, self.owner, 'unassign', 'Release')
         decide(self.finding, self.admin, 'assign', '', self.reviewer)
         self.assertEqual(self.finding.owner_id, self.reviewer.pk)
+
+    def test_review_return_links_are_local_and_preserved_after_assignment(self):
+        from urllib.parse import urlencode
+        self.client.force_login(self.admin)
+        return_to = reverse('findings', args=[self.env.pk]) + '?owner=none&q=A&page=2'
+        url = self.url + '?' + urlencode({'return_to': return_to})
+        response = self.client.get(url)
+        self.assertEqual(response.context['review_return'], return_to)
+        response = self.client.post(url, {'action':'assign', 'owner':self.owner.pk, 'revision':self.finding.revision})
+        self.assertEqual(response.url, url)
+        for invalid in ('https://evil.example/', '//evil.example/', '/administration/', '/environments/999/findings/', 'http://['):
+            response = self.client.get(self.url, {'return_to':invalid})
+            self.assertEqual(response.context['review_return'], reverse('findings', args=[self.env.pk]))
+
+    def test_review_neighbours_follow_filter_and_sort_across_pages(self):
+        from unittest.mock import patch
+        from types import SimpleNamespace
+        from urllib.parse import urlsplit, parse_qs
+        self.client.force_login(self.admin)
+        other = Finding.objects.create(environment=self.env, snapshot=self.snapshot, kind='empty_group',
+            path='/infra/groups/b', name='B', qualification='eligible', fingerprint='b',
+            first_seen=timezone.now(), last_seen=timezone.now(), evaluated_at=timezone.now())
+        return_to = reverse('findings', args=[self.env.pk]) + '?owner=none&sort=name&direction=desc&page=2'
+        with patch('inventory.review_navigation.preferences', return_value=SimpleNamespace(page_size=1)):
+            response = self.client.get(self.url, {'return_to':return_to})
+        previous = response.context['review_navigation']['previous']
+        self.assertEqual(urlsplit(previous).path, reverse('finding-detail', args=[self.env.pk,other.pk]))
+        self.assertIn('page=1', parse_qs(urlsplit(previous).query)['return_to'][0])
+        self.assertNotIn('next', response.context['review_navigation'])
+        self.assign()
+        response = self.client.get(self.url, {'return_to':return_to})
+        self.assertTrue(response.context['review_navigation']['changed'])
+
+    def test_active_queue_and_decision_blocker_are_visible(self):
+        self.client.force_login(self.owner)
+        response = self.client.get(reverse('findings', args=[self.env.pk]), {'owner':'none'})
+        self.assertContains(response, 'href="?owner=none" aria-current="page"')
+        self.assign()
+        Finding.objects.filter(pk=self.finding.pk).update(qualification='insufficient')
+        response = self.client.get(self.url)
+        self.assertContains(response, 'id="decision-blocker"')
+        self.assertContains(response, 'aria-describedby="decision-blocker"')
+        self.assertContains(response, 'Review coverage')
+
+    def test_first_approver_is_not_offered_second_approval_after_reassignment(self):
+        self.approve_owner()
+        decide(self.finding, self.owner, 'unassign', 'Unavailable')
+        decide(self.finding, self.admin, 'assign', '', self.reviewer)
+        self.client.force_login(self.owner)
+        response = self.client.get(self.url)
+        self.assertFalse(response.context['can_decide'])
+        self.assertContains(response, 'The current owner and the first approver cannot provide the second approval.')

@@ -243,7 +243,7 @@ Screenshots show version 0.5.3 with synthetic documentation data. Names, counts 
 
 ![Reassign owner dialog with reviewer selection and reason](images/assign-owner.png)
 
-*Earlier screenshot: the current dialog combines search and selection into one field. Reassign owner opens a focused dialog. Reassigning owned work resets approvals; assigning released work preserves valid progress.*
+*Reassign owner opens a focused dialog with one searchable user selector. Reassigning owned work resets approvals; assigning released work preserves valid progress.*
 
 
 The progress indicator shows the current stage. Evidence and dependencies appear
@@ -338,3 +338,9 @@ The owner picker uses one search field with a short results list. Selecting a re
 ### Open the evaluated object
 
 Choose **View object in evaluated snapshot** to open the exact NSX path in the snapshot used for evaluation. Its inventory or firewall tab opens with the object details; a matching visible table row is highlighted. **Back to finding review** returns to the review. Missing objects show an explicit message, and retained review evidence remains available. This link uses the evaluated snapshot, which may differ from the newest collection.
+
+### Keeping your place in a review queue
+
+The active queue is highlighted. Assignment and review progress are separate: an unassigned finding may retain its first or final approvals, but needs an owner before approval or completion can continue. The decision panel explains the next step and any evidence blocker beside the action.
+
+Open a finding from Finding reviews or My work to retain the originating search, filters and page in its back link. Finding reviews also offers Previous/Next within the filtered order, including adjacent pages. If a decision removes the finding from those results, return to the list to continue. Returning in the same browser tab restores the saved list scroll position for up to one hour. The evaluated-snapshot round trip preserves this return link.

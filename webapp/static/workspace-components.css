@@ -225,3 +225,14 @@ body .action-dialog-footer{display:flex;justify-content:flex-end;gap:10px;flex:n
 @media(max-height:600px){.action-dialog-body .reviewer-options{max-height:none;overflow:visible}}
 
 .finding-target-row{outline:2px solid var(--app-accent,#2563eb);outline-offset:-2px}
+
+.review-neighbours{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;margin:12px 0}.review-neighbours:empty{display:none}
+
+/* Shared administrative editing and validation feedback. */
+[data-edit-form]>.unsaved-status{font-size:13px;color:var(--muted);margin:0 0 16px}
+.form-error-summary{padding:16px;margin-bottom:20px;border:2px solid #b42318;border-radius:8px;background:var(--app-surface,#fff)}
+.form-error-summary ul{margin:8px 0 0;padding-left:20px}.form-error-summary a{text-decoration:underline}
+[data-edit-form]>.form-actions,[data-edit-form]>.settings-savebar{position:sticky;bottom:0;z-index:3;background:var(--app-surface,#fff);padding:16px 0;border-top:1px solid var(--line);display:flex;gap:12px;flex-wrap:wrap}
+.action-dialog-body [data-edit-form]>.form-actions{position:static}
+.settings-section legend{font-size:16px;font-weight:600;padding:0 8px}
+@media(max-width:600px){[data-edit-form]>.form-actions,[data-edit-form]>.settings-savebar{position:static}.form-error-summary{padding:12px}.topbar-actions{gap:6px}}
