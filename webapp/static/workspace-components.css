@@ -198,3 +198,9 @@ body .compact-action-dialog{width:min(520px,calc(100vw - 32px));max-height:calc(
 .login-divider::before,.login-divider::after{content:"";height:1px;background:var(--line);flex:1}
 .login-note{margin:22px 0 0;padding-top:18px;border-top:1px solid var(--line);font-size:12px;line-height:1.6;color:var(--muted);text-align:center}
 @media(max-width:480px){.login-main{padding:18px}.login-content{padding:24px}.login-brand{padding:24px}}
+.reviewer-combobox{position:relative}
+.reviewer-options{position:absolute;top:44px;left:0;right:0;z-index:20;max-height:200px;overflow:auto;list-style:none;margin:0;padding:4px;background:var(--app-surface,#fff);border:1px solid var(--line);border-radius:7px;box-shadow:0 8px 24px #132c4320}
+.reviewer-options li{padding:10px;border-radius:4px;cursor:pointer;font-size:13px;overflow-wrap:anywhere}
+.reviewer-options li:hover,.reviewer-options li[aria-selected=true]{background:var(--app-surface-soft,#edf3ff)}
+.reviewer-combobox>small{display:block;margin-top:6px}
+select[data-reviewer-combobox][hidden]{display:none}

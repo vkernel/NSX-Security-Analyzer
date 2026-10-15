@@ -163,7 +163,10 @@ def decide(finding, actor, action, reason, owner=None, ticket='', manual_verifie
         raise ValidationError('Operator or administrator access is required.')
     reason, ticket = reason.strip(), ticket.strip()
     if not reason:
-        raise ValidationError('A reason is required for every workflow action.')
+        if action == 'assign' and not finding.owner_id:
+            reason = 'Owner assigned.'
+        else:
+            raise ValidationError('A reason is required for this workflow action.')
     before = finding.workflow_state
     if finding.required_approvals not in (1, 2):
         raise ValidationError('Invalid approval requirement.')

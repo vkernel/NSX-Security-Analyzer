@@ -47,7 +47,7 @@ Valid approvals and history are preserved; the server rechecks permissions and r
 ![Unassigned findings without release controls](images/unassigned-reviews.png)
 
 The **Unassigned** queue hides release controls. Open a finding and use
-**Actions → Assign owner** to take responsibility.
+**Assign owner** to take responsibility (under **Actions** when multiple actions are available). Search and select a reviewer in one field; unassigned work requires no assignment reason.
 
 ## Compare saved evidence
 

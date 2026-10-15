@@ -587,3 +587,22 @@ class FindingWorkflowTests(TestCase):
                 self.assertEqual(self.client.get(review_url, {'owner': 'none'}).context['page'].paginator.count, 0)
                 if stage == 'second_review':
                     decide(self.finding, self.reviewer, 'approve', 'Independent checks complete')
+
+    def test_ownerless_assignment_needs_no_note_but_reassignment_does(self):
+        self.client.force_login(self.admin)
+        response = self.client.post(self.url, {'action': 'assign', 'owner': self.owner.pk, 'revision': self.finding.revision})
+        self.assertEqual(response.status_code, 302)
+        self.finding.refresh_from_db()
+        self.assertEqual(self.finding.owner_id, self.owner.pk)
+        self.assertEqual(self.finding.events.first().details['reason'], 'Owner assigned.')
+        response = self.client.post(self.url, {'action': 'assign', 'owner': self.reviewer.pk, 'revision': self.finding.revision})
+        self.assertEqual(response.status_code, 200)
+        self.finding.refresh_from_db()
+        self.assertEqual(self.finding.owner_id, self.owner.pk)
+        with self.assertRaises(ValidationError):
+            decide(self.finding, self.admin, 'assign', '', self.reviewer)
+        with self.assertRaises(ValidationError):
+            decide(self.finding, self.owner, 'approve', '')
+        decide(self.finding, self.owner, 'unassign', 'Release')
+        decide(self.finding, self.admin, 'assign', '', self.reviewer)
+        self.assertEqual(self.finding.owner_id, self.reviewer.pk)
