@@ -30,6 +30,51 @@ class PaginationVerificationTests(SimpleTestCase):
         search_configuration(client)
         self.assertEqual(client.inventory_warnings[0]['conflicts'][0]['changed_fields'], ['expression'])
 
+    def test_vm_pages_use_external_id_sort_and_preserve_filters(self):
+        calls = []
+        pages = iter([
+            {'results': [{'external_id': 'a'}], 'result_count': 2, 'cursor': 'next'},
+            {'results': [{'external_id': 'b'}]},
+        ])
+        client = self.nsx_client([])
+        def get(path, params):
+            calls.append(dict(params))
+            return next(pages)
+        client.get.side_effect = get
+        original = {'enforcement_point_path': '/infra/ep'}
+        self.assertEqual(len(list(client.items('/infra/realized-state/virtual-machines', original))), 2)
+        self.assertEqual(original, {'enforcement_point_path': '/infra/ep'})
+        for params in calls:
+            self.assertEqual(params['sort_by'], 'external_id')
+            self.assertEqual(params['sort_ascending'], 'true')
+            self.assertEqual(params['enforcement_point_path'], '/infra/ep')
+        self.assertEqual(calls[1]['cursor'], 'next')
+
+    def test_explicit_vm_sort_is_preserved(self):
+        client = self.nsx_client([{'results': [], 'result_count': 0}])
+        list(client.items('/infra/realized-state/virtual-machines', {'sort_by': 'display_name', 'sort_ascending': 'false'}))
+        self.assertEqual(client.get.call_args.args[1]['sort_by'], 'display_name')
+        self.assertEqual(client.get.call_args.args[1]['sort_ascending'], 'false')
+
+    def test_vm_sort_rejection_falls_back_only_before_pagination(self):
+        calls = []
+        client = self.nsx_client([])
+        def get(path, params):
+            calls.append(dict(params))
+            if len(calls) == 1:
+                raise AuditError('Unsupported sort', status_code=400)
+            return {'results': [{'external_id': 'a'}], 'result_count': 1}
+        client.get.side_effect = get
+        self.assertEqual(len(list(client.items('/infra/realized-state/virtual-machines'))), 1)
+        self.assertNotIn('sort_by', calls[1])
+        client = self.nsx_client([
+            {'results': [{'external_id': 'a'}], 'result_count': 2, 'cursor': 'next'},
+            AuditError('Bad cursor', status_code=400),
+        ])
+        with self.assertRaises(AuditError):
+            list(client.items('/infra/realized-state/virtual-machines'))
+        self.assertEqual(client.get.call_count, 2)
+
     def nsx_client(self, pages):
         client = object.__new__(NSXClient)
         client.get = Mock(side_effect=pages)

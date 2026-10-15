@@ -183,3 +183,18 @@ body .compact-action-dialog{width:min(520px,calc(100vw - 32px));max-height:calc(
 [data-finding-review] [hidden]{display:none!important}[data-snapshot-compare][aria-disabled=true]{opacity:.5;cursor:default}
 @media(max-width:600px){.comparison-arrow{display:none}.comparison-toolbar>.form-field{flex-basis:100%}.compact-action-dialog .form-actions{flex-wrap:wrap}}
 .directory-toolbar>.form-actions{margin:0;padding:0;border:0;align-self:end}.compact-action-dialog textarea{font-family:inherit;padding:10px;resize:vertical}
+
+/* Shared sign-in shell uses the same logo and navy as the application sidebar. */
+.login-main .login-panel{padding:0;max-width:440px;overflow:hidden;border-radius:12px}
+.login-brand{display:flex;justify-content:center;background:#111827;padding:28px 24px;border-bottom:3px solid #2563eb}
+.login-brand img{display:block;width:208px;max-width:100%;height:auto}
+.login-content{padding:28px 32px 24px}
+.login-panel h1{font-size:26px;margin:0 0 8px;line-height:1.25}
+.login-panel .lead{font-size:14px;line-height:1.6;margin:0 0 24px;color:var(--muted)}
+.login-panel form{margin-top:0}
+.login-panel form p{margin:0 0 18px}
+.login-providers{display:grid;gap:10px}
+.login-divider{display:flex;align-items:center;gap:12px;margin:22px 0;color:var(--muted);font-size:12px}
+.login-divider::before,.login-divider::after{content:"";height:1px;background:var(--line);flex:1}
+.login-note{margin:22px 0 0;padding-top:18px;border-top:1px solid var(--line);font-size:12px;line-height:1.6;color:var(--muted);text-align:center}
+@media(max-width:480px){.login-main{padding:18px}.login-content{padding:24px}.login-brand{padding:24px}}

@@ -323,3 +323,19 @@ add no NSX calls. They include finding Actions dialogs, contextual bulk release,
 a compact comparison toolbar, two-snapshot selection, a diagnostic collection
 dialog and collapsible approval explanations. JavaScript is required for selection
 shortcuts; direct finding forms and comparison selectors remain available.
+
+### Repeated VM pagination warnings
+
+VM inventory requests now explicitly request ascending `external_id` order on
+`/infra/realized-state/virtual-machines` to reduce page overlap caused by unstable
+ordering. The endpoint documents sorting parameters in the
+[Broadcom API guide](https://developer.broadcom.com/xapis/nsx-t-data-center-rest-api/latest/method_ListAllVirtualMachines.html).
+If NSX rejects the automatic sort with HTTP 400 on the first page, collection
+retries that page without sorting and logs the fallback. Errors on subsequent
+pages are not treated as sort rejection.
+
+Sorting does not provide an atomic inventory snapshot. Unique-count checks,
+conflict detection and three independent attempts remain required. A persistent
+mismatch still pauses evaluation and approval; duplicates are never counted as
+missing distinct VMs. If failures continue, retain the worker's three inventory
+verification entries and the sort-rejection warning, if present, for diagnosis.

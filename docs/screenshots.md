@@ -11,6 +11,15 @@ filters and review state can change the available controls. Click an image on Gi
 to view its full size. Screenshots illustrate appearance, not collection completeness
 or approval of any real object.
 
+## Sign in
+
+![Sign-in page with the NSX Security Analyzer shield logo](images/login.png)
+
+The updated sign-in design above was captured from development on 15 October
+2026 using an isolated local instance. The other screenshots below show 0.5.3.
+Enter your local credentials, or choose Keycloak or LDAPS when your administrator
+has enabled them. The LDAPS page uses the same branding and form layout.
+
 ## Find and review work
 
 ![Finding reviews with owner and review-state columns](images/finding-reviews.png)

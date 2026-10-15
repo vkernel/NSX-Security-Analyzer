@@ -235,6 +235,10 @@ class NSXClient:
 
     def _items_once(self, path, params=None, page_size=1000):
         params = dict(params or {})
+        vm_default_sort = path == "/infra/realized-state/virtual-machines" and "sort_by" not in params
+        if vm_default_sort:
+            # Stable identity order avoids relying on changing runtime/default ordering.
+            params.update(sort_by="external_id", sort_ascending="true")
         if path == "/search/query" and "sort_by" not in params:
             params.update(sort_by="path", sort_ascending="true")
         if getattr(self, "testing", False) is True:
@@ -265,6 +269,12 @@ class NSXClient:
                     LOG.warning("NSX rejected sorted search; retrying the same query without sort parameters")
                     params.pop("sort_by", None)
                     params.pop("sort_ascending", None)
+                    page = self.get(path, params)
+                elif vm_default_sort and not seen and exc.status_code == 400:
+                    LOG.warning("NSX rejected VM external_id sorting; retrying page one without sort parameters. Completeness checks remain required.")
+                    params.pop("sort_by", None)
+                    params.pop("sort_ascending", None)
+                    vm_default_sort = False
                     page = self.get(path, params)
                 else:
                     raise
@@ -1770,6 +1780,7 @@ def feature_guide():
 <p>Shared pacing and HTTP 429 cooldown waits do not consume the individual request retry budget; the overall collection deadline still applies. Compatibility search is used when NSX rejects unrestricted queries or returns an empty broad result despite nonempty directly collected groups/services, and its limited resource-type coverage remains visible. Unsupported identity/container checks and configured exclusions are not proof of empty membership. Older snapshots keep their original request errors: upgrading or rebuilding an index does not repeat those NSX checks.</p>
 <h3>Inventory changed during collection</h3>
 <p>Inventory pagination checks unique identities, conflicting versions and the reported total. A mismatch restarts that endpoint from page one, with 2- and 4-second delays, for three attempts in total. Attempts are never merged. An unresolved mismatch can leave a browsable snapshot with coverage warnings, while finding evaluation and approval are paused. Existing finding presence and observation progress are not advanced; historical recalculation skips unverified snapshots. Comparisons mark missing objects as Presence uncertain.</p>
+<p>VM inventory requests explicitly sort by external ID to reduce unstable page ordering. If NSX rejects this automatic sort on page one, the collector logs a fallback to unsorted requests. Sorting does not guarantee an atomic inventory; all completeness checks and retry limits remain in place.</p>
 <p>For example, <strong>1237/1238 unique objects; 1 duplicate rows</strong> means 1,237 distinct identities were returned against a reported count of 1,238. The repeated row does not fill the gap. This may reflect inventory churn, page overlap or an inconsistent count; the message alone does not identify the cause. No small discrepancy is silently accepted.</p>
 <p>On the dedicated VM endpoint, duplicate differences only in _last_sync_time, compute_ids, guest_info, host_id, local_id_on_host, power_state or source are tolerated as runtime churn. Displayed runtime details are first-observed values. Tags, names, deletion state, other fields, identity and completeness remain checked. This exception does not apply to configuration search.</p>
 <p>Run another collection after changes settle. Persistent warnings need the endpoint, counts, attempt number, job ID, NSX version and actual worker build from Collections → Diagnostics and worker logs. Updating software or rebuilding saved indexes cannot verify an old snapshot. A later verified full collection is needed to resume evaluation. Missing group/service paths in configuration search are a separate check: persistent gaps after three coverage attempts fail the collection without publishing a new snapshot. Limited compatibility-search scope remains visible even when those paths are covered.</p>
