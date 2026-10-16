@@ -182,6 +182,12 @@ class FindingReviewForm(forms.Form):
         from django.contrib.auth import get_user_model
         finding, actor = kwargs.pop('finding', None), kwargs.pop('actor', None)
         super().__init__(*args, **kwargs)
+        # Default new assignments to the current eligible reviewer. Submitted
+        # choices (including a cleared field) must survive validation errors.
+        if (not self.is_bound and finding and not finding.owner_id
+                and not self.initial.get('owner') and actor
+                and actor.is_active and actor.is_staff):
+            self.initial['owner'] = actor.pk
         selected = self.data.get(self.add_prefix('owner')) if self.is_bound else self.initial.get('owner')
         selected = int(selected) if str(selected or '').isdigit() and len(str(selected)) < 19 else None
         self.fields['owner'].queryset = get_user_model().objects.filter(pk=selected, is_active=True, is_staff=True).select_related('keycloakidentity', 'ldapidentity')

@@ -588,6 +588,24 @@ class FindingWorkflowTests(TestCase):
                 if stage == 'second_review':
                     decide(self.finding, self.reviewer, 'approve', 'Independent checks complete')
 
+    def test_assign_owner_defaults_to_current_reviewer_without_assigning(self):
+        self.client.force_login(self.reviewer)
+        response = self.client.get(self.url)
+        form = response.context['form']
+        self.assertEqual(form['owner'].value(), self.reviewer.pk)
+        self.assertContains(response, f'value="{self.reviewer.pk}" selected')
+        self.finding.refresh_from_db()
+        self.assertIsNone(self.finding.owner_id)
+        self.assertFalse(self.finding.events.exists())
+        # Preserve another selection and an explicitly cleared field on errors.
+        for selected in (str(self.owner.pk), ''):
+            response = self.client.post(self.url, {'action': 'assign', 'owner': selected, 'revision': -1})
+            self.assertEqual(response.status_code, 200)
+            self.assertEqual(response.context['form']['owner'].value(), selected)
+        self.assign()
+        response = self.client.get(self.url)
+        self.assertEqual(response.context['form']['owner'].value(), self.owner.pk)
+
     def test_ownerless_assignment_needs_no_note_but_reassignment_does(self):
         self.client.force_login(self.admin)
         response = self.client.post(self.url, {'action': 'assign', 'owner': self.owner.pk, 'revision': self.finding.revision})
