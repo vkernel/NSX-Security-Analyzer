@@ -344,3 +344,23 @@ Choose **View object in evaluated snapshot** to open the exact NSX path in the s
 The active queue is highlighted. Assignment and review progress are separate: an unassigned finding may retain its first or final approvals, but needs an owner before approval or completion can continue. The decision panel explains the next step and any evidence blocker beside the action.
 
 Open a finding from Finding reviews or My work to retain the originating search, filters and page in its back link. Finding reviews also offers Previous/Next within the filtered order, including adjacent pages. If a decision removes the finding from those results, return to the list to continue. Returning in the same browser tab restores the saved list scroll position for up to one hour. The evaluated-snapshot round trip preserves this return link.
+
+
+## Recover a first approval after a collection gap
+
+Administrators can open a finding in **Owner review**, then select **Preview approval
+recovery** in Review history. The preview changes nothing. It shows the original
+approver, timestamp and reason if recovery is supported, or an explanation if blocked.
+Confirm explicitly to restore the first approval and return to **Awaiting second
+approval**. The original approver cannot provide the independent second approval.
+Recovery is recorded as a separate administrator event; the original decision is
+preserved unchanged. Second approvals are never restored by this action.
+
+Recovery requires a completed criteria recalculation, current eligible evidence,
+the same active owner, unchanged review evidence and coverage, stable object identity,
+and retained evidence across the interval. A saved assessment must explicitly prove
+that the interruption was a collection gap. Changed evidence, later workflow actions,
+incomplete coverage, missing history or ambiguous invalidation reasons block recovery.
+An increased maximum gap alone does not guarantee that recovery is possible.
+Checks run again when confirming, and a stale preview must be reopened. When blocked,
+resolve current evidence issues and obtain a fresh owner approval.

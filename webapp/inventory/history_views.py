@@ -377,3 +377,30 @@ def my_work(request):
 
     from urllib.parse import urlencode
     return render(request, 'inventory/my_work.html', {'page': page, 'review_return': request.get_full_path(), 'queue': queue, 'query': term, 'environments': Environment.objects.only('pk','name'), 'work_environment': selected_environment, 'sort': sort, 'query_string': urlencode({'queue': queue, 'q': term, 'environment':selected_environment, 'sort':sort})})
+
+
+@login_required
+@require_http_methods(['GET', 'POST'])
+def approval_recovery(request, pk, finding_id):
+    if not request.user.is_active or not request.user.is_superuser:
+        return HttpResponseForbidden('Administrator access is required.')
+    from .approval_recovery import preview, recover
+    from django.core.exceptions import ValidationError
+    from contextlib import nullcontext
+    error = ''
+    with transaction.atomic() if request.method == 'POST' else nullcontext():
+        environment = get_object_or_404(Environment.objects.select_for_update() if request.method == 'POST' else Environment.objects, pk=pk)
+        rows = Finding.objects.select_for_update() if request.method == 'POST' else Finding.objects
+        finding = get_object_or_404(rows, environment=environment, pk=finding_id)
+        if request.method == 'POST':
+            try:
+                if request.POST.get('confirm') != 'yes':
+                    raise ValidationError('Confirm recovery of the first approval.')
+                recover(finding, request.user, request.POST.get('revision'), request.POST.get('event_id'))
+            except ValidationError as exc:
+                error = '; '.join(exc.messages)
+            else:
+                messages.success(request, 'Original first approval recovered. Independent second approval is required.')
+                return redirect('finding-detail', pk=pk, finding_id=finding_id)
+        result = preview(finding)
+    return render(request, 'inventory/approval_recovery.html', {'environment': environment, 'finding': finding, 'recovery': result, 'error': error})

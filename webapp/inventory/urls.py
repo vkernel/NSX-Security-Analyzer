@@ -19,6 +19,7 @@ urlpatterns = [
     path('environments/<int:pk>/compare/', history_views.comparison, name='snapshot-comparison'),
     path('environments/<int:pk>/coverage/', history_views.coverage, name='collection-coverage'),
     path('environments/<int:pk>/findings/', history_views.findings, name='findings'),
+    path('environments/<int:pk>/findings/<int:finding_id>/recover-approval/', history_views.approval_recovery, name='approval-recovery'),
     path('environments/<int:pk>/findings/<int:finding_id>/history.json', history_views.finding_history_export, name='finding-history-export'),
     path('environments/<int:pk>/findings/<int:finding_id>/', history_views.finding_detail, name='finding-detail'),
     path('workspace/<slug:section>/', views.workspace_section, name='workspace-section'),

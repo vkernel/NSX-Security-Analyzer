@@ -676,3 +676,85 @@ class FindingWorkflowTests(TestCase):
         response = self.client.get(self.url)
         self.assertFalse(response.context['can_decide'])
         self.assertContains(response, 'The current owner and the first approver cannot provide the second approval.')
+
+    def recovery_fixture(self):
+        from .models import SnapshotFindingAssessment, SnapshotFindingEvidence, FindingRecalculation
+        from .observation import condition_fingerprint
+        self.finding.evidence = {'membership': 'empty', 'unique_id': 'stable-object'}
+        self.finding.save()
+        self.approve_owner()
+        original = self.finding.approvals['owner'].copy()
+        stamp = self.snapshot.generated_at + timedelta(microseconds=1)
+        current = Snapshot.objects.create(environment=self.env, generated_at=stamp, report={})
+        SnapshotRecord.objects.create(snapshot=current, ordinal=1, view='inventory', name='A', sort_name='a',
+            compact={'path': self.finding.path, 'membership': 'empty'}, data={}, columns=[], sort_values={}, search_basic='', search_evidence='')
+        SnapshotFindingAssessment.objects.create(snapshot=current, path=self.finding.path, kind=self.finding.kind,
+            assessment={'status':'observing', 'reason':'Observation restarted after a gap exceeding 24.0 hours.'})
+        invalidate(self.finding, 'Current evidence no longer qualifies under the finding criteria.')
+        self.finding.snapshot = current
+        self.finding.observation_started = self.snapshot.generated_at
+        self.finding.save()
+        for snapshot in (self.snapshot, current):
+            SnapshotFindingEvidence.objects.create(snapshot=snapshot, path=self.finding.path, kind=self.finding.kind,
+                name='A', fingerprint=condition_fingerprint(self.finding.kind, self.finding.evidence))
+        FindingRecalculation.objects.create(environment=self.env, kinds=[self.finding.kind], status='completed', finished_at=timezone.now())
+        return original, current
+
+    def test_gap_recovery_preview_confirmation_and_independent_review(self):
+        original, current = self.recovery_fixture()
+        url = reverse('approval-recovery', args=[self.env.pk, self.finding.pk])
+        self.client.force_login(self.owner)
+        self.assertEqual(self.client.get(url).status_code, 403)
+        self.assertEqual(self.client.post(url, {'confirm':'yes'}).status_code, 403)
+        self.client.force_login(self.admin)
+        response = self.client.get(url)
+        result = response.context['recovery']
+        self.assertTrue(result['allowed'], result)
+        self.finding.refresh_from_db()
+        self.assertEqual(self.finding.approvals, {})
+        data = {'revision':self.finding.revision, 'event_id':result['event_id']}
+        self.assertEqual(self.client.post(url, data).status_code, 200)
+        data['confirm'] = 'yes'
+        self.assertEqual(self.client.post(url, dict(data, revision=-1)).status_code, 200)
+        self.assertEqual(self.client.post(url, data).status_code, 302)
+        self.finding.refresh_from_db()
+        self.assertEqual(self.finding.approvals, {'owner':original})
+        self.assertEqual(self.finding.workflow_state, 'second_review')
+        self.assertEqual(self.finding.events.first().details['action'], 'approval_recovered')
+        with self.assertRaises(ValidationError):
+            decide(self.finding, self.owner, 'approve', 'Cannot approve twice')
+        self.assertEqual(self.client.post(url, data).status_code, 200)
+
+    def test_gap_recovery_blocks_missing_proof_and_changed_evidence(self):
+        from .approval_recovery import preview
+        from .models import SnapshotFindingAssessment
+        original, current = self.recovery_fixture()
+        self.finding.evidence['unique_id'] = 'replacement'
+        self.assertFalse(preview(self.finding)['allowed'])
+        self.finding.evidence = original['evidence']
+        current.needs_review = True; current.save()
+        self.assertFalse(preview(self.finding)['allowed'])
+        current.needs_review = False; current.save()
+        SnapshotFindingAssessment.objects.filter(snapshot=current).delete()
+        self.assertFalse(preview(self.finding)['allowed'])
+
+    def test_gap_recovery_rechecks_workflow_and_recalculation(self):
+        from .approval_recovery import preview
+        from .models import FindingRecalculation
+        original, current = self.recovery_fixture()
+        invalidation = self.finding.events.filter(details__action='approval_invalidated').first()
+        details = invalidation.details.copy()
+        invalidation.details = dict(details, reason='Relevant evidence changed or the condition was observed again.')
+        invalidation.save()
+        self.assertFalse(preview(self.finding)['allowed'])
+        invalidation.details = details; invalidation.save()
+        self.finding.owner = self.reviewer
+        self.assertFalse(preview(self.finding)['allowed'])
+        self.finding.owner = self.owner
+        job = FindingRecalculation.objects.get(environment=self.env)
+        job.status = 'queued'; job.save()
+        self.assertFalse(preview(self.finding)['allowed'])
+        job.status = 'completed'; job.save()
+        self.assertTrue(preview(self.finding)['allowed'])
+        self.finding.events.create(message='Owner changed', details={'action':'assign'})
+        self.assertFalse(preview(self.finding)['allowed'])
