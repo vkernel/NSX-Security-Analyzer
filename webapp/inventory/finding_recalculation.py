@@ -143,6 +143,17 @@ def run(pk, token):
             if key not in seen: del states[key]
         current.update(processed=number)
         LOG.info('finding_recalculation job=%s snapshot=%s progress=%s/%s candidates=%s', pk, snapshot_id, number, len(history), len(states))
+    # Prepare potentially large evidence projections before taking the publication
+    # lock. Recheck the snapshot, policy and restore set after acquiring it.
+    present_keys = set(Finding.objects.filter(environment=env, kind__in=job.kinds, present=True).values_list('kind', 'path'))
+    restore_candidates = set(states) - present_keys
+    restored = {}
+    if restore_candidates and history:
+        for section, row in source_rows(history[-1][0]):
+            report = {'objects': [row]} if section == 'objects' else {'dfw': {section: [row]}}
+            for kind, path, name, evidence in candidates(report):
+                if (kind, path) in restore_candidates:
+                    restored[(kind, path)] = evidence
     with transaction.atomic():
         # Same environment lock as collection synchronization and finding reviews.
         Environment.objects.select_for_update().get(pk=env.pk)
@@ -158,12 +169,10 @@ def run(pk, token):
         existing = {(f.kind, f.path): f for f in Finding.objects.filter(environment=env, kind__in=job.kinds).defer('evidence')}
         # Restore evidence and presence for rows missing from the live finding state.
         restore = {key for key in states if key not in existing or not existing[key].present}
-        restored = {}
-        if restore and history:
-            for section, row in source_rows(history[-1][0]):
-                report = {'objects': [row]} if section == 'objects' else {'dfw': {section: [row]}}
-                for kind, path, name, evidence in candidates(report):
-                    if (kind, path) in restore: restored[(kind, path)] = evidence
+        if not restore.issubset(restored):
+            # A concurrent publication changed the rows needing restoration.
+            current.update(status='queued', processed=0)
+            return
         required_approvals = workspace_policy().required_approvals
         creates, updates, restored_updates = [], [], []
         for key, state in states.items():

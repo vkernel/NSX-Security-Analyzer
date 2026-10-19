@@ -21,11 +21,13 @@ class AdaptiveRequests:
         self.condition = threading.Condition()
         self.latencies = {}
 
-    def acquire(self):
+    def acquire(self, deadline=None):
         with self.condition:
             while self.active >= self.limit:
                 self.contended = True
-                self.condition.wait()
+                if deadline is not None and self.clock() >= deadline:
+                    raise TimeoutError('Request phase budget exhausted while waiting for concurrency')
+                self.condition.wait(timeout=max(.001, deadline - self.clock()) if deadline is not None else None)
             self.active += 1
         return self.clock()
 
@@ -106,16 +108,18 @@ def adapt_requests(client):
 
     def request(path, params=None):
         queued_at = time.monotonic()
-        started = controller.acquire()
+        phase_deadline = getattr(client.request_context, 'phase_deadline', None)
+        started = controller.acquire(deadline=phase_deadline)
         error = None
         try:
             # Queue time is not time spent attempting a request. The whole
             # collection deadline still bounds pacing and server cooldowns.
-            pacer.acquire()
+            pacer.acquire(deadline=phase_deadline)
             waited = time.monotonic() - queued_at
             if hasattr(client.request_context, 'deadline'):
                 client.request_context.deadline = min(client.request_context.deadline + waited,
-                                                      getattr(client, 'request_deadline', float('inf')))
+                                                      getattr(client, 'request_deadline', float('inf')),
+                                                      phase_deadline if phase_deadline is not None else float('inf'))
             started = controller.clock()
             return original(path, params)
         except BaseException as exc:
@@ -123,7 +127,7 @@ def adapt_requests(client):
             raise
         finally:
             endpoint = ("rule_statistics" if "/rules/" in path else "policy_statistics") if path.endswith("/statistics") else (
-                "membership" if "/members/" in path else "search" if path.startswith("/search/") else "inventory")
+                "membership/" + path.rsplit("/", 1)[-1] if "/members/" in path else "search" if path.startswith("/search/") else "inventory")
             pacer.result(error)
             controller.release(started, error, endpoint)
 

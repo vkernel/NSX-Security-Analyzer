@@ -57,8 +57,17 @@ def collection_diagnostics(request, pk):
     job = get_object_or_404(AuditJob.objects.defer('config','environment__password_ciphertext','environment__ca_certificate').select_related('environment'), pk=pk)
     from .models import Snapshot
     diagnostics = Snapshot.objects.filter(job_id=job.pk).values('report__performance', 'report__dfw__collection_diagnostics').first()
+    performance = (diagnostics or {}).get('report__performance') or {}
+    endpoints = (performance.get('concurrency') or {}).get('endpoints') or {}
+    phase_labels = {'inventory': 'Base inventory', 'search': 'Reference search', 'dfw': 'Firewall rules and counters',
+                    'membership': 'Group membership', 'tags': 'Tags and VM inventory'}
+    retrieval_phases = [{'label': phase_labels.get(key, key.replace('_', ' ').capitalize()), 'seconds': value}
+                        for key, value in performance.get('phases_seconds', {}).items()]
     response = render(request, 'inventory/collection_diagnostics.html', {
         'job': job, 'timeline': job.diagnostics.get('timeline', []),
+        'performance': performance, 'retrieval_phases': retrieval_phases,
+        'endpoint_rows': [{'label': key.replace('_', ' '), **value} for key, value in endpoints.items()],
+        'counter_retries': (diagnostics or {}).get('report__dfw__collection_diagnostics') or {},
         'error_detail': json.dumps(job.diagnostics.get('error', {}), indent=2),
         'request_statistics': json.dumps(diagnostics, indent=2) if diagnostics else '',
     })

@@ -43,17 +43,24 @@ def candidates(report):
 
 
 @transaction.atomic
-def synchronize(environment_id):
+def synchronize(environment_id, collected_snapshot=None, job_id=None):
     """Idempotent; serialize reviews/collection against the latest full snapshot."""
     LOG.info("findings environment_id=%s acquiring environment lock", environment_id)
-    environment = Environment.objects.select_for_update().only("id", "sync_interval_minutes").get(pk=environment_id)
+    from contextlib import nullcontext
+    from .diagnostics import phase
+    with phase(job_id, 'wait_for_environment_lock') if job_id else nullcontext():
+        environment = Environment.objects.select_for_update().only("id", "sync_interval_minutes").get(pk=environment_id)
     snapshot = environment.snapshots.filter(testing=False, imported=False).only('id','generated_at').first()
     if snapshot is None:
         return
     if environment.findings.exists() and not environment.findings.exclude(snapshot_id=snapshot.pk).exists():
         return
     policy = observation.policy_for(environment)
-    report = snapshot.report
+    if (collected_snapshot is not None and collected_snapshot.pk == snapshot.pk
+            and collected_snapshot.environment_id == environment_id):
+        report = collected_snapshot.report
+    else:
+        report = snapshot.report
     if report.get('inventory_warnings'):
         LOG.warning("findings environment_id=%s paused: inventory verification incomplete", environment_id)
         return

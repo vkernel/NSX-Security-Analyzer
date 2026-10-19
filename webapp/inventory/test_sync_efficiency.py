@@ -71,3 +71,42 @@ class OverlappingRetrievalTests(SimpleTestCase):
              patch.object(collector, 'collect_references', side_effect=FinishedRetrieval):
             with self.assertRaises(FinishedRetrieval):
                 collector.audit(Mock(), workers=4)
+
+
+class CollectionReportReuseTests(TestCase):
+    def test_current_in_memory_report_avoids_database_report_reload(self):
+        from django.db import connection
+        from django.test.utils import CaptureQueriesContext
+        from .findings import synchronize
+        env = Environment.objects.create(name='Reuse', slug='reuse', manager='https://example.invalid')
+        snapshot = Snapshot.objects.create(environment=env, generated_at=timezone.now(),
+            report={'inventory_warnings': ['incomplete']})
+        with CaptureQueriesContext(connection) as queries:
+            synchronize(env.pk, collected_snapshot=snapshot)
+        self.assertFalse(any('SELECT' in q['sql'] and '"report"' in q['sql'] for q in queries))
+        # A stale supplied object cannot override the actual latest snapshot.
+        Snapshot.objects.create(environment=env, generated_at=timezone.now(), report={'inventory_warnings':['new']})
+        with CaptureQueriesContext(connection) as queries:
+            synchronize(env.pk, collected_snapshot=snapshot)
+        self.assertTrue(any('SELECT' in q['sql'] and '"report"' in q['sql'] for q in queries))
+
+
+    def test_collection_diagnostics_shows_readable_costs_and_legacy_fallback(self):
+        from django.contrib.auth import get_user_model
+        from django.urls import reverse
+        from django.test import override_settings
+        from .models import AuditJob
+        user = get_user_model().objects.create_user('diagnostics-reviewer', is_staff=True)
+        self.client.force_login(user)
+        env = Environment.objects.create(name='Timings', slug='timings', manager='https://example.invalid')
+        job = AuditJob.objects.create(environment=env, status='succeeded')
+        snapshot = Snapshot.objects.create(environment=env, job=job, generated_at=timezone.now(), report={
+            'performance': {'http': {'requests': 42}, 'phases_seconds': {'membership': 12},
+                'concurrency': {'endpoints': {'membership/ip-addresses': {'successful_requests': 10, 'failed_requests': 1, 'request_seconds': 8, 'p95_seconds': 2}}}}})
+        with override_settings(STORAGES={'staticfiles': {'BACKEND': 'django.contrib.staticfiles.storage.StaticFilesStorage'}}):
+            response = self.client.get(reverse('collection-diagnostics', args=[job.pk]))
+            self.assertContains(response, 'Where collection time was spent')
+            self.assertContains(response, 'Group membership')
+            self.assertContains(response, 'membership/ip-addresses')
+            snapshot.report = {}; snapshot.save()
+            self.assertEqual(self.client.get(reverse('collection-diagnostics', args=[job.pk])).status_code, 200)

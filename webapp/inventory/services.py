@@ -314,7 +314,7 @@ def execute_job(job_id):
                 build(snapshot, snapshot._rendered)
             from .findings import synchronize
             with phase(job.pk, "synchronize_findings"):
-                synchronize(job.environment_id)
+                synchronize(job.environment_id, collected_snapshot=snapshot, job_id=job.pk)
             if stop_requested(job.pk):
                 raise CollectionStopped()
             current.status = "succeeded"

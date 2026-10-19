@@ -50,15 +50,17 @@ def preview(finding):
     expected = condition_fingerprint(finding.kind, decision.get('evidence', {}))
     snapshots = Snapshot.objects.filter(environment=finding.environment, testing=False, imported=False,
         generated_at__gte=original.generated_at, generated_at__lte=finding.snapshot.generated_at)
-    for snapshot in snapshots.only('pk', 'needs_review', 'summary').iterator():
-        if snapshot.needs_review or snapshot.summary.get('inventory_warnings'):
+    evidence_by_snapshot = dict(SnapshotFindingEvidence.objects.filter(snapshot__in=snapshots,
+        kind=finding.kind, path=finding.path).values_list('snapshot_id', 'fingerprint'))
+    fields = ['pk', 'needs_review', 'summary']
+    if finding.kind == 'unused':
+        fields.append('report__search_coverage')
+    for snapshot in snapshots.values(*fields).iterator():
+        if snapshot['needs_review'] or snapshot['summary'].get('inventory_warnings'):
             return blocked('The retained interval contains incomplete coverage; recovery cannot be proven safe.')
-        if finding.kind == 'unused':
-            coverage = Snapshot.objects.filter(pk=snapshot.pk).values_list('report__search_coverage', flat=True).get()
-            if coverage_key(coverage) != decision.get('coverage_key', ''):
-                return blocked('Reference-search coverage changed within the retained interval.')
-        evidence = SnapshotFindingEvidence.objects.filter(snapshot=snapshot, kind=finding.kind, path=finding.path).first()
-        if not evidence or evidence.fingerprint != expected:
+        if finding.kind == 'unused' and coverage_key(snapshot['report__search_coverage']) != decision.get('coverage_key', ''):
+            return blocked('Reference-search coverage changed within the retained interval.')
+        if evidence_by_snapshot.get(snapshot['pk']) != expected:
             return blocked('Missing or changed retained evidence prevents recovery.')
     return {'allowed': True, 'reason': 'Retained evidence supports recovering the first approval only.',
             'decision': decision, 'event_id': invalidation.pk}

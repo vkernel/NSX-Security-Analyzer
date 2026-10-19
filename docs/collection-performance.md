@@ -28,14 +28,15 @@ just HTTP 400 query rejections. Each alternative starts from page one; rejected
 queries and the successful query scope are recorded. The explicit-type fallback
 retains its narrower coverage limitation. An actually empty direct inventory
 does not trigger this compatibility fallback.
-If any paths are absent, collection retries the complete search up to three times
-(waiting two and four seconds), discarding each incomplete result rather than
-merging attempts. Persistent gaps fail the task and report missing group/service
+If any paths are absent, collection retries coverage up to three times
+(waiting two and four seconds). Compatibility queries, changing-inventory retries
+and coverage retries share a maximum of five search scans. Search pagination does
+not start an additional nested retry loop. Each attempt discards incomplete results;
+partial search results are never accepted as verified coverage. Persistent gaps fail the task and report missing group/service
 counts, returned record/path counts, the query, and up to three missing path
 samples. A gap alone does not establish indexing lag: query behavior or path
 scope may also explain it. Testing samples skip this completeness check; HTTP
-errors are not retried by this coverage check. Existing pagination warnings
-remain in force even if a subsequent coverage attempt finds every expected path.
+errors are not retried by this coverage check. Non-search inventory warnings remain in force even when search coverage succeeds.
 
 New snapshots save DFW strategy counts in `dfw.collection_diagnostics`: policies evaluated, fully successful bulk policies, policies skipped during cooldown, fallback rules and categorized reasons (counted per rule). Empty policies are excluded.
 
@@ -53,7 +54,7 @@ References: [NSX policy statistics](https://developer.broadcom.com/xapis/nsx-t-d
 
 Ethernet policy rules are retained in inventory with **Not supported** activity and no hit count. Their statistics endpoints are not queried. An explicit NSX HTTP 400 / error 500209 response is also recognized as unsupported. This does not establish zero traffic. Unsupported rules remain in inventory totals, are shown separately from unknown statistics, and cannot qualify as historical zero-activity evidence.
 
-After the first statistics pass completes, transport timeouts get one recovery pass, one rule at a time, following a two-second delay. HTTP errors and malformed results do not trigger this recovery. The recovery uses the existing request timeout and HTTP retry policy. Initial timeout notes and timestamps are retained in `statistics_retry`; a failed recovery stays unknown. Diagnostics count timeout retries, recoveries, and unsupported rules. A collection can take longer when recovering missing evidence.
+After the first statistics pass completes, transport timeouts get one recovery pass with at most two concurrent requests (one in single-worker mode). A shared 30-second recovery budget limits admissions, pacing waits, transport timeouts and HTTP retries. In-flight calls finish or time out; this is not a hard process-kill deadline. Rules that cannot be retried retain unknown evidence. HTTP errors and malformed results do not trigger this recovery. Initial timeout notes and timestamps are retained in `statistics_retry`. Diagnostics count retries, recoveries, skipped retries and recovery duration. The overall collection deadline still applies.
 
 Statistics tasks are capped at two concurrent workers in addition to the shared adaptive request limiter. Inventory concurrency is unchanged. Sequential recovery runs after that pool completes. Compare one versus two using equivalent read-only rule requests before raising this cap; a short comparison does not establish capacity for every manager.
 
@@ -655,3 +656,24 @@ with configuration consumers. Exclusion happens before pagination, so the count
 check uses the filtered query's reported total. VM tag assignments still use the
 dedicated VM inventory endpoint, with its verification checks intact. Search
 coverage records the excluded types; configuration conflicts continue to warn.
+
+
+## Collection performance details
+
+Open **Collections → Diagnostics** to see retrieval phase times, request/retry and
+throttling counts, aggregate pacing wait, and endpoint costs. Membership endpoints
+are measured separately. Phase and request times overlap; do not sum them as elapsed
+collection time. Older snapshots may lack these metrics. The saved publication timeline
+includes `wait_for_environment_lock` to distinguish contention from evidence processing.
+
+Collection reuses its in-memory report for finding synchronization only when it still
+matches the latest snapshot of that environment. Other callers retain the database
+fallback. Recalculation prepares restoration evidence before taking the environment
+lock, then rechecks snapshot, policy and restoration state before writing. Approval
+recovery reads historical evidence in bulk instead of querying each snapshot separately.
+These changes preserve freshness, coverage verification and atomic publication.
+
+Compare the phase times for equivalent inventory sizes before changing concurrency.
+Automatic request limits and fresh membership checks remain in effect. There is no
+assumed speedup percentage: NSX latency, throttling and database resources determine
+the improvement in each environment.

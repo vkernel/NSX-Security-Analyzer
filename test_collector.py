@@ -124,12 +124,13 @@ class InventoryTests(unittest.TestCase):
         self.assertEqual(dfw['collection_diagnostics']['unsupported_rules'], 1)
         self.assertEqual(dfw['collection_diagnostics']['bulk_policies'], 0)
 
-    def test_timeout_recovery_is_single_sequential_pass(self):
+    def test_timeout_recovery_is_bounded_parallel_pass(self):
         import threading
         lock = threading.Lock()
         calls = {}
         active = 0
         maximum_retry_active = 0
+        retry_barrier = __import__("threading").Barrier(2, timeout=3)
         client = Mock()
         client.statistics_backoff = {}
         def items(path, **kwargs):
@@ -147,6 +148,7 @@ class InventoryTests(unittest.TestCase):
                 self.assertEqual(set(calls), {'/p/rules/a/statistics', '/p/rules/b/statistics'})
                 active += 1
                 maximum_retry_active = max(active, maximum_retry_active)
+            retry_barrier.wait()
             with lock: active -= 1
             if '/a/' in path: return [{'hit_count': 4}]
             try: raise TimeoutError('read timed out')
@@ -154,9 +156,9 @@ class InventoryTests(unittest.TestCase):
         client.items.side_effect = items
         with patch.object(nsx.time, 'sleep') as sleep:
             dfw, _ = nsx.audit_dfw(client, [{'path': '/d'}], workers=2)
-        sleep.assert_called_once_with(2)
+        sleep.assert_not_called()
         self.assertEqual(list(calls.values()), [2, 2])
-        self.assertEqual(maximum_retry_active, 1)
+        self.assertEqual(maximum_retry_active, 2)
         self.assertEqual([r['hit_status'] for r in dfw['rules']], ['traffic_recorded','unknown'])
         self.assertEqual(dfw['collection_diagnostics']['timeout_recoveries'], 1)
         self.assertEqual(dfw['collection_diagnostics']['timeout_retries'], 2)
@@ -1313,11 +1315,10 @@ examples.forEach((_,index) => {
         sleep.assert_called_once_with(2)
 
     @patch.object(nsx.time, "sleep")
-    def test_changing_search_has_bounded_retries_and_returns_warning(self, sleep):
+    def test_changing_search_has_bounded_retries_and_rejects_partial_results(self, sleep):
         client = self.client_with_pages([{"results": [{"path": "/partial"}], "result_count": 2}] * 3)
-        resources, coverage = nsx.search_configuration(client)
-        self.assertEqual(resources, [{"path": "/partial"}])
-        self.assertEqual(client.inventory_warnings[0]["attempts"], 3)
+        with self.assertRaises(nsx.InventoryChanged):
+            nsx.search_configuration(client)
         self.assertEqual(client.get.call_count, 3)
         self.assertEqual([call.args[0] for call in sleep.call_args_list], [2, 4])
 
@@ -1329,6 +1330,45 @@ examples.forEach((_,index) => {
             nsx.search_configuration(client)
         self.assertEqual(client.items.call_count, 1)
         sleep.assert_not_called()
+
+    @patch.object(nsx.time, 'sleep')
+    def test_search_scan_budget_is_shared_across_coverage_retries(self, sleep):
+        client = self.client_with_pages([])
+        client.items = Mock(return_value=[])
+        with self.assertRaisesRegex(nsx.AuditError, 'five-scan budget'):
+            nsx.verified_configuration_search(client, [self.group], [])
+        self.assertEqual(client.items.call_count, 5)
+
+    def test_counter_retry_budget_leaves_unretried_rules_unknown(self):
+        clock = [0.0]
+        calls = {}
+        client = Mock()
+        client.statistics_backoff = {}
+        def items(path, **kwargs):
+            if path == '/d/security-policies': return [{'path':'/p'}]
+            if path == '/p/rules': return [{'path':'/p/rules/a'}, {'path':'/p/rules/b'}]
+            if path == '/p/statistics': raise nsx.AuditError('unavailable')
+            calls[path] = calls.get(path, 0) + 1
+            if calls[path] > 1:
+                clock[0] += 31
+            try: raise TimeoutError('timed out')
+            except TimeoutError as exc: raise nsx.AuditError('timed out') from exc
+        client.items.side_effect = items
+        with patch.object(nsx.time, 'monotonic', side_effect=lambda: clock[0]):
+            dfw, _ = nsx.audit_dfw(client, [{'path':'/d'}], workers=1)
+        self.assertEqual(dfw['collection_diagnostics']['timeout_retries'], 1)
+        self.assertEqual(dfw['collection_diagnostics']['timeout_retries_skipped'], 1)
+        self.assertTrue(all(rule['hit_status'] == 'unknown' for rule in dfw['rules']))
+
+    def test_expired_counter_phase_does_not_start_http_request(self):
+        client = self.client_with_pages([])
+        del client.get
+        client.request_context = __import__('threading').local()
+        client.request_context.phase_deadline = nsx.time.monotonic() - 1
+        client._get = Mock()
+        with self.assertRaisesRegex(nsx.AuditError, 'budget exhausted'):
+            client.get('/p/rules/r/statistics')
+        client._get.assert_not_called()
 
     def test_search_failure_never_becomes_empty_inventory(self):
         client = Mock()
@@ -1562,7 +1602,7 @@ examples.forEach((_,index) => {
     @patch.object(nsx.time, "sleep")
     def test_truncated_inventory_warns(self, sleep):
         client = self.client_with_pages([{"results": [1], "result_count": 2}] * 3)
-        self.assertEqual(list(client.items("/search/query")), [1])
+        self.assertEqual(list(client.items("/infra/realized-state/virtual-machines")), [1])
         self.assertEqual(len(client.inventory_warnings), 1)
 
     def test_repeated_cursor_fails(self):

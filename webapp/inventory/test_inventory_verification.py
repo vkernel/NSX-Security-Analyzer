@@ -22,13 +22,14 @@ class PaginationVerificationTests(SimpleTestCase):
         self.assertEqual(len(coverage['excluded_resource_types']), 3)
 
     @patch('inventory.collector.time.sleep')
-    def test_configuration_conflicts_still_warn_with_runtime_exclusions(self, sleep):
+    def test_configuration_conflicts_reject_search_with_runtime_exclusions(self, sleep):
         client = self.nsx_client([{'results': [
             {'path': '/infra/groups/g', 'expression': []},
             {'path': '/infra/groups/g', 'expression': [{'resource_type': 'PathExpression', 'paths': ['/x']}]},
         ], 'result_count': 1}] * 3)
-        search_configuration(client)
-        self.assertEqual(client.inventory_warnings[0]['conflicts'][0]['changed_fields'], ['expression'])
+        with self.assertRaisesRegex(AuditError, 'changed fields: expression'):
+            search_configuration(client)
+        self.assertEqual(client.get.call_count, 3)
 
     def test_vm_pages_use_external_id_sort_and_preserve_filters(self):
         calls = []

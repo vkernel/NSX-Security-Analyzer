@@ -128,12 +128,14 @@ class NSXClient:
         bulk = path.endswith("/statistics") and "/rules/" not in path
         retries = 0 if bulk else getattr(self, "retries", 0)
         retry_deadline = min(time.monotonic() + 60, getattr(self, "request_deadline", float("inf")))
+        phase_deadline = getattr(getattr(self, 'request_context', None), 'phase_deadline', float('inf'))
+        retry_deadline = min(retry_deadline, phase_deadline)
         if hasattr(self, "request_context"):
             self.request_context.deadline = retry_deadline
         for attempt in range(retries + 1):
             if hasattr(self, "request_context"):
                 retry_deadline = self.request_context.deadline
-            if attempt and time.monotonic() >= retry_deadline:
+            if (attempt or phase_deadline != float("inf")) and time.monotonic() >= retry_deadline:
                 raise AuditError("GET {}: retry time budget exhausted".format(path))
             if hasattr(self, "metrics_lock"):
                 with self.metrics_lock:
@@ -170,9 +172,14 @@ class NSXClient:
         if params:
             url += "?" + urlencode(params)
         timeout = self.bulk_timeout if path.endswith("/statistics") and "/rules/" not in path else self.timeout
+        phase_deadline = getattr(getattr(self, 'request_context', None), 'phase_deadline', float('inf'))
+        remaining = phase_deadline - time.monotonic()
+        if remaining <= 0:
+            raise AuditError('Counter recovery time budget exhausted')
+        timeout = min(timeout, remaining)
         try:
             response = self.http.request("GET", url, headers=self.headers, redirect=False,
-                retries=False, timeout=urllib3.Timeout(connect=timeout, read=timeout), pool_timeout=timeout)
+                retries=False, timeout=urllib3.Timeout(total=timeout if phase_deadline != float("inf") else None, connect=timeout, read=timeout), pool_timeout=timeout)
             if not 200 <= response.status < 300:
                 detail = ""
                 try:
@@ -192,9 +199,9 @@ class NSXClient:
             raise AuditError("GET {}: expected a JSON object".format(path))
         return data
 
-    def items(self, path, params=None, page_size=1000):
+    def items(self, path, params=None, page_size=1000, verification_owner=False):
         """Retry inconsistent inventories; never hide failed pages or broken cursors."""
-        for attempt in range(3):
+        for attempt in range(1 if verification_owner else 3):
             records = []
             identities = set()
             duplicates = 0
@@ -214,6 +221,8 @@ class NSXClient:
                         identities.add(identity)
                     records.append(record)
             except InventoryChanged as exc:
+                if verification_owner:
+                    raise  # Search owns retries; never return a partial search as complete.
                 LOG.warning("Inventory verification endpoint=%s attempt=%s unique=%s duplicates=%s reason=%s",
                             path, attempt + 1, len(records), duplicates, exc)
                 if attempt < 2:
@@ -919,19 +928,59 @@ def audit_dfw(client, domains, workers=4, testing=False):
     # This avoids overlapping recovery requests and preserves first-attempt evidence.
     retry_rules = [r for r in rules if statistics[r["path"]].get("statistics_error_kind") == "timeout"]
     if retry_rules and not testing:
-        time.sleep(2)
-        for rule in retry_rules:
-            previous = statistics[rule["path"]]
-            recovered = rule_statistics(client, rule)
-            for key in ("statistics_source", "statistics_fallback_reason", "statistics_bulk_failures",
-                        "statistics_bulk_retry_at", "statistics_bulk_skipped"):
-                if key in previous:
-                    recovered[key] = previous[key]
-            recovered["statistics_retry"] = {"attempts": 1, "initial_notes": previous["notes"],
-                "initial_checked_at": previous["statistics_checked_at"]}
-            statistics[rule["path"]] = recovered
-            diagnostics["timeout_retries"] += 1
-            diagnostics["timeout_recoveries"] += int(recovered["hit_status"] in {"zero_hits", "traffic_recorded"})
+        retry_started = time.monotonic()
+        retry_deadline = retry_started + 30
+        pending_rules = iter(retry_rules)
+        diagnostics['timeout_retry_workers'] = min(workers, 2)
+        diagnostics['timeout_retry_budget_seconds'] = 30
+        if isinstance(client, NSXClient) and not hasattr(client, 'request_context'):
+            client.request_context = threading.local()
+        def retry_rule(rule):
+            context = getattr(client, 'request_context', None) if isinstance(client, NSXClient) else None
+            if context is not None:
+                context.phase_deadline = retry_deadline
+            try:
+                return rule, rule_statistics(client, rule)
+            except TimeoutError:
+                if time.monotonic() >= getattr(client, 'request_deadline', float('inf')):
+                    raise
+                result = dict(statistics[rule['path']])
+                result['notes'] = list(result['notes']) + ['Counter recovery time budget exhausted; evidence remains unknown.']
+                return rule, result
+            finally:
+                if context is not None:
+                    del context.phase_deadline
+        with ThreadPoolExecutor(max_workers=min(workers, 2)) as pool:
+            active = set()
+            exhausted = False
+            while active or not exhausted:
+                while not exhausted and len(active) < min(workers, 2):
+                    if time.monotonic() >= retry_deadline:
+                        exhausted = True
+                        break
+                    rule = next(pending_rules, None)
+                    if rule is None:
+                        exhausted = True
+                        break
+                    active.add(pool.submit(retry_rule, rule))
+                if not active:
+                    break
+                done, active = wait(active, return_when=FIRST_COMPLETED)
+                for future in done:
+                    rule, recovered = future.result()
+                    previous = statistics[rule['path']]
+                    for key in ('statistics_source', 'statistics_fallback_reason', 'statistics_bulk_failures',
+                                'statistics_bulk_retry_at', 'statistics_bulk_skipped'):
+                        if key in previous:
+                            recovered[key] = previous[key]
+                    recovered['statistics_retry'] = {'attempts': 1, 'initial_notes': previous['notes'],
+                        'initial_checked_at': previous['statistics_checked_at']}
+                    statistics[rule['path']] = recovered
+                    diagnostics['timeout_retries'] += 1
+                    diagnostics['timeout_recoveries'] += int(recovered['hit_status'] in {'zero_hits', 'traffic_recorded'})
+        diagnostics['timeout_retry_seconds'] = round(time.monotonic() - retry_started, 3)
+        diagnostics['timeout_retries_skipped'] = len(retry_rules) - diagnostics['timeout_retries']
+
     for row in rules:
         row.update(statistics[row["path"]])
     return {"policies": policies, "rules": rules, "errors": errors,
@@ -1333,7 +1382,13 @@ def search_configuration(client, expect_resources=False):
             attempts = 1 if getattr(client, "testing", False) is True else 3
             for attempt in range(attempts):
                 try:
-                    resources = list(client.items("/search/query", {"query": query}))
+                    budget = getattr(client, '_search_scan_budget', None)
+                    if isinstance(budget, dict):
+                        if budget['remaining'] <= 0:
+                            raise AuditError('Search verification exhausted its shared five-scan budget; no complete coverage was accepted.')
+                        budget['remaining'] -= 1
+                    options = {'verification_owner': True} if isinstance(client, NSXClient) else {}
+                    resources = list(client.items("/search/query", {"query": query}, **options))
                     break
                 except InventoryChanged as exc:
                     if attempt == attempts - 1:
@@ -1368,6 +1423,8 @@ def search_configuration(client, expect_resources=False):
 
 def verified_configuration_search(client, groups, services, testing=False):
     """Verify search coverage against direct inventory; discard incomplete attempts."""
+    if isinstance(client, NSXClient):
+        client._search_scan_budget = {'remaining': 5}
     expected_groups = {obj["path"] for obj in groups}
     expected_services = {obj["path"] for obj in services}
     attempts = 1 if testing else 3
@@ -1380,6 +1437,9 @@ def verified_configuration_search(client, groups, services, testing=False):
         missing = missing_groups | missing_services
         if not missing or testing:
             coverage["inventory_coverage_retries"] = attempt
+            budget = getattr(client, '_search_scan_budget', None)
+            if isinstance(budget, dict):
+                coverage['search_scans'] = 5 - budget['remaining']
             return resources, coverage
         # Do not presume index lag: query behavior and path differences can
         # produce the same symptom. Keep the task error useful and bounded.
@@ -1745,6 +1805,8 @@ def feature_guide():
 <div class="section-eyebrow">Help &amp; coverage</div><h2>Report user guide</h2>
 <p>Use this guide to understand what the report checks, how to explore its results and what each finding means. This report displays a saved database snapshot. Opening it or filtering it does not modify NSX.</p>
 
+<h3>Investigating collection duration</h3>
+<p>Open Collections → Diagnostics for retrieval phase times, HTTP retries, throttling and endpoint costs. Membership endpoints are measured separately. The publication timeline shows environment lock waits. Concurrent phase and request times overlap and must not be added together. Search verification shares a five-scan limit; counter timeout recovery uses at most two concurrent requests and a 30-second budget. Unresolved counters remain unknown and incomplete search coverage is not accepted.</p>
 <h3>Editing settings and review drafts</h3>
 <p>Editing forms show unsaved changes and, with JavaScript enabled, warn before you leave. This does not autosave: use the save or review action explicitly. Connection tests and certificate previews do not save settings. After validation fails, follow the error summary links to the fields that need correction. Authentication forms group connection details, user lookup (LDAPS), role mapping and certificate trust. Save controls stay visible on desktop and follow the form on narrow screens.</p>
 
