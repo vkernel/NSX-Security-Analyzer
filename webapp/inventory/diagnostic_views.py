@@ -67,6 +67,7 @@ def collection_diagnostics(request, pk):
         'job': job, 'timeline': job.diagnostics.get('timeline', []),
         'performance': performance, 'retrieval_phases': retrieval_phases,
         'endpoint_rows': [{'label': key.replace('_', ' '), **value} for key, value in endpoints.items()],
+        'queue_waits': (performance.get('concurrency') or {}).get('queue_wait_seconds', {}),
         'counter_retries': (diagnostics or {}).get('report__dfw__collection_diagnostics') or {},
         'error_detail': json.dumps(job.diagnostics.get('error', {}), indent=2),
         'request_statistics': json.dumps(diagnostics, indent=2) if diagnostics else '',

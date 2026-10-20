@@ -38,6 +38,7 @@ class Environment(models.Model):
     ca_filename = models.CharField(max_length=255, blank=True, editable=False)
     insecure = models.BooleanField(default=False)
     workers = models.PositiveSmallIntegerField(default=4, validators=[MinValueValidator(1), MaxValueValidator(16)])
+    max_concurrent_requests = models.PositiveSmallIntegerField(default=8, validators=[MinValueValidator(1), MaxValueValidator(32)])
     timeout = models.PositiveIntegerField(default=30, validators=[MinValueValidator(1), MaxValueValidator(300)])
     retries = models.PositiveSmallIntegerField(default=2, validators=[MaxValueValidator(5)])
     enabled = models.BooleanField(default=True)
@@ -61,7 +62,7 @@ class Environment(models.Model):
     def collection_config(self):
         return {key: getattr(self, key) for key in (
             "manager", "username", "password_ciphertext", "ca_bundle", "ca_certificate", "insecure",
-            "workers", "timeout", "retries")}
+            "workers", "timeout", "retries", "max_concurrent_requests")}
 
 
 class AuditJob(models.Model):

@@ -462,6 +462,35 @@ def group_definition(group):
 MEMBERSHIP_ENDPOINTS = ("ip-addresses", "virtual-machines", "logical-ports", "logical-switches")
 
 
+class MembershipProbe:
+    """Count logical probes without storing object paths, payloads or identities."""
+    def __init__(self, client):
+        self.client = client
+        self.calls = 0
+        self.endpoints = {}
+
+    def __getattr__(self, name):
+        return getattr(self.client, name)
+
+    def get(self, path, params=None):
+        self.calls += 1
+        endpoint = path.rsplit('/', 1)[-1]
+        counts = self.endpoints.setdefault(endpoint, {'calls': 0, 'positive': 0, 'no_members_returned': 0, 'errors': 0})
+        counts['calls'] += 1
+        try:
+            page = self.client.get(path, params)
+        except Exception:
+            counts['errors'] += 1
+            raise
+        if isinstance(page.get('results'), list):
+            count = page.get('result_count', 0)
+            positive = bool(page['results']) or (type(count) is int and count > 0)
+            counts['positive' if positive else 'no_members_returned'] += 1
+        else:
+            counts['errors'] += 1
+        return page
+
+
 def membership_order(group, previous=None):
     """Order existence probes; never omit negative checks based on configuration."""
     preferred = []
@@ -734,6 +763,7 @@ def policy_statistics(client, policy, rules, defer_fallback=False):
     samples = {r["path"]: [] for r in rules}
     scopes = set()
     fallback_reason = None
+    fallback_code = None
     retry_at = None
     backoff = getattr(client, "statistics_backoff", {})
     cached = backoff.get(policy["path"]) if isinstance(backoff, dict) else None
@@ -748,6 +778,7 @@ def policy_statistics(client, policy, rules, defer_fallback=False):
         if cached:
             fallback_reason, retry_at = cached["reason"], cached["retry_at"]
             entries = []
+            fallback_code = 'cooldown'
         else:
             try:
                 entries = list(client.items(policy["path"] + "/statistics", page_size=None))
@@ -778,11 +809,23 @@ def policy_statistics(client, policy, rules, defer_fallback=False):
                 identity = counter.get("rule", counter.get("rule_id"))
                 matches = aliases.get(str(identity), set())
                 if len(matches) != 1:
-                    raise AuditError("Unmapped or ambiguous policy counter (identity fields: {})".format(
+                    raise AuditError(("Missing policy counter identity" if identity is None else "Unmapped or ambiguous policy counter") + " (identity fields: {})".format(
                         ", ".join(k for k in ("rule", "rule_id", "internal_rule_id") if k in counter) or "none"))
                 samples[next(iter(matches))].append({"enforcement_point": scope, "statistics": counter})
     except AuditError as exc:
         fallback_reason = str(exc)
+        if exc.status_code:
+            fallback_code = 'http_error'
+        else:
+            message = str(exc)
+            fallback_code = next((code for prefix, code in (
+                ('Missing policy counter identity', 'missing_identity'),
+                ('Unmapped or ambiguous policy counter', 'unmapped_or_ambiguous_identity'),
+                ('Incomplete nested policy statistics', 'incomplete_nested_counters'),
+                ('Invalid nested policy statistics', 'invalid_nested_counters'),
+                ('Invalid policy statistics', 'invalid_policy_statistics'),
+                ('Invalid policy counter', 'invalid_counter'),
+            ) if message.startswith(prefix)), 'transport_or_other_error')
         samples = {r["path"]: [] for r in rules}
     results = {}
     for rule in rules:
@@ -795,6 +838,7 @@ def policy_statistics(client, policy, rules, defer_fallback=False):
             LOG.debug("Policy statistics fallback for %s: %s", rule["path"], reason)
             result = {"_pending_statistics": True} if defer_fallback else rule_statistics(client, rule)
             result["statistics_source"] = "rule"
+            result['statistics_fallback_code'] = fallback_code or ('invalid_rule_counters' if complete else 'missing_or_duplicate_scope_counters')
             result["statistics_fallback_reason"] = reason
             if retry_at:
                 result["statistics_bulk_failures"] = failures
@@ -876,7 +920,7 @@ def audit_dfw(client, domains, workers=4, testing=False):
         return policy_statistics(client, policy, policy_rules, defer_fallback=True)
     statistics = {}
     diagnostics = {"bulk_policies": 0, "bulk_successes": 0, "bulk_skipped": 0,
-                   "fallback_rules": 0, "fallback_reasons": {}, "timeout_retries": 0,
+                   "fallback_rules": 0, "fallback_reasons": {}, "fallback_details": {}, "timeout_retries": 0,
                    "timeout_recoveries": 0, "unsupported_rules": 0}
     def fallback(rule, metadata):
         result = rule_statistics(client, rule)
@@ -923,6 +967,9 @@ def audit_dfw(client, domains, workers=4, testing=False):
                             category = "cooldown" if skipped else "http_error" if "HTTP " in reason else "timeout" if "timed out" in reason.lower() else "incomplete_or_unavailable"
                             reasons = diagnostics["fallback_reasons"]
                             reasons[category] = reasons.get(category, 0) + 1
+                            code = metadata.get('statistics_fallback_code', 'unclassified')
+                            details = diagnostics['fallback_details']
+                            details[code] = details.get(code, 0) + 1
                             queue.appendleft((fallback, (rule, metadata), None))
     # Retry only transport timeouts, after all first-pass statistics have finished.
     # This avoids overlapping recovery requests and preserves first-attempt evidence.
@@ -969,7 +1016,7 @@ def audit_dfw(client, domains, workers=4, testing=False):
                 for future in done:
                     rule, recovered = future.result()
                     previous = statistics[rule['path']]
-                    for key in ('statistics_source', 'statistics_fallback_reason', 'statistics_bulk_failures',
+                    for key in ('statistics_source', 'statistics_fallback_reason', 'statistics_fallback_code', 'statistics_bulk_failures',
                                 'statistics_bulk_retry_at', 'statistics_bulk_skipped'):
                         if key in previous:
                             recovered[key] = previous[key]
@@ -1512,12 +1559,24 @@ def audit(client, workers=4, testing=False, progress=None):
     LOG.info("Checking membership for %d groups...", len(groups))
     membership_progress = {"completed": 0, "last_log": time.monotonic()}
     membership_lock = threading.Lock()
+    membership_diagnostics = {'groups_checked': 0, 'probe_calls': 0, 'calls_per_group': {}, 'outcomes': {}, 'endpoints': {}}
     group_inventory = {g["path"]: g for g in all_groups}
     scope_cache = {}
     scopes = {g['path']: membership_scope(g, group_inventory, scope_cache) for g in groups}
     def check_membership(group):
-        result = membership(client, group, group_inventory, scopes[group['path']])
+        probe = MembershipProbe(client)
+        result = membership(probe, group, group_inventory, scopes[group['path']])
         with membership_lock:
+            membership_diagnostics['groups_checked'] += 1
+            membership_diagnostics['probe_calls'] += probe.calls
+            distribution = membership_diagnostics['calls_per_group']
+            distribution[str(probe.calls)] = distribution.get(str(probe.calls), 0) + 1
+            outcomes = membership_diagnostics['outcomes']
+            outcomes[result[0]] = outcomes.get(result[0], 0) + 1
+            for endpoint, counts in probe.endpoints.items():
+                aggregate = membership_diagnostics['endpoints'].setdefault(endpoint, {key: 0 for key in counts})
+                for key, value in counts.items():
+                    aggregate[key] += value
             membership_progress["completed"] += 1
             now = time.monotonic()
             if now-membership_progress["last_log"] >= 30 or membership_progress["completed"] == len(groups):
@@ -1636,7 +1695,7 @@ def audit(client, workers=4, testing=False, progress=None):
     return {"inventory_warnings": getattr(client, "inventory_warnings", []) if isinstance(getattr(client, "inventory_warnings", []), list) else [],
             "inventory": inventory, "tags": tags, "testing": testing, "generated_at": datetime.now(timezone.utc).isoformat(),
             "performance": {"workers": workers, "elapsed_seconds": round(time.perf_counter() - started, 2),
-                            "phases_seconds": phases,
+                            "phases_seconds": phases, "membership": membership_diagnostics,
                             "http": dict(client.metrics) if isinstance(getattr(client, "metrics", None), dict) else {}},
             "scope": ("TESTING SAMPLE: first record per list, first domain only" if testing else "Local Manager /infra; references in visible Policy search index"),
             "usage_definition": "No configuration reference found; not a traffic analysis or deletion approval",
@@ -1806,6 +1865,7 @@ def feature_guide():
 <p>Use this guide to understand what the report checks, how to explore its results and what each finding means. This report displays a saved database snapshot. Opening it or filtering it does not modify NSX.</p>
 
 <h3>Investigating collection duration</h3>
+<p>New collections record the collecting worker build and configured request ceiling. Membership workload shows probes per group and endpoint outcomes; request-capacity waiting is separate from rate pacing. Set Maximum concurrent NSX requests in Edit environment → Advanced request settings (default 8, range 1–32). Changes apply to newly queued collections for that environment without restarting the worker. Waiting requests are served in FIFO order. Compare collections at higher limits cautiously; verification and adaptive backoff remain enabled.</p>
 <p>Open Collections → Diagnostics for retrieval phase times, HTTP retries, throttling and endpoint costs. Membership endpoints are measured separately. The publication timeline shows environment lock waits. Concurrent phase and request times overlap and must not be added together. Search verification shares a five-scan limit; counter timeout recovery uses at most two concurrent requests and a 30-second budget. Unresolved counters remain unknown and incomplete search coverage is not accepted.</p>
 <h3>Editing settings and review drafts</h3>
 <p>Editing forms show unsaved changes and, with JavaScript enabled, warn before you leave. This does not autosave: use the save or review action explicitly. Connection tests and certificate previews do not save settings. After validation fails, follow the error summary links to the fields that need correction. Authentication forms group connection details, user lookup (LDAPS), role mapping and certificate trust. Save controls stay visible on desktop and follow the form on narrow screens.</p>

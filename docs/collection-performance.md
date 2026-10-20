@@ -677,3 +677,38 @@ Compare the phase times for equivalent inventory sizes before changing concurren
 Automatic request limits and fresh membership checks remain in effect. There is no
 assumed speedup percentage: NSX latency, throttling and database resources determine
 the improvement in each environment.
+
+
+## Membership-heavy collections and fair scheduling
+
+The shared request limiter serves waiting requests in FIFO order. A worker finishing
+one request cannot take a new slot ahead of an already queued firewall, search or
+membership request. This improves fairness; it does not reserve capacity for a lane
+or remove the overall rate limiter and adaptive backoff.
+
+Set **Maximum concurrent NSX requests** under **Edit environment → Advanced request
+settings** (default **8**, valid range **1–32**). This is saved per environment in
+the database and captured when a collection is queued. Existing queued or running
+collections keep their captured settings; older queued jobs without this setting
+use eight. No ConfigMap, environment variable or worker restart is needed. Start with the
+unchanged default, then compare equivalent full collections at 12 and 16 if NSX
+latency and throttling remain healthy. This is a ceiling, not a guaranteed number
+of active requests; adaptive concurrency still starts at at most two. Do not assume
+a proportional speedup or raise it to compensate for incomplete evidence.
+
+New snapshots record the collecting worker's version, full build revision, build
+time and configured ceiling. **Collections → Diagnostics → Collecting worker**
+shows that saved identity, independently of the web app footer. Older snapshots
+show “Not recorded”; they are not relabelled with the current worker's build.
+
+**Membership workload** reports logical probes, groups checked, the distribution
+of probes per group (including zero-call explicit-member groups), result categories
+and endpoint response counts. Logical probes exclude internal HTTP retries. A
+response with no members is not proof of emptiness; all existing verification
+rules remain intact. Request capacity wait is reported separately per endpoint
+family and is cumulative across workers, not additional elapsed time.
+
+Bulk-counter fallback details distinguish missing identity, unmapped/ambiguous
+identity, incomplete nested counters, invalid counters, missing/duplicate scope
+counters, HTTP errors and cooldown. Counts represent affected rules. These codes
+contain no raw response values and do not relax counter completeness checks.

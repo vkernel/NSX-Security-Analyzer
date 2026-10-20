@@ -278,7 +278,8 @@ def execute_job(job_id):
                     if note.startswith(prefix) and note[len(prefix):] in audit.MEMBERSHIP_ENDPOINTS:
                         client.membership_hints[row["path"]] = note[len(prefix):]
         client.request_deadline = time.monotonic() + max(0, settings.AUDIT_TIMEOUT - (timezone.now()-job.started_at).total_seconds() - 10) if job.started_at else time.monotonic() + settings.AUDIT_TIMEOUT - 10
-        concurrency = None if job.testing else adapt_requests(client)
+        maximum_requests = config.get("max_concurrent_requests", 8)
+        concurrency = None if job.testing else adapt_requests(client, maximum=maximum_requests)
         try:
             with phase(job.pk, "retrieve_nsx_inventory"):
                 report = audit.audit(client, workers=1 if job.testing else concurrency.maximum, testing=job.testing,
@@ -291,6 +292,12 @@ def execute_job(job_id):
             report.setdefault("performance", {})["concurrency"] = concurrency.summary()
             report["performance"]["workers"] = concurrency.peak
             report["performance"]["request_pacing"] = client.request_pacer.summary()
+        from .version import VERSION, BUILD
+        report.setdefault('performance', {})['collector_build'] = {
+            'version': VERSION, 'revision': BUILD['revision'], 'built_at': BUILD['built_at'],
+            'configured_maximum': maximum_requests,
+            'diagnostics_schema': 2,
+        }
         update_progress(job.pk, 5, "Preparing report and hit history")
         from urllib.parse import urlsplit
         report["manager"] = urlsplit(client.base_url).netloc

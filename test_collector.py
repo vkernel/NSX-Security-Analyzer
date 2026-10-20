@@ -1370,6 +1370,32 @@ examples.forEach((_,index) => {
             client.get('/p/rules/r/statistics')
         client._get.assert_not_called()
 
+    def test_membership_probe_counts_without_changing_membership(self):
+        client = Mock()
+        client.membership_hints = {}
+        client.get.return_value = {'results': []}
+        probe = nsx.MembershipProbe(client)
+        self.assertEqual(nsx.membership(probe, {'path': '/groups/a'})[0], 'empty')
+        self.assertEqual(probe.calls, 4)
+        self.assertEqual(sum(v['no_members_returned'] for v in probe.endpoints.values()), 4)
+        client.get.return_value = {'results': ['192.0.2.1']}
+        probe = nsx.MembershipProbe(client)
+        self.assertEqual(nsx.membership(probe, {'path': '/groups/a'})[0], 'nonempty')
+        self.assertEqual(probe.calls, 1)
+        self.assertEqual(probe.endpoints['ip-addresses']['positive'], 1)
+        probe = nsx.MembershipProbe(client)
+        nsx.membership(probe, {'path': '/groups/a', 'expression': [{'resource_type':'IPAddressExpression', 'ip_addresses':['192.0.2.1']}]})
+        self.assertEqual(probe.calls, 0)
+
+    def test_bulk_fallback_code_does_not_include_payload_values(self):
+        client = Mock()
+        client.statistics_backoff = {}
+        client.items.return_value = [{'statistics': {'internal_rule_id':'private-marker', 'hit_count':0}}]
+        result = nsx.policy_statistics(client, {'path':'/p'}, [{'path':'/p/rules/r'}], defer_fallback=True)
+        row = result['/p/rules/r']
+        self.assertEqual(row['statistics_fallback_code'], 'missing_identity')
+        self.assertNotIn('private-marker', row['statistics_fallback_reason'])
+
     def test_search_failure_never_becomes_empty_inventory(self):
         client = Mock()
         client.items.side_effect = nsx.AuditError("query rejected", 400)

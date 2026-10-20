@@ -108,5 +108,22 @@ class CollectionReportReuseTests(TestCase):
             self.assertContains(response, 'Where collection time was spent')
             self.assertContains(response, 'Group membership')
             self.assertContains(response, 'membership/ip-addresses')
+            self.assertContains(response, 'Not recorded in this snapshot')
+            snapshot.report['performance'].update({
+                'collector_build': {'version': '0.5.3', 'revision': 'worker-test-build',
+                                    'built_at': '2026-10-20', 'configured_maximum': 12},
+                'membership': {'groups_checked': 3, 'probe_calls': 5,
+                               'calls_per_group': {'0': 1, '1': 1, '4': 1},
+                               'endpoints': {'ip-addresses': {'calls': 2, 'positive': 1,
+                                                            'no_members_returned': 1, 'errors': 0}}},
+            })
+            snapshot.report['performance']['concurrency']['queue_wait_seconds'] = {'rule_statistics': 1.25}
+            snapshot.report['dfw'] = {'collection_diagnostics': {'fallback_details': {'missing_identity': 2}}}
+            snapshot.save()
+            response = self.client.get(reverse('collection-diagnostics', args=[job.pk]))
+            for text in ('worker-test-build', 'Membership workload', '3 groups checked',
+                         'Waiting for request capacity', 'missing_identity',
+                         'Why bulk counters used individual requests'):
+                self.assertContains(response, text)
             snapshot.report = {}; snapshot.save()
             self.assertEqual(self.client.get(reverse('collection-diagnostics', args=[job.pk])).status_code, 200)

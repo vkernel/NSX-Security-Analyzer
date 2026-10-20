@@ -4,6 +4,14 @@ from .credentials import encrypt_password
 
 
 class EnvironmentForm(forms.ModelForm):
+    max_concurrent_requests = forms.IntegerField(
+        label="Maximum concurrent NSX requests", min_value=1, max_value=32, required=False,
+        help_text="Default 8; range 1–32. Applies to newly queued collections for this environment. Adaptive concurrency may use fewer requests. No worker restart is needed.")
+
+    def clean_max_concurrent_requests(self):
+        value = self.cleaned_data.get("max_concurrent_requests")
+        return self.instance.max_concurrent_requests if value is None else value
+
     ca_upload = forms.FileField(label="CA certificate file", required=False,
         widget=forms.FileInput(attrs={"accept": ".pem,.crt,.cer"}),
         help_text="Optional PEM certificate or bundle, up to 1 MB. Stored with this environment; no worker path needed.")
@@ -80,7 +88,7 @@ class EnvironmentForm(forms.ModelForm):
     class Meta:
         model = Environment
         fields = ["name", "slug", "manager", "username", "password",
-                  "ca_upload", "remove_ca", "insecure", "timeout", "retries", "enabled", "sync_interval_minutes"]
+                  "ca_upload", "remove_ca", "insecure", "timeout", "retries", "max_concurrent_requests", "enabled", "sync_interval_minutes"]
         labels = {"sync_interval_minutes": "Automatic sync", "slug": "Environment ID", "manager": "NSX Manager",
                   "insecure": "Disable TLS certificate validation"}
         help_texts = {"insecure": "Leave unchecked to verify the manager using the saved approved certificate or the system trust store.", "sync_interval_minutes": "Full inventory syncs run automatically at this interval. The first sync runs after one interval. Paused environments do not sync.", "slug": "A stable identifier, for example east-datacenter."}
