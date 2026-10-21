@@ -712,3 +712,35 @@ Bulk-counter fallback details distinguish missing identity, unmapped/ambiguous
 identity, incomplete nested counters, invalid counters, missing/duplicate scope
 counters, HTTP errors and cooldown. Counts represent affected rules. These codes
 contain no raw response values and do not relax counter completeness checks.
+
+
+### Type-specific membership probes and fresh evidence
+
+Simple flat Condition expressions with one known member type now omit only
+inapplicable endpoints. VirtualMachine conditions keep VM, IP and logical-port
+checks; Segment conditions keep switch, IP and logical-port checks; VIF and
+SegmentPort conditions keep IP and logical-port checks. Mixed types, nested or
+path expressions, extended identity criteria and uncertain definitions retain all
+four probes. Diagnostics show typed-plan groups and omitted probes.
+
+This follows Broadcom's endpoint applicability documentation for
+[VM members](https://developer.broadcom.com/xapis/nsx-t-data-center-rest-api/latest/method_GetGroupVMMembers.html),
+[logical-switch members](https://developer.broadcom.com/xapis/nsx-t-data-center-rest-api/latest/method_GetGroupLSMembers.html)
+and [effective logical-port members](https://developer.broadcom.com/xapis/nsx-t-data-center-rest-api/latest/method_GetGroupLPMembers.html).
+A VM without an IP is still found by the VM probe. Every required negative probe
+must succeed without an unexplained continuation cursor. Prior empty results are
+never reused as current evidence; previous positive endpoints only guide ordering.
+Approval evidence continues to use the latest full evaluated collection.
+
+Bulk policy responses lacking an unambiguous rule identity receive a 30-minute
+cooldown before another bulk attempt. Individual rule counters are still fetched
+fresh on every collection. Internal realized IDs are not guessed to be policy IDs:
+Broadcom's [RuleStatistics schema](https://developer.broadcom.com/xapis/nsx-t-data-center-rest-api/latest/types_RuleStatistics.html)
+allows multiple realized rules per policy rule. Existing completeness checks and
+per-rule fallback remain. This reduces repeated unsuccessful bulk attempts but
+does not eliminate individual requests when identities are unavailable.
+
+Finding publication advances observations, eligibility, workflow state and snapshot
+assessments as before, but rewrites the JSON evidence only when its fingerprint
+changes. Publication remains atomic. No historical snapshots or approvals are
+silently repurposed to speed up collection.

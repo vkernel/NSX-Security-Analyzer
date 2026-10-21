@@ -70,13 +70,18 @@ def synchronize(environment_id, collected_snapshot=None, job_id=None):
     existing = {(f.kind, f.path): f for f in environment.findings.all()}
     LOG.info("findings environment_id=%s existing_count=%s", environment_id, len(existing))
     started = perf_counter()
-    creates, updates, events, assessments = [], [], [], []
+    creates, updates, events, assessments, evidence_updates = [], [], [], [], []
     def flush():
         if creates:
             Finding.objects.bulk_create(creates, batch_size=100)
         if updates:
-            Finding.objects.bulk_update(updates, ['status', 'present', 'name', 'evidence',
+            Finding.objects.bulk_update(updates, ['status', 'present', 'name',
                 'fingerprint', 'last_seen', 'evaluated_at', 'snapshot', 'revision'] + observation.FIELDS + WORKFLOW_FIELDS, batch_size=100)
+        # Unchanged JSON evidence can be large; advance observation/workflow fields
+        # without serializing and rewriting it for every collection.
+        if evidence_updates:
+            Finding.objects.bulk_update(evidence_updates, ['evidence'], batch_size=100)
+            evidence_updates.clear()
         if events:
             FindingEvent.objects.bulk_create([FindingEvent(finding=f, message=m) for f,m in events], batch_size=100)
         for f in creates + updates:
@@ -120,6 +125,8 @@ def synchronize(environment_id, collected_snapshot=None, job_id=None):
             invalidate(finding, relevant_error or 'Current evidence no longer qualifies under the finding criteria.')
         if prior_qualification != finding.qualification:
             events.append((finding, 'Qualification: ' + finding.get_qualification_display()))
+        if digest != finding.fingerprint:
+            evidence_updates.append(finding)
         if digest != finding.fingerprint or not finding.present:
             finding.status = 'open'
             events.append((finding, 'Saved evidence updated or the finding was observed again. Workflow approvals are reset only when relevant evidence or eligibility changes.'))

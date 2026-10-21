@@ -491,8 +491,41 @@ class MembershipProbe:
         return page
 
 
+def membership_endpoints(group):
+    """Prune only documented inapplicable endpoints for simple typed conditions.
+
+    Path/nested/unknown expressions retain all probes. No previous result is used
+    as negative evidence. Keep effective IP/port checks even for VM conditions.
+    """
+    if group.get('extended_expression') or group.get('group_type') not in (None, [], ''):
+        return MEMBERSHIP_ENDPOINTS
+    expressions = group.get('expression')
+    if not isinstance(expressions, list) or not expressions or len(expressions) % 2 != 1:
+        return MEMBERSHIP_ENDPOINTS
+    types = set()
+    for index, expression in enumerate(expressions):
+        if not isinstance(expression, dict):
+            return MEMBERSHIP_ENDPOINTS
+        if index % 2:
+            if expression.get('resource_type') != 'ConjunctionOperator' or expression.get('conjunction_operator') not in ('AND', 'OR'):
+                return MEMBERSHIP_ENDPOINTS
+            continue
+        if (expression.get('resource_type') != 'Condition'
+                or expression.get('member_type') not in ('VirtualMachine', 'VIF', 'Segment', 'SegmentPort')
+                or not all(expression.get(key) for key in ('key', 'operator', 'value'))
+                or expression.get('expressions')):
+            return MEMBERSHIP_ENDPOINTS
+        types.add(expression['member_type'])
+    if len(types) != 1:
+        return MEMBERSHIP_ENDPOINTS
+    member_type = next(iter(types))
+    return tuple(endpoint for endpoint in MEMBERSHIP_ENDPOINTS
+                 if (endpoint != 'virtual-machines' or member_type == 'VirtualMachine')
+                 and (endpoint != 'logical-switches' or member_type == 'Segment'))
+
+
 def membership_order(group, previous=None):
-    """Order existence probes; never omit negative checks based on configuration."""
+    """Order existence probes; previous results are ordering hints, not evidence."""
     preferred = []
     if previous in MEMBERSHIP_ENDPOINTS:
         preferred.append(previous)
@@ -595,7 +628,10 @@ def membership(client, group, group_inventory=None, scope=None):
         return "nonempty", ["Contains explicit IP/MAC members"]
     hints = getattr(client, "membership_hints", {})
     previous = hints.get(group["path"]) if isinstance(hints, dict) else None
+    planned_endpoints = membership_endpoints(group)
     for endpoint in membership_order(group, previous):
+        if endpoint not in planned_endpoints:
+            continue
         try:
             # Only existence is needed; do not download a large membership list.
             page = client.get(group["path"] + "/members/" + endpoint, {"page_size": 1})
@@ -826,6 +862,10 @@ def policy_statistics(client, policy, rules, defer_fallback=False):
                 ('Invalid policy statistics', 'invalid_policy_statistics'),
                 ('Invalid policy counter', 'invalid_counter'),
             ) if message.startswith(prefix)), 'transport_or_other_error')
+        if fallback_code in ('missing_identity', 'unmapped_or_ambiguous_identity'):
+            failures = min(failures + 1, 10)
+            retry_at = (datetime.now(timezone.utc) + timedelta(minutes=30)).isoformat()
+            fallback_reason = "GET " + policy["path"] + "/statistics: " + fallback_reason
         samples = {r["path"]: [] for r in rules}
     results = {}
     for rule in rules:
@@ -1559,7 +1599,7 @@ def audit(client, workers=4, testing=False, progress=None):
     LOG.info("Checking membership for %d groups...", len(groups))
     membership_progress = {"completed": 0, "last_log": time.monotonic()}
     membership_lock = threading.Lock()
-    membership_diagnostics = {'groups_checked': 0, 'probe_calls': 0, 'calls_per_group': {}, 'outcomes': {}, 'endpoints': {}}
+    membership_diagnostics = {'groups_checked': 0, 'probe_calls': 0, 'calls_per_group': {}, 'outcomes': {}, 'endpoints': {}, 'typed_probe_groups': 0, 'inapplicable_probes_omitted': 0}
     group_inventory = {g["path"]: g for g in all_groups}
     scope_cache = {}
     scopes = {g['path']: membership_scope(g, group_inventory, scope_cache) for g in groups}
@@ -1568,6 +1608,11 @@ def audit(client, workers=4, testing=False, progress=None):
         result = membership(probe, group, group_inventory, scopes[group['path']])
         with membership_lock:
             membership_diagnostics['groups_checked'] += 1
+            if probe.calls and len(membership_endpoints(group)) < len(MEMBERSHIP_ENDPOINTS):
+                membership_diagnostics['typed_probe_groups'] += 1
+                # Count actual avoided calls only when the complete plan ran.
+                if result[0] != 'nonempty':
+                    membership_diagnostics['inapplicable_probes_omitted'] += len(MEMBERSHIP_ENDPOINTS) - len(membership_endpoints(group))
             membership_diagnostics['probe_calls'] += probe.calls
             distribution = membership_diagnostics['calls_per_group']
             distribution[str(probe.calls)] = distribution.get(str(probe.calls), 0) + 1
@@ -1865,6 +1910,7 @@ def feature_guide():
 <p>Use this guide to understand what the report checks, how to explore its results and what each finding means. This report displays a saved database snapshot. Opening it or filtering it does not modify NSX.</p>
 
 <h3>Investigating collection duration</h3>
+<p>Simple single-member-type conditions omit documented inapplicable membership endpoints; mixed, nested and uncertain definitions retain all checks. Every collection obtains fresh membership evidence. Bulk counters with missing or ambiguous rule identity use a 30-minute bulk retry cooldown while individual counters remain freshly collected. Finding publication avoids rewriting unchanged JSON evidence.</p>
 <p>New collections record the collecting worker build and configured request ceiling. Membership workload shows probes per group and endpoint outcomes; request-capacity waiting is separate from rate pacing. Set Maximum concurrent NSX requests in Edit environment → Advanced request settings (default 8, range 1–32). Changes apply to newly queued collections for that environment without restarting the worker. Waiting requests are served in FIFO order. Compare collections at higher limits cautiously; verification and adaptive backoff remain enabled.</p>
 <p>Open Collections → Diagnostics for retrieval phase times, HTTP retries, throttling and endpoint costs. Membership endpoints are measured separately. The publication timeline shows environment lock waits. Concurrent phase and request times overlap and must not be added together. Search verification shares a five-scan limit; counter timeout recovery uses at most two concurrent requests and a 30-second budget. Unresolved counters remain unknown and incomplete search coverage is not accepted.</p>
 <h3>Editing settings and review drafts</h3>

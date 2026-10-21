@@ -18,6 +18,59 @@ def rendered_document(report):
     return nsx._render_report(report, fragments=False)
 
 
+class TypedMembershipTests(unittest.TestCase):
+    def group(self, member_type):
+        return {'path': '/g', 'expression': [{'resource_type': 'Condition',
+            'member_type': member_type, 'key': 'Tag', 'operator': 'EQUALS', 'value': 'test'}]}
+
+    def test_only_inapplicable_endpoints_are_omitted(self):
+        for kind, expected in [('VirtualMachine', 3), ('Segment', 3), ('VIF', 2), ('SegmentPort', 2)]:
+            client = Mock(membership_hints={})
+            client.get.return_value = {'results': [], 'result_count': 0}
+            self.assertEqual(nsx.membership(client, self.group(kind))[0], 'empty')
+            self.assertEqual(client.get.call_count, expected)
+
+    def test_nested_mixed_unknown_and_extended_keep_full_checks(self):
+        for expression in ([{'resource_type':'PathExpression', 'paths':['/child']}],
+                           [{'resource_type':'NestedExpression', 'expressions': self.group('VIF')['expression']}],
+                           self.group('VIF')['expression'] + [{'resource_type':'ConjunctionOperator', 'conjunction_operator':'OR'}] + self.group('Segment')['expression'],
+                           [{'resource_type':'Condition', 'member_type':'Unknown'}], []):
+            self.assertEqual(nsx.membership_endpoints({'expression': expression}), nsx.MEMBERSHIP_ENDPOINTS)
+        group = self.group('VIF'); group['extended_expression'] = [{}]
+        self.assertEqual(nsx.membership_endpoints(group), nsx.MEMBERSHIP_ENDPOINTS)
+
+    def test_fresh_probes_detect_changes_and_failures(self):
+        group = self.group('VirtualMachine')
+        client = Mock(membership_hints={'/g': 'virtual-machines'})
+        client.get.return_value = {'results': [], 'result_count': 0}
+        self.assertEqual(nsx.membership(client, group)[0], 'empty')
+        client.get.reset_mock()
+        client.get.return_value = {'results': [{'id': 'vm-without-ip'}]}
+        self.assertEqual(nsx.membership(client, group)[0], 'nonempty')
+        self.assertEqual(client.get.call_count, 1)
+        client.get.side_effect = nsx.AuditError('failed current probe')
+        self.assertEqual(nsx.membership(client, group)[0], 'unknown')
+        client.get.side_effect = None
+        client.get.return_value = {'results': [], 'cursor': 'more'}
+        self.assertEqual(nsx.membership(client, group)[0], 'unknown')
+
+    def test_missing_bulk_identity_cooldown_never_reuses_counters(self):
+        rule = {'path': '/p/rules/a'}
+        client = Mock(statistics_backoff={})
+        client.items.return_value = [{'statistics': {'results': [{'internal_rule_id': '123', 'hit_count': 0}], 'result_count': 1}}]
+        first = nsx.policy_statistics(client, {'path':'/p'}, [rule], defer_fallback=True)[rule['path']]
+        self.assertEqual(first['statistics_fallback_code'], 'missing_identity')
+        self.assertIn('statistics_bulk_retry_at', first)
+        prior = {'manager':'nsx', 'generated_at':nsx.datetime.now(nsx.timezone.utc).isoformat(),
+                 'dfw':{'rules':[dict(first, policy_path='/p')]}}
+        client.statistics_backoff = nsx.statistics_backoff(prior, 'nsx')
+        client.items.reset_mock()
+        second = nsx.policy_statistics(client, {'path':'/p'}, [rule], defer_fallback=True)[rule['path']]
+        self.assertTrue(second['_pending_statistics'])
+        self.assertEqual(second['statistics_fallback_code'], 'cooldown')
+        client.items.assert_not_called()
+
+
 class InventoryTests(unittest.TestCase):
     @patch.object(nsx.time, 'sleep')
     def test_search_coverage_retries_discard_incomplete_attempts(self, sleep):
