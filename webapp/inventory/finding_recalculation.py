@@ -103,7 +103,7 @@ def index(snapshot_id):
 
 
 def policy_values(policy):
-    return tuple(getattr(policy, field) for field in [k+'_days' for k in observation.KINDS] + ['minimum_observations', 'maximum_gap_hours'])
+    return tuple(getattr(policy, field) for field in [k+'_days' for k in observation.KINDS] + ['minimum_observations', 'maximum_gap_hours']) + tuple((r.pk, r.name, r.tag_scope, r.reason) for r in getattr(policy, 'transient_rules', []))
 
 
 def run(pk, token):
@@ -204,6 +204,13 @@ def run(pk, token):
             target.revision += 1
             updates.append(target)
         from .finding_workflow import invalidate, FIELDS as WORKFLOW_FIELDS
+        from .transient import apply
+        suppression_targets = [target for target in creates + updates if target.kind == 'empty_group' and (target.kind, target.path) in states]
+        for offset in range(0, len(suppression_targets), 100):
+            batch = suppression_targets[offset:offset+100]
+            evidence = dict(Finding.objects.filter(pk__in=[t.pk for t in batch if t.pk]).values_list('pk', 'evidence'))
+            for target in batch:
+                apply(target, target.__dict__.get('evidence', evidence.get(target.pk, {})), getattr(policy, 'transient_rules', []))
         for target in updates:
             if not target.present or target.qualification != 'eligible':
                 invalidate(target, 'Recalculated criteria no longer qualify this finding.')

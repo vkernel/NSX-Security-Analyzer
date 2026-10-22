@@ -193,6 +193,14 @@ class FindingPolicy(models.Model):
     maximum_gap_hours = models.PositiveIntegerField(default=0, validators=[MaxValueValidator(8760)])
 
 
+class TransientEmptinessPolicy(models.Model):
+    name = models.CharField(max_length=100)
+    enabled = models.BooleanField(default=True)
+    environment = models.ForeignKey(Environment, null=True, blank=True, on_delete=models.CASCADE)
+    tag_scope = models.CharField(max_length=128)
+    reason = models.CharField(max_length=150)
+
+
 class Finding(models.Model):
     required_approvals = models.PositiveSmallIntegerField(default=2, choices=[(1, 'Single approval'), (2, 'Two-person approval (four-eyes principle)')])
     workflow_state = models.CharField(max_length=24, default='unassigned', choices=[
@@ -218,6 +226,7 @@ class Finding(models.Model):
     snapshot = models.ForeignKey(Snapshot, null=True, on_delete=models.SET_NULL)
     revision = models.PositiveIntegerField(default=0)
     qualification = models.CharField(max_length=24, default='insufficient', choices=[
+        ('suppressed', 'Suppressed — expected transient emptiness'),
         ('observing', 'Observing'), ('eligible', 'Eligible for review'),
         ('insufficient', 'Insufficient evidence'), ('cleared', 'Condition cleared'), ('disabled', 'Qualification disabled')])
     observation_started = models.DateTimeField(null=True, blank=True)

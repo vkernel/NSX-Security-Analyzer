@@ -403,3 +403,41 @@ Other criteria, AND/OR combinations and negative conditions can change the resul
 Incomplete inventory and unsupported conditions are flagged. No NSX changes are
 made. Preview chains are limited to 200 relationships and eight levels; truncation
 is shown explicitly. Always review current evidence before approving cleanup.
+
+
+## Expected transient emptiness
+
+For session-driven groups that can legitimately be empty between sessions, administrators
+can open **Administration → Finding review criteria → Manage transient-emptiness policies**.
+Create a named policy with an exact, case-sensitive membership tag scope (for example,
+`VDI_Gebruiker`), a reason, and either one environment or all environments. Scope suggestions
+come from saved group definitions; manual entry is supported. Preview shows matching groups
+and whether they already have an empty-group finding, without contacting NSX.
+
+Only pure positive VM Tag `EQUALS` conditions using that scope match. Mixed scopes,
+nested groups, negative conditions and other member types are excluded. This matches the
+scope in the group's membership conditions, not a metadata tag attached to the group.
+
+Saving suppresses matching **empty-group** findings and queues recalculation from retained
+history. Inventory, collected membership evidence and separate unused-object findings remain
+unchanged. Suppressed findings are available under **Finding reviews → Suppressed**, with the
+policy and reason in their details; they cannot receive cleanup approval. Existing ownership
+and review history remain, but active cleanup approvals are invalidated.
+
+Disable the policy to reevaluate normal observation criteria. Previous approvals are not
+automatically restored. Policy changes are audited. This exception declares expected business
+behavior; it does not prove traffic use or guarantee that continuously sampled emptiness was
+observed. The external membership-management script does not need changing.
+
+
+## Custom services in Finding reviews
+
+Custom services use the shared **Unused groups and custom services (days)** criterion.
+In Finding reviews, choose **Unused groups and custom services** in the finding-type filter.
+They are stored as unused-object candidates, not as a separate service finding type.
+A custom service appears when no configuration reference is found and its observation period,
+minimum observations and evidence requirements are satisfied. Built-in/system-owned services,
+referenced services and audit-excluded services do not become unused-service findings.
+If a service is missing, check its usage in the evaluated snapshot and expand **Why some
+findings are not listed** in Finding reviews. Empty-group criteria and transient-emptiness
+policies do not apply to services.

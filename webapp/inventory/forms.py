@@ -228,7 +228,7 @@ class FindingPolicyForm(forms.ModelForm):
         fields = ['zero_hits_days', 'empty_group_days', 'unused_days', 'empty_policy_days',
                   'disabled_days', 'minimum_observations', 'maximum_gap_hours']
         labels = {'zero_hits_days': 'Firewall rules with zero hits (days)', 'empty_group_days': 'Empty groups (days)',
-                  'unused_days': 'Unused groups and objects (days)', 'empty_policy_days': 'Empty firewall policies (days)',
+                  'unused_days': 'Unused groups and custom services (days)', 'empty_policy_days': 'Empty firewall policies (days)',
                   'disabled_days': 'Disabled firewall rules (days)'}
         help_texts = {field: '0 shows confirmed conditions in the latest retained full collection. 1 requires at least 24 hours of supported history plus the minimum observations. Saving recalculates from existing history.' for field in fields[:5]}
         help_texts['minimum_observations'] = 'Required when the waiting period is at least 1 day. With 0 days, one confirmed observation is enough.'
@@ -239,8 +239,8 @@ class FindingFilterForm(forms.Form):
     from .findings import LABELS
     from .models import Finding
     q = forms.CharField(required=False, label='Search name or path', max_length=255)
-    kind = forms.ChoiceField(required=False, choices=[('', 'All finding types')] + list(LABELS.items()))
-    review = forms.ChoiceField(required=False, choices=[('', 'All workflow stages')] + Finding._meta.get_field('workflow_state').choices)
+    kind = forms.ChoiceField(required=False, choices=[('', 'All finding types')] + [(key, 'Unused groups and custom services' if key == 'unused' else label) for key, label in LABELS.items()])
+    review = forms.ChoiceField(required=False, choices=[('', 'All workflow stages'), ('suppressed', 'Suppressed')] + Finding._meta.get_field('workflow_state').choices)
     owner = forms.ChoiceField(required=False)
     sort = forms.ChoiceField(required=False, choices=[('name', 'Name'), ('kind', 'Finding type'), ('status', 'Review status')])
     direction = forms.ChoiceField(required=False, choices=[('asc', 'Ascending'), ('desc', 'Descending')])

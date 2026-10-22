@@ -122,6 +122,9 @@ def relevant_evidence_error(kind, row, search_coverage, stamp, interval_minutes)
 
 def approval_readiness(finding):
     def blocked(message): return {'status': 'blocked', 'message': message}
+    from .transient import matching, policies_for
+    if finding.kind == 'empty_group' and matching(finding.evidence, policies_for(finding.environment_id)):
+        return blocked('Suppressed: expected transient emptiness under the configured policy.')
     from .usability import policy
     recalculation = FindingRecalculation.objects.filter(environment_id=finding.environment_id).values('status', 'kinds').first()
     if (recalculation and recalculation['status'] in ('queued', 'running', 'failed')

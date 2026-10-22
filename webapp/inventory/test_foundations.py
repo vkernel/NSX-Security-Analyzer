@@ -30,6 +30,26 @@ class FoundationTests(TestCase):
         return Snapshot.objects.create(environment=self.env, report=data or report(),
             generated_at=kwargs.pop('generated_at', self.now), **kwargs)
 
+    def test_unused_custom_service_appears_in_reviews(self):
+        from .models import FindingPolicy
+        from .forms import FindingPolicyForm, FindingFilterForm
+        FindingPolicy.objects.create(unused_days=0)
+        data = report()
+        service = {'kind': 'custom_service', 'path': '/infra/services/custom-example',
+                   'name': 'Custom example service', 'usage': 'unused_candidate',
+                   'membership': 'not_applicable', 'referenced_by': []}
+        data['objects'].append(service)
+        data['inventory']['services'].append(service)
+        self.snapshot(data)
+        synchronize(self.env.pk)
+        finding = Finding.objects.get(environment=self.env, path=service['path'])
+        self.assertEqual(finding.kind, 'unused')
+        self.assertEqual(finding.qualification, 'eligible')
+        response = self.client.get(reverse('findings', args=[self.env.pk]), {'kind': 'unused'})
+        self.assertContains(response, service['name'])
+        self.assertIn('custom services', FindingPolicyForm().fields['unused_days'].label)
+        self.assertIn(('unused', 'Unused groups and custom services'), FindingFilterForm().fields['kind'].choices)
+
     def test_comparison_changes_and_ignores_counters(self):
         old = report()
         old['dfw']['rules'] = [{'path': '/rules/a', 'name': 'R', 'action': 'ALLOW', 'hit_count': 0}]

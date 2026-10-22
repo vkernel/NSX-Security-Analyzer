@@ -11,8 +11,11 @@ FIELDS = ['qualification', 'observation_started', 'observation_count', 'observat
 
 
 def policy_for(environment):
-    return (FindingPolicy.objects.filter(environment=environment).first()
+    policy = (FindingPolicy.objects.filter(environment=environment).first()
             or FindingPolicy.objects.filter(scope='global').first() or FindingPolicy())
+    from .transient import policies_for
+    policy.transient_rules = policies_for(environment.pk) if environment else []
+    return policy
 
 
 def condition_fingerprint(kind, evidence):
@@ -34,6 +37,9 @@ def condition_fingerprint(kind, evidence):
 
 
 def advance(finding, policy, environment, stamp, reset=False, row=None):
+    from .transient import apply
+    if apply(finding, row or finding.evidence, getattr(policy, 'transient_rules', [])):
+        return
     days = getattr(policy, finding.kind + '_days', None)
     finding.required_days = days or 0
     if days is None:

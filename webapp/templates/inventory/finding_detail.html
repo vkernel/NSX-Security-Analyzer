@@ -4,6 +4,7 @@
 {% include 'inventory/history_navigation.html' %}
 <nav class="review-neighbours" aria-label="Findings in current results">{% if review_navigation.previous %}<a class="button" href="{{ review_navigation.previous }}">← Previous finding</a>{% endif %}{% if review_navigation.next %}<a class="button" href="{{ review_navigation.next }}">Next finding →</a>{% endif %}</nav>{% if review_navigation.changed %}<p class="muted">This finding is no longer in the current filtered results. Return to the list to continue.</p>{% endif %}
 <ol class="review-progress" aria-label="Review progress">{% for step in progress %}<li class="{% if step.current %}current{% elif step.done %}done{% endif %}" {% if step.current %}aria-current="step"{% endif %}><span>{{ forloop.counter }}</span>{{ step.label }}</li>{% endfor %}</ol>
+{% if finding.qualification == 'suppressed' %}<p class="notice">Expected empty — session-driven group. {{ finding.qualification_reason }}</p>{% endif %}
 <div class="finding-workspace">
 <section class="finding-evidence form-card"><p class="eyebrow">Evidence &amp; dependencies</p><h2>Review the finding</h2>
 <p>{% if finding.present %}Observed in the latest full snapshot.{% else %}Not observed in the latest full snapshot. Resolution is unconfirmed.{% endif %}</p>

@@ -71,6 +71,10 @@ def coverage(request, pk):
 
 def filtered_findings(request, environment, params):
     rows = environment.findings.filter(Q(present=True, qualification='eligible') | Q(workflow_state__in=['owner_review','second_review','ready','rejected','decommissioned'])).select_related('owner__keycloakidentity', 'owner__ldapidentity').defer('evidence', 'approvals')
+    if params.get('review') == 'suppressed':
+        rows = environment.findings.filter(qualification='suppressed').select_related('owner__keycloakidentity', 'owner__ldapidentity').defer('evidence', 'approvals')
+    else:
+        rows = rows.exclude(qualification='suppressed')
     from .forms import FindingFilterForm
     from django.db.models import F
     form = FindingFilterForm(params or {'sort': 'name', 'direction': 'asc'})
@@ -81,7 +85,7 @@ def filtered_findings(request, environment, params):
         if values['q']:
             rows = rows.filter(Q(name__icontains=values['q']) | Q(path__icontains=values['q']))
         if values['kind']: rows = rows.filter(kind=values['kind'])
-        if values['review']:
+        if values['review'] and values['review'] != 'suppressed':
             rows = rows.filter(workflow_state=values['review'])
             if values['review'] in ('second_review', 'ready'):
                 rows = rows.filter(owner__isnull=False)
@@ -357,7 +361,7 @@ def my_work(request):
         return HttpResponseForbidden('Operator access required.')
     queue = request.GET.get('queue', 'assigned')
     if queue not in ('assigned', 'second', 'ready'): queue = 'assigned'
-    rows = Finding.objects.select_related('environment', 'owner__keycloakidentity', 'owner__ldapidentity').defer('evidence', 'approvals')
+    rows = Finding.objects.exclude(qualification='suppressed').select_related('environment', 'owner__keycloakidentity', 'owner__ldapidentity').defer('evidence', 'approvals')
     if queue == 'assigned': rows = rows.filter(owner=request.user, workflow_state='owner_review')
     elif queue == 'second':
         rows = rows.filter(workflow_state='second_review', required_approvals=2, owner__isnull=False).exclude(owner=request.user).exclude(approvals__owner__actor_id=str(request.user.pk))
