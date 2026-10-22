@@ -23,6 +23,44 @@ class TypedMembershipTests(unittest.TestCase):
         return {'path': '/g', 'expression': [{'resource_type': 'Condition',
             'member_type': member_type, 'key': 'Tag', 'operator': 'EQUALS', 'value': 'test'}]}
 
+    def test_vm_fast_path_requires_exact_current_empty_evidence(self):
+        group = self.group('VirtualMachine'); group['path'] = '/infra/domains/default/groups/test'
+        client = Mock(membership_hints={})
+        client.get.return_value = {'results':[], 'result_count':0}
+        self.assertEqual(nsx.membership(client,group,vm_fast=True)[0], 'empty')
+        self.assertEqual(client.get.call_count,1)
+        for payload in ({'results':[]}, {'results':[], 'result_count':0, 'cursor':'more'}):
+            client.get.reset_mock(); client.get.return_value = payload
+            nsx.membership(client,group,vm_fast=True)
+            self.assertEqual(client.get.call_count,3)
+        for key,value in [('remote_path','/remote'), ('extended_expression',[{}])]:
+            self.assertFalse(nsx.vm_fast_eligible(dict(group, **{key:value})))
+        group['expression'][0]['operator'] = 'NOT_EQUALS'
+        self.assertFalse(nsx.vm_fast_eligible(group))
+
+    def test_verification_discrepancy_rechecks_shortcuts_before_publication(self):
+        fixed = nsx.datetime(2026, 10, 22, tzinfo=nsx.timezone.utc)
+        paths = ['/infra/domains/default/groups/g'+str(i) for i in range(200)]
+        sampled = lambda p: int(nsx.hashlib.sha256((str(fixed.date())+p).encode()).hexdigest(),16)%20 == 0
+        paths = [next(p for p in paths if sampled(p)), next(p for p in paths if not sampled(p))]
+        groups = [dict(self.group('VirtualMachine'),path=p) for p in paths]
+        client = Mock(membership_hints={}, vm_fast_disabled=False)
+        client.items.side_effect = lambda path, params=None, **kw: {
+            '/infra/domains':[{'path':'/infra/domains/default'}],
+            '/infra/domains/default/groups':groups, '/infra/services':[], '/search/query':groups,
+            '/infra/domains/default/security-policies':[], '/infra/tags':[],
+            '/infra/realized-state/virtual-machines':[]}[path]
+        client.get.side_effect = lambda path, params=None: ({'results':[{'id':'ip'}], 'result_count':1}
+            if path.endswith('/ip-addresses') else {'results':[], 'result_count':0})
+        with patch.object(nsx, 'datetime', wraps=nsx.datetime) as clock:
+            clock.now.return_value = fixed
+            result = nsx.audit(client,workers=2)
+        stats = result['performance']['membership']['vm_fast_path']
+        self.assertEqual(stats['rechecked'],1)
+        self.assertTrue(stats['disabled'])
+        self.assertEqual(stats['used'],0)
+        self.assertTrue(all(r['membership']=='nonempty' for r in result['objects']))
+
     def test_only_inapplicable_endpoints_are_omitted(self):
         for kind, expected in [('VirtualMachine', 3), ('Segment', 3), ('VIF', 2), ('SegmentPort', 2)]:
             client = Mock(membership_hints={})
@@ -1016,7 +1054,7 @@ examples.forEach((_,index) => {
         rule = {"path": "/p/rules/a", "id": "a", "rule_id": 100}
         for counters in ({"results": [{"rule": "a", "hit_count": 0}], "result_count": 2},
                          {"results": [{"rule": "a", "hit_count": 0}], "cursor": "more"},
-                         {"results": [{"internal_rule_id": "100", "hit_count": 0}]}):
+                         {"results": [{"internal_rule_id": "999", "hit_count": 0}]}):
             client = Mock()
             client.items.side_effect = [[{"enforcement_point": "ep", "statistics": counters}],
                                        [{"hit_count": 5}]]
@@ -1051,6 +1089,35 @@ examples.forEach((_,index) => {
         client.items.assert_called_once_with("/p/statistics", page_size=None)
         self.assertEqual(recovered["statistics_source"], "policy")
         self.assertEqual(recovered["hit_count"], 12)
+
+    def test_bulk_identity_mapping_is_explicit_and_conflicts_fall_back(self):
+        rule = {'path':'/p/rules/a', 'id':'a', 'rule_id':42, 'internal_rule_id':'realized-a'}
+        for counter in ({'rule_path':rule['path'], 'hit_count':7},
+                        {'internal_rule_id':'realized-a', 'hit_count':7}):
+            client = Mock(statistics_backoff={})
+            client.items.return_value = [counter]
+            result = nsx.policy_statistics(client, {'path':'/p'}, [rule], defer_fallback=True)[rule['path']]
+            self.assertEqual(result['statistics_source'], 'policy')
+            self.assertEqual(result['hit_count'], 7)
+        client.items.return_value = [{'rule':'a', 'rule_path':'/wrong', 'hit_count':0}]
+        result = nsx.policy_statistics(client, {'path':'/p'}, [rule], defer_fallback=True)[rule['path']]
+        self.assertTrue(result['_pending_statistics'])
+        rule.pop('internal_rule_id')
+        client.items.return_value = [{'internal_rule_id':42, 'hit_count':0}]
+        self.assertEqual(nsx.policy_statistics(client, {'path':'/p'}, [rule], defer_fallback=True)[rule['path']]['statistics_source'], 'policy')
+
+    def test_numeric_bulk_ids_do_not_match_policy_object_ids_or_ambiguous_rules(self):
+        client = Mock(statistics_backoff={})
+        client.items.return_value = [{'enforcement_point':'ep', 'statistics':{
+            'result_count':1, 'results':[{'internal_rule_id':'4090','hit_count':7}]}}]
+        for rules in ([{'path':'/p/rules/4090','id':'4090'}],
+                      [{'path':'/p/rules/a','rule_id':4090}, {'path':'/p/rules/b','rule_id':4090}]):
+            result = nsx.policy_statistics(client, {'path':'/p'}, rules, defer_fallback=True)
+            self.assertTrue(all(row.get('_pending_statistics') for row in result.values()))
+        rules = [{'path':'/p/rules/a','rule_id':4090}, {'path':'/p/rules/b','rule_id':4091}]
+        result = nsx.policy_statistics(client, {'path':'/p'}, rules, defer_fallback=True)
+        self.assertEqual(result[rules[0]['path']]['hit_count'],7)
+        self.assertTrue(result[rules[1]['path']]['_pending_statistics'])
 
     def test_policy_statistics_batches_rules(self):
         rules = [{"path": "/p/rules/a", "id": "a"}, {"path": "/p/rules/b", "id": "b"}]

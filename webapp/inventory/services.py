@@ -270,6 +270,7 @@ def execute_job(job_id):
             previous = load(job.environment)
         client.statistics_backoff = audit.statistics_backoff(previous,
                                                              urlsplit(client.base_url).netloc)
+        client.vm_fast_disabled = bool((previous or {}).get('vm_fast_disabled', False))
         client.membership_hints = {}
         for row in (previous or {}).get("objects", []):
             if row.get("kind") == "group" and row.get("membership") == "nonempty":
@@ -288,6 +289,13 @@ def execute_job(job_id):
             if concurrency:
                 LOG.info("NSX request pacing summary: %s", client.request_pacer.summary())
             client.close()
+        if previous and previous.get('manager') == urlsplit(client.base_url).netloc:
+            before = {r['path'] for r in previous.get('objects', []) if r.get('kind') == 'group'}
+            after = {r['path'] for r in report.get('objects', []) if r.get('kind') == 'group'}
+            report.setdefault('performance', {}).setdefault('collection_scope', {})['comparison'] = {
+                'previous_at': previous.get('generated_at'), 'previous_groups':len(before),
+                'current_groups':len(after), 'added':len(after-before), 'removed':len(before-after),
+                'added_samples':sorted(after-before)[:10], 'removed_samples':sorted(before-after)[:10]}
         if concurrency:
             report.setdefault("performance", {})["concurrency"] = concurrency.summary()
             report["performance"]["workers"] = concurrency.peak

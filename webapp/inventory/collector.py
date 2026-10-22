@@ -501,6 +501,8 @@ class MembershipProbe:
         vm = self.results.get('virtual-machines')
         if vm == 'positive':
             return 'VM members found'
+        if vm == 'negative' and not any(key in self.results for key in ('ip-addresses', 'logical-ports')):
+            return 'VM-only fast path; follow-ups omitted'
         if vm != 'negative':
             return 'VM check unavailable or not reached'
         others = [self.results.get(key) for key in ('ip-addresses', 'logical-ports')]
@@ -640,7 +642,24 @@ def membership_scope(group, group_inventory=None, cache=None):
     return explicit, tuple(issues), tuple(limitations)
 
 
-def membership(client, group, group_inventory=None, scope=None):
+def vm_fast_eligible(group):
+    """Only local, single positive VM conditions; no composed/extended membership."""
+    expressions = group.get('expression')
+    if (group.get('extended_expression') or group.get('group_type') not in (None, [], '')
+            or group.get('_origin_site_id') or group.get('remote_path')
+            or not group.get('path', '').startswith('/infra/domains/')
+            or not isinstance(expressions, list) or len(expressions) != 1):
+        return False
+    condition = expressions[0]
+    return (isinstance(condition, dict) and condition.get('resource_type') == 'Condition'
+            and condition.get('member_type') == 'VirtualMachine'
+            and condition.get('key') in ('Tag', 'Name')
+            and condition.get('operator') == 'EQUALS'
+            and isinstance(condition.get('value'), str) and bool(condition['value'])
+            and not condition.get('expressions'))
+
+
+def membership(client, group, group_inventory=None, scope=None, vm_fast=False):
     """Positive evidence wins; negative results require supported, successful checks."""
     explicit, issues, limitations = scope if scope is not None else membership_scope(group, group_inventory)
     issues, limitations = list(issues), list(limitations)
@@ -649,7 +668,9 @@ def membership(client, group, group_inventory=None, scope=None):
     hints = getattr(client, "membership_hints", {})
     previous = hints.get(group["path"]) if isinstance(hints, dict) else None
     planned_endpoints = membership_endpoints(group)
-    for endpoint in membership_order(group, previous):
+    fast = vm_fast and vm_fast_eligible(group) and not issues and not limitations
+    order = ['virtual-machines', 'ip-addresses', 'logical-ports'] if fast else membership_order(group, previous)
+    for endpoint in order:
         if endpoint not in planned_endpoints:
             continue
         try:
@@ -662,6 +683,8 @@ def membership(client, group, group_inventory=None, scope=None):
                 raise AuditError("{}: invalid result_count".format(endpoint))
             if page["results"] or count > 0:
                 return "nonempty", ["Resolved members found: " + endpoint]
+            if fast and endpoint == 'virtual-machines' and type(page.get('result_count')) is int and page['result_count'] == 0 and not page.get('cursor'):
+                return 'empty', ['VM-only definition: current VM membership endpoint returned zero members; effective IP/port checks omitted.']
             if page.get("cursor"):
                 issues.append(endpoint + ": empty first page with continuation cursor")
         except AuditError as exc:
@@ -816,6 +839,16 @@ def policy_statistics(client, policy, rules, defer_fallback=False):
         for key in (rule["path"], rule.get("id", rule["path"].rsplit("/", 1)[-1]), rule.get("rule_id")):
             if key is not None:
                 aliases.setdefault(str(key), set()).add(rule["path"])
+    internal_aliases = {}
+    for rule in rules:
+        # Rule.rule_id is the system-assigned datapath/statistics identifier.
+        # NSX 4.2 returns it as a string internal_rule_id in bulk counters.
+        # Keep this namespace separate from user-supplied policy object IDs.
+        internal_id = rule.get('internal_rule_id')
+        if internal_id is None and type(rule.get('rule_id')) is int and rule['rule_id'] > 0:
+            internal_id = rule['rule_id']
+        if internal_id is not None:
+            internal_aliases.setdefault(str(internal_id), set()).add(rule['path'])
     samples = {r["path"]: [] for r in rules}
     scopes = set()
     fallback_reason = None
@@ -862,8 +895,12 @@ def policy_statistics(client, policy, rules, defer_fallback=False):
             for counter in counters:
                 if not isinstance(counter, dict):
                     raise AuditError("Invalid policy counter")
-                identity = counter.get("rule", counter.get("rule_id"))
-                matches = aliases.get(str(identity), set())
+                identities = [counter[key] for key in ('rule', 'rule_id', 'rule_path') if counter.get(key) is not None]
+                identity = identities[0] if identities else (counter.get('internal_rule_id') if str(counter.get('internal_rule_id')) in internal_aliases else None)
+                candidates = [aliases.get(str(value), set()) for value in identities]
+                if counter.get('internal_rule_id') is not None:
+                    candidates.append(internal_aliases.get(str(counter['internal_rule_id']), set()))
+                matches = set.intersection(*candidates) if candidates else set()
                 if len(matches) != 1:
                     raise AuditError(("Missing policy counter identity" if identity is None else "Unmapped or ambiguous policy counter") + " (identity fields: {})".format(
                         ", ".join(k for k in ("rule", "rule_id", "internal_rule_id") if k in counter) or "none"))
@@ -990,7 +1027,9 @@ def audit_dfw(client, domains, workers=4, testing=False):
     # Submit only bounded work; prioritize newly discovered fallbacks over more
     # bulk probes. No worker waits on another future in the same executor.
     queue = deque((check, (job,), job[1]) for job in jobs)
-    statistics_workers = min(workers, 2)
+    # All requests still acquire the shared client limiter. Allow counter tasks
+    # to use spare capacity without raising the configured HTTP concurrency.
+    statistics_workers = max(1, workers)
     diagnostics["statistics_workers"] = statistics_workers
     with ThreadPoolExecutor(max_workers=statistics_workers) as pool:
         active = {}
@@ -1587,6 +1626,18 @@ def audit(client, workers=4, testing=False, progress=None):
     for inventory in inventories[:-1]:
         groups.extend(inventory)
     services = inventories[-1]
+    scope_diagnostics = {'domains': [{'path': domain['path'], 'groups': len(inventory),
+                         'unique_groups': len({g['path'] for g in inventory})}
+                        for domain, inventory in zip(domains, inventories[:-1])],
+                         'group_rows': len(groups), 'unique_group_paths': len({g['path'] for g in groups})}
+    # Identical repeated paths need only one probe; conflicting data must not be
+    # silently selected as evidence.
+    unique_groups = {}
+    for group in groups:
+        if group['path'] in unique_groups and unique_groups[group['path']] != group:
+            raise AuditError('Conflicting group inventory for ' + group['path'])
+        unique_groups[group['path']] = group
+    groups = list(unique_groups.values())
     all_groups = groups
     # The UI name can differ from the ID/path; flags can also be absent.
     groups = [g for g in all_groups
@@ -1623,11 +1674,31 @@ def audit(client, workers=4, testing=False, progress=None):
     group_inventory = {g["path"]: g for g in all_groups}
     scope_cache = {}
     scopes = {g['path']: membership_scope(g, group_inventory, scope_cache) for g in groups}
+    fast_paths = set()
+    verification_failed = threading.Event()
+    # Rotate verification daily; Sunday performs a comprehensive pass.
+    verification_day = datetime.now(timezone.utc).date()
+    fast_disabled = getattr(client, 'vm_fast_disabled', False) is True
+    full_verification = fast_disabled or verification_day.weekday() == 6
+    membership_diagnostics['vm_fast_path'] = {'eligible':0, 'used':0, 'verification_groups':0,
+                                             'rechecked':0, 'disabled':fast_disabled, 'full_verification':full_verification}
     def check_membership(group):
         probe = MembershipProbe(client)
-        result = membership(probe, group, group_inventory, scopes[group['path']])
+        eligible = not testing and vm_fast_eligible(group)
+        verify = eligible and (full_verification or int(hashlib.sha256((str(verification_day) + group['path']).encode()).hexdigest(), 16) % 20 == 0)
+        fast = eligible and not verify
+        result = membership(probe, group, group_inventory, scopes[group['path']], vm_fast=fast)
+        used = bool(result[0] == 'empty' and fast and probe.calls == 1)
+        if verify and (probe.results.get('virtual-machines') in ('error', 'incomplete') or (probe.results.get('virtual-machines') == 'negative' and probe.vm_comparison() != 'All three checks empty')):
+            verification_failed.set()
         with membership_lock:
             membership_diagnostics['groups_checked'] += 1
+            fast_stats = membership_diagnostics['vm_fast_path']
+            fast_stats['eligible'] += int(eligible)
+            fast_stats['verification_groups'] += int(verify)
+            fast_stats['used'] += int(used)
+            if used:
+                fast_paths.add(group['path'])
             if membership_endpoints(group) == ('ip-addresses', 'virtual-machines', 'logical-ports'):
                 comparisons = membership_diagnostics['vm_probe_comparison']
                 outcome = probe.vm_comparison()
@@ -1657,6 +1728,27 @@ def audit(client, workers=4, testing=False, progress=None):
         started = time.perf_counter()
         with ThreadPoolExecutor(max_workers=workers) as members_pool:
             result = dict(zip((g["path"] for g in groups), members_pool.map(check_membership, groups)))
+            if verification_failed.is_set():
+                membership_diagnostics['vm_fast_path']['disabled'] = True
+            if verification_failed.is_set() and fast_paths:
+                # A discrepancy invalidates every shortcut result in this run.
+                targets = [g for g in groups if g['path'] in fast_paths]
+                def recheck(group):
+                    probe = MembershipProbe(client)
+                    checked = membership(probe, group, group_inventory, scopes[group['path']])
+                    with membership_lock:
+                        membership_diagnostics['probe_calls'] += probe.calls
+                        for endpoint, counts in probe.endpoints.items():
+                            aggregate = membership_diagnostics['endpoints'].setdefault(endpoint, {key:0 for key in counts})
+                            for key, value in counts.items():
+                                aggregate[key] += value
+                    return checked
+                for group, checked in zip(targets, members_pool.map(recheck, targets)):
+                    membership_diagnostics['outcomes'][result[group['path']][0]] -= 1
+                    membership_diagnostics['outcomes'][checked[0]] = membership_diagnostics['outcomes'].get(checked[0], 0) + 1
+                    result[group['path']] = checked
+                membership_diagnostics['vm_fast_path']['rechecked'] = len(targets)
+                membership_diagnostics['vm_fast_path']['used'] = 0
         return result, round(time.perf_counter()-started, 2)
 
     # All retrieval tasks use the same client's adaptive request limiter. Keep diagnostic
@@ -1764,7 +1856,7 @@ def audit(client, workers=4, testing=False, progress=None):
     return {"inventory_warnings": getattr(client, "inventory_warnings", []) if isinstance(getattr(client, "inventory_warnings", []), list) else [],
             "inventory": inventory, "tags": tags, "testing": testing, "generated_at": datetime.now(timezone.utc).isoformat(),
             "performance": {"workers": workers, "elapsed_seconds": round(time.perf_counter() - started, 2),
-                            "phases_seconds": phases, "membership": membership_diagnostics,
+                            "phases_seconds": phases, "membership": membership_diagnostics, "collection_scope": scope_diagnostics,
                             "http": dict(client.metrics) if isinstance(getattr(client, "metrics", None), dict) else {}},
             "scope": ("TESTING SAMPLE: first record per list, first domain only" if testing else "Local Manager /infra; references in visible Policy search index"),
             "usage_definition": "No configuration reference found; not a traffic analysis or deletion approval",
@@ -1933,6 +2025,7 @@ def feature_guide():
 <div class="section-eyebrow">Help &amp; coverage</div><h2>Report user guide</h2>
 <p>Use this guide to understand what the report checks, how to explore its results and what each finding means. This report displays a saved database snapshot. Opening it or filtering it does not modify NSX.</p>
 
+<p><strong>Collection performance:</strong> counter tasks share the configured NSX request limit with membership tasks and can use spare capacity. Diagnostics show group rows and unique paths per domain to explain workload changes. Tag relationships use bounded database batches. Missing bulk counter identities retain individual-rule fallback. Simple local single-condition VM Name/Tag equality groups can use a fresh explicit zero VM result; mixed or uncertain definitions retain full checks. Daily rotating verification and full Sunday checks detect discrepancies; any discrepancy rechecks shortcuts and disables the fast path for subsequent collections.</p>
 <h3>Cleanup impact preview</h3>
 <p>Groups, firewall rules and policies have a read-only Impact preview in object details and finding reviews. It shows collected direct and nested configuration dependencies, referencing rule fields and policy containment. Links open the exact object in the same snapshot. Cycles, unresolved references and truncated chains are marked. This is not a traffic simulation or deletion approval; no detected references does not prove safe deletion. VM deletion and tag assignment removal have separate previews with potential membership effects explicitly labelled.</p>
 <h3>Investigating collection duration</h3>

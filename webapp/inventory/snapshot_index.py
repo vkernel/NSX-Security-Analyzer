@@ -149,9 +149,13 @@ def build(snapshot, rendered=None):
             shared_rules.clear()
         SnapshotRecord.objects.bulk_create(rows, batch_size=500)
         from .tag_relationships import index_record
+        relationship_batch = []
         for record in rows:
             if record.view in ('tags', 'scopes'):
-                index_record(record, metadata)
+                index_record(record, metadata, relationship_batch)
+        if relationship_batch:
+            from .models import SnapshotRelationship
+            SnapshotRelationship.objects.bulk_create(relationship_batch, batch_size=250)
         insert_seconds += perf_counter() - write_started
         batch_bytes = 0
         record_ids.extend(row.pk for row in rows)

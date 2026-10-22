@@ -90,3 +90,17 @@ class TagRelationshipTests(TestCase):
             self.assertLess(len(str(result)),20000)
         clear_index(self.snapshot.pk)
         self.assertFalse(SnapshotRelationship.objects.exists())
+
+    def test_shared_batch_defers_small_relationship_writes(self):
+        from .tag_relationships import index_record
+        from .models import SnapshotRecord, SnapshotRelationship
+        row = SnapshotRecord(snapshot=self.snapshot, ordinal=99, view='tags', name='small',
+                             data={'vms':{'vm':'VM'}}, compact={}, columns=[], sort_values={})
+        row.save()
+        batch = []
+        with CaptureQueriesContext(connection) as queries:
+            index_record(row, {}, batch)
+        self.assertEqual(len(queries), 0)
+        self.assertEqual(len(batch), 1)
+        SnapshotRelationship.objects.bulk_create(batch)
+        self.assertEqual(SnapshotRelationship.objects.get(record=row).data['path'], 'vm')

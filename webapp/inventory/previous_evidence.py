@@ -14,7 +14,7 @@ def load(environment):
         return None
     if connection.vendor != 'postgresql':
         report = environment.snapshots.get(pk=pk).report
-        return {**{k: report[k] for k in ('manager','testing','generated_at') if k in report},
+        return {'vm_fast_disabled': report.get('performance', {}).get('membership', {}).get('vm_fast_path', {}).get('disabled', False), **{k: report[k] for k in ('manager','testing','generated_at') if k in report},
             'objects': [{k:r[k] for k in ('path','kind','membership','notes') if k in r} for r in report.get('objects', [])],
             'dfw': {'rules': [{k:r[k] for k in RULE_FIELDS if k in r} for r in report.get('dfw', {}).get('rules', [])]}}
     def project(path):
@@ -22,7 +22,7 @@ def load(environment):
             FROM jsonb_array_elements(COALESCE(""" + path + """, '[]'::jsonb)) WITH ORDINALITY r(value, position)
             CROSS JOIN LATERAL (SELECT jsonb_object_agg(key,value) AS value
                 FROM jsonb_each(r.value) WHERE key = ANY(%s::text[])) filtered), '[]'::jsonb)"""
-    sql = "SELECT jsonb_build_object('manager', report->'manager', 'testing', report->'testing', 'generated_at', report->'generated_at', 'objects', " + project("report->'objects'") + ", 'dfw', jsonb_build_object('rules', " + project("report->'dfw'->'rules'") + ')) FROM inventory_snapshot WHERE id = %s'
+    sql = "SELECT jsonb_build_object('vm_fast_disabled', report#>'{performance,membership,vm_fast_path,disabled}', 'manager', report->'manager', 'testing', report->'testing', 'generated_at', report->'generated_at', 'objects', " + project("report->'objects'") + ", 'dfw', jsonb_build_object('rules', " + project("report->'dfw'->'rules'") + ')) FROM inventory_snapshot WHERE id = %s'
     with connection.cursor() as cursor:
         cursor.execute(sql, [list(('path','kind','membership','notes')), list(RULE_FIELDS), pk])
         value = cursor.fetchone()[0]

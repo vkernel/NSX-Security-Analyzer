@@ -765,3 +765,47 @@ connection reuse, validated by an HTTPS integration test. This diagnostic update
 does not increase worker count or concurrency and does not promise a further
 collection-time reduction. The next collection can provide evidence to assess
 whether further probe reduction is appropriate.
+
+### Request scheduling and indexing
+
+Firewall counter tasks can use spare capacity up to the configured worker count;
+all HTTP requests still pass through the same shared concurrency and pacing
+limits. This does not increase the configured concurrent NSX requests or require
+additional worker replicas. Bulk policy probes remain limited to one active probe.
+
+Tag and scope relationships are inserted in bounded batches shared across snapshot
+records, reducing small database inserts. Snapshot publication remains atomic.
+
+Collection diagnostics include group counts and unique paths per domain. Identical
+repeated group paths are probed once; conflicting definitions fail collection.
+Compare these counts before comparing collection durations across builds.
+
+Bulk counter parsing accepts exact rule paths and maps statistics internal_rule_id
+to the system-assigned numeric Rule.rule_id within the same policy (or an explicit
+internal_rule_id if supplied). User-supplied object IDs and display names are never
+used as internal-ID mappings. Duplicate and conflicting mappings require fallback. Missing or conflicting mappings retain individual-rule
+fallback. The NSX 4.2 response format with internal_rule_id strings and numeric
+Rule.rule_id values is supported without extra mapping requests. Existing bulk
+failure cooldowns expire normally before that policy is tried again.
+
+### Restricted VM membership fast path
+
+Local groups containing exactly one VirtualMachine Name or Tag EQUALS condition
+can use a fresh VM membership response with an explicit result_count of zero,
+an empty results list and no cursor. This establishes VM membership for that
+restricted definition; effective IP/port checks are omitted and recorded in notes.
+Remote, mixed, nested, extended and other conditions keep their full probe plan.
+Missing counts, cursors, scope limitations and failures cannot use the shortcut.
+No historical negative membership cache is used.
+
+Approximately 5% of eligible paths receive full checks, rotating daily in UTC;
+Sunday uses full checks for every group. A verification discrepancy reruns every
+shortcut result before publication and disables shortcuts in subsequent collections.
+Sampling detects discrepancies but is not proof that all endpoints always agree.
+The diagnostics distinguish shortcut results, full verification and rechecks.
+
+Inventory scope diagnostics compare audited group paths with the previous usable
+snapshot from the same manager, showing added/removed counts and up to ten samples.
+They identify changes in collected paths, not the administrative cause of a change.
+Actual speed improvements must be measured on a new deployed collection of a
+comparable workload; offline tests do not establish production duration.

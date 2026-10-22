@@ -10,6 +10,7 @@ class PreviousEvidenceTests(TestCase):
     def test_projection_preserves_history_and_removes_inventory(self):
         env = Environment.objects.create(name='Synthetic', slug='projection', manager='https://example.invalid')
         report = {'manager':'example.invalid','testing':False,'generated_at':'2026-10-01T00:00:00+00:00',
+            'performance':{'membership':{'vm_fast_path':{'disabled':True}}},
             'inventory': {'unused':'large'}, 'objects':[{'kind':'group','path':'/g', 'membership':'nonempty',
                 'notes':['Resolved members found: virtual-machines'], 'configuration':{'unused':'large'}}],
             'dfw': {'rules':[{'path':'/r','hit_status':'traffic_recorded','hit_count':4,
@@ -18,6 +19,7 @@ class PreviousEvidenceTests(TestCase):
         self.assertIsNone(load(env))
         Snapshot.objects.create(environment=env, generated_at=timezone.now(), report=report)
         lean = load(env)
+        self.assertTrue(lean['vm_fast_disabled'])
         self.assertNotIn('inventory', lean)
         self.assertNotIn('statistics', lean['dfw']['rules'][0])
         self.assertNotIn('configuration', lean['objects'][0])
