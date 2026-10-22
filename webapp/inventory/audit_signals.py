@@ -8,7 +8,7 @@ from django.dispatch import receiver
 from .audit_events import record
 
 FIELDS = {
-    'TransientEmptinessPolicy': ('name', 'enabled', 'environment_id', 'tag_scope', 'reason'),
+    'TransientEmptinessPolicy': ('name', 'enabled', 'environment_id', 'tag_scope', 'reason', 'mode', 'empty_days', 'minimum_observations', 'maximum_gap_hours'),
     'LDAPConfiguration': ('enabled', 'server_url', 'secondary_server_url', 'user_base', 'username_attribute', 'identity_attribute', 'viewer_group', 'operator_group', 'admin_group'),
     'KeycloakConfiguration': ('enabled', 'issuer', 'client_id', 'role_source', 'viewer_role', 'operator_role', 'admin_role'),
     'Environment': ('name', 'slug', 'manager', 'enabled', 'sync_interval_minutes', 'insecure', 'timeout', 'retries'),

@@ -38,9 +38,18 @@ def condition_fingerprint(kind, evidence):
 
 
 def advance(finding, policy, environment, stamp, reset=False, row=None):
-    from .transient import apply
+    from .transient import apply, matching
     if apply(finding, row or finding.evidence, getattr(policy, 'transient_rules', [])):
         return
+    monitor = matching(row or finding.evidence, getattr(policy, 'transient_rules', [])) if finding.kind == 'empty_group' else None
+    if monitor and monitor.mode == 'monitor':
+        from copy import copy
+        policy = copy(policy)
+        policy.empty_group_days = monitor.empty_days
+        policy.minimum_observations = monitor.minimum_observations
+        policy.maximum_gap_hours = monitor.maximum_gap_hours
+    else:
+        monitor = None
     days = getattr(policy, finding.kind + '_days', None)
     finding.required_days = days or 0
     if days is None:
@@ -53,7 +62,7 @@ def advance(finding, policy, environment, stamp, reset=False, row=None):
         return
 
     gap = timedelta(hours=policy.maximum_gap_hours) if policy.maximum_gap_hours else timedelta(minutes=max(1440, 2 * environment.sync_interval_minutes))
-    signature = hashlib.sha256(json.dumps([days, policy.minimum_observations, gap.total_seconds()]).encode()).hexdigest()
+    signature = hashlib.sha256(json.dumps([days, policy.minimum_observations, gap.total_seconds()] + ([monitor.pk, monitor.tag_scope] if monitor else [])).encode()).hexdigest()
     restart = (reset or not finding.observation_started or finding.policy_fingerprint != signature
                or stamp <= finding.last_seen or stamp - finding.last_seen > gap)
     if finding.kind == 'zero_hits':
@@ -86,6 +95,11 @@ def advance(finding, policy, environment, stamp, reset=False, row=None):
     else:
         finding.qualification = 'observing'
         finding.qualification_reason = ('Observation restarted after a gap exceeding {:.1f} hours. '.format(gap.total_seconds()/3600) if stamp - finding.last_seen > gap else '') + 'Observed {} of {} required days; {} of {} required successful observations.'.format(finding.observation_days, days, finding.observation_count, policy.minimum_observations)
+
+    if monitor:
+        finding.qualification_reason = ('Prolonged empty VDI group — ' + monitor.name + ': ' +
+            ('Empty in every qualifying observation. ' if finding.qualification == 'eligible' else '') +
+            finding.qualification_reason)[:255]
 
 
 def absent(finding, rows):

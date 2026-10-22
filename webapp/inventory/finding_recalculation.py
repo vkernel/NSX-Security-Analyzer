@@ -84,26 +84,27 @@ def source_rows(snapshot_id):
 @transaction.atomic
 def index(snapshot_id):
     Snapshot.objects.select_for_update().only('pk').get(pk=snapshot_id)
-    if SnapshotFindingEvidenceIndex.objects.filter(snapshot_id=snapshot_id, version=2).exists(): return
+    if SnapshotFindingEvidenceIndex.objects.filter(snapshot_id=snapshot_id, version=3).exists(): return
     SnapshotFindingEvidence.objects.filter(snapshot_id=snapshot_id).delete()
     batch = []
     for section, row in source_rows(snapshot_id):
         report = {'objects': [row]} if section == 'objects' else {'dfw': {section: [row]}}
         for kind, path, name, evidence in candidates(report):
             if kind not in observation.KINDS: continue
+            from .transient import condition_scope
             digest = observation.condition_fingerprint(kind, evidence)
             batch.append(SnapshotFindingEvidence(snapshot_id=snapshot_id, kind=kind, path=path, name=name[:255],
-                fingerprint=digest, zero_counter=row.get('hit_count') == 0,
+                fingerprint=digest, membership_scope=condition_scope(row) or '', zero_counter=row.get('hit_count') == 0,
                 checked_at=str(row.get('statistics_checked_at') or '')[:64]))
         if len(batch) >= 100:
             SnapshotFindingEvidence.objects.bulk_create(batch, batch_size=100, ignore_conflicts=True)
             batch.clear()
     if batch: SnapshotFindingEvidence.objects.bulk_create(batch, batch_size=100, ignore_conflicts=True)
-    SnapshotFindingEvidenceIndex.objects.update_or_create(snapshot_id=snapshot_id, defaults={'version': 2})
+    SnapshotFindingEvidenceIndex.objects.update_or_create(snapshot_id=snapshot_id, defaults={'version': 3})
 
 
 def policy_values(policy):
-    return tuple(getattr(policy, field) for field in [k+'_days' for k in observation.KINDS] + ['minimum_observations', 'maximum_gap_hours']) + tuple((r.pk, r.name, r.tag_scope, r.reason) for r in getattr(policy, 'transient_rules', []))
+    return tuple(getattr(policy, field) for field in [k+'_days' for k in observation.KINDS] + ['minimum_observations', 'maximum_gap_hours']) + tuple((r.pk, r.name, r.tag_scope, r.reason, r.mode, r.empty_days, r.minimum_observations, r.maximum_gap_hours) for r in getattr(policy, 'transient_rules', []))
 
 
 def run(pk, token):
@@ -112,7 +113,7 @@ def run(pk, token):
     policy = observation.policy_for(env)
     signature = policy_values(policy)
     history = list(snapshots(env.pk).values_list('pk', 'generated_at'))
-    if all(getattr(policy, kind+'_days') == 0 for kind in job.kinds):
+    if all(getattr(policy, kind+'_days') == 0 for kind in job.kinds) and not ('empty_group' in job.kinds and any(r.mode == 'monitor' for r in policy.transient_rules)):
         history = history[-1:]
     current = FindingRecalculation.objects.filter(pk=pk, token=token, status='running')
     if not current.update(total=len(history)): return
@@ -133,7 +134,7 @@ def run(pk, token):
                 state = Finding(environment=env, required_approvals=required_approvals, kind=row.kind, path=row.path, first_seen=stamp, last_seen=stamp)
             reset = new or not state.present or state.fingerprint != row.fingerprint
             observation.advance(state, policy, env, stamp, reset=reset,
-                                row={'hit_count': 0 if row.zero_counter else None, 'statistics_checked_at': row.checked_at})
+                                row={'hit_count': 0 if row.zero_counter else None, 'statistics_checked_at': row.checked_at, '_membership_scope': row.membership_scope})
             state.name, state.fingerprint = row.name, row.fingerprint
             state.last_seen = state.evaluated_at = stamp
             state.snapshot_id, state.present = snapshot_id, True

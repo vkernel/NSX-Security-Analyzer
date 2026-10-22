@@ -39,14 +39,14 @@ def condition_scope(row):
 
 
 def matching(row, policies):
-    scope = condition_scope(row)
+    scope = row.get('_membership_scope') or condition_scope(row)
     return next((p for p in policies if p.enabled and p.tag_scope == scope), None) if scope else None
 
 
 def apply(finding, row, policies):
     if finding.kind != 'empty_group': return False
     policy = matching(row, policies)
-    if not policy: return False
+    if not policy or policy.mode != 'suppress': return False
     finding.qualification = 'suppressed'
     finding.qualification_reason = f'{policy.name}: {policy.reason}'[:255]
     finding.observation_started = finding.qualified_at = None
@@ -58,14 +58,29 @@ def apply(finding, row, policies):
 class PolicyForm(forms.ModelForm):
     class Meta:
         model = TransientEmptinessPolicy
-        fields = ['name', 'enabled', 'environment', 'tag_scope', 'reason']
-        labels = {'tag_scope':'Membership tag scope'}
+        fields = ['name', 'enabled', 'environment', 'tag_scope', 'reason', 'mode', 'empty_days', 'minimum_observations', 'maximum_gap_hours']
+        labels = {'tag_scope':'Membership tag scope', 'empty_days':'Empty observation period (days)', 'maximum_gap_hours':'Maximum collection gap (hours)'}
         help_texts = {'tag_scope':'Exact, case-sensitive scope in positive VM tag conditions. Mixed and nested definitions are excluded.'}
         widgets = {'tag_scope':forms.TextInput(attrs={'list':'observed-scopes'})}
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.fields['environment'].empty_label = 'All environments'
+        for name in ('mode', 'empty_days', 'minimum_observations', 'maximum_gap_hours'):
+            self.fields[name].required = False
+        for name in ('empty_days', 'minimum_observations', 'maximum_gap_hours'):
+            self.fields[name].help_text = 'Used only in Monitor prolonged emptiness mode.'
+
+    def clean(self):
+        data = super().clean()
+        data['mode'] = data.get('mode') or 'suppress'
+        for name, default in [('empty_days', 14), ('minimum_observations', 3), ('maximum_gap_hours', 24)]:
+            if data.get(name) is None:
+                if data['mode'] == 'monitor':
+                    self.add_error(name, 'Required for prolonged emptiness monitoring.')
+                else:
+                    data[name] = getattr(self.instance, name, default)
+        return data
 
     def clean_tag_scope(self):
         value = self.cleaned_data['tag_scope']

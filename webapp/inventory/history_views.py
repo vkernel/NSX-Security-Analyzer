@@ -146,7 +146,7 @@ def findings(request, pk):
     page = Paginator(rows, preferences(request).page_size).get_page(request.GET.get('page'))
     release_eligible = 0
     for row in page:
-        row.label = LABELS.get(row.kind, row.kind)
+        row.label = 'Prolonged empty VDI group' if row.qualification_reason.startswith('Prolonged empty VDI group') else LABELS.get(row.kind, row.kind)
         row.can_release = bool(request.user.is_staff and row.owner_id and row.workflow_state != 'decommissioned'
                                and (row.owner_id == request.user.pk or request.user.is_superuser))
         release_eligible += int(row.can_release)
@@ -234,7 +234,7 @@ def finding_detail(request, pk, finding_id):
         'can_unassign': bool(request.user.is_staff and finding.owner_id and finding.workflow_state != 'decommissioned'
                              and (finding.owner_id == request.user.pk or request.user.is_superuser)),
         'required_approvals': required_approvals, 'approval_label': approval_label,
-        'label': LABELS.get(finding.kind, finding.kind), 'form': form, 'page': page, 'approval_decisions': decisions, 'readiness': readiness, 'can_decide': can_decide, 'progress': progress, 'facts': facts, 'owner_name': owner_name, 'owner_detail': owner_detail,
+        'label': 'Prolonged empty VDI group' if finding.qualification_reason.startswith('Prolonged empty VDI group') else LABELS.get(finding.kind, finding.kind), 'form': form, 'page': page, 'approval_decisions': decisions, 'readiness': readiness, 'can_decide': can_decide, 'progress': progress, 'facts': facts, 'owner_name': owner_name, 'owner_detail': owner_detail,
         'query_string': urlencode({'return_to': review_return}),
         'evidence': json.dumps(finding.evidence, indent=2, ensure_ascii=False) if request.GET.get('evidence') == '1' else None})
 

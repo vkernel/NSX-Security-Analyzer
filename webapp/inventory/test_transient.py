@@ -81,3 +81,66 @@ class TransientPolicyTests(TestCase):
         synchronize(self.env.pk)
         self.finding.refresh_from_db();self.assertEqual(self.finding.qualification,'suppressed')
         self.assertFalse(Finding.objects.filter(kind='unused',qualification='suppressed').exists())
+
+    def test_monitor_gui_thresholds_replay_and_returning_members(self):
+        from datetime import timedelta
+        self.client.force_login(self.admin)
+        payload = dict(self.payload, action='save', mode='monitor', empty_days=2,
+                       minimum_observations=3, maximum_gap_hours=48)
+        self.assertEqual(self.client.post(self.url, payload).status_code, 302)
+        policy = TransientEmptinessPolicy.objects.get()
+        self.assertEqual((policy.mode, policy.empty_days, policy.minimum_observations, policy.maximum_gap_hours), ('monitor', 2, 3, 48))
+        job = replay.claim(); replay.run(job.pk, job.token)
+        self.finding.refresh_from_db()
+        self.assertEqual(self.finding.qualification, 'observing')
+        self.assertEqual(self.finding.required_days, 2)
+        for day in (1, 2):
+            Snapshot.objects.create(environment=self.env, generated_at=self.snap.generated_at + timedelta(days=day), report=deepcopy(self.snap.report))
+            synchronize(self.env.pk)
+        self.finding.refresh_from_db()
+        self.assertEqual(self.finding.qualification, 'eligible')
+        self.assertEqual(self.finding.observation_count, 3)
+        self.assertIn('Empty in every qualifying observation', self.finding.qualification_reason)
+        replay.queue([self.env.pk], ['empty_group']); job = replay.claim(); replay.run(job.pk, job.token)
+        self.finding.refresh_from_db()
+        self.assertEqual(self.finding.qualification, 'eligible')
+        self.assertEqual(self.finding.observation_count, 3)
+        self.assertContains(self.client.get(reverse('findings', args=[self.env.pk])), 'Prolonged empty VDI group')
+        self.finding.owner = self.admin
+        self.finding.workflow_state = 'second_review'
+        self.finding.approvals = {'owner': {'actor_id': str(self.admin.pk)}}
+        self.finding.save()
+        data = deepcopy(self.snap.report); data['objects'][0]['membership'] = 'nonempty'
+        Snapshot.objects.create(environment=self.env, generated_at=self.snap.generated_at + timedelta(days=3), report=data)
+        synchronize(self.env.pk)
+        self.finding.refresh_from_db()
+        self.assertEqual(self.finding.qualification, 'cleared')
+        self.assertEqual(self.finding.approvals, {})
+        self.assertEqual(self.finding.owner, self.admin)
+        Snapshot.objects.create(environment=self.env, generated_at=self.snap.generated_at + timedelta(days=4), report=deepcopy(self.snap.report))
+        synchronize(self.env.pk)
+        self.finding.refresh_from_db()
+        self.assertEqual(self.finding.qualification, 'observing')
+        self.assertEqual(self.finding.observation_count, 1)
+
+    def test_monitor_unknown_and_gap_restart_in_live_and_replay(self):
+        from datetime import timedelta
+        TransientEmptinessPolicy.objects.create(name='Monitor', tag_scope='VDI_Gebruiker',
+            mode='monitor', empty_days=2, minimum_observations=3, maximum_gap_hours=48)
+        for day, membership in [(1, 'empty'), (2, 'unknown'), (3, 'empty'), (7, 'empty')]:
+            data = deepcopy(self.snap.report); data['objects'][0]['membership'] = membership
+            Snapshot.objects.create(environment=self.env, generated_at=self.snap.generated_at + timedelta(days=day), report=data)
+            synchronize(self.env.pk)
+            if day in (3, 7):
+                self.finding.refresh_from_db()
+                self.assertEqual(self.finding.observation_count, 1)
+                self.assertEqual(self.finding.qualification, 'observing')
+        replay.queue([self.env.pk], ['empty_group']); job = replay.claim(); replay.run(job.pk, job.token)
+        self.finding.refresh_from_db()
+        self.assertEqual(self.finding.observation_count, 1)
+        self.assertEqual(self.finding.qualification, 'observing')
+
+    def test_monitor_requires_valid_thresholds(self):
+        from .transient import PolicyForm
+        self.assertFalse(PolicyForm(dict(self.payload, mode='monitor')).is_valid())
+        self.assertFalse(PolicyForm(dict(self.payload, mode='monitor', empty_days=0, minimum_observations=1, maximum_gap_hours=0)).is_valid())

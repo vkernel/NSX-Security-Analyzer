@@ -418,7 +418,7 @@ Only pure positive VM Tag `EQUALS` conditions using that scope match. Mixed scop
 nested groups, negative conditions and other member types are excluded. This matches the
 scope in the group's membership conditions, not a metadata tag attached to the group.
 
-Saving suppresses matching **empty-group** findings and queues recalculation from retained
+In **Always suppress** mode, saving suppresses matching **empty-group** findings and queues recalculation from retained
 history. Inventory, collected membership evidence and separate unused-object findings remain
 unchanged. Suppressed findings are available under **Finding reviews → Suppressed**, with the
 policy and reason in their details; they cannot receive cleanup approval. Existing ownership
@@ -441,3 +441,23 @@ referenced services and audit-excluded services do not become unused-service fin
 If a service is missing, check its usage in the evaluated snapshot and expand **Why some
 findings are not listed** in Finding reviews. Empty-group criteria and transient-emptiness
 policies do not apply to services.
+
+
+### Monitor prolonged VDI emptiness
+
+In **Administration → Finding review criteria → Manage transient-emptiness policies**,
+edit a scope policy and choose **Monitor prolonged emptiness**. Configure its empty
+observation period (default 14 days), minimum successful observations (default 3), and
+maximum collection gap (default 24 hours). All three fields are required for monitoring.
+The existing **Always suppress** mode remains the default for existing policies.
+
+Saving replays retained history using these settings, independently of the general
+empty-group period. Qualified groups appear as **Prolonged empty VDI group** within the
+Empty group finding category. Observation history shows the policy, dates and count.
+Any confirmed membership resets the period and invalidates active cleanup approvals;
+missing or uncertain evidence and excessive gaps interrupt qualification. Owners and
+history are preserved. Review and impact checks still apply to referenced groups.
+
+“Empty in every qualifying observation” does not prove continuous emptiness between
+collections. No additional NSX polling or changes to the external VDI script are required.
+When policies overlap, the oldest enabled matching policy takes precedence.

@@ -195,6 +195,10 @@ class FindingPolicy(models.Model):
 
 
 class TransientEmptinessPolicy(models.Model):
+    mode = models.CharField(max_length=16, default='suppress', choices=[('suppress', 'Always suppress'), ('monitor', 'Monitor prolonged emptiness')])
+    empty_days = models.PositiveIntegerField(default=14, validators=[MinValueValidator(1), MaxValueValidator(3650)])
+    minimum_observations = models.PositiveIntegerField(default=3, validators=[MinValueValidator(2), MaxValueValidator(10000)])
+    maximum_gap_hours = models.PositiveIntegerField(default=24, validators=[MinValueValidator(1), MaxValueValidator(8760)])
     name = models.CharField(max_length=100)
     enabled = models.BooleanField(default=True)
     environment = models.ForeignKey(Environment, null=True, blank=True, on_delete=models.CASCADE)
@@ -486,6 +490,7 @@ class FindingRecalculation(models.Model):
 
 
 class SnapshotFindingEvidence(models.Model):
+    membership_scope = models.CharField(max_length=255, blank=True)
     snapshot = models.ForeignKey(Snapshot, on_delete=models.CASCADE, related_name='finding_evidence')
     kind = models.CharField(max_length=40)
     path = models.TextField()
