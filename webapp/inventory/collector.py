@@ -468,6 +468,7 @@ class MembershipProbe:
         self.client = client
         self.calls = 0
         self.endpoints = {}
+        self.results = {}
 
     def __getattr__(self, name):
         return getattr(self.client, name)
@@ -481,14 +482,33 @@ class MembershipProbe:
             page = self.client.get(path, params)
         except Exception:
             counts['errors'] += 1
+            self.results[endpoint] = 'error'
             raise
         if isinstance(page.get('results'), list):
             count = page.get('result_count', 0)
             positive = bool(page['results']) or (type(count) is int and count > 0)
             counts['positive' if positive else 'no_members_returned'] += 1
+            self.results[endpoint] = ('incomplete' if type(count) is not int or count < 0
+                                     else 'positive' if positive
+                                     else 'incomplete' if page.get('cursor') else 'negative')
         else:
             counts['errors'] += 1
+            self.results[endpoint] = 'incomplete'
         return page
+
+    def vm_comparison(self):
+        # This is diagnostic evidence only, never an input to finding decisions.
+        vm = self.results.get('virtual-machines')
+        if vm == 'positive':
+            return 'VM members found'
+        if vm != 'negative':
+            return 'VM check unavailable or not reached'
+        others = [self.results.get(key) for key in ('ip-addresses', 'logical-ports')]
+        if 'positive' in others:
+            return 'VM empty but IP or port members found'
+        if all(value == 'negative' for value in others):
+            return 'All three checks empty'
+        return 'VM empty but follow-up incomplete'
 
 
 def membership_endpoints(group):
@@ -1599,7 +1619,7 @@ def audit(client, workers=4, testing=False, progress=None):
     LOG.info("Checking membership for %d groups...", len(groups))
     membership_progress = {"completed": 0, "last_log": time.monotonic()}
     membership_lock = threading.Lock()
-    membership_diagnostics = {'groups_checked': 0, 'probe_calls': 0, 'calls_per_group': {}, 'outcomes': {}, 'endpoints': {}, 'typed_probe_groups': 0, 'inapplicable_probes_omitted': 0}
+    membership_diagnostics = {'groups_checked': 0, 'probe_calls': 0, 'calls_per_group': {}, 'outcomes': {}, 'endpoints': {}, 'typed_probe_groups': 0, 'inapplicable_probes_omitted': 0, 'vm_probe_comparison': {}}
     group_inventory = {g["path"]: g for g in all_groups}
     scope_cache = {}
     scopes = {g['path']: membership_scope(g, group_inventory, scope_cache) for g in groups}
@@ -1608,6 +1628,10 @@ def audit(client, workers=4, testing=False, progress=None):
         result = membership(probe, group, group_inventory, scopes[group['path']])
         with membership_lock:
             membership_diagnostics['groups_checked'] += 1
+            if membership_endpoints(group) == ('ip-addresses', 'virtual-machines', 'logical-ports'):
+                comparisons = membership_diagnostics['vm_probe_comparison']
+                outcome = probe.vm_comparison()
+                comparisons[outcome] = comparisons.get(outcome, 0) + 1
             if probe.calls and len(membership_endpoints(group)) < len(MEMBERSHIP_ENDPOINTS):
                 membership_diagnostics['typed_probe_groups'] += 1
                 # Count actual avoided calls only when the complete plan ran.
@@ -1909,7 +1933,10 @@ def feature_guide():
 <div class="section-eyebrow">Help &amp; coverage</div><h2>Report user guide</h2>
 <p>Use this guide to understand what the report checks, how to explore its results and what each finding means. This report displays a saved database snapshot. Opening it or filtering it does not modify NSX.</p>
 
+<h3>Cleanup impact preview</h3>
+<p>Groups, firewall rules and policies have a read-only Impact preview in object details and finding reviews. It shows collected direct and nested configuration dependencies, referencing rule fields and policy containment. Links open the exact object in the same snapshot. Cycles, unresolved references and truncated chains are marked. This is not a traffic simulation or deletion approval; no detected references does not prove safe deletion. VM deletion and tag assignment removal have separate previews with potential membership effects explicitly labelled.</p>
 <h3>Investigating collection duration</h3>
+<p>VM probe comparison reports whether the existing IP or port checks find members when the VM check is empty. It adds no requests and does not change finding or approval decisions. Agreement in a collection is diagnostic evidence, not a guarantee that follow-up checks can be removed. HTTPS connections already use a shared reusable pool.</p>
 <p>Simple single-member-type conditions omit documented inapplicable membership endpoints; mixed, nested and uncertain definitions retain all checks. Every collection obtains fresh membership evidence. Bulk counters with missing or ambiguous rule identity use a 30-minute bulk retry cooldown while individual counters remain freshly collected. Finding publication avoids rewriting unchanged JSON evidence.</p>
 <p>New collections record the collecting worker build and configured request ceiling. Membership workload shows probes per group and endpoint outcomes; request-capacity waiting is separate from rate pacing. Set Maximum concurrent NSX requests in Edit environment → Advanced request settings (default 8, range 1–32). Changes apply to newly queued collections for that environment without restarting the worker. Waiting requests are served in FIFO order. Compare collections at higher limits cautiously; verification and adaptive backoff remain enabled.</p>
 <p>Open Collections → Diagnostics for retrieval phase times, HTTP retries, throttling and endpoint costs. Membership endpoints are measured separately. The publication timeline shows environment lock waits. Concurrent phase and request times overlap and must not be added together. Search verification shares a five-scan limit; counter timeout recovery uses at most two concurrent requests and a 30-second budget. Unresolved counters remain unknown and incomplete search coverage is not accepted.</p>
@@ -1990,6 +2017,7 @@ def feature_guide():
 </ul>
 <p>Disabled rules and references from other groups or services still count as usage. Self-references and realization records do not. Built-in services and default/system groups are excluded from cleanup findings. Antrea/container groups are included in reference checks. Unsupported membership scope is labeled Not supported; failed or incomplete API checks are reported as Unknown.</p>
 <p><strong>Not supported</strong> membership means identity, container or nested/path criteria cannot be fully resolved by these checks; this is a scope limitation, not an empty-group finding or collection failure.</p>
+<p><strong>VM and tag impact previews</strong> are available from saved-snapshot evidence drawers. VM deletion shows explicit paths and potential tag-condition chains to groups, rules and policies. For tags, select a VM assignment to preview its removal. This does not delete a catalog entry or model traffic. Dynamic conditions, other criteria and incomplete coverage can change the result; potential relationships are not confirmed membership changes.</p>
 <p><strong>Empty</strong> means the supported membership checks returned no members. <strong>Has members</strong> means explicit IP/MAC entries or resolved members were found. An empty group may still be referenced by a rule. Membership methods identify tag conditions, other dynamic conditions, IP/MAC addresses, explicit objects, nested groups or segment/port paths. The membership-definition popup shows configured criteria; its JSON preserves AND/OR structure and is not a resolved member list.</p>
 
 <h3>Distributed firewall overview and segmentation indicator</h3>

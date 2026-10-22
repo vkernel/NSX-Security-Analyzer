@@ -54,6 +54,28 @@ class TypedMembershipTests(unittest.TestCase):
         client.get.return_value = {'results': [], 'cursor': 'more'}
         self.assertEqual(nsx.membership(client, group)[0], 'unknown')
 
+    def test_vm_comparison_preserves_followup_positive_evidence(self):
+        group = self.group('VirtualMachine')
+        for payloads, status, comparison in (
+            ([{'results': []}, {'results': []}, {'results': []}], 'empty', 'All three checks empty'),
+            ([{'results': []}, {'results': [{'id': 'ip'}]}], 'nonempty', 'VM empty but IP or port members found'),
+            ([{'results': []}, {'results': [], 'cursor': 'more'}, {'results': []}], 'unknown', 'VM empty but follow-up incomplete'),
+            ([{'results': []}, nsx.AuditError('failed'), {'results': []}], 'unknown', 'VM empty but follow-up incomplete'),
+            ([{'results': [{'id': 'vm-no-ip'}]}], 'nonempty', 'VM members found'),
+        ):
+            client = Mock(membership_hints={})
+            client.get.side_effect = payloads
+            probe = nsx.MembershipProbe(client)
+            self.assertEqual(nsx.membership(probe, group)[0], status)
+            self.assertEqual(probe.vm_comparison(), comparison)
+            self.assertEqual(client.get.call_count, len(payloads))
+        client = Mock(membership_hints={'/g': 'ip-addresses'})
+        client.get.return_value = {'results': [{'id': 'ip'}]}
+        probe = nsx.MembershipProbe(client)
+        self.assertEqual(nsx.membership(probe, group)[0], 'nonempty')
+        self.assertEqual(probe.vm_comparison(), 'VM check unavailable or not reached')
+        self.assertEqual(client.get.call_count, 1)
+
     def test_missing_bulk_identity_cooldown_never_reuses_counters(self):
         rule = {'path': '/p/rules/a'}
         client = Mock(statistics_backoff={})

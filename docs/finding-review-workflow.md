@@ -364,3 +364,42 @@ incomplete coverage, missing history or ambiguous invalidation reasons block rec
 An increased maximum gap alone does not guarantee that recovery is possible.
 Checks run again when confirming, and a stale preview must be reopened. When blocked,
 resolve current evidence issues and obtain a fresh owner approval.
+
+## Impact preview (groups, firewall rules and policies)
+
+Open **Impact preview** from a finding review or the object's snapshot details.
+The read-only page shows exact collected references, nested group chains, rule
+source/destination/applied-to usage, containing policies and rules removed with a
+policy. It links to the exact object in the same snapshot. Repeated nodes and
+cycles are shown once; preview depth and relationship count are bounded and
+truncation is disclosed. Unknown referencing objects remain visible as unresolved.
+
+The proposed action is deletion, but no NSX changes are performed. Configuration
+dependencies do not establish traffic impact: removing a rule may expose later
+rules or default actions, and referenced objects may prevent deletion. No detected
+references means only that none were found within collected coverage. Snapshot
+age, historical status, imported/sampled data and coverage limitations must be
+considered. VM and tag assignment previews are described below.
+
+Impact preview is optional. If a reviewer opens it from a finding and that finding's
+evaluated snapshot subsequently changes, approval from that browser session requires
+opening the preview again. Existing current-evidence and independent-approval checks
+remain enforced. The preview does not grant approval or authorize deletion.
+
+### VM and tag assignment impact previews
+
+Open **Impact preview** from a VM or tag evidence drawer in a saved snapshot.
+VM deletion previews show explicit VM path references and potential tag-condition
+relationships, followed through parent groups, rules and policies. These objects
+are not automatically deleted with the VM.
+
+For a tag, select a specific VM assignment to preview its removal. The initial
+view summarizes collected uses of the exact scope and tag name. This is not a
+simulation of deleting a tag catalog entry, and group or other resource tag
+assignments are outside the VM assignment preview.
+
+Potential tag relationships do not prove realized membership or a traffic change.
+Other criteria, AND/OR combinations and negative conditions can change the result.
+Incomplete inventory and unsupported conditions are flagged. No NSX changes are
+made. Preview chains are limited to 200 relationships and eight levels; truncation
+is shown explicitly. Always review current evidence before approving cleanup.

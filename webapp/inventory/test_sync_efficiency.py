@@ -113,6 +113,7 @@ class CollectionReportReuseTests(TestCase):
                 'collector_build': {'version': '0.5.3', 'revision': 'worker-test-build',
                                     'built_at': '2026-10-20', 'configured_maximum': 12},
                 'membership': {'groups_checked': 3, 'probe_calls': 5,
+                               'vm_probe_comparison': {'All three checks empty': 1},
                                'calls_per_group': {'0': 1, '1': 1, '4': 1},
                                'endpoints': {'ip-addresses': {'calls': 2, 'positive': 1,
                                                             'no_members_returned': 1, 'errors': 0}}},
@@ -123,6 +124,7 @@ class CollectionReportReuseTests(TestCase):
             response = self.client.get(reverse('collection-diagnostics', args=[job.pk]))
             for text in ('worker-test-build', 'Membership workload', '3 groups checked',
                          'Waiting for request capacity', 'missing_identity',
+                         'VM membership check comparison', 'All three checks empty',
                          'Why bulk counters used individual requests'):
                 self.assertContains(response, text)
             snapshot.report = {}; snapshot.save()

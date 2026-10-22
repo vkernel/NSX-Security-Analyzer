@@ -179,6 +179,8 @@ def finding_detail(request, pk, finding_id):
             data = form.cleaned_data
             if data['revision'] != finding.revision:
                 form.add_error(None, 'This finding changed while you were reviewing it. Reload the page before saving.')
+            elif data['action'] == 'approve' and request.session.get('impact_preview_' + str(finding.pk)) not in (None, str(finding.snapshot_id)):
+                form.add_error(None, 'The snapshot changed since your impact preview. Open Impact preview again before approving.')
             else:
                 try:
                     decide(finding, request.user, data['action'], data['note'], data['owner'], data['change_ticket'], data['manual_verified'], data['manual_checks'], data['evidence_reference'])
@@ -223,6 +225,7 @@ def finding_detail(request, pk, finding_id):
     owner_name, _, owner_detail = owner_label.partition(' · ')
     page = Paginator(finding.events.select_related('actor__keycloakidentity', 'actor__ldapidentity').defer('details'), 20).get_page(request.GET.get('page'))
     return render(request, 'inventory/finding_detail.html', {'environment': environment, 'finding': finding,
+        'impact_supported': '/groups/' in finding.path or '/security-policies/' in finding.path,
         'review_return': review_return, 'review_navigation': navigation(request, environment, finding, review_return),
         'can_unassign': bool(request.user.is_staff and finding.owner_id and finding.workflow_state != 'decommissioned'
                              and (finding.owner_id == request.user.pk or request.user.is_superuser)),

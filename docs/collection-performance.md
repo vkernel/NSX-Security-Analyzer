@@ -744,3 +744,24 @@ Finding publication advances observations, eligibility, workflow state and snaps
 assessments as before, but rewrites the JSON evidence only when its fingerprint
 changes. Publication remains atomic. No historical snapshots or approvals are
 silently repurposed to speed up collection.
+
+
+### Validating a potential VM-only shortcut
+
+**Collections → Diagnostics → VM membership check comparison** counts results
+for simple VM-only definitions using the existing requests. It separates agreement,
+a negative VM response followed by positive IP/port evidence, incomplete follow-up,
+and cases where the VM check was not reached. No additional requests are made and
+no group paths or member identities are stored in these counters.
+
+A prior positive endpoint hint can stop the probes before the VM request; that
+case is not counted as agreement. Empty pages with a continuation cursor and
+invalid counts are not accepted as negative evidence in the comparison. Even zero
+disagreements in one collection do not prove that a VM-only shortcut is safe.
+Finding and approval decisions retain all applicable fresh checks.
+
+The collector already uses one shared bounded urllib3 connection pool with TLS
+connection reuse, validated by an HTTPS integration test. This diagnostic update
+does not increase worker count or concurrency and does not promise a further
+collection-time reduction. The next collection can provide evidence to assess
+whether further probe reduction is appropriate.

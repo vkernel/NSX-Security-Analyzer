@@ -26,6 +26,18 @@ class FindingWorkflowTests(TestCase):
         self.record = SnapshotRecord.objects.create(snapshot=self.snapshot, ordinal=1, view='inventory', name='A', sort_name='a', compact={'path':self.finding.path,'membership':'empty'}, data={}, columns=[], sort_values={}, search_basic='', search_evidence='')
         self.url=reverse('finding-detail',args=[self.env.pk,self.finding.pk])
 
+    def test_changed_impact_preview_requires_refresh_before_approval(self):
+        from unittest.mock import patch
+        self.client.force_login(self.owner)
+        session = self.client.session
+        session['impact_preview_' + str(self.finding.pk)] = 'older-snapshot'
+        session.save()
+        with patch('inventory.finding_workflow.decide') as decide_mock:
+            response = self.client.post(self.url, {'revision':self.finding.revision,
+                'action':'approve', 'note':'Reviewed dependencies'})
+        self.assertContains(response, 'snapshot changed since your impact preview')
+        decide_mock.assert_not_called()
+
     def assign(self, owner=None):
         decide(self.finding, self.admin, 'assign', 'Please check dependencies.', owner or self.owner)
 

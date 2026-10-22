@@ -14,6 +14,14 @@
       if(row.path){const identity=make('div',null,'evidence-identity');identity.append(make('code',row.path));const copy=make('button','Copy path');copy.type='button';copy.dataset.copyPath=row.path;identity.append(copy);groups.get('Technical details').push(identity);}
     }
     if(row?.statistics_checked_at){const timing=make('p','Counters checked: '),time=make('time');time.dateTime=row.statistics_checked_at;time.textContent=new Date(row.statistics_checked_at).toString();if(window.workspaceTime){const template=document.createElement('template');template.innerHTML=window.workspaceTime(row.statistics_checked_at);timing.append(template.content);}else timing.append(time);groups.get('Technical details').push(timing);}
+    const impactBase=document.querySelector('[data-impact-base]')?.dataset.impactBase;
+    if(impactBase && row?.path && (row.kind==='group' || row.inventory_type==='Group' || row.policy_path || row.rule_count!==undefined)){
+      const link=make('a','Impact preview','button');link.href=impactBase+'?'+new URLSearchParams({path:row.path});groups.get('Overview').push(link);
+    }
+    if(impactBase && (row?.inventory_type==='Virtual machine' || row?.inventory_type==='Tag')){
+      const params=row.inventory_type==='Tag'?{action:'remove-tag',scope:row.scope||'',tag:row.name}:{action:'delete-vm',path:row.path};
+      const link=make('a','Impact preview','button');link.href=impactBase+'?'+new URLSearchParams(params);groups.get('Overview').push(link);
+    }
     if(summary.children.length)groups.get('Overview').push(summary);
     for(const node of nodes){
       // Explicit sections are emitted by new reports. Keep older saved reports readable.
