@@ -432,9 +432,9 @@ observed. The external membership-management script does not need changing.
 
 ## Custom services in Finding reviews
 
-Custom services use the shared **Unused groups and custom services (days)** criterion.
-In Finding reviews, choose **Unused groups and custom services** in the finding-type filter.
-They are stored as unused-object candidates, not as a separate service finding type.
+Custom services use their own **Unused custom services (days)** criterion, independently of **Unused groups (days)**.
+In Finding reviews, choose **Unused custom service** in the finding-type filter.
+Services and groups have separate finding types. Existing service reviews retain their ownership, history and approvals during upgrade; the service waiting period initially copies the previous shared setting.
 A custom service appears when no configuration reference is found and its observation period,
 minimum observations and evidence requirements are satisfied. Built-in/system-owned services,
 referenced services and audit-excluded services do not become unused-service findings.

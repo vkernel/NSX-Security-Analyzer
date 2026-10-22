@@ -187,6 +187,7 @@ class FindingPolicy(models.Model):
     zero_hits_days = models.PositiveIntegerField(default=90, validators=[MaxValueValidator(3650)])
     empty_group_days = models.PositiveIntegerField(default=30, validators=[MaxValueValidator(3650)])
     unused_days = models.PositiveIntegerField(default=30, validators=[MaxValueValidator(3650)])
+    unused_service_days = models.PositiveIntegerField(default=30, validators=[MaxValueValidator(3650)])
     empty_policy_days = models.PositiveIntegerField(default=30, validators=[MaxValueValidator(3650)])
     disabled_days = models.PositiveIntegerField(default=30, validators=[MaxValueValidator(3650)])
     minimum_observations = models.PositiveIntegerField(default=3, validators=[MinValueValidator(2), MaxValueValidator(10000)])

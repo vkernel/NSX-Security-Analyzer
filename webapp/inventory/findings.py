@@ -8,16 +8,21 @@ from .models import Environment, Finding, FindingEvent, SnapshotFindingAssessmen
 from . import observation
 from .finding_workflow import invalidate, review_fingerprint, relevant_evidence_error, coverage_changed, FIELDS as WORKFLOW_FIELDS
 
-LABELS = {'unused': 'Unused object candidate', 'empty_group': 'Empty group',
+LABELS = {'unused': 'Unused group', 'unused_service': 'Unused custom service', 'empty_group': 'Empty group',
           'membership': 'Unknown group membership', 'zero_hits': 'Zero recorded hits',
           'disabled': 'Disabled rule', 'statistics': 'Unknown rule statistics',
           'empty_policy': 'Empty firewall policy', 'policy': 'Unknown policy inventory',
           'tag': 'Tag usage needs review'}
 
 
+def is_service(row):
+    return row.get('kind') == 'custom_service' or row.get('path', '').startswith(('/infra/services/', '/global-infra/services/'))
+
+
 def candidates(report):
     for rows, checks in (
-        (report.get('objects', []), [('unused', lambda r: r.get('usage') == 'unused_candidate'),
+        (report.get('objects', []), [('unused', lambda r: r.get('usage') == 'unused_candidate' and not is_service(r)),
+            ('unused_service', lambda r: r.get('usage') == 'unused_candidate' and is_service(r)),
             ('empty_group', lambda r: r.get('membership') == 'empty'),
             ('membership', lambda r: r.get('membership') == 'unknown')]),
         (report.get('dfw', {}).get('rules', []), [('zero_hits', lambda r: r.get('hit_status') == 'zero_hits' and not r.get('disabled')),

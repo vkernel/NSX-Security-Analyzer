@@ -43,6 +43,7 @@ def apply_approval_policy(required, actor):
 
 def review_fingerprint(kind, evidence):
     # Counter acquisition method can change without changing configuration or condition.
+    kind = 'unused' if kind == 'unused_service' else kind  # Preserve existing service approval identity.
     stable = {key: value for key, value in evidence.items() if key != 'statistics_source'}
     return hashlib.sha256(json.dumps([kind, stable], sort_keys=True, separators=(',', ':')).encode()).hexdigest()
 
@@ -83,7 +84,7 @@ def coverage_key(search):
 
 
 def coverage_changed(finding, search):
-    if finding.kind != 'unused' or not finding.approvals.get('owner'):
+    if finding.kind not in ('unused', 'unused_service') or not finding.approvals.get('owner'):
         return False
     saved = finding.approvals['owner'].get('coverage_key')
     return saved != coverage_key(search) if saved else compatibility_search(search)
@@ -97,7 +98,7 @@ def relevant_evidence_error(kind, row, search_coverage, stamp, interval_minutes)
         return 'This object is excluded from finding checks and cannot be approved.'
     if kind == 'empty_group':
         return '' if row.get('membership') == 'empty' else 'Group membership was not confirmed empty in this collection.'
-    if kind == 'unused':
+    if kind in ('unused', 'unused_service'):
         if row.get('usage') != 'unused_candidate':
             return 'Reference checks did not confirm this object as an unused candidate.'
         if not isinstance(search_coverage, dict) or search_coverage.get('errors') or search_coverage.get('failed') or (search_coverage.get('mode') != 'all_types' and not compatibility_search(search_coverage)):
@@ -142,16 +143,16 @@ def approval_readiness(finding):
     if latest.generated_at < timezone.now() - timedelta(hours=policy().stale_hours):
         return blocked('Collection evidence is stale. Run a new full collection before approval.')
     # Read one compact object, never the full report or rendered evidence.
-    view = 'inventory' if finding.kind in ('empty_group', 'unused') else 'dfw'
+    view = 'inventory' if finding.kind in ('empty_group', 'unused', 'unused_service') else 'dfw'
     row = SnapshotRecord.objects.filter(snapshot=latest, view=view, compact__path=finding.path).values_list('compact', flat=True).first()
-    search = Snapshot.objects.filter(pk=latest.pk).values_list('report__search_coverage', flat=True).get() if finding.kind == 'unused' else None
+    search = Snapshot.objects.filter(pk=latest.pk).values_list('report__search_coverage', flat=True).get() if finding.kind in ('unused', 'unused_service') else None
     error = relevant_evidence_error(finding.kind, row, search, latest.generated_at, finding.environment.sync_interval_minutes)
     if error: return blocked(error)
-    manual = finding.kind == 'unused' and compatibility_search(search)
+    manual = finding.kind in ('unused', 'unused_service') and compatibility_search(search)
     return {'status': 'manual' if manual else 'ready',
             'message': 'Reference-search coverage is limited. Each reviewer must independently check dependencies outside the collected search results.' if manual else 'Relevant saved evidence is current and supports review.',
-            'coverage': search if finding.kind == 'unused' else {},
-            'coverage_key': coverage_key(search) if finding.kind == 'unused' else '', 'row': row}
+            'coverage': search if finding.kind in ('unused', 'unused_service') else {},
+            'coverage_key': coverage_key(search) if finding.kind in ('unused', 'unused_service') else '', 'row': row}
 
 
 def evidence_error(finding):

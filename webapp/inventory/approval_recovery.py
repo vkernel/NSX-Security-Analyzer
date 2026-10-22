@@ -53,12 +53,12 @@ def preview(finding):
     evidence_by_snapshot = dict(SnapshotFindingEvidence.objects.filter(snapshot__in=snapshots,
         kind=finding.kind, path=finding.path).values_list('snapshot_id', 'fingerprint'))
     fields = ['pk', 'needs_review', 'summary']
-    if finding.kind == 'unused':
+    if finding.kind in ('unused', 'unused_service'):
         fields.append('report__search_coverage')
     for snapshot in snapshots.values(*fields).iterator():
         if snapshot['needs_review'] or snapshot['summary'].get('inventory_warnings'):
             return blocked('The retained interval contains incomplete coverage; recovery cannot be proven safe.')
-        if finding.kind == 'unused' and coverage_key(snapshot['report__search_coverage']) != decision.get('coverage_key', ''):
+        if finding.kind in ('unused', 'unused_service') and coverage_key(snapshot['report__search_coverage']) != decision.get('coverage_key', ''):
             return blocked('Reference-search coverage changed within the retained interval.')
         if evidence_by_snapshot.get(snapshot['pk']) != expected:
             return blocked('Missing or changed retained evidence prevents recovery.')

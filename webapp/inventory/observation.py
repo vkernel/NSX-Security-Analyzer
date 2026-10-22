@@ -5,7 +5,7 @@ from datetime import timedelta
 from django.utils.dateparse import parse_datetime
 from .models import FindingPolicy
 
-KINDS = ('zero_hits', 'empty_group', 'unused', 'empty_policy', 'disabled')
+KINDS = ('zero_hits', 'empty_group', 'unused', 'unused_service', 'empty_policy', 'disabled')
 FIELDS = ['qualification', 'observation_started', 'observation_count', 'observation_days',
           'required_days', 'qualified_at', 'qualification_reason', 'policy_fingerprint']
 
@@ -24,6 +24,7 @@ def condition_fingerprint(kind, evidence):
     keys += {
         'empty_group': ['membership_definition'],
         'unused': ['configuration'],
+        'unused_service': ['configuration'],
         'zero_hits': ['configuration_fingerprint', 'configuration', 'action', 'disabled',
                       'source_groups', 'destination_groups', 'services', 'scope'],
         'disabled': ['configuration_fingerprint', 'configuration', 'action',
@@ -94,6 +95,7 @@ def absent(finding, rows):
     clear = {
         'empty_group': row.get('membership') in ('non_empty', 'nonempty'),
         'unused': row.get('usage') == 'referenced',
+        'unused_service': row.get('usage') == 'referenced',
         'zero_hits': row.get('hit_status') == 'traffic_recorded',
         'disabled': row.get('disabled') is False,
         'empty_policy': isinstance(row.get('rule_count'), int) and row['rule_count'] > 0,

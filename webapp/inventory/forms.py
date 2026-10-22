@@ -225,12 +225,12 @@ class FindingPolicyForm(forms.ModelForm):
     class Meta:
         from .models import FindingPolicy
         model = FindingPolicy
-        fields = ['zero_hits_days', 'empty_group_days', 'unused_days', 'empty_policy_days',
+        fields = ['zero_hits_days', 'empty_group_days', 'unused_days', 'unused_service_days', 'empty_policy_days',
                   'disabled_days', 'minimum_observations', 'maximum_gap_hours']
         labels = {'zero_hits_days': 'Firewall rules with zero hits (days)', 'empty_group_days': 'Empty groups (days)',
-                  'unused_days': 'Unused groups and custom services (days)', 'empty_policy_days': 'Empty firewall policies (days)',
+                  'unused_days': 'Unused groups (days)', 'unused_service_days': 'Unused custom services (days)', 'empty_policy_days': 'Empty firewall policies (days)',
                   'disabled_days': 'Disabled firewall rules (days)'}
-        help_texts = {field: '0 shows confirmed conditions in the latest retained full collection. 1 requires at least 24 hours of supported history plus the minimum observations. Saving recalculates from existing history.' for field in fields[:5]}
+        help_texts = {field: '0 shows confirmed conditions in the latest retained full collection. 1 requires at least 24 hours of supported history plus the minimum observations. Saving recalculates from existing history.' for field in fields[:6]}
         help_texts['minimum_observations'] = 'Required when the waiting period is at least 1 day. With 0 days, one confirmed observation is enough.'
         help_texts['maximum_gap_hours'] = '0 uses twice the environment collection interval with a minimum of 24 hours. A longer gap restarts observation.'
 
@@ -239,7 +239,7 @@ class FindingFilterForm(forms.Form):
     from .findings import LABELS
     from .models import Finding
     q = forms.CharField(required=False, label='Search name or path', max_length=255)
-    kind = forms.ChoiceField(required=False, choices=[('', 'All finding types')] + [(key, 'Unused groups and custom services' if key == 'unused' else label) for key, label in LABELS.items()])
+    kind = forms.ChoiceField(required=False, choices=[('', 'All finding types')] + list(LABELS.items()))
     review = forms.ChoiceField(required=False, choices=[('', 'All workflow stages'), ('suppressed', 'Suppressed')] + Finding._meta.get_field('workflow_state').choices)
     owner = forms.ChoiceField(required=False)
     sort = forms.ChoiceField(required=False, choices=[('name', 'Name'), ('kind', 'Finding type'), ('status', 'Review status')])

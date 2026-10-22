@@ -33,7 +33,7 @@ class FoundationTests(TestCase):
     def test_unused_custom_service_appears_in_reviews(self):
         from .models import FindingPolicy
         from .forms import FindingPolicyForm, FindingFilterForm
-        FindingPolicy.objects.create(unused_days=0)
+        FindingPolicy.objects.create(unused_days=30, unused_service_days=0)
         data = report()
         service = {'kind': 'custom_service', 'path': '/infra/services/custom-example',
                    'name': 'Custom example service', 'usage': 'unused_candidate',
@@ -43,12 +43,45 @@ class FoundationTests(TestCase):
         self.snapshot(data)
         synchronize(self.env.pk)
         finding = Finding.objects.get(environment=self.env, path=service['path'])
-        self.assertEqual(finding.kind, 'unused')
+        self.assertEqual(finding.kind, 'unused_service')
         self.assertEqual(finding.qualification, 'eligible')
-        response = self.client.get(reverse('findings', args=[self.env.pk]), {'kind': 'unused'})
+        self.assertEqual(Finding.objects.get(environment=self.env, kind='unused').qualification, 'observing')
+        response = self.client.get(reverse('findings', args=[self.env.pk]), {'kind': 'unused_service'})
         self.assertContains(response, service['name'])
-        self.assertIn('custom services', FindingPolicyForm().fields['unused_days'].label)
-        self.assertIn(('unused', 'Unused groups and custom services'), FindingFilterForm().fields['kind'].choices)
+        self.assertIn('custom services', FindingPolicyForm().fields['unused_service_days'].label)
+        self.assertIn(('unused_service', 'Unused custom service'), FindingFilterForm().fields['kind'].choices)
+
+    def test_service_split_preserves_review_and_criteria(self):
+        import importlib
+        from django.apps import apps
+        from django.db import connection
+        from types import SimpleNamespace
+        from .models import FindingPolicy, SnapshotFindingEvidence, SnapshotFindingAssessment
+        from .finding_workflow import review_fingerprint, relevant_evidence_error
+        policy = FindingPolicy.objects.create(unused_days=17)
+        snapshot = self.snapshot()
+        evidence = {'usage': 'unused_candidate', 'configuration': {'id': 'custom'}}
+        approvals = {'owner': {'actor_id': str(self.user.pk), 'fingerprint': review_fingerprint('unused', evidence)}}
+        finding = Finding.objects.create(environment=self.env, snapshot=snapshot, kind='unused',
+            path='/infra/services/custom', name='Custom', first_seen=self.now, last_seen=self.now,
+            evaluated_at=self.now, owner=self.user, workflow_state='second_review', approvals=approvals,
+            evidence=evidence, fingerprint=review_fingerprint('unused', evidence))
+        finding.events.create(message='Original approval')
+        SnapshotFindingEvidence.objects.create(snapshot=snapshot, kind='unused', path=finding.path, name='Custom', fingerprint='stable')
+        SnapshotFindingAssessment.objects.create(snapshot=snapshot, kind='unused', path=finding.path, assessment={'kind':'unused','status':'eligible'})
+        migration = importlib.import_module('inventory.migrations.0043_split_unused_services')
+        migration.split_services(apps, SimpleNamespace(connection=connection))
+        finding.refresh_from_db(); policy.refresh_from_db()
+        self.assertEqual(policy.unused_service_days, 17)
+        self.assertEqual(finding.kind, 'unused_service')
+        self.assertEqual(finding.owner, self.user)
+        self.assertEqual(finding.workflow_state, 'second_review')
+        self.assertEqual(finding.approvals, approvals)
+        self.assertEqual(finding.events.count(), 1)
+        self.assertEqual(review_fingerprint(finding.kind, evidence), finding.fingerprint)
+        self.assertTrue(SnapshotFindingEvidence.objects.filter(kind='unused_service', path=finding.path).exists())
+        self.assertEqual(SnapshotFindingAssessment.objects.get(path=finding.path).assessment['kind'], 'unused_service')
+        self.assertTrue(relevant_evidence_error('unused_service', evidence, {}, self.now, 60))
 
     def test_comparison_changes_and_ignores_counters(self):
         old = report()

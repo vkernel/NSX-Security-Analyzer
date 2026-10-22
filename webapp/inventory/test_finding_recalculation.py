@@ -134,7 +134,7 @@ class FindingRecalculationTests(TestCase):
     def test_save_queues_only_affected_types_and_respects_overrides(self):
         other = Environment.objects.create(name='Other', slug='other', manager='https://other.example')
         FindingPolicy.objects.create(scope=str(other.pk), environment=other)
-        fields = ('zero_hits_days', 'empty_group_days', 'unused_days', 'empty_policy_days', 'disabled_days', 'minimum_observations', 'maximum_gap_hours')
+        fields = ('zero_hits_days', 'empty_group_days', 'unused_days', 'unused_service_days', 'empty_policy_days', 'disabled_days', 'minimum_observations', 'maximum_gap_hours')
         data = {field: getattr(self.policy, field) for field in fields}
         data['empty_group_days'] = 1
         self.assertEqual(self.client.post(reverse('finding-policy'), data).status_code, 302)
