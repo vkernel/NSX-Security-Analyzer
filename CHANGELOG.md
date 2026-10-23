@@ -2,6 +2,8 @@
 
 ## Development — 2026-10-23
 
+- Add administrator-only saved deletion configuration dialogs with copy/download JSON, group details and manual recreation guidance. History is read-only; no recovery API is implemented.
+
 - Add category-specific single/four-eyes approval settings, a read-only settings preview and targeted approval resets.
 - Clarify limited dependency-search verification for groups and custom services independently of approval count.
 - Add administrator-only single/bulk NSX deletion previews, explicit ticketed confirmation, live revalidation and per-object durable outcomes. Deletion shares the collection lane; no automatic DELETE retry or rollback.

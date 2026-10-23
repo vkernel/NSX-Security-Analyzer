@@ -11,7 +11,7 @@ from django.http import HttpResponseForbidden
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 from django.views.decorators.http import require_GET, require_http_methods
-from .models import Environment, Finding, FindingEvent
+from .models import Environment, Finding, FindingEvent, DeletionItem
 from .forms import SnapshotComparisonForm, FindingReviewForm
 from .findings import LABELS
 from .preferences import preferences
@@ -233,6 +233,7 @@ def finding_detail(request, pk, finding_id):
     owner_name, _, owner_detail = owner_label.partition(' · ')
     page = Paginator(finding.events.select_related('actor__keycloakidentity', 'actor__ldapidentity').defer('details'), 20).get_page(request.GET.get('page'))
     return render(request, 'inventory/finding_detail.html', {'environment': environment, 'finding': finding,
+        'deletion_records': DeletionItem.objects.filter(finding=finding).exclude(before={}).select_related('batch').order_by('-pk') if request.user.is_superuser else [],
         'impact_supported': '/groups/' in finding.path or '/security-policies/' in finding.path,
         'review_return': review_return, 'review_navigation': navigation(request, environment, finding, review_return),
         'can_unassign': bool(request.user.is_staff and finding.owner_id and finding.workflow_state != 'decommissioned'

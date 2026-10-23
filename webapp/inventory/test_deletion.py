@@ -193,3 +193,39 @@ class DeletionTests(TestCase):
             self.assertEqual(process.call_args.args[0].pk,self.item.pk)
         self.batch.refresh_from_db();self.assertEqual(self.batch.status,'completed')
         second.refresh_from_db();self.assertEqual(second.status,'blocked')
+
+    def test_saved_configuration_read_only_and_download(self):
+        self.item.status = 'uncertain'
+        self.item.before['description'] = '<script>unsafe</script>'
+        self.item.save()
+        url = reverse('deletion-configuration', args=[self.item.pk])
+        with patch.object(d, 'connection') as connection, patch.object(d, 'delete_once') as delete:
+            response = self.client.get(url)
+            self.assertContains(response, 'Saved before deletion')
+            self.assertContains(response, 'Check whether the object still exists')
+            self.assertNotContains(response, '<script>unsafe</script>')
+            download = self.client.get(url + '?download=1')
+            self.assertEqual(download.json(), self.item.before)
+            self.assertIn('attachment;', download['Content-Disposition'])
+            self.assertEqual(download['Cache-Control'], 'private, no-store')
+            self.assertEqual(self.client.post(url).status_code, 405)
+            connection.assert_not_called(); delete.assert_not_called()
+        self.item.finding = None
+        self.item.save()
+        self.assertEqual(self.client.get(url).status_code, 200)
+        self.client.force_login(get_user_model().objects.create_user('history-viewer'))
+        self.assertEqual(self.client.get(url).status_code, 403)
+        self.assertEqual(self.client.get(url + '?download=1').status_code, 403)
+
+    def test_saved_group_configuration_and_missing_backup(self):
+        self.item.before = {'resource_type':'Group', 'description':'VDI group',
+                            'tags':[{'scope':'role','tag':'vdi'}], 'expression':[{'resource_type':'Condition','value':'VDI'}]}
+        self.item.save()
+        url = reverse('deletion-configuration', args=[self.item.pk])
+        response = self.client.get(url)
+        self.assertContains(response, 'Group definition')
+        self.assertContains(response, 'Membership expressions')
+        self.assertContains(response, 'VDI automation')
+        self.item.before = {}; self.item.save()
+        self.assertContains(self.client.get(url), 'No pre-deletion configuration')
+        self.assertEqual(self.client.get(url + '?download=1').status_code, 404)

@@ -552,3 +552,26 @@ API references: [Group deletion](https://developer.broadcom.com/xapis/nsx-t-data
 Closing the confirmation dialog cancels that submission only. Once execution is
 queued, this interface has no cancellation or rollback action. Preserve the request
 record and change ticket for follow-up.
+
+### View saved configuration for manual recreation
+
+Administrators can choose **View deleted configuration** on a deletion result or
+on the related finding's **Saved deletion configurations** section. The dialog
+shows the original ID/path, recorded Manager, environment, requestor, timestamps,
+change ticket and outcome. Groups also show their description, tags and membership
+expressions. **Copy JSON** and **Download JSON** provide the saved raw object.
+Without JavaScript, the link opens a standalone page; downloading still works.
+
+The data is labelled **Saved before deletion** and comes from the read-only preview,
+not a live NSX query. It remains accessible through the deletion request after the
+original snapshot or finding is removed. Normal snapshot retention does not remove
+these records. If no configuration was captured, the page explains that no backup
+is available; the application cannot reconstruct it.
+
+This is for manual recreation in NSX. There is no recovery API, automatic restore
+or rollback. The raw JSON contains server-generated fields and must not be blindly
+submitted as an API payload. Recheck dependencies and current state first, especially
+for uncertain or interrupted deletions. Dynamic membership uses current inventory;
+VDI automation can change it again. Separately deleted references, firewall rules,
+runtime state and counters are not restored by recreating an object. Type-specific
+guidance appears beside the saved JSON.

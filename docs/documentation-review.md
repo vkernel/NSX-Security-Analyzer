@@ -1,5 +1,8 @@
 # Documentation update — 23 October 2026
 
+Added the read-only saved deletion configuration viewer with copy/download controls
+and manual recreation guidance; no automated recovery is provided.
+
 Updated the user workflow, GUI Help & coverage, operations guide, security guidance,
 application overview and changelog for category approval modes and confirmed NSX
 deletion. Corrected manual-only completion language and documented deletion-record

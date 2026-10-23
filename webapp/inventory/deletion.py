@@ -8,10 +8,10 @@ import urllib3
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import ValidationError
 from django.db import transaction
-from django.http import HttpResponseForbidden
+from django.http import HttpResponse, HttpResponseForbidden
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
-from django.views.decorators.http import require_http_methods
+from django.views.decorators.http import require_GET, require_http_methods
 from . import collector
 from .credentials import decrypt_password
 from .models import DeletionBatch, DeletionItem, Environment, Finding
@@ -305,3 +305,32 @@ def detail(request, pk):
     return render(request,'inventory/deletion_detail.html',{'batch':batch,'items':batch.items.select_related('finding'),
         'error':error,'verified_count':batch.items.filter(status='verified').count(),
         'can_confirm': batch.status=='preview_ready' and batch.requested_by_id==request.user.pk})
+
+
+@login_required
+@require_GET
+def saved_configuration(request, pk):
+    """Read only: the immutable saved payload, never a live NSX request."""
+    if not permitted(request.user):
+        return HttpResponseForbidden('Administrator access is required to view deletion configuration.')
+    item = get_object_or_404(DeletionItem.objects.select_related('batch__environment', 'batch__requested_by'), pk=pk)
+    payload = json.dumps(item.before, indent=2, ensure_ascii=False)
+    if request.GET.get('download') == '1':
+        if not item.before:
+            return HttpResponse('No configuration was saved for this item.', status=404)
+        response = HttpResponse(payload, content_type='application/json; charset=utf-8')
+        response['Content-Disposition'] = f'attachment; filename="nsx-deletion-{item.pk}-configuration.json"'
+    else:
+        guidance = {
+            'Group': 'Recreate the group in its original domain with the saved name, tags and membership expressions. Check referenced groups and segments. Dynamic membership uses current inventory; VDI automation may change it again.',
+            'Service': 'Recreate the custom service and its service entries, checking protocols and ports. Separately removed references are not restored.',
+            'Rule': 'Check the original parent policy, rule order, scope, action and referenced groups/services before recreating the rule. Recreating it can change traffic behavior.',
+            'SecurityPolicy': 'Check category, scope and policy ordering before recreating the empty policy. Separately deleted rules are not included.',
+        }.get(item.before.get('resource_type'), 'Review the saved object type and dependencies before manual recreation.')
+        response = render(request, 'inventory/deletion_configuration.html', {
+            'item': item, 'configuration': payload, 'guidance': guidance,
+            'expressions': json.dumps(item.before.get('expression', []), indent=2, ensure_ascii=False),
+            'extended_expressions': json.dumps(item.before.get('extended_expression', []), indent=2, ensure_ascii=False),
+        })
+    response['Cache-Control'] = 'private, no-store'
+    return response

@@ -11,7 +11,7 @@ filters and review state can change the available controls. Click an image on Gi
 to view its full size. Screenshots illustrate appearance, not collection completeness
 or approval of any real object.
 
-The images predate category-specific approval modes and confirmed NSX deletion.
+The images predate category-specific approval modes, confirmed NSX deletion and the saved-configuration viewer.
 For current controls and their behavior, see the [review workflow](finding-review-workflow.md#approval-modes-by-category)
 and [deletion walkthrough](finding-review-workflow.md#using-the-deletion-preview).
 

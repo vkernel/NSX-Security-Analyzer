@@ -239,3 +239,7 @@ body .action-dialog-footer{display:flex;justify-content:flex-end;gap:10px;flex:n
 
 /* Deletion confirmation retains fixed controls while a bulk target list scrolls. */
 #nsx-delete-dialog>form{display:flex;flex-direction:column;min-height:0;max-height:inherit;margin:0}
+body dialog#saved-configuration-dialog{width:min(880px,calc(100vw - 32px))}
+#saved-configuration-dialog .form-card{margin:0;padding:0;border:0;box-shadow:none}
+#saved-configuration-content pre{white-space:pre-wrap;overflow-wrap:anywhere;max-height:none}
+#saved-configuration-content dd{overflow-wrap:anywhere}

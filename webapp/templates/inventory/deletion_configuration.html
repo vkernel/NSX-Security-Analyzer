@@ -1,0 +1,32 @@
+{% extends 'base.html' %}{% load static %}{% block content %}
+<a class="breadcrumb" href="{% url 'deletion-detail' item.batch_id %}">← Deletion request</a>
+<section id="saved-configuration-content" class="form-card">
+<h2>Saved before deletion</h2>
+<p>This is historical configuration, not a live NSX read. Viewing, copying or downloading it makes no NSX changes.</p>
+<dl class="review-facts">
+<dt>Object</dt><dd>{{ item.name }} · {{ item.before.resource_type|default:'Unknown type' }}</dd>
+<dt>Original ID / path</dt><dd>{{ item.before.id|default:'Not recorded' }}<br><code class="review-wrap">{{ item.path }}</code></dd>
+<dt>Environment / recorded Manager</dt><dd>{{ item.batch.environment.name }} · {{ item.batch.manager }}</dd>
+<dt>Requested by</dt><dd>{{ item.batch.requested_by|default:'Account no longer available' }}</dd>
+<dt>Preview completed</dt><dd>{{ item.batch.checked_at|default:'Not recorded' }}</dd>
+<dt>DELETE intent recorded</dt><dd>{{ item.request_sent_at|default:'No DELETE intent recorded' }}</dd>
+<dt>Item finished</dt><dd>{{ item.finished_at|default:'Not finished' }}</dd>
+<dt>Change ticket</dt><dd>{{ item.batch.ticket|default:'Not confirmed' }}</dd>
+<dt>Outcome</dt><dd>{{ item.status }} · {{ item.message }}</dd>
+</dl>
+{% if item.status != 'deleted' %}<p class="notice">Deletion is not confirmed for this record. Check whether the object still exists in NSX before recreating it.</p>{% endif %}
+{% if item.before %}
+{% if item.before.resource_type == 'Group' %}
+<h3>Group definition</h3><p><strong>Description:</strong> {{ item.before.description|default:'No description' }}</p>
+<h4>Tags</h4><ul>{% for tag in item.before.tags %}<li>Scope: {{ tag.scope|default:'(empty)' }} · Tag: {{ tag.tag }}</li>{% empty %}<li>No tags saved.</li>{% endfor %}</ul>
+<h4>Membership expressions</h4><pre class="review-evidence">{{ expressions }}</pre>
+{% if item.before.extended_expression %}<h4>Extended expressions</h4><pre class="review-evidence">{{ extended_expressions }}</pre>{% endif %}
+{% endif %}
+<h3>Manual recreation in NSX</h3><p>{{ guidance }}</p>
+<p>The raw JSON includes server-generated fields such as revision, identity and timestamps. It is historical evidence, not a ready-to-submit API payload. Remove read-only fields as required by the target API. Recreating configuration does not restore old runtime membership, counters or separately removed references.</p>
+<div class="form-actions"><button class="button" type="button" data-copy-configuration>Copy JSON</button><a class="button" href="{% url 'deletion-configuration' item.pk %}?download=1">Download JSON</a><span role="status" data-copy-status></span></div>
+<pre class="review-evidence" data-configuration-json tabindex="0">{{ configuration }}</pre>
+{% else %}<p class="notice">No pre-deletion configuration was saved for this item.</p>{% endif %}
+</section>
+<script src="{% static 'deletion-configuration.js' %}" defer></script>
+{% endblock %}

@@ -6,6 +6,7 @@
 <ol class="review-progress" aria-label="Review progress">{% for step in progress %}<li class="{% if step.current %}current{% elif step.done %}done{% endif %}" {% if step.current %}aria-current="step"{% endif %}><span>{{ forloop.counter }}</span>{{ step.label }}</li>{% endfor %}</ol>
 {% if finding.qualification == 'suppressed' %}<p class="notice">Expected empty — session-driven group. {{ finding.qualification_reason }}</p>{% endif %}
 {% if user.is_superuser and finding.workflow_state == 'ready' %}<form method="post" action="{% url 'deletion-selection' environment.pk %}" class="form-actions">{% csrf_token %}<input type="hidden" name="finding" value="{{ finding.pk }}"><button class="button">Delete from NSX — preview</button></form>{% endif %}
+{% if deletion_records %}<section class="form-card"><h2>Saved deletion configurations</h2>{% for record in deletion_records %}<p><a class="button" data-configuration-view href="{% url 'deletion-configuration' record.pk %}">View deleted configuration</a> · {{ record.batch.created_at }} · {{ record.status }} · {{ record.batch.ticket|default:'No ticket' }}</p>{% endfor %}</section>{% include 'inventory/deletion_configuration_dialog.html' %}{% endif %}
 <div class="finding-workspace">
 <section class="finding-evidence form-card"><p class="eyebrow">Evidence &amp; dependencies</p><h2>Review the finding</h2>
 <p>{% if finding.present %}Observed in the latest full snapshot.{% else %}Not observed in the latest full snapshot. Resolution is unconfirmed.{% endif %}</p>

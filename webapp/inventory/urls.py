@@ -3,6 +3,7 @@ from . import activity_views, authentication_settings, keycloak_settings, system
 
 urlpatterns = [
     path('environments/<int:pk>/deletions/', deletion.selection, name='deletion-selection'),
+    path('deletion-items/<int:pk>/configuration/', deletion.saved_configuration, name='deletion-configuration'),
     path('deletions/<uuid:pk>/', deletion.detail, name='deletion-detail'),
     path('administration/transient-emptiness/', transient.settings_view, name='transient-emptiness'),
     path("snapshots/<uuid:pk>/impact/", impact.impact_preview, name="impact-preview"),

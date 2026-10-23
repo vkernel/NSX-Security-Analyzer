@@ -384,3 +384,12 @@ Deletion records retain configuration and approval evidence beyond snapshot rete
 and protect their environment from deletion. Include them in database backup/access
 controls. See the [deletion walkthrough](finding-review-workflow.md#using-the-deletion-preview)
 for supported objects, safeguards and per-object outcomes.
+
+### Inspecting deleted object configuration
+
+Use **View deleted configuration** in a deletion result to inspect, copy or download
+its saved JSON for manual work in NSX. This administrator-only viewer never contacts
+NSX. Keep downloads under the same access controls as inventory exports; they can
+include internal addresses, tags and policy details. A historical record is not proof
+of current absence: check NSX before recreating anything after an uncertain outcome.
+See [manual recreation guidance](finding-review-workflow.md#view-saved-configuration-for-manual-recreation).
