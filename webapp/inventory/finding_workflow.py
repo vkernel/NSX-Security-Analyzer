@@ -144,13 +144,14 @@ def approval_readiness(finding, *, deletion_live=False):
     from .evidence_coverage import snapshot_issues, relevant
     affected = relevant(snapshot_issues(latest), finding.kind, finding.path) if latest else []
     execution_source = None
+    direct_blockers = []
     if deletion_live and affected:
         from .deletion_readiness import historical_group_evidence
-        execution_source = historical_group_evidence(finding, latest)
+        execution_source = historical_group_evidence(finding, latest, blockers=direct_blockers)
     if affected and execution_source is None:
         return {'status':'blocked', 'verification_paused':True,
                 'message':'Verification paused; existing decisions are retained. Required evidence is incomplete: ' +
-                          '; '.join(sorted({issue['scope'] for issue in affected})) + '. Run a collection with verified relevant coverage.'}
+                          '; '.join(sorted({issue['scope'] for issue in affected})) + '. ' + ('Direct live verification unavailable: ' + ' '.join(direct_blockers) if direct_blockers else 'Run a collection with verified relevant coverage.')}
 
     if execution_source is not None:
         latest = execution_source

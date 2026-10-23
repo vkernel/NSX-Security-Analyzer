@@ -633,3 +633,11 @@ fast shortcut is not used. Complete live configuration/reference checks, valid
 approvals, per-object expiry and explicit administrator confirmation remain required.
 The preview records when direct membership verification was used. This does not
 restore objects or authorize deletion automatically.
+
+When direct verification is unavailable, the deletion preview includes a specific
+reason code and explanation: unsupported group definition, missing or incomplete
+approved history, intervening collection warnings, missing/changed group evidence,
+changed criteria, or expired observation history. Collection-specific failures
+include the collection ID and timestamp. Resolve the stated cause and create a
+new preview; existing preview results remain historical. These diagnostics do not
+relax approval, membership, reference, or freshness requirements.

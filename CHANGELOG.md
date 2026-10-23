@@ -2,6 +2,10 @@
 
 ## Development — 2026-10-23
 
+- Deletion previews now explain why direct group verification is unavailable,
+  including collection-specific evidence failures and observation gap limits,
+  instead of showing only the generic VM inventory warning.
+
 - Add an execution-only direct membership path for already-approved simple VM groups when only global VM pagination is incomplete. Retain fresh qualified history and require explicit zero VM/IP/port checks, unchanged evidence and full live dependency verification.
 
 - Scope inventory-verification pauses to supported evidence dependencies; retain decisions during affected inventory uncertainty and keep unclassified failures blocking.

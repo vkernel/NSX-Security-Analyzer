@@ -88,3 +88,31 @@ class HistoricalExecutionTests(TestCase):
             newer=self.snapshot(0,warnings)
             self.assertIsNone(historical_group_evidence(self.finding,newer))
             newer.delete()
+
+    def test_preview_explains_definition_and_history_blockers(self):
+        self.finding.evidence = dict(self.finding.evidence, configuration={})
+        result = approval_readiness(self.finding, deletion_live=True)
+        self.assertEqual(result['status'], 'blocked')
+        self.assertIn('[unsupported_group_definition]', result['message'])
+        self.finding.refresh_from_db()
+        self.policy.empty_group_days = 10
+        self.policy.save()
+        result = approval_readiness(self.finding, deletion_live=True)
+        self.assertIn('[criteria_changed]', result['message'])
+        self.assertNotIn('Direct live verification', approval_readiness(self.finding)['message'])
+
+    def test_intermediate_blocker_identifies_collection(self):
+        record = SnapshotRecord.objects.get(snapshot=self.latest)
+        record.compact['membership'] = 'unknown'
+        record.save()
+        result = approval_readiness(self.finding, deletion_live=True)
+        self.assertIn('[membership_not_empty]', result['message'])
+        self.assertIn(str(self.latest.pk), result['message'])
+        self.assertEqual(result['status'], 'blocked')
+
+    def test_gap_blocker_has_configured_limit(self):
+        from unittest.mock import patch
+        with patch('inventory.deletion_readiness.timezone.now', return_value=self.finding.last_seen + timedelta(hours=25)):
+            result = approval_readiness(self.finding, deletion_live=True)
+        self.assertIn('[history_gap_exceeded]', result['message'])
+        self.assertIn('24 hours', result['message'])
