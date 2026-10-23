@@ -146,6 +146,30 @@ class Command(BaseCommand):
             SnapshotComparison.objects.filter(pk=pair.pk, ready=False).update(status='failed', error='Comparison worker interrupted or failed. Retry after checking diagnostics.')
         return True
 
+    def run_deletion(self):
+        from inventory.deletion import claim, interrupted
+        from inventory.models import DeletionBatch
+        # This method runs only under the exclusive collection lane lease.
+        for pk in DeletionBatch.objects.filter(status__in=['checking', 'running']).values_list('pk', flat=True):
+            interrupted(pk)
+        batch = claim()
+        if not batch: return False
+        try:
+            with subprocess.Popen([sys.executable, str(settings.BASE_DIR / 'manage.py'), 'run_deletion', str(batch.pk)]) as process:
+                try:
+                    deadline = time.monotonic() + settings.AUDIT_TIMEOUT
+                    while process.poll() is None:
+                        self.check_lease()
+                        if time.monotonic() >= deadline: raise subprocess.TimeoutExpired('run_deletion', settings.AUDIT_TIMEOUT)
+                        time.sleep(1)
+                finally:
+                    if process.poll() is None:
+                        process.kill()
+                        process.wait()
+        finally:
+            interrupted(batch.pk)
+        return True
+
     def run_worker(self, options):
         lane = options.get("lane", "all")
         self.heartbeat_lanes = tuple(LANES) if lane in ('all', 'both') else (lane,)
@@ -165,6 +189,9 @@ class Command(BaseCommand):
             if lane in ('recalculation', 'comparison'):
                 if options['once']: return
                 time.sleep(2)
+                continue
+            if self.run_deletion():
+                if options['once']: return
                 continue
             with phase('worker', 'expire_stale_jobs', quiet=True):
                 expire_jobs()

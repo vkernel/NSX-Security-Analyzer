@@ -1,3 +1,12 @@
+# Documentation update — 23 October 2026
+
+Updated the user workflow, GUI Help & coverage, operations guide, security guidance,
+application overview and changelog for category approval modes and confirmed NSX
+deletion. Corrected manual-only completion language and documented deletion-record
+retention, worker sharing, migration requirements and uncertain outcomes. The gallery
+identifies screenshots that predate these features. The older review below is a
+historical record, not a statement about current release pins.
+
 # Documentation review — 13 October 2026
 
 Reviewed all 22 tracked Markdown files present at the start of this task, including

@@ -361,3 +361,26 @@ Action dialogs, including diagnostic collection and table column filters, use a 
 Open **Activity** in the top bar to follow collections, finding review indexing and snapshot comparisons together. Filter by environment, task type or active/failed status. Each type has its own worker queue. The view is bounded to 30 active and 30 recent tasks per type (60 when filtering by status); finding indexing shows the latest task per environment. Comparison age is time since its original request, not measured processing duration.
 
 Activity, comparison preparation and finding recalculation status refresh while their page is visible, using your refresh interval. Updates pause inside a focused task region or an expanded detail to avoid interrupting reading. Collection state changes update in place instead of reloading the page, preserving snapshot selections. Follow **View collection result** when finished. Refresh the finding list after recalculation to load its new membership.
+
+## Upgrading approval settings and confirmed deletion
+
+Back up PostgreSQL and retain the existing encryption secret. Apply migrations
+`0045_category_approval_modes` and `0046_approved_nsx_deletion` before starting the
+matching web, worker and scheduler images. For development deployments, pin the same
+`development-<commit>` image on all components, including the migration Job.
+Category overrides initially inherit the workspace default; inspect **Administration →
+Review approvals → Preview changes** before changing effective approval requirements.
+
+Deletion previews and execution use the existing collection lane. A busy collection
+can delay them; no additional worker is required. Refresh the deletion request page
+for progress. Do not restart a worker during a confirmed deletion unless necessary;
+interrupted or uncertain outcomes require checking NSX before a new request.
+
+Collection uses read-only requests. Optional deletion uses the saved environment
+credentials with their existing NSX permissions; a read-only NSX account cannot
+perform it. Only application administrators can request and confirm deletion.
+Deleting a finding or a snapshot is not a request to delete the NSX object.
+Deletion records retain configuration and approval evidence beyond snapshot retention,
+and protect their environment from deletion. Include them in database backup/access
+controls. See the [deletion walkthrough](finding-review-workflow.md#using-the-deletion-preview)
+for supported objects, safeguards and per-object outcomes.

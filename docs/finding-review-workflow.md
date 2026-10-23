@@ -1,7 +1,8 @@
 # Finding review approvals
 
-Finding reviews authorize a proposed decommissioning decision. They never delete
-or modify an NSX object. Operators and administrators can perform workflow
+Finding reviews authorize a proposed decommissioning decision. Approval alone does
+not modify NSX. A separate administrator preview and explicit confirmation can delete
+supported approved objects. Operators and administrators can perform review workflow
 actions; viewers can read the results. The same rules apply to local, Keycloak
 and LDAP accounts. Each person must use their own account.
 
@@ -49,18 +50,13 @@ completion; the recalculated finding must still satisfy normal evidence checks.
 *Synthetic administrator view. The effect on open reviews remains visible beside the setting.*
 
 
-Open **Administration → Review approvals**, select **Single approval** or
-**Two-person approval (four-eyes principle)** and click **Save approval setting**.
-Only administrators can change this global setting. Two-person approval remains
-the default. Saving updates open reviews to the selected requirement, including
-existing unassigned findings. Affected reviews restart at **Owner review** (or
-**Unassigned** if no owner exists); previous approvals remain in audit history and
-must be repeated. Rejected reviews stay rejected, and completed decommissioning
-records keep their original requirement. Saving the same value again also updates
-older reviews that still have a different requirement. After upgrading, save this
-setting once to apply it to those reviews. New assignment, reassignment of owned work and reopening capture the current
-setting. Assigning released work preserves its existing stage and approval requirement;
-policy and evidence invalidation still apply.
+Open **Administration → Review approvals** to choose the workspace default and
+optional overrides for groups, custom services, firewall rules and firewall policies.
+Only administrators can change these settings. Four-eyes remains the default;
+overrides initially inherit it. Use **Preview changes** before saving to see affected
+open reviews. Only reviews whose effective requirement changes lose their current
+approvals; ownership and historical decisions remain. Rejected and completed reviews
+are unchanged. See [approval modes by category](#approval-modes-by-category).
 
 With single approval, the assigned owner's approval moves the finding directly
 to **Ready for decommissioning**. All evidence checks and manual verification
@@ -77,8 +73,9 @@ below. Approval requirements and decisions are retained in the audit history.
    administrator performs an independent review. The owner cannot give this
    approval, even with administrator access.
 4. Second approval moves the finding to **Ready for decommissioning**. Perform
-   the actual change through your organization's change process.
-5. Choose **Record decommissioning**, enter the mandatory change-ticket reference
+   the actual change through your organization's change process, or use the
+   [administrator deletion workflow](#delete-approved-objects-from-nsx).
+5. For an externally performed change, choose **Record decommissioning**, enter the mandatory change-ticket reference
    and completion reason. This records a manual attestation, not automated proof
    of deletion. Record completion before a new collection removes the condition;
    otherwise its approval is invalidated and it must be reviewed again.
@@ -149,8 +146,8 @@ an application audit event in the same transaction as the action. Conflicting
 edits are rejected; reload the page to see the current decision. Failed workflow
 actions are recorded in the application audit log. **Export audit history (JSON)**
 includes the saved decisions and their evidence. Review history survives snapshot
-retention and retains actor names after user deletion. Deleting an environment
-also deletes its finding history; application audit events follow their separate
+retention and retains actor names after user deletion. An environment with deletion records cannot be deleted because those records are
+protected. Otherwise deleting an environment also deletes its finding history; application audit events follow their separate
 audit retention policy. Export records before deleting an environment when longer
 retention is required.
 
@@ -461,3 +458,97 @@ history are preserved. Review and impact checks still apply to referenced groups
 “Empty in every qualifying observation” does not prove continuous emptiness between
 collections. No additional NSX polling or changes to the external VDI script are required.
 When policies overlap, the oldest enabled matching policy takes precedence.
+
+
+## Approval modes by category
+
+Under **Administration → Review approvals**, administrators choose a workspace default
+and optional overrides for **Groups (including VDI)**, **Custom services**, **Firewall rules**,
+and **Firewall policies**. Each override supports **Inherit default**, **Single approval**,
+or **Four-eyes**. These settings apply across environments.
+
+Empty, unused and prolonged-empty VDI groups share the Groups setting. Disabled and
+zero-hit rules share Firewall rules. Finding details show the effective mode and its
+setting source. Single approval requires the assigned owner's decision; four-eyes also
+requires a different authorized operator or administrator.
+
+Use **Preview changes** to see effective modes and counts of affected open reviews without
+saving. Saving resets approvals only where an open review's effective requirement changes.
+Ownership and history remain, and the reset is audited. Rejected and completed reviews
+are unchanged. New findings and assignments use the category's effective requirement.
+Evidence, observation thresholds, suppression and completion-ticket checks still apply.
+
+
+### Limited dependency-search coverage
+
+Unused groups and custom services show **Limited dependency-search coverage — additional
+checks required** when the collection uses a defined list of searchable object types.
+The searched types are shown beside the warning. Each required reviewer must document
+checks outside that scope and provide an evidence reference. This is separate from the
+single-approval or four-eyes setting. Empty-group findings use membership evidence instead.
+
+## Delete approved objects from NSX
+
+**Ready for decommissioning** findings now offer **Delete from NSX — preview** to
+administrators. The review list links to a separate selection page for up to 100
+ready findings; repeated paths are deduplicated. Preview is read-only and is
+processed by the existing collection worker, so it waits for an active collection.
+
+Supported targets are local-manager groups, custom services (including their service
+entries), DFW rules and empty DFW policies. VM/tag operations, global/project objects,
+protected/system objects, referenced objects and objects with unsupported children are
+blocked. Empty policies need a new snapshot containing their configuration and identity
+before they can qualify for this feature.
+
+The worker checks valid approvals, fresh evidence, exact object identity/configuration,
+live references and the relevant membership/rule condition. Live reference coverage must
+be unrestricted and complete; the manual-verification approval route does not override
+this restriction. The saved NSX account needs CRUD permissions for the target; the app
+does not elevate permissions. Collection itself remains read-only.
+
+The confirmation dialog lists the environment, Manager and every verified target. A
+change ticket and explicit permanent-deletion checkbox are required. Only verified rows
+are submitted; blocked/already-absent rows are skipped. Confirmation belongs to the
+requesting administrator and expires after ten minutes. Execution repeats checks and
+blocks changed or expired previews. No force or automatic retry is used. Group deletion
+uses `fail_if_subtree_exists=true`. Search and DELETE are separate operations: NSX search
+is eventually consistent, permissions may hide dependencies, and external configuration
+changes can occur between checks and deletion. Avoid concurrent NSX changes and review
+business impact independently. A saved-snapshot impact link is provided alongside each row.
+
+Results are recorded per object: **deleted**, **already_absent**, **blocked**, **failed**,
+or **uncertain**. Only an accepted DELETE followed by verified absence marks the selected
+review Decommissioned. Other findings for the same path await the next collection; they
+are not treated as independently approved deletions. Partial success is possible and
+there is no automatic rollback. Worker interruption or ambiguous responses require
+checking NSX before requesting another preview. Durable records preserve the original
+configuration, approved evidence, approvals, administrator, ticket, timestamps and HTTP
+outcome. Normal snapshot retention does not remove deletion records.
+
+API references: [Group deletion](https://developer.broadcom.com/xapis/nsx-t-data-center-rest-api/latest/method_DeleteGroup.html),
+[Rule deletion](https://developer.broadcom.com/xapis/nsx-t-data-center-rest-api/latest/method_DeleteSecurityRule.html).
+
+### Using the deletion preview
+
+1. Open a ready finding and choose **Delete from NSX — preview**, or open the
+   deletion selection page from Finding reviews to select multiple ready objects.
+2. Wait for the collection worker, then use **Refresh results**. Opening a preview
+   does not delete anything. Review each result and its saved-snapshot impact link.
+3. When verified objects are available, open **Review permanent deletion**, check
+   their names and paths, enter a change ticket and explicitly confirm. The preview
+   expires ten minutes after verification; request a fresh preview if it expires.
+4. Refresh the result page after execution. Check every row; a completed batch does
+   not mean every object was deleted.
+
+| Result | Meaning and next step |
+| --- | --- |
+| `verified` | Preview checks passed; confirmation is still required. |
+| `deleted` | DELETE was accepted and a subsequent read confirmed absence. |
+| `already_absent` | Object was absent before this deletion; this is not proof the app deleted it. |
+| `blocked` | Read the reason; obtain fresh evidence or resolve the dependency before a new preview. |
+| `failed` | NSX rejected the request; review permissions or the reported error. |
+| `uncertain` | The outcome could not be confirmed. Check NSX before attempting another deletion. |
+
+Closing the confirmation dialog cancels that submission only. Once execution is
+queued, this interface has no cancellation or rollback action. Preserve the request
+record and change ticket for follow-up.

@@ -1,7 +1,9 @@
 from django.urls import path
-from . import activity_views, authentication_settings, keycloak_settings, system_health, views, history_views, diagnostic_views, report_views, impact, transient
+from . import activity_views, authentication_settings, keycloak_settings, system_health, views, history_views, diagnostic_views, report_views, impact, transient, deletion
 
 urlpatterns = [
+    path('environments/<int:pk>/deletions/', deletion.selection, name='deletion-selection'),
+    path('deletions/<uuid:pk>/', deletion.detail, name='deletion-detail'),
     path('administration/transient-emptiness/', transient.settings_view, name='transient-emptiness'),
     path("snapshots/<uuid:pk>/impact/", impact.impact_preview, name="impact-preview"),
     path('collections/<uuid:pk>/result/', activity_views.collection_result, name='collection-result'),

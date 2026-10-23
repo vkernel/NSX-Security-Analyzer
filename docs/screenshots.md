@@ -11,6 +11,10 @@ filters and review state can change the available controls. Click an image on Gi
 to view its full size. Screenshots illustrate appearance, not collection completeness
 or approval of any real object.
 
+The images predate category-specific approval modes and confirmed NSX deletion.
+For current controls and their behavior, see the [review workflow](finding-review-workflow.md#approval-modes-by-category)
+and [deletion walkthrough](finding-review-workflow.md#using-the-deletion-preview).
+
 ## Sign in
 
 ![Sign-in page with the NSX Security Analyzer shield logo](images/login.png)
@@ -30,7 +34,7 @@ Assignment and review progress are shown separately.
 
 Open the finding name to inspect evidence, readiness and review progress. Follow the
 [finding review guide](finding-review-workflow.md) for assignment, required checks,
-independent approvals and manual completion.
+independent approvals, manual completion and administrator-confirmed NSX deletion.
 
 For badges such as **8 / 7 days · 192 observations**, see
 [Reading observation badges](finding-review-workflow.md#reading-observation-badges).

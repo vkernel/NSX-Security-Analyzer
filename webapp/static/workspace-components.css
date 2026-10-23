@@ -236,3 +236,6 @@ body .action-dialog-footer{display:flex;justify-content:flex-end;gap:10px;flex:n
 .action-dialog-body [data-edit-form]>.form-actions{position:static}
 .settings-section legend{font-size:16px;font-weight:600;padding:0 8px}
 @media(max-width:600px){[data-edit-form]>.form-actions,[data-edit-form]>.settings-savebar{position:static}.form-error-summary{padding:12px}.topbar-actions{gap:6px}}
+
+/* Deletion confirmation retains fixed controls while a bulk target list scrolls. */
+#nsx-delete-dialog>form{display:flex;flex-direction:column;min-height:0;max-height:inherit;margin:0}

@@ -8,6 +8,7 @@ import hashlib
 import json
 from .audit_events import record
 from .user_labels import user_label
+from .approval_modes import required
 
 STATES = [('unassigned', 'Unassigned'), ('owner_review', 'Owner review'),
           ('second_review', 'Awaiting second approval'), ('ready', 'Ready for decommissioning'),
@@ -16,19 +17,22 @@ FIELDS = ['workflow_state', 'approvals', 'change_ticket', 'required_approvals']
 
 
 @transaction.atomic
-def apply_approval_policy(required, actor):
+def apply_approval_policy(settings, actor):
     """Restart open reviews under the new policy without manufacturing approval."""
     from .models import Environment, Finding
+    from .approval_modes import required
     count = 0
     # Match the environment -> finding lock order used by review decisions.
     for env in Environment.objects.order_by('pk').select_for_update():
         findings = Finding.objects.select_for_update().defer('evidence').filter(environment=env).exclude(
-            workflow_state='decommissioned').exclude(required_approvals=required)
+            workflow_state__in=['rejected', 'decommissioned'])
         for finding in findings.iterator(chunk_size=100):
+            effective = required(finding.kind, settings)
+            if finding.required_approvals == effective: continue
             before = finding.workflow_state
             prior = {'previous_required_approvals': finding.required_approvals,
                      'prior_approvals': finding.approvals}
-            finding.required_approvals = required
+            finding.required_approvals = effective
             finding.approvals = {}
             if before != 'rejected':
                 finding.workflow_state = 'owner_review' if finding.owner_id else 'unassigned'
@@ -151,7 +155,7 @@ def approval_readiness(finding):
     if error: return blocked(error)
     manual = finding.kind in ('unused', 'unused_service') and compatibility_search(search)
     return {'status': 'manual' if manual else 'ready',
-            'message': 'Reference-search coverage is limited. Each reviewer must independently check dependencies outside the collected search results.' if manual else 'Relevant saved evidence is current and supports review.',
+            'message': 'The collection searched a defined list of object types. Dependencies outside that scope are not verified. Each required reviewer must independently document additional dependency checks and provide an evidence reference.' if manual else 'Relevant saved evidence is current and supports review.',
             'coverage': search if finding.kind in ('unused', 'unused_service') else {},
             'coverage_key': coverage_key(search) if finding.kind in ('unused', 'unused_service') else '', 'row': row}
 
@@ -199,7 +203,7 @@ def decide(finding, actor, action, reason, owner=None, ticket='', manual_verifie
         from .usability import policy
         resume = finding.owner_id is None and before in ('second_review', 'ready', 'rejected')
         if not resume:
-            finding.required_approvals = policy().required_approvals
+            finding.required_approvals = required(finding.kind, policy())
         finding.owner = owner
         if not resume:
             finding.workflow_state, finding.approvals = 'owner_review', {}
@@ -212,7 +216,7 @@ def decide(finding, actor, action, reason, owner=None, ticket='', manual_verifie
         elif before != 'rejected':
             raise ValidationError('Only rejected or completed reviews can be reopened manually.')
         from .usability import policy
-        finding.required_approvals = policy().required_approvals
+        finding.required_approvals = required(finding.kind, policy())
         finding.workflow_state = 'owner_review' if finding.owner_id else 'unassigned'
         finding.approvals = {}
     elif action in ('approve', 'reject'):

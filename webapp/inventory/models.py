@@ -172,6 +172,10 @@ class RetentionPolicy(models.Model):
 
 
 class WorkspacePolicy(models.Model):
+    groups_approvals = models.PositiveSmallIntegerField(default=0, choices=[(0, 'Inherit default'), (1, 'Single approval'), (2, 'Four-eyes')])
+    services_approvals = models.PositiveSmallIntegerField(default=0, choices=[(0, 'Inherit default'), (1, 'Single approval'), (2, 'Four-eyes')])
+    rules_approvals = models.PositiveSmallIntegerField(default=0, choices=[(0, 'Inherit default'), (1, 'Single approval'), (2, 'Four-eyes')])
+    policies_approvals = models.PositiveSmallIntegerField(default=0, choices=[(0, 'Inherit default'), (1, 'Single approval'), (2, 'Four-eyes')])
     required_approvals = models.PositiveSmallIntegerField(default=2, choices=[(1, 'Single approval'), (2, 'Two-person approval (four-eyes principle)')])
     id = models.PositiveSmallIntegerField(primary_key=True, default=1, editable=False)
     stale_hours = models.PositiveIntegerField(default=24, validators=[MinValueValidator(1), MaxValueValidator(8760)])
@@ -526,3 +530,38 @@ class ServiceHeartbeat(models.Model):
 
 class InitialPasswordChange(models.Model):
     user = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, primary_key=True)
+
+
+class DeletionBatch(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    environment = models.ForeignKey(Environment, on_delete=models.PROTECT)
+    requested_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, on_delete=models.SET_NULL)
+    manager = models.CharField(max_length=500)
+    status = models.CharField(max_length=24, default='preview_queued')
+    ticket = models.CharField(max_length=255, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    checked_at = models.DateTimeField(null=True)
+    confirmed_at = models.DateTimeField(null=True)
+    finished_at = models.DateTimeField(null=True)
+
+    class Meta:
+        permissions = [('execute_nsx_deletion', 'Execute approved NSX object deletions')]
+
+
+class DeletionItem(models.Model):
+    batch = models.ForeignKey(DeletionBatch, on_delete=models.CASCADE, related_name='items')
+    finding = models.ForeignKey(Finding, null=True, on_delete=models.SET_NULL)
+    path = models.TextField()
+    name = models.CharField(max_length=255)
+    revision = models.PositiveIntegerField()
+    status = models.CharField(max_length=24, default='pending')
+    message = models.TextField(blank=True)
+    before = models.JSONField(default=dict)
+    approved_evidence = models.JSONField(default=dict)
+    approvals = models.JSONField(default=dict)
+    request_sent_at = models.DateTimeField(null=True)
+    finished_at = models.DateTimeField(null=True)
+    http_status = models.PositiveSmallIntegerField(null=True)
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=['batch', 'path'], name='unique_deletion_target')]

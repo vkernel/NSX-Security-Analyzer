@@ -1,5 +1,13 @@
 # Changelog
 
+## Development — 2026-10-23
+
+- Add category-specific single/four-eyes approval settings, a read-only settings preview and targeted approval resets.
+- Clarify limited dependency-search verification for groups and custom services independently of approval count.
+- Add administrator-only single/bulk NSX deletion previews, explicit ticketed confirmation, live revalidation and per-object durable outcomes. Deletion shares the collection lane; no automatic DELETE retry or rollback.
+- Add migrations `0045_category_approval_modes` and `0046_approved_nsx_deletion`; deploy migrations and matching web/worker images together.
+- Update Help & coverage, review instructions and operations guidance. Existing screenshots are labelled as predating the new controls.
+
 ## 0.5.3 — 2026-10-13
 
 - Add compact finding Actions dialogs and contextual bulk return to unassigned, preserving permissions, revision checks, review history and valid approvals.

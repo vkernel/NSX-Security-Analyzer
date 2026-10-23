@@ -19,7 +19,7 @@ def preview(report, path, limit=200, depth_limit=8, action="delete", scope="", t
     if groups is None:
         groups = [r for r in report.get('objects', []) if r.get('kind') == 'group']
     dfw = report.get('dfw', {})
-    for kind, rows in [('group', groups), ('rule', dfw.get('rules', [])), ('policy', dfw.get('policies', []))]:
+    for kind, rows in [('group', groups), ('service', report.get('inventory', {}).get('services', [])), ('rule', dfw.get('rules', [])), ('policy', dfw.get('policies', []))]:
         for row in rows:
             if row.get('path'):
                 nodes[row['path']] = dict(row, impact_kind=kind)
@@ -134,6 +134,7 @@ def preview(report, path, limit=200, depth_limit=8, action="delete", scope="", t
             if source == path and label != 'Containing policy':
                 dependencies.append({'path': target, 'name': nodes.get(target, {}).get('name', target), 'label': label})
     consequences = {
+        'service': 'Deleting this service removes its service entries. Referencing firewall rules or nested services may require changes; no traffic behavior can be inferred from absence of references.',
         'VM': 'Deleting the VM removes the workload. Related groups may change membership and their referencing rules may apply to a different set of workloads. Groups and rules are not deleted automatically.',
         'tag': 'Removing this tag assignment may change dynamic group membership and the rules that apply to the VM. It does not delete the VM, groups, rules, or other assignments.',
         'group': 'Referencing rules or parent groups may require changes. Deletion may be rejected while references exist. The resulting traffic behavior cannot be determined here.',

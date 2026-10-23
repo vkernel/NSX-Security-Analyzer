@@ -215,7 +215,11 @@ def finding_detail(request, pk, finding_id):
     required_approvals = finding.required_approvals
     if finding.workflow_state == 'unassigned':
         from .usability import policy
-        required_approvals = policy().required_approvals
+        from .approval_modes import required
+        required_approvals = required(finding.kind, policy())
+    from .approval_modes import source
+    from .usability import policy as current_approval_policy
+    approval_source = source(finding.kind, current_approval_policy()) if finding.workflow_state not in ('rejected', 'decommissioned') else 'Recorded review requirement'
     approval_label = dict(Finding._meta.get_field('required_approvals').choices)[required_approvals]
     if required_approvals == 1:
         steps = [(key, label) for key, label in steps if key != 'second_review']
@@ -233,7 +237,7 @@ def finding_detail(request, pk, finding_id):
         'review_return': review_return, 'review_navigation': navigation(request, environment, finding, review_return),
         'can_unassign': bool(request.user.is_staff and finding.owner_id and finding.workflow_state != 'decommissioned'
                              and (finding.owner_id == request.user.pk or request.user.is_superuser)),
-        'required_approvals': required_approvals, 'approval_label': approval_label,
+        'required_approvals': required_approvals, 'approval_label': approval_label, 'approval_source': approval_source,
         'label': 'Prolonged empty VDI group' if finding.qualification_reason.startswith('Prolonged empty VDI group') else LABELS.get(finding.kind, finding.kind), 'form': form, 'page': page, 'approval_decisions': decisions, 'readiness': readiness, 'can_decide': can_decide, 'progress': progress, 'facts': facts, 'owner_name': owner_name, 'owner_detail': owner_detail,
         'query_string': urlencode({'return_to': review_return}),
         'evidence': json.dumps(finding.evidence, indent=2, ensure_ascii=False) if request.GET.get('evidence') == '1' else None})
@@ -314,16 +318,21 @@ def review_approvals(request):
     from .forms import ReviewApprovalsForm
     if not request.user.is_superuser:
         return HttpResponseForbidden('Administrator access is required.')
+    from .approval_modes import preview
+    previewed = False
     with transaction.atomic():
         policy = WorkspacePolicy.objects.select_for_update().filter(pk=1).first() or WorkspacePolicy(pk=1)
         form = ReviewApprovalsForm(request.POST if request.method == 'POST' else None, instance=policy)
         if request.method == 'POST' and form.is_valid():
-            form.save()
-            from .finding_workflow import apply_approval_policy
-            changed = apply_approval_policy(policy.required_approvals, request.user)
-            messages.success(request, f'Approval requirement saved. Updated {changed} open reviews; affected approvals must be repeated.')
-            return redirect('review-approvals')
-    return render(request, 'inventory/review_approvals.html', {'form': form})
+            if request.POST.get('action') == 'preview':
+                previewed = True
+            else:
+                form.save()
+                from .finding_workflow import apply_approval_policy
+                changed = apply_approval_policy(policy, request.user)
+                messages.success(request, f'Approval requirement saved. Updated {changed} open reviews; affected approvals must be repeated.')
+                return redirect('review-approvals')
+    return render(request, 'inventory/review_approvals.html', {'form': form, 'mode_rows': preview(policy), 'previewed': previewed})
 
 
 @login_required

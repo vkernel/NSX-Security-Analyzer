@@ -8,7 +8,7 @@
 
 See [snapshot maintenance and stopping collections](docs/snapshot-maintenance.md) for optional refresh jobs and collection cancellation.
 
-A read-only NSX Policy inventory and security review workspace. Collect inventory
+An NSX Policy inventory and security review workspace with read-only collection and explicitly confirmed administrator deletion of approved objects. Collect inventory
 from multiple NSX Managers, explore firewall rules and reference evidence, and
 compare saved snapshots in a PostgreSQL-backed web application.
 

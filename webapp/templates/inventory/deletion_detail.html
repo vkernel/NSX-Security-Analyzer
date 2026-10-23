@@ -1,0 +1,21 @@
+{% extends 'base.html' %}{% load static %}{% block content %}
+<a class="breadcrumb" href="{% url 'deletion-selection' batch.environment_id %}">← NSX deletion requests</a>
+<h1>NSX deletion {{ batch.status }}</h1><p><strong>{{ batch.environment.name }}</strong> · {{ batch.manager }}</p>
+<p>Requested by {{ batch.requested_by }} · Change ticket: {{ batch.ticket|default:'Not yet confirmed' }}</p>
+{% if error %}<p class="notice" role="alert">{{ error }}</p>{% endif %}
+<p>Preview and execution use the collection worker. Refresh to see progress. No DELETE is automatically retried after an interruption.</p><a class="button" href="">Refresh results</a>
+<table><thead><tr><th>Object</th><th>Result</th><th>Details</th></tr></thead><tbody>{% for item in items %}<tr><td>{{ item.name }}<br><code class="review-wrap">{{ item.path }}</code>{% if item.finding.snapshot_id %}<br><a href="{% url 'impact-preview' item.finding.snapshot_id %}?path={{ item.path|urlencode }}&amp;finding={{ item.finding_id }}">Saved-snapshot impact preview</a>{% endif %}</td><td>{{ item.status }}</td><td>{{ item.message }}{% if item.before %}<details><summary>Saved pre-deletion configuration</summary><pre class="review-evidence">{{ item.before|pprint }}</pre></details>{% endif %}{% if item.http_status %}<br>DELETE HTTP {{ item.http_status }}{% endif %}</td></tr>{% endfor %}</tbody></table>
+{% if can_confirm and verified_count %}
+<button type="button" class="button" id="delete-confirm-open">Review permanent deletion of {{ verified_count }} object{{ verified_count|pluralize }}</button>
+<dialog class="action-dialog" id="nsx-delete-dialog" aria-labelledby="nsx-delete-title"><form method="post">{% csrf_token %}
+<div class="action-dialog-header"><h2 id="nsx-delete-title">Permanently delete {{ verified_count }} object{{ verified_count|pluralize }}?</h2></div>
+<div class="action-dialog-body"><p><strong>{{ batch.environment.name }} · {{ batch.manager }}</strong></p><p>The following objects will be permanently deleted from NSX. Service definitions include their service entries. Firewall-rule removal changes policy behavior. There is no automatic undo; restoration requires a separate operation.</p>
+<ul>{% for item in items %}{% if item.status == 'verified' %}<li>{{ item.name }} · {{ item.before.resource_type }}<br><code class="review-wrap">{{ item.path }}</code><br>Required approvals valid; live dependency checks passed.</li>{% endif %}{% endfor %}</ul>
+<p>Only verified objects are included. Blocked or already absent objects are skipped. Each object is rechecked before deletion. Bulk deletion is not atomic: some objects may succeed while others fail.</p>
+<p>Search is eventually consistent and cannot prove absence of external or permission-hidden dependencies. NSX checks and DELETE are not atomic: another administrator or automation can change configuration between them. Do not make concurrent configuration changes during this operation.</p>
+<label for="deletion-ticket">Change-ticket reference</label><input id="deletion-ticket" name="ticket" maxlength="255" required>
+<label><input type="checkbox" name="confirm" value="yes" required> I confirm permanent deletion of these exact objects and have reviewed their business impact.</label></div>
+<div class="action-dialog-footer"><button type="button" class="button" id="delete-confirm-cancel">Cancel</button><button class="button primary">Permanently delete {{ verified_count }} object{{ verified_count|pluralize }}</button></div></form></dialog>
+<script src="{% static 'nsx-deletion.js' %}" defer></script>
+{% endif %}
+{% endblock %}
