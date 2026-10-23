@@ -59,7 +59,7 @@ def connection(env):
 def approvals_valid(finding):
     if finding.kind not in KINDS or finding.workflow_state != 'ready' or not finding.owner_id:
         raise ValidationError('The finding must be assigned and ready for decommissioning.')
-    readiness = approval_readiness(finding)
+    readiness = approval_readiness(finding, deletion_live=True)
     if readiness['status'] == 'blocked': raise ValidationError(readiness['message'])
     stages = ['owner', 'second'] if finding.required_approvals == 2 else ['owner']
     if finding.required_approvals not in (1, 2): raise ValidationError('Invalid approval requirement.')
@@ -73,6 +73,7 @@ def approvals_valid(finding):
     if coverage_changed(finding, readiness.get('coverage')): raise ValidationError('Approved reference coverage changed.')
     if readiness['status'] == 'manual' and any(not d.get('manual_verified') for d in decisions):
         raise ValidationError('Independent verification is missing from an approval.')
+    return readiness
 
 
 def current_object(client, path):
@@ -84,7 +85,8 @@ def current_object(client, path):
 
 def validate_live(client, finding):
     """Read-only preflight, repeated for each target immediately before execution."""
-    approvals_valid(finding)
+    client.direct_membership_verified = False
+    readiness = approvals_valid(finding)
     kind = target_type(finding.path)
     expected_type = {'unused':'Group', 'empty_group':'Group', 'unused_service':'Service', 'zero_hits':'Rule', 'disabled':'Rule', 'empty_policy':'SecurityPolicy'}[finding.kind]
     if kind != expected_type: raise ValidationError('Finding type does not match the target path.')
@@ -123,8 +125,14 @@ def validate_live(client, finding):
     if kind == 'SecurityPolicy' and collector.objects(client, finding.path + '/rules'):
         raise ValidationError('The firewall policy is no longer empty.')
     if finding.kind == 'empty_group':
-        state, _ = collector.membership(client, obj, group_inventory={g['path']:g for g in groups})
-        if state != 'empty': raise ValidationError('Live group membership is not confirmed empty.')
+        if isinstance(readiness, dict) and readiness.get('requires_direct_membership'):
+            from .deletion_readiness import strict_group_empty
+            if not strict_group_empty(client, obj):
+                raise ValidationError('Direct membership verification did not return explicit zero VM, IP and port members. Deletion remains blocked.')
+            client.direct_membership_verified = True
+        else:
+            state, _ = collector.membership(client, obj, group_inventory={g['path']:g for g in groups})
+            if state != 'empty': raise ValidationError('Live group membership is not confirmed empty.')
     if finding.kind == 'disabled' and obj.get('disabled') is not True:
         raise ValidationError('The rule is no longer disabled.')
     if finding.kind == 'zero_hits':
@@ -181,6 +189,7 @@ def process_item(item, execute=False):
                 item.before, item.approved_evidence, item.approvals = obj, finding.evidence, finding.approvals
                 item.verified_at = timezone.now()
                 item.verification = {
+                    'Membership verification': 'Explicit zero VM, IP and port members; retained qualified history' if getattr(client, 'direct_membership_verified', False) is True else 'Standard finding-specific live checks',
                     'Identity and configuration': 'Matches approved evidence',
                     'Approvals and history': 'Current required approvals and observation criteria verified',
                     'Dependencies': 'Fresh unrestricted reference search passed; no incoming references',

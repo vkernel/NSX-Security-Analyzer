@@ -611,3 +611,25 @@ separate operations, so concurrent external changes cannot be prevented atomical
 Apply migration `0047_deletion_verification` before starting matching web/worker images.
 Old previews without per-object verification timestamps must be recreated. No recovery
 API or automatic DELETE retries are added.
+
+### Targeted verification when global VM pagination is incomplete
+
+Deletion previews can use retained qualified history for a local group containing
+exactly one positive VM Name or Tag equality condition. Normal finding approvals
+remain paused; this exception is only for already-ready deletion requests.
+
+The saved history must remain fresh, within the configured observation gap, and
+qualified under the unchanged criteria (including any VDI monitoring policy). Every
+intervening full snapshot must have only the recognized global VM inventory warning,
+and must contain the same group configuration/identity with empty membership evidence.
+Missing objects, unknown membership, other warnings, newer verified evidence not yet
+applied, changed criteria, mixed/nested/extended definitions and stale history block
+this path. No new historical observations are created.
+
+The live preview and execution then require explicit zero counts, empty result arrays
+and no continuation cursor/error from all three group membership endpoints: VMs,
+IP addresses and logical ports. Missing counts are not accepted as zero. The VM-only
+fast shortcut is not used. Complete live configuration/reference checks, valid
+approvals, per-object expiry and explicit administrator confirmation remain required.
+The preview records when direct membership verification was used. This does not
+restore objects or authorize deletion automatically.

@@ -125,7 +125,7 @@ def relevant_evidence_error(kind, row, search_coverage, stamp, interval_minutes)
     return 'This finding type does not have sufficient supported evidence for decommissioning approval.'
 
 
-def approval_readiness(finding):
+def approval_readiness(finding, *, deletion_live=False):
     def blocked(message): return {'status': 'blocked', 'message': message}
     from .transient import matching, policies_for
     transient_policy = matching(finding.evidence, policies_for(finding.environment_id)) if finding.kind == 'empty_group' else None
@@ -143,11 +143,17 @@ def approval_readiness(finding):
     latest = finding.environment.snapshots.filter(testing=False, imported=False).only('pk', 'generated_at', 'summary').first()
     from .evidence_coverage import snapshot_issues, relevant
     affected = relevant(snapshot_issues(latest), finding.kind, finding.path) if latest else []
-    if affected:
+    execution_source = None
+    if deletion_live and affected:
+        from .deletion_readiness import historical_group_evidence
+        execution_source = historical_group_evidence(finding, latest)
+    if affected and execution_source is None:
         return {'status':'blocked', 'verification_paused':True,
                 'message':'Verification paused; existing decisions are retained. Required evidence is incomplete: ' +
                           '; '.join(sorted({issue['scope'] for issue in affected})) + '. Run a collection with verified relevant coverage.'}
 
+    if execution_source is not None:
+        latest = execution_source
     if not latest or latest.pk != finding.snapshot_id:
         return blocked('Review evidence has not been updated to the latest full collection.')
     if latest.generated_at < timezone.now() - timedelta(hours=policy().stale_hours):
@@ -162,7 +168,8 @@ def approval_readiness(finding):
     return {'status': 'manual' if manual else 'ready',
             'message': 'The collection searched a defined list of object types. Dependencies outside that scope are not verified. Each required reviewer must independently document additional dependency checks and provide an evidence reference.' if manual else 'Relevant saved evidence is current and supports review.',
             'coverage': search if finding.kind in ('unused', 'unused_service') else {},
-            'coverage_key': coverage_key(search) if finding.kind in ('unused', 'unused_service') else '', 'row': row}
+            'coverage_key': coverage_key(search) if finding.kind in ('unused', 'unused_service') else '', 'row': row,
+            'requires_direct_membership': execution_source is not None}
 
 
 def evidence_error(finding):

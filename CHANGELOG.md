@@ -2,6 +2,8 @@
 
 ## Development — 2026-10-23
 
+- Add an execution-only direct membership path for already-approved simple VM groups when only global VM pagination is incomplete. Retain fresh qualified history and require explicit zero VM/IP/port checks, unchanged evidence and full live dependency verification.
+
 - Scope inventory-verification pauses to supported evidence dependencies; retain decisions during affected inventory uncertainty and keep unclassified failures blocking.
 - Apply the same coverage scopes to collection publication, historical recalculation and approval readiness. Preserve observation thresholds and normal unknown-evidence handling.
 - Add selected-row Actions for deletion previews and release; show coverage blockers and per-object verification results. Explicit administrator confirmation remains separate from finding approvals.

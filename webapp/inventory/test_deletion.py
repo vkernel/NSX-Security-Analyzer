@@ -301,3 +301,24 @@ class DeletionTests(TestCase):
         self.item.refresh_from_db()
         self.assertEqual(self.item.status,'blocked')
         self.assertIn('expired during verification',self.item.message)
+
+    def test_direct_group_execution_still_requires_membership_and_reference_coverage(self):
+        from .deletion_readiness import strict_group_empty
+        obj={'resource_type':'Group','path':'/infra/domains/default/groups/direct','unique_id':'identity','_create_time':12,
+             'expression':[{'resource_type':'Condition','member_type':'VirtualMachine','key':'Name','operator':'EQUALS','value':'test'}]}
+        self.finding.kind='empty_group'; self.finding.path=obj['path']
+        self.finding.evidence=dict(self.evidence,configuration=d.clean(obj))
+        page={'results':[],'result_count':0}
+        client=Mock(inventory_warnings=[])
+        client.get.side_effect=lambda path,*args: obj if path==obj['path'] else page
+        with patch.object(d,'approvals_valid',return_value={'requires_direct_membership':True}), \
+             patch.object(d.collector,'objects',return_value=[]), \
+             patch.object(d.collector,'verified_configuration_search',return_value=([obj],{'mode':'all_types'})) as search, \
+             patch.object(d.collector,'membership',side_effect=AssertionError('No fast or duplicate probes')):
+            self.assertEqual(d.validate_live(client,self.finding),obj)
+            self.assertTrue(client.direct_membership_verified)
+            page.pop('result_count')
+            with self.assertRaises(ValidationError): d.validate_live(client,self.finding)
+            page['result_count']=0
+            search.return_value=([obj],{'mode':'explicit_types'})
+            with self.assertRaises(ValidationError): d.validate_live(client,self.finding)
