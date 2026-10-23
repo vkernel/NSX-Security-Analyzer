@@ -556,6 +556,8 @@ class DeletionItem(models.Model):
     revision = models.PositiveIntegerField()
     status = models.CharField(max_length=24, default='pending')
     message = models.TextField(blank=True)
+    verified_at = models.DateTimeField(null=True)
+    verification = models.JSONField(default=dict)
     before = models.JSONField(default=dict)
     approved_evidence = models.JSONField(default=dict)
     approvals = models.JSONField(default=dict)

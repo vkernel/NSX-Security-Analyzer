@@ -39,7 +39,7 @@ class DeletionTests(TestCase):
         self.batch = DeletionBatch.objects.create(environment=self.env, requested_by=self.user, manager=self.env.manager,
             status='preview_ready', checked_at=timezone.now(), confirmed_at=timezone.now(), ticket='CHG-1')
         self.item = DeletionItem.objects.create(batch=self.batch, finding=self.finding, path=self.finding.path, name='Test',
-            revision=self.finding.revision, status='verified', before=self.obj, approved_evidence=self.evidence, approvals=self.finding.approvals)
+            revision=self.finding.revision, status='verified', verified_at=timezone.now(), before=self.obj, approved_evidence=self.evidence, approvals=self.finding.approvals)
         self.client.force_login(self.user)
 
     def test_approval_validation_requires_valid_current_decisions(self):
@@ -121,6 +121,7 @@ class DeletionTests(TestCase):
 
     def test_expired_preview_and_changed_review_block_delete(self):
         self.batch.checked_at=timezone.now()-timedelta(minutes=11);self.batch.save()
+        self.item.verified_at=timezone.now()-timedelta(minutes=11);self.item.save()
         self.item.batch=self.batch
         self.assertEqual(self.execute_with(),0)
         self.item.refresh_from_db();self.assertEqual(self.item.status,'blocked')
@@ -229,3 +230,74 @@ class DeletionTests(TestCase):
         self.item.before = {}; self.item.save()
         self.assertContains(self.client.get(url), 'No pre-deletion configuration')
         self.assertEqual(self.client.get(url + '?download=1').status_code, 404)
+
+    def test_selected_preview_rejects_changed_revision(self):
+        url = reverse('deletion-selection', args=[self.env.pk])
+        response = self.client.post(url, {'selected':f'{self.finding.pk}:{self.finding.revision+1}'})
+        self.assertContains(response, 'Some selected findings changed')
+        self.assertEqual(DeletionBatch.objects.count(), 1)
+        response = self.client.post(url, {'selected':f'{self.finding.pk}:{self.finding.revision}'})
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(DeletionBatch.objects.count(), 2)
+
+    def test_preview_explains_current_inventory_blocker(self):
+        from .models import Snapshot
+        Snapshot.objects.create(environment=self.env, generated_at=timezone.now(),
+            summary={'inventory_warnings':True}, report={'inventory_warnings':[{'endpoint':'/vm','detail':'Missing one VM'}]})
+        self.item.status = 'blocked'; self.item.save()
+        response = self.client.get(reverse('deletion-detail',args=[self.batch.pk]))
+        self.assertContains(response, 'Missing one VM')
+        self.assertContains(response, 'No selected objects passed verification')
+        self.assertContains(response, 'Existing blocked results are historical')
+
+
+    def test_finding_selection_has_contextual_delete_action(self):
+        response = self.client.get(reverse('findings', args=[self.env.pk]) + '?review=ready')
+        self.assertContains(response, 'id="finding-selection-bar" hidden')
+        self.assertContains(response, 'id="delete-selected-open"')
+        self.assertContains(response, 'data-delete-eligible="true"')
+        self.assertContains(response, 'id="bulk-delete-preview"')
+        self.assertNotContains(response, 'Delete selected from NSX — choose ready objects')
+        self.client.force_login(get_user_model().objects.create_user('selection-operator', is_staff=True))
+        response = self.client.get(reverse('findings', args=[self.env.pk]) + '?review=ready')
+        self.assertNotContains(response, 'id="delete-selected-open"')
+
+    def test_confirmation_rejects_expired_or_legacy_item_even_when_batch_is_fresh(self):
+        url = reverse('deletion-detail',args=[self.batch.pk])
+        for stamp in (None, timezone.now()-timedelta(minutes=11)):
+            self.item.verified_at=stamp; self.item.save()
+            response=self.client.post(url,{'ticket':'CHG-expiry','confirm':'yes'})
+            self.assertContains(response,'One or more object previews expired')
+            self.batch.refresh_from_db()
+            self.assertEqual(self.batch.status,'preview_ready')
+
+    def test_live_checks_cannot_substitute_for_explicit_execution_authorization(self):
+        self.batch.confirmed_at=None; self.batch.save()
+        self.assertEqual(self.execute_with(),0)
+        self.item.refresh_from_db()
+        self.assertEqual(self.item.status,'blocked')
+        self.assertIn('Explicit confirmation',self.item.message)
+
+    def test_preview_saves_check_results_without_deleting(self):
+        @contextmanager
+        def client(env): yield Mock()
+        with patch.object(d,'connection',client), patch.object(d,'guard'), patch.object(d,'validate_live',return_value=self.obj), patch.object(d,'delete_once') as delete:
+            d.process_item(self.item,execute=False)
+            delete.assert_not_called()
+        self.item.refresh_from_db()
+        self.assertIsNotNone(self.item.verified_at)
+        self.assertIn('Dependencies',self.item.verification)
+        self.assertIn('Ready for confirmation',self.item.message)
+
+    def test_expiry_during_live_verification_prevents_delete(self):
+        @contextmanager
+        def client(env): yield Mock()
+        def slow_check(client, finding):
+            self.item.verified_at=timezone.now()-timedelta(minutes=11)
+            return self.obj
+        with patch.object(d,'connection',client), patch.object(d,'guard'), patch.object(d,'validate_live',side_effect=slow_check), patch.object(d,'delete_once') as delete:
+            d.process_item(self.item,execute=True)
+            delete.assert_not_called()
+        self.item.refresh_from_db()
+        self.assertEqual(self.item.status,'blocked')
+        self.assertIn('expired during verification',self.item.message)

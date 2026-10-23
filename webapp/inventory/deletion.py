@@ -171,7 +171,7 @@ def process_item(item, execute=False):
         guard(batch, finding, item)
         if execute and (not batch.confirmed_at or not batch.ticket):
             raise ValidationError('Explicit confirmation and a change ticket are required.')
-        if execute and (not batch.checked_at or timezone.now() - batch.checked_at > timedelta(minutes=10)):
+        if execute and (not item.verified_at or timezone.now() - item.verified_at > timedelta(minutes=10)):
             raise ValidationError('Preview expired. Create a new preview.')
         with connection(batch.environment) as client:
             obj = validate_live(client, finding)
@@ -179,7 +179,18 @@ def process_item(item, execute=False):
                 item.status, item.message = 'already_absent', 'Already absent in NSX; no deletion sent and no review marked decommissioned.'
             elif not execute:
                 item.before, item.approved_evidence, item.approvals = obj, finding.evidence, finding.approvals
-                item.status, item.message = 'verified', 'Live checks passed. Search is eventually consistent; external dependencies may still exist.'
+                item.verified_at = timezone.now()
+                item.verification = {
+                    'Identity and configuration': 'Matches approved evidence',
+                    'Approvals and history': 'Current required approvals and observation criteria verified',
+                    'Dependencies': 'Fresh unrestricted reference search passed; no incoming references',
+                    'Finding condition': {'empty_group':'Fresh group membership confirmed empty',
+                                  'unused':'No configuration references found',
+                                  'unused_service':'No configuration references found',
+                                  'disabled':'Rule remains disabled', 'zero_hits':'Fresh zero counters confirmed',
+                                  'empty_policy':'Fresh rule inventory confirmed empty'}[finding.kind],
+                }
+                item.status, item.message = 'verified', 'Ready for confirmation. Required live checks passed; explicit execution authorization is still required.'
             else:
                 if obj != item.before: raise ValidationError('Object changed after preview. Create a new preview.')
                 # Commit durable intent before the network mutation. A crash never causes an automatic retry.
@@ -192,6 +203,12 @@ def process_item(item, execute=False):
                     batch.environment = env
                     guard(batch, finding, item)
                     if not env.enabled: raise ValidationError('The environment is paused.')
+                    if not item.verified_at or timezone.now() - item.verified_at > timedelta(minutes=10):
+                        raise ValidationError('Object preview expired during verification. Create a new preview.')
+                    if target_type(item.path) == 'Rule':
+                        parent = client.get(item.path.rsplit('/rules/', 1)[0])
+                        if {k: parent.get(k) for k in ('scope','category','sequence_number','stateful')} != finding.evidence['configuration']['policy']:
+                            raise ValidationError('Parent policy changed immediately before deletion.')
                     if current_object(client, item.path) != obj:
                         raise ValidationError('Object changed immediately before deletion.')
                     sent = True
@@ -260,6 +277,17 @@ def selection(request, pk):
     error = ''
     if request.method == 'POST':
         ids = request.POST.getlist('finding')
+        revisions = {}
+        selected = request.POST.getlist('selected')
+        if selected:
+            try:
+                pairs = [value.split(':') for value in selected]
+                if len(pairs) > 100 or any(len(pair) != 2 or not all(v.isdecimal() and len(v) < 19 for v in pair) for pair in pairs):
+                    raise ValueError
+                revisions = {int(pk): int(revision) for pk, revision in pairs}
+                ids = [pk for pk, revision in pairs]
+            except ValueError:
+                ids = []
         if not ids or len(ids) > 100 or any(not v.isdecimal() for v in ids):
             error = 'Select between 1 and 100 findings.'
         else:
@@ -267,6 +295,8 @@ def selection(request, pk):
                 Environment.objects.select_for_update().get(pk=env.pk)
                 rows = list(Finding.objects.filter(environment=env, pk__in=ids, workflow_state='ready', kind__in=KINDS).order_by('pk'))
                 if len(rows) != len(set(ids)): error = 'Some selected findings are no longer ready. Refresh and select again.'
+                elif any(row.pk in revisions and row.revision != revisions[row.pk] for row in rows):
+                    error = 'Some selected findings changed. Refresh the finding reviews page and select again.'
                 else:
                     batch = DeletionBatch.objects.create(environment=env, manager=env.manager, requested_by=request.user)
                     seen = set()
@@ -293,6 +323,8 @@ def detail(request, pk):
             if (batch.requested_by_id != request.user.pk or batch.status != 'preview_ready' or not batch.checked_at
                 or timezone.now() - batch.checked_at > timedelta(minutes=10)):
                 error = 'Preview is unavailable, expired or belongs to another administrator. Create a new preview.'
+            elif batch.items.filter(status='verified', verified_at__isnull=True).exists() or batch.items.filter(status='verified', verified_at__lt=timezone.now()-timedelta(minutes=10)).exists():
+                error = 'One or more object previews expired. Create a new preview.'
             elif not ticket or len(ticket)>255 or request.POST.get('confirm') != 'yes':
                 error = 'Provide a change ticket and explicitly confirm permanent deletion.'
             elif not batch.items.filter(status='verified').exists(): error = 'No objects passed the live checks.'
@@ -302,7 +334,12 @@ def detail(request, pk):
                 record('nsx.deletion_confirmed','DeletionBatch',batch.pk, actor=request.user.pk,
                        details={'ticket':ticket,'environment_id':batch.environment_id,'count':batch.items.filter(status='verified').count()})
                 return redirect('deletion-detail',pk=pk)
+    latest = batch.environment.snapshots.filter(testing=False, imported=False).only('pk', 'generated_at', 'summary').first()
+    warnings = []
+    if latest and latest.summary.get('inventory_warnings'):
+        warnings = batch.environment.snapshots.filter(pk=latest.pk).values_list('report__inventory_warnings', flat=True).first() or []
     return render(request,'inventory/deletion_detail.html',{'batch':batch,'items':batch.items.select_related('finding'),
+        'status_label':batch.status.replace('_', ' ').capitalize(), 'latest_snapshot':latest, 'inventory_warnings':warnings, 'inventory_blocked':bool(latest and latest.summary.get('inventory_warnings')),
         'error':error,'verified_count':batch.items.filter(status='verified').count(),
         'can_confirm': batch.status=='preview_ready' and batch.requested_by_id==request.user.pk})
 

@@ -6,9 +6,19 @@
   const open = document.getElementById('release-open');
   const checkboxes = [...document.querySelectorAll('input[form="bulk-release"][name="selected"]')];
   const selected = () => checkboxes.filter(box => box.checked && !box.disabled);
+  const deletion = document.getElementById('delete-selected-open');
+  const deleteForm = document.getElementById('bulk-delete-preview');
+  const menu = bar.querySelector('.selection-action-menu');
   const update = () => {
     const count = selected().length;
     bar.hidden = count === 0;
+    if (!count && menu) menu.open = false;
+    if (deletion) {
+      deletion.disabled = count === 0 || count > 100 || selected().some(box => box.dataset.deleteEligible !== 'true');
+      document.getElementById('delete-selection-help').textContent = deletion.disabled
+        ? 'Select up to 100 assigned, ready findings of supported types to preview deletion.'
+        : 'Opens a read-only preview; confirmation is required before deletion.';
+    }
     document.getElementById('finding-selection-count').textContent = `${count} selected`;
     document.getElementById('release-title').textContent =
       `Return ${count} finding${count === 1 ? '' : 's'} to unassigned`;
@@ -16,7 +26,21 @@
   checkboxes.forEach(box => box.addEventListener('change', update));
   open.addEventListener('click', () => {
     update();
+    if (menu) menu.open = false;
     if (selected().length) dialog.showModal();
+  });
+  if (deletion && deleteForm) deletion.addEventListener('click', () => {
+    update();
+    if (deletion.disabled) return;
+    const container = deleteForm.querySelector('[data-delete-selection]');
+    container.replaceChildren();
+    selected().forEach(box => {
+      const input = document.createElement('input');
+      input.type = 'hidden'; input.name = 'selected'; input.value = box.value;
+      container.appendChild(input);
+    });
+    if (menu) menu.open = false;
+    deleteForm.requestSubmit();
   });
   document.getElementById('release-cancel').addEventListener('click', () => dialog.close());
   document.getElementById('release-clear').addEventListener('click', () => {

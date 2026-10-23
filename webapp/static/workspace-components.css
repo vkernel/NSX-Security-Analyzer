@@ -243,3 +243,6 @@ body dialog#saved-configuration-dialog{width:min(880px,calc(100vw - 32px))}
 #saved-configuration-dialog .form-card{margin:0;padding:0;border:0;box-shadow:none}
 #saved-configuration-content pre{white-space:pre-wrap;overflow-wrap:anywhere;max-height:none}
 #saved-configuration-content dd{overflow-wrap:anywhere}
+.selection-action-menu{position:relative}
+.selection-action-options{position:absolute;right:0;top:100%;z-index:20;min-width:270px;display:grid;gap:8px;padding:12px;background:var(--app-surface,#fff);border:1px solid var(--line);border-radius:10px;box-shadow:0 8px 24px #10182820}
+.selection-action-options small{max-width:280px;color:var(--muted)}

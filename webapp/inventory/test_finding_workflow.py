@@ -341,6 +341,8 @@ class FindingWorkflowTests(TestCase):
             self.assertTrue(error('zero_hits',{**counters,**patch}))
 
     def test_approval_reads_only_compact_object(self):
+        self.snapshot.summary = {'evidence_coverage': []}
+        self.snapshot.save(update_fields=['summary'])
         from django.db import connection
         from django.test.utils import CaptureQueriesContext
         from .finding_workflow import evidence_error

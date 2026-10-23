@@ -2,6 +2,11 @@
 
 ## Development — 2026-10-23
 
+- Scope inventory-verification pauses to supported evidence dependencies; retain decisions during affected inventory uncertainty and keep unclassified failures blocking.
+- Apply the same coverage scopes to collection publication, historical recalculation and approval readiness. Preserve observation thresholds and normal unknown-evidence handling.
+- Add selected-row Actions for deletion previews and release; show coverage blockers and per-object verification results. Explicit administrator confirmation remains separate from finding approvals.
+- Add migration `0047_deletion_verification`; per-object previews expire after ten minutes and legacy previews must be recreated.
+
 - Add administrator-only saved deletion configuration dialogs with copy/download JSON, group details and manual recreation guidance. History is read-only; no recovery API is implemented.
 
 - Add category-specific single/four-eyes approval settings, a read-only settings preview and targeted approval resets.

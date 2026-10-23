@@ -110,13 +110,15 @@ Coverage remains limited; approval does not relabel it as complete. Search
 remains eventually consistent and visibility depends on permissions; unrestricted
 search is not proof that every possible dependency is visible.
 
-Inventory verification warnings pause all finding evaluation and approval for the
-environment until a later verified full collection is available. This is distinct
-from an unrelated object-check warning: warnings about unrelated objects and an
-unprepared global coverage summary do not block a finding whose own relevant evidence is complete. They remain visible
-on Collection coverage. These same finding-specific checks apply when a new
-collection revalidates pending approvals. Existing indexed snapshots benefit without
-a new collection; missing object indexes must still be prepared or recollected.
+Inventory verification warnings pause findings that require the affected evidence.
+Dedicated VM inventory warnings pause empty-group and tag-dependent checks; unrelated
+service and firewall findings can continue only with complete required evidence.
+Unknown endpoint scopes and configuration inventory/search inconsistencies remain
+blocking. Temporary inventory uncertainty preserves decisions and observations;
+verified relevant configuration changes still invalidate approvals. The queue shows
+**Verification paused — decisions retained** or **Approved — execution verification required**.
+Historical recalculation also skips affected observations without counting them as
+successful checks. Observation thresholds, freshness and maximum-gap rules still apply.
 
 Each approval retains the actor identity, timestamp, reason, source snapshot UUID,
 relevant evidence fingerprint, evidence, reference-search scope and any manual
@@ -509,7 +511,7 @@ does not elevate permissions. Collection itself remains read-only.
 The confirmation dialog lists the environment, Manager and every verified target. A
 change ticket and explicit permanent-deletion checkbox are required. Only verified rows
 are submitted; blocked/already-absent rows are skipped. Confirmation belongs to the
-requesting administrator and expires after ten minutes. Execution repeats checks and
+requesting administrator; each object preview expires ten minutes after its verification. Execution repeats checks and
 blocks changed or expired previews. No force or automatic retry is used. Group deletion
 uses `fail_if_subtree_exists=true`. Search and DELETE are separate operations: NSX search
 is eventually consistent, permissions may hide dependencies, and external configuration
@@ -575,3 +577,37 @@ for uncertain or interrupted deletions. Dynamic membership uses current inventor
 VDI automation can change it again. Separately deleted references, firewall rules,
 runtime state and counters are not restored by recreating an object. Type-specific
 guidance appears beside the saved JSON.
+
+### Selection actions and blocked previews
+
+On Finding reviews, select rows to reveal **Actions**. Choose **Return to unassigned**
+or, as an administrator, **Delete from NSX** to preview those exact selections.
+Deletion requires all selected rows to be assigned, ready and of a supported type;
+changed revisions are rejected. No DELETE occurs when opening a preview.
+**Deletion history** remains available without selecting rows.
+
+A ready workflow stage and an eligible saved object do not override current inventory
+verification. If the latest full collection has inventory warnings, the deletion
+preview displays its timestamp, warning details and links to coverage/diagnostics.
+Resolve the warning, complete a verified collection and finding evaluation, then
+create a new preview. An old blocked preview remains a historical result.
+
+### Additional execution authorization
+
+The finding's single/four-eyes approval and the deletion confirmation are separate:
+**finding approval → live preview → administrator confirmation → final checks → DELETE**.
+Each verified item records its verification time and results for identity/configuration,
+approvals/history, incoming references and the relevant finding condition. The
+administrator confirms the exact objects and supplies the ticket. This is additional
+execution authorization, not a substitute for finding approvals or coverage.
+
+Each object preview expires after ten minutes, including time spent waiting or checking
+other objects. Execution rechecks expiry immediately before mutation. Changed targets,
+changed relevant parent-policy settings, incomplete live references and failed conditions
+remain blocked. A fresh membership response cannot replace historical VDI criteria;
+fresh counters cannot replace the zero-hit observation period. Search and DELETE remain
+separate operations, so concurrent external changes cannot be prevented atomically.
+
+Apply migration `0047_deletion_verification` before starting matching web/worker images.
+Old previews without per-object verification timestamps must be recreated. No recovery
+API or automatic DELETE retries are added.

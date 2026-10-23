@@ -144,11 +144,17 @@ def findings(request, pk):
     qualification_counts = list(environment.findings.values('qualification').annotate(total=Count('pk')).order_by('qualification'))
     rows, form, query = filtered_findings(request, environment, request.GET)
     page = Paginator(rows, preferences(request).page_size).get_page(request.GET.get('page'))
+    from .deletion import KINDS
+    from .evidence_coverage import snapshot_issues, relevant
+    latest = environment.snapshots.filter(testing=False, imported=False).only('pk', 'summary').first()
+    coverage = snapshot_issues(latest) if latest else []
     release_eligible = 0
     for row in page:
         row.label = 'Prolonged empty VDI group' if row.qualification_reason.startswith('Prolonged empty VDI group') else LABELS.get(row.kind, row.kind)
         row.can_release = bool(request.user.is_staff and row.owner_id and row.workflow_state != 'decommissioned'
                                and (row.owner_id == request.user.pk or request.user.is_superuser))
+        row.verification_paused = bool(relevant(coverage, row.kind, row.path))
+        row.can_delete = bool(request.user.is_superuser and row.owner_id and row.workflow_state == 'ready' and row.kind in KINDS)
         release_eligible += int(row.can_release)
     params = request.GET.copy()
     params.pop('page', None)

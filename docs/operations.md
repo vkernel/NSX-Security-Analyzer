@@ -393,3 +393,11 @@ NSX. Keep downloads under the same access controls as inventory exports; they ca
 include internal addresses, tags and policy details. A historical record is not proof
 of current absence: check NSX before recreating anything after an uncertain outcome.
 See [manual recreation guidance](finding-review-workflow.md#view-saved-configuration-for-manual-recreation).
+
+### Scoped verification upgrade
+
+Migration `0047_deletion_verification` records per-object deletion verification time
+and check results. Recreate older previews after rollout. Collection already retries
+inconsistent pagination up to three times per endpoint; this upgrade scopes finding
+pauses to known affected evidence and leaves unknown failures blocking. It does not
+increase workers, accept missing inventory percentages, or add automatic recovery.

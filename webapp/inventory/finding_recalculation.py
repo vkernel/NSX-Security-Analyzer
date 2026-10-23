@@ -17,8 +17,6 @@ from .diagnostics import LOG
 
 def snapshots(environment_id):
     return Snapshot.objects.filter(environment_id=environment_id, testing=False, imported=False).filter(
-        Q(report__inventory_warnings__isnull=True) | Q(report__inventory_warnings=[])
-    ).filter(
         Q(job__isnull=True) | Q(job__status='succeeded')).order_by('generated_at', 'created_at', 'pk')
 
 
@@ -120,13 +118,18 @@ def run(pk, token):
     if not current.update(total=len(history)): return
     from .usability import policy as workspace_policy
     approval_settings = workspace_policy()
+    from .evidence_coverage import snapshot_issues, relevant
     states = {}
+    latest_coverage = []
     for number, (snapshot_id, stamp) in enumerate(history, 1):
         if not current.exists(): return
+        latest_coverage = snapshot_issues(Snapshot.objects.only('pk', 'summary').get(pk=snapshot_id))
         index(snapshot_id)
         seen = set()
         rows = SnapshotFindingEvidence.objects.filter(snapshot_id=snapshot_id, kind__in=job.kinds).order_by('pk')
         for row in rows.iterator(chunk_size=200):
+            if relevant(latest_coverage, row.kind, row.path):
+                continue
             key = (row.kind, row.path)
             seen.add(key)
             state = states.get(key)
@@ -142,11 +145,12 @@ def run(pk, token):
             states[key] = state
         # Missing/excluded/unknown objects break the sequence; never bridge them.
         for key in list(states):
-            if key not in seen: del states[key]
+            if key not in seen and not relevant(latest_coverage, *key): del states[key]
         current.update(processed=number)
         LOG.info('finding_recalculation job=%s snapshot=%s progress=%s/%s candidates=%s', pk, snapshot_id, number, len(history), len(states))
     # Prepare potentially large evidence projections before taking the publication
     # lock. Recheck the snapshot, policy and restore set after acquiring it.
+    states = {key: state for key, state in states.items() if not relevant(latest_coverage, *key)}
     present_keys = set(Finding.objects.filter(environment=env, kind__in=job.kinds, present=True).values_list('kind', 'path'))
     restore_candidates = set(states) - present_keys
     restored = {}
@@ -197,6 +201,8 @@ def run(pk, token):
                 state.required_approvals = required(state.kind, approval_settings)
                 creates.append(state)
         for target in existing.values():
+            if relevant(latest_coverage, target.kind, target.path):
+                continue
             target.qualification = 'insufficient'
             target.qualification_reason = 'No confirmed condition in the latest retained full collection.'
             target.observation_started = target.qualified_at = None

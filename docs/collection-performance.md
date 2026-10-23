@@ -608,12 +608,14 @@ counts, and duplicate counts. No percentage of missing objects is silently accep
 Failed requests, invalid responses, repeated cursors and deadline exhaustion remain
 retrieval errors and retain their existing error/unknown-coverage handling.
 
-Because references cross inventory areas, a snapshot with an inventory verification
-warning conservatively pauses all finding evaluation and approval for that environment.
-Existing finding presence and observations remain unchanged; historical recalculation
-skips these snapshots. Snapshot comparisons label missing objects **Presence uncertain**,
-not Added/Removed. Retention preserves the last verified full snapshot as a baseline,
-and prior-run hints use a snapshot without inventory verification warnings.
+Inventory warnings use conservative per-finding evidence scopes. Dedicated VM inventory
+warnings pause empty-group/tag evidence, while unaffected findings may advance only
+with their required evidence complete. Group membership warnings are scoped to their
+target. Firewall inventory inconsistencies also block unused-object reference checks.
+Unclassified warnings remain blocking for all findings. Publication and history replay
+preserve affected decisions without counting partial observations. Verified changes
+and normal observation/freshness criteria still apply. Snapshot comparisons and
+retention continue to use conservative complete-inventory baselines.
 
 Allow changes to settle, then collect again. A verified collection resumes normal
 finding evaluation. Persistent mismatches in a quiet environment warrant checking

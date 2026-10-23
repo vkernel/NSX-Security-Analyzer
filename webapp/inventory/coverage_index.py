@@ -8,7 +8,7 @@ def report_issues(report, needs_review=False):
     for warning in report.get("inventory_warnings", []):
         found = True
         yield {"area": "Inventory verification", "name": warning["endpoint"],
-               "detail": warning["detail"] + "; inventory changed during collection. Finding evaluation and approval are paused; run another collection."}
+               "detail": warning["detail"] + "; inventory changed during collection. Findings requiring this evidence are paused; existing decisions are retained. Unknown warning scopes block all findings."}
     for rows, field, area, fallback in (
         (report.get('objects', []), 'membership', 'Group membership', 'Membership is unknown.'),
         (report.get('dfw', {}).get('rules', []), 'hit_status', 'Rule counters', 'Evidence is unknown.'),

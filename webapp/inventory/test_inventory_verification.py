@@ -267,7 +267,7 @@ class WarningSnapshotTests(TestCase):
         self.assertTrue(finding.present)
         self.assertEqual(finding.snapshot_id, old.pk)
         self.assertEqual(approval_readiness(finding)['status'], 'blocked')
-        self.assertEqual(list(snapshots(env.pk).values_list('pk', flat=True)), [old.pk])
+        self.assertEqual(snapshots(env.pk).count(), 2)  # Replay now applies per-finding coverage scopes.
         self.assertTrue(needs_review(report))
         self.assertEqual(list(report_issues(report))[0]['area'], 'Inventory verification')
 

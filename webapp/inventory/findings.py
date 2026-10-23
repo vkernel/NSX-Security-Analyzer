@@ -67,9 +67,8 @@ def synchronize(environment_id, collected_snapshot=None, job_id=None):
         report = collected_snapshot.report
     else:
         report = snapshot.report
-    if report.get('inventory_warnings'):
-        LOG.warning("findings environment_id=%s paused: inventory verification incomplete", environment_id)
-        return
+    from .evidence_coverage import issues, relevant
+    coverage = issues(report)
     source_rows = {r['path']: r for r in report.get('objects', []) + report.get('dfw', {}).get('rules', []) + report.get('dfw', {}).get('policies', [])}
     from .usability import policy as workspace_policy
     approval_settings = workspace_policy()
@@ -101,6 +100,8 @@ def synchronize(environment_id, collected_snapshot=None, job_id=None):
     processed = 0
     seen = set()
     for kind, path, name, evidence in candidates(report):
+        if relevant(coverage, kind, path):
+            continue  # Keep prior decisions and observations; never count uncertain evidence.
         processed += 1
         if processed % 500 == 0:
             LOG.info("findings environment_id=%s processed_candidates=%s", environment_id, processed)
@@ -146,6 +147,19 @@ def synchronize(environment_id, collected_snapshot=None, job_id=None):
         if len(creates) + len(updates) >= 100:
             flush()
     for key, finding in existing.items():
+        if relevant(coverage, finding.kind, finding.path):
+            # Preserve uncertainty; a definitive current object configuration change
+            # still invalidates decisions even when another required check is paused.
+            row = source_rows.get(finding.path, {})
+            old = finding.evidence.get('configuration')
+            new = row.get('configuration')
+            identity_changed = any(finding.evidence.get(field) is not None and row.get(field) is not None
+                                   and finding.evidence[field] != row[field] for field in ('unique_id', 'created_at'))
+            if identity_changed or (old and new and old != new):
+                invalidate(finding, 'Object identity or configuration changed while verification was paused.')
+                finding.revision += 1
+                updates.append(finding)
+            continue  # Missing from a partial inventory is not proof of disappearance.
         if key not in seen:
             invalidate(finding, 'The finding is no longer observed; prior approval is no longer valid.')
             if finding.present:

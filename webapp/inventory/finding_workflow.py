@@ -140,9 +140,14 @@ def approval_readiness(finding):
         return blocked('Finding criteria recalculation is pending or running. Wait for it to complete before approval or recording completion.')
     if not finding.present or finding.qualification != 'eligible':
         return blocked('The finding must be currently observed and eligible for review.')
-    latest = finding.environment.snapshots.filter(testing=False, imported=False).only('pk', 'generated_at').first()
-    if latest and Snapshot.objects.filter(pk=latest.pk).values_list('summary__inventory_warnings', flat=True).get():
-        return blocked('Inventory changed during the latest collection. Run a verified collection before approval.')
+    latest = finding.environment.snapshots.filter(testing=False, imported=False).only('pk', 'generated_at', 'summary').first()
+    from .evidence_coverage import snapshot_issues, relevant
+    affected = relevant(snapshot_issues(latest), finding.kind, finding.path) if latest else []
+    if affected:
+        return {'status':'blocked', 'verification_paused':True,
+                'message':'Verification paused; existing decisions are retained. Required evidence is incomplete: ' +
+                          '; '.join(sorted({issue['scope'] for issue in affected})) + '. Run a collection with verified relevant coverage.'}
+
     if not latest or latest.pk != finding.snapshot_id:
         return blocked('Review evidence has not been updated to the latest full collection.')
     if latest.generated_at < timezone.now() - timedelta(hours=policy().stale_hours):
