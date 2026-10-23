@@ -13,10 +13,10 @@ from inventory.services import claim_job, expire_jobs, fail_job, stop_requested,
 
 
 class Command(BaseCommand):
-    help = "Run independent collection, finding-review indexing and snapshot-comparison lanes."
+    help = "Run independent collection, finding-review indexing, comparison and deletion-preview lanes."
 
     def add_arguments(self, parser):
-        parser.add_argument("--lane", choices=["all", "both", *LANES], default="all", help="Default supervises all three lanes independently; both is a legacy alias for all.")
+        parser.add_argument("--lane", choices=["all", "both", *LANES], default="all", help="Default supervises all four lanes independently; both is a legacy alias for all.")
         parser.add_argument("--once", action="store_true", help="Process at most one queued job, then exit.")
 
     def handle(self, *args, **options):
@@ -146,13 +146,13 @@ class Command(BaseCommand):
             SnapshotComparison.objects.filter(pk=pair.pk, ready=False).update(status='failed', error='Comparison worker interrupted or failed. Retry after checking diagnostics.')
         return True
 
-    def run_deletion(self):
+    def run_deletion(self, *, preview=False):
         from inventory.deletion import claim, interrupted
         from inventory.models import DeletionBatch
-        # This method runs only under the exclusive collection lane lease.
-        for pk in DeletionBatch.objects.filter(status__in=['checking', 'running']).values_list('pk', flat=True):
+        # Each lane reconciles only its own work; never interrupt the other lane.
+        for pk in DeletionBatch.objects.filter(status='checking' if preview else 'running').values_list('pk', flat=True):
             interrupted(pk)
-        batch = claim()
+        batch = claim(preview=preview)
         if not batch: return False
         try:
             with subprocess.Popen([sys.executable, str(settings.BASE_DIR / 'manage.py'), 'run_deletion', str(batch.pk)]) as process:
@@ -186,7 +186,10 @@ class Command(BaseCommand):
             if lane in ('all', 'both', 'comparison') and self.run_comparison():
                 if options['once']: return
                 continue
-            if lane in ('recalculation', 'comparison'):
+            if lane in ('all', 'both', 'deletion_preview') and self.run_deletion(preview=True):
+                if options['once']: return
+                continue
+            if lane in ('recalculation', 'comparison', 'deletion_preview'):
                 if options['once']: return
                 time.sleep(2)
                 continue

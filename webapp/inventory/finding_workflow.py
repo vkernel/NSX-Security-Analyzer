@@ -296,3 +296,19 @@ def decide(finding, actor, action, reason, owner=None, ticket='', manual_verifie
     finding.revision += 1
     finding.save(update_fields=FIELDS + ['owner', 'revision'])
     event(finding, action, before, reason, actor, extra)
+    if action == 'complete':
+        from .related_decommission import related_findings, close_related
+        if related_findings(finding).exists():
+            from .deletion import connection, current_object, target_type
+            from .collector import AuditError
+            try:
+                target_type(finding.path)
+                with connection(finding.environment) as client:
+                    absent = current_object(client, finding.path) is None
+            except (AuditError, ValidationError, OSError):
+                absent = False
+            if absent:
+                close_related(finding, actor)
+            else:
+                event(finding, 'related_closure_pending', finding.workflow_state,
+                      'Related findings remain open: live object absence could not be verified. No DELETE was sent.', actor)

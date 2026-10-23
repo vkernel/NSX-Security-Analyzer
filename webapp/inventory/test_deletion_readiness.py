@@ -116,3 +116,29 @@ class HistoricalExecutionTests(TestCase):
             result = approval_readiness(self.finding, deletion_live=True)
         self.assertIn('[history_gap_exceeded]', result['message'])
         self.assertIn('24 hours', result['message'])
+
+    def test_recreated_object_does_not_inherit_decommissioning(self):
+        self.finding.workflow_state = 'decommissioned'
+        self.finding.change_ticket = 'OLD'
+        self.finding.approvals = {'owner': {'actor_id': 'old'}}
+        self.finding.save()
+        self.row['unique_id'] = 'recreated'
+        self.snapshot(0, [])
+        synchronize(self.env.pk)
+        self.finding.refresh_from_db()
+        self.assertEqual(self.finding.workflow_state, 'unassigned')
+        self.assertEqual(self.finding.approvals, {})
+        self.assertEqual(self.finding.change_ticket, '')
+
+class FlatAndDefinitionTests(SimpleTestCase):
+    def test_flat_vm_and_is_supported_without_changing_collection_fast_path(self):
+        from .deletion_readiness import supported_vm_group
+        from .collector import vm_fast_eligible
+        condition = {'resource_type':'Condition', 'member_type':'VirtualMachine', 'key':'Tag', 'operator':'EQUALS', 'value':'scope|tag'}
+        group = {'path':'/infra/domains/default/groups/g', 'expression':[condition, {'resource_type':'ConjunctionOperator', 'conjunction_operator':'AND'}, dict(condition, value='other|tag')]}
+        self.assertTrue(supported_vm_group(group))
+        self.assertFalse(vm_fast_eligible(group))
+        client=Mock(); client.get.return_value={'results':[], 'result_count':0}
+        self.assertTrue(strict_group_empty(client, group)); self.assertEqual(client.get.call_count, 3)
+        for changed in ([condition, condition], [condition, {'resource_type':'ConjunctionOperator', 'conjunction_operator':'OR'}, condition], [dict(condition, member_type='Segment')], [dict(condition, operator='NOTEQUALS')]):
+            self.assertFalse(supported_vm_group(dict(group, expression=changed)))

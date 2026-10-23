@@ -81,7 +81,7 @@ spec:
         - name: worker
           readinessProbe:
             exec:
-              command: [python, manage.py, check_heartbeat, collection, recalculation, comparison]
+              command: [python, manage.py, check_heartbeat, collection, recalculation, comparison, deletion_preview]
             initialDelaySeconds: 30
             periodSeconds: 30
             timeoutSeconds: 10

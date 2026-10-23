@@ -266,17 +266,17 @@ their saved data.
 
 ### Collection and recalculation concurrency
 
-The normal `python manage.py audit_worker` command now supervises three independent
+The normal `python manage.py audit_worker` command now supervises four independent
 lanes in the existing worker container. One collection may run globally, and one
-finding-review indexing/recalculation and one snapshot comparison may run alongside it. Additional jobs remain queued.
+finding-review indexing/recalculation, one snapshot comparison and one read-only deletion preview may run alongside it. Confirmed deletion shares the collection lane. Additional jobs remain queued.
 PostgreSQL locks enforce these limits across worker replicas; SQLite is intended
 for a single-worker development deployment. No extra Compose service or Kubernetes
-Deployment is needed. Allow worker memory for all three subprocesses together.
+Deployment is needed. Allow worker memory for all four subprocesses together.
 
 The command name remains `audit_worker` for deployment compatibility; UI labels use
-“collection worker.” `--lane collection`, `--lane recalculation` and `--lane comparison` are available
+“collection worker.” `--lane collection`, `--lane recalculation` `--lane comparison` and `--lane deletion_preview` are available
 for separate process deployments. `--once` processes at most one job and exits;
-with its default lane it conservatively reserves all three lanes for that invocation.
+with its default lane it conservatively reserves all four lanes for that invocation.
 Stop old worker replicas during upgrade, apply migrations, then start the matching new build.
 
 ### Filtering comparisons and personal work

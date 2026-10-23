@@ -544,6 +544,15 @@ class DeletionBatch(models.Model):
     confirmed_at = models.DateTimeField(null=True)
     finished_at = models.DateTimeField(null=True)
 
+    @property
+    def status_label(self):
+        return {
+            'preview_queued': 'Waiting for preview worker',
+            'checking': 'Checking live deletion preview',
+            'queued': 'Waiting for collection lane to become available',
+            'running': 'Executing confirmed deletion',
+        }.get(self.status, self.status.replace('_', ' ').capitalize())
+
     class Meta:
         permissions = [('execute_nsx_deletion', 'Execute approved NSX object deletions')]
 

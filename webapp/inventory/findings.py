@@ -121,6 +121,13 @@ def synchronize(environment_id, collected_snapshot=None, job_id=None):
             if len(creates) + len(updates) >= 100:
                 flush()
             continue
+        if (finding.workflow_state == 'decommissioned'
+                and evidence.get('unique_id') and evidence.get('created_at') is not None
+                and any(evidence.get(key) != finding.evidence.get(key) for key in ('unique_id', 'created_at'))):
+            finding.workflow_state = 'owner_review' if finding.owner_id else 'unassigned'
+            finding.approvals = {}
+            finding.change_ticket = ''
+            events.append((finding, 'A different object identity was observed at this path. Previous decommissioning remains in history; new review required.'))
         if not finding.present or review_fingerprint(kind, evidence) != review_fingerprint(kind, finding.evidence):
             invalidate(finding, 'Relevant evidence changed or the condition was observed again.')
         if coverage_changed(finding, report.get('search_coverage')):

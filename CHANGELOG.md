@@ -2,6 +2,10 @@
 
 ## Development — 2026-10-23
 
+- Support flat VM Name/Tag AND conditions for direct deletion verification. Close and cross-link related findings only after verified object absence, preserve approvals, and restart review for recreated object identities.
+
+- Run read-only deletion previews in an independent supervised lane in the existing worker container. Keep confirmed deletion serialized with collection; add queue labels and preview heartbeat monitoring.
+
 - Deletion previews now explain why direct group verification is unavailable,
   including collection-specific evidence failures and observation gap limits,
   instead of showing only the generic VM inventory warning.

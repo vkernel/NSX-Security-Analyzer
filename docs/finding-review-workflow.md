@@ -494,7 +494,7 @@ single-approval or four-eyes setting. Empty-group findings use membership eviden
 **Ready for decommissioning** findings now offer **Delete from NSX — preview** to
 administrators. The review list links to a separate selection page for up to 100
 ready findings; repeated paths are deduplicated. Preview is read-only and is
-processed by the existing collection worker, so it waits for an active collection.
+processed in an independent preview lane in the existing worker container, alongside active collections. Confirmed DELETE execution remains serialized with collection.
 
 Supported targets are local-manager groups, custom services (including their service
 entries), DFW rules and empty DFW policies. VM/tag operations, global/project objects,
@@ -534,7 +534,7 @@ API references: [Group deletion](https://developer.broadcom.com/xapis/nsx-t-data
 
 1. Open a ready finding and choose **Delete from NSX — preview**, or open the
    deletion selection page from Finding reviews to select multiple ready objects.
-2. Wait for the collection worker, then use **Refresh results**. Opening a preview
+2. Wait for the preview worker, then use **Refresh results**. Opening a preview
    does not delete anything. Review each result and its saved-snapshot impact link.
 3. When verified objects are available, open **Review permanent deletion**, check
    their names and paths, enter a change ticket and explicitly confirm. The preview
@@ -615,7 +615,7 @@ API or automatic DELETE retries are added.
 ### Targeted verification when global VM pagination is incomplete
 
 Deletion previews can use retained qualified history for a local group containing
-exactly one positive VM Name or Tag equality condition. Normal finding approvals
+one or more positive VM Name or Tag equality conditions joined only by AND. Normal finding approvals
 remain paused; this exception is only for already-ready deletion requests.
 
 The saved history must remain fresh, within the configured observation gap, and
@@ -641,3 +641,24 @@ changed criteria, or expired observation history. Collection-specific failures
 include the collection ID and timestamp. Resolve the stated cause and create a
 new preview; existing preview results remain historical. These diagnostics do not
 relax approval, membership, reference, or freshness requirements.
+
+
+### Related findings for a decommissioned object
+
+After NSX deletion succeeds and a read confirms absence, all open findings with
+that environment, path, unique identity and creation time are marked decommissioned.
+For example, deleting an approved empty group also closes its unused-group finding,
+even if that related review was unassigned. This records the outcome; it does not
+approve the related finding. Original assignments and decisions remain retained.
+The confirmation lists related findings, and their histories link to the primary
+finding and deletion batch. Failed or uncertain deletion never closes them.
+Manual completion attempts a read-only absence check before closing related findings;
+if the object still exists or the check fails, related reviews remain open and the
+primary history explains why. A different object identity later collected at the
+same path starts review again without inheriting the old approvals or completion.
+
+Direct deletion verification supports local flat VM Name/Tag EQUALS conditions,
+either a single condition or multiple conditions joined only by AND. It still
+requires explicit empty VM, IP and port results plus all existing retained-history,
+identity, approval and dependency checks. OR, nested, mixed and extended definitions
+remain blocked. This does not change collection membership shortcuts.

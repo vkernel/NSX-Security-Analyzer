@@ -199,6 +199,10 @@ def process_item(item, execute=False):
                                   'disabled':'Rule remains disabled', 'zero_hits':'Fresh zero counters confirmed',
                                   'empty_policy':'Fresh rule inventory confirmed empty'}[finding.kind],
                 }
+                from .related_decommission import related_findings
+                item.verification['Related findings'] = [
+                    {'id': row.pk, 'kind': {'unused': 'Unused group', 'unused_service': 'Unused custom service'}.get(row.kind, row.kind.replace('_', ' ').capitalize()), 'name': row.name}
+                    for row in related_findings(finding)]
                 item.status, item.message = 'verified', 'Ready for confirmation. Required live checks passed; explicit execution authorization is still required.'
             else:
                 if obj != item.before: raise ValidationError('Object changed after preview. Create a new preview.')
@@ -236,6 +240,8 @@ def process_item(item, execute=False):
                         finding.save(update_fields=['workflow_state','change_ticket','revision'])
                         event(finding, 'nsx_deleted', before, 'NSX DELETE accepted and object absence verified.', batch.requested_by,
                               {'deletion_batch':str(batch.pk), 'deletion_item':item.pk, 'change_ticket':batch.ticket, 'http_status':status})
+                        from .related_decommission import close_related
+                        close_related(finding, batch.requested_by, deletion_item=item)
                         item.status, item.message = 'deleted', 'Deleted from NSX and absence verified.'
     except Exception as exc:
         item.status = 'uncertain' if sent else 'blocked'
@@ -247,9 +253,9 @@ def process_item(item, execute=False):
                     'ticket':batch.ticket, 'http_status':item.http_status, 'message':item.message})
 
 
-def claim():
+def claim(*, preview=False):
     with transaction.atomic():
-        batch = DeletionBatch.objects.select_for_update(skip_locked=True).filter(status__in=['preview_queued','queued']).order_by('created_at').first()
+        batch = DeletionBatch.objects.select_for_update(skip_locked=True).filter(status='preview_queued' if preview else 'queued').order_by('created_at').first()
         if batch:
             batch.status = 'checking' if batch.status == 'preview_queued' else 'running'
             batch.save(update_fields=['status'])
@@ -347,8 +353,11 @@ def detail(request, pk):
     warnings = []
     if latest and latest.summary.get('inventory_warnings'):
         warnings = batch.environment.snapshots.filter(pk=latest.pk).values_list('report__inventory_warnings', flat=True).first() or []
-    return render(request,'inventory/deletion_detail.html',{'batch':batch,'items':batch.items.select_related('finding'),
-        'status_label':batch.status.replace('_', ' ').capitalize(), 'latest_snapshot':latest, 'inventory_warnings':warnings, 'inventory_blocked':bool(latest and latest.summary.get('inventory_warnings')),
+    items = list(batch.items.select_related('finding'))
+    for item in items:
+        item.related_findings = item.verification.get('Related findings', [])
+    return render(request,'inventory/deletion_detail.html',{'batch':batch,'items':items,
+        'status_label':batch.status_label, 'latest_snapshot':latest, 'inventory_warnings':warnings, 'inventory_blocked':bool(latest and latest.summary.get('inventory_warnings')),
         'error':error,'verified_count':batch.items.filter(status='verified').count(),
         'can_confirm': batch.status=='preview_ready' and batch.requested_by_id==request.user.pk})
 

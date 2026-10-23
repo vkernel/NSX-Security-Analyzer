@@ -60,23 +60,24 @@ class LaneClaimsTests(TestCase):
 
 
 class SupervisorTests(SimpleTestCase):
-    def test_supervisor_starts_and_stops_all_three_lanes(self):
-        processes=[MagicMock(),MagicMock(),MagicMock()]
+    def test_supervisor_starts_and_stops_all_four_lanes(self):
+        processes=[MagicMock() for _ in LANES]
         for process in processes: process.poll.return_value=None
         with patch('inventory.management.commands.audit_worker.subprocess.Popen',side_effect=processes) as spawn, patch('inventory.management.commands.audit_worker.time.sleep',side_effect=KeyboardInterrupt):
             with self.assertRaises(KeyboardInterrupt): Command().supervise_lanes()
         self.assertEqual(spawn.call_args_list[0].args[0][-1],'collection')
         self.assertEqual(spawn.call_args_list[1].args[0][-1],'recalculation')
         self.assertEqual(spawn.call_args_list[2].args[0][-1],'comparison')
+        self.assertEqual(spawn.call_args_list[3].args[0][-1], 'deletion_preview')
         for process in processes:
             process.terminate.assert_called_once()
             process.wait.assert_called_once_with(timeout=15)
 
     def test_each_lane_claims_only_its_own_queue(self):
-        for lane in ('collection', 'recalculation', 'comparison'):
+        for lane in LANES:
             with self.subTest(lane=lane):
                 command = Command()
-                with patch.object(command, 'run_deletion', return_value=False), patch.object(command, 'check_lease'), \
+                with patch.object(command, 'run_deletion', return_value=False) as deletion, patch.object(command, 'check_lease'), \
                      patch('inventory.management.commands.audit_worker.expire_jobs'), \
                      patch('inventory.management.commands.audit_worker.claim_job', return_value=None) as collection, \
                      patch('inventory.finding_recalculation.claim', return_value=None) as recalculation, \
@@ -86,6 +87,9 @@ class SupervisorTests(SimpleTestCase):
                 self.assertEqual(recalculation.call_count, int(lane == 'recalculation'))
                 self.assertEqual(comparison.call_count, int(lane == 'comparison'))
                 self.assertEqual(command.heartbeat_lanes, (lane,))
+                if lane == 'deletion_preview': deletion.assert_called_once_with(preview=True)
+                elif lane == 'collection': deletion.assert_called_once_with()
+                else: deletion.assert_not_called()
 
     def test_comparison_runs_while_other_queues_are_busy(self):
         command = Command()
@@ -105,3 +109,42 @@ class SupervisorTests(SimpleTestCase):
             with patch.object(command, 'supervise_lanes') as supervise:
                 command.handle(**options)
             supervise.assert_called_once()
+
+class DeletionLaneTests(TestCase):
+    def setUp(self):
+        from .models import DeletionBatch
+        self.env = Environment.objects.create(name='Preview', slug='preview', manager='https://example.test')
+        self.preview = DeletionBatch.objects.create(environment=self.env, manager=self.env.manager)
+        self.execution = DeletionBatch.objects.create(environment=self.env, manager=self.env.manager, status='queued')
+
+    def test_preview_claim_does_not_claim_execution_or_wait_for_collection(self):
+        from .deletion import claim
+        AuditJob.objects.create(environment=self.env, status='running')
+        self.assertEqual(claim(preview=True).pk, self.preview.pk)
+        self.assertIsNone(claim(preview=True))
+        self.execution.refresh_from_db()
+        self.assertEqual(self.execution.status, 'queued')
+        self.assertEqual(claim().pk, self.execution.pk)
+        self.assertIsNone(claim())
+
+    def test_reconciliation_never_interrupts_other_lane(self):
+        for preview in (True, False):
+            self.preview.status = 'checking'; self.preview.save()
+            self.execution.status = 'running'; self.execution.save()
+            with patch('inventory.deletion.claim', return_value=None):
+                self.assertFalse(Command().run_deletion(preview=preview))
+            self.preview.refresh_from_db(); self.execution.refresh_from_db()
+            self.assertEqual(self.preview.status, 'interrupted' if preview else 'checking')
+            self.assertEqual(self.execution.status, 'running' if preview else 'interrupted')
+
+    def test_preview_lease_is_exclusive_and_independent(self):
+        if connection.vendor != 'postgresql': self.skipTest('PostgreSQL advisory locks')
+        with lease('collection') as collection, lease('deletion_preview') as preview:
+            self.assertIsNot(collection, False)
+            self.assertIsNot(preview, False)
+            with lease('deletion_preview') as duplicate:
+                self.assertIs(duplicate, False)
+
+    def test_queue_labels_explain_separate_lanes(self):
+        self.assertEqual(self.preview.status_label, 'Waiting for preview worker')
+        self.assertEqual(self.execution.status_label, 'Waiting for collection lane to become available')

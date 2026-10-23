@@ -9,6 +9,23 @@ from .models import Snapshot, SnapshotRecord
 from .transient import matching
 
 
+def supported_vm_group(group):
+    """Deletion-only allowlist: flat positive VM conditions joined by AND."""
+    expressions = group.get('expression')
+    if not isinstance(expressions, list) or not expressions or len(expressions) % 2 == 0:
+        return False
+    for index, expression in enumerate(expressions):
+        if not isinstance(expression, dict):
+            return False
+        if index % 2:
+            if (expression.get('resource_type') != 'ConjunctionOperator'
+                    or expression.get('conjunction_operator') != 'AND'):
+                return False
+        elif not collector.vm_fast_eligible(dict(group, expression=[expression])):
+            return False
+    return True
+
+
 def historical_group_evidence(finding, latest, *, blockers=None):
     """Return a fresh approved source only when every intervening gap is VM-only.
 
@@ -23,8 +40,8 @@ def historical_group_evidence(finding, latest, *, blockers=None):
     config = finding.evidence.get('configuration') or {}
     if finding.kind != 'empty_group' or finding.workflow_state != 'ready':
         return blocked('finding_not_ready', 'Direct verification requires an empty-group finding already ready for decommissioning.')
-    if not collector.vm_fast_eligible(config):
-        return blocked('unsupported_group_definition', 'The saved group definition is not supported for direct verification. It must be a local group with exactly one VM Name or Tag EQUALS condition, without nested, mixed or extended expressions. Review the group Technical details.')
+    if not supported_vm_group(config):
+        return blocked('unsupported_group_definition', 'The saved group definition is not supported for direct verification. It must be a local group with one or more VM Name or Tag EQUALS conditions joined only by AND, without nested, mixed or extended expressions. Review the group Technical details.')
     source = Snapshot.objects.filter(pk=finding.snapshot_id, environment_id=finding.environment_id,
                                      testing=False, imported=False).only('pk','generated_at','summary').first()
     if not source or not latest:
@@ -81,7 +98,7 @@ def historical_group_evidence(finding, latest, *, blockers=None):
 
 def strict_group_empty(client, group):
     """Explicit zero from every applicable endpoint; no VM-only fast shortcut."""
-    if not collector.vm_fast_eligible(group):
+    if not supported_vm_group(group):
         return False
     for endpoint in ('virtual-machines','ip-addresses','logical-ports'):
         page = client.get(group['path']+'/members/'+endpoint, {'page_size':1})

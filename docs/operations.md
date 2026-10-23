@@ -371,8 +371,8 @@ matching web, worker and scheduler images. For development deployments, pin the 
 Category overrides initially inherit the workspace default; inspect **Administration →
 Review approvals → Preview changes** before changing effective approval requirements.
 
-Deletion previews and execution use the existing collection lane. A busy collection
-can delay them; no additional worker is required. Refresh the deletion request page
+Deletion previews use an independent lane in the existing worker container. A busy
+collection delays confirmed DELETE execution, but does not delay read-only previews. Refresh the deletion request page
 for progress. Do not restart a worker during a confirmed deletion unless necessary;
 interrupted or uncertain outcomes require checking NSX before a new request.
 
@@ -401,3 +401,12 @@ and check results. Recreate older previews after rollout. Collection already ret
 inconsistent pagination up to three times per endpoint; this upgrade scopes finding
 pauses to known affected evidence and leaves unknown failures blocking. It does not
 increase workers, accept missing inventory percentages, or add automatic recovery.
+
+When upgrading to independent deletion previews, stop the old worker before starting
+the updated worker; do not overlap old and new workers because old versions claim
+both deletion queues under the collection lease. Deploy matching web/worker images.
+The default `audit_worker` supervises the new `deletion_preview` lane automatically.
+Custom explicit-lane deployments must also run `--lane deletion_preview`. Monitor
+its heartbeat alongside collection, recalculation and comparison. No new schema
+migration is required. Preview adds read-only NSX traffic while collection runs;
+existing confirmation, expiry and live execution checks remain mandatory.
