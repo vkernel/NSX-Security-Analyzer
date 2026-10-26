@@ -216,8 +216,8 @@ HTTP 400/404/405/501 start at six hours. Repeated failures double the delay up t
 reused. Missing/unmapped counters in a successful bulk response do not trigger
 this cooldown.
 Additional worker replicas do not increase the global one-collection limit. Keep
-`audit_worker --lane all` (the default) for all four task queues, or use separately
-sized `collection`, `recalculation`, `comparison` and `deletion_preview` lane processes with the same
+`audit_worker --lane all` (the default) for all five task queues, or use separately
+sized `collection`, `recalculation`, `comparison`, `deletion_preview` and `deletion_execution` lane processes with the same
 image and database. Account for their combined memory usage. See
 [resource sizing](../docs/resource-sizing.md#concurrent-collection-and-finding-history-replay).
 

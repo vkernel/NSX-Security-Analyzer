@@ -371,8 +371,7 @@ matching web, worker and scheduler images. For development deployments, pin the 
 Category overrides initially inherit the workspace default; inspect **Administration →
 Review approvals → Preview changes** before changing effective approval requirements.
 
-Deletion previews use an independent lane in the existing worker container. A busy
-collection delays confirmed DELETE execution, but does not delay read-only previews. Refresh the deletion request page
+Deletion previews use an independent lane in the existing worker container. Confirmed DELETE execution also uses an independent lane; collection does not occupy either deletion queue. Refresh the deletion request page
 for progress. Do not restart a worker during a confirmed deletion unless necessary;
 interrupted or uncertain outcomes require checking NSX before a new request.
 
@@ -410,3 +409,18 @@ Custom explicit-lane deployments must also run `--lane deletion_preview`. Monito
 its heartbeat alongside collection, recalculation and comparison. No new schema
 migration is required. Preview adds read-only NSX traffic while collection runs;
 existing confirmation, expiry and live execution checks remain mandatory.
+
+
+When upgrading to independent deletion execution, stop the old worker before starting
+the new one: older builds claim execution under the collection lease. The default
+worker starts `deletion_execution` automatically; explicit-lane deployments must add
+it and include it in heartbeat checks. There is no additional deployment or schema
+migration. Allow memory for the extra lane and concurrent read-only NSX verification.
+Final guarded deletion coordinates with publication through the environment lock;
+that lock includes bounded final NSX requests, not the whole collection or preflight.
+Verified deletion records and finding closure commit together. Publication and history
+replay suppress evidence for those deleted identities, including new finding kinds
+from an overlapping snapshot. A new identity at the same path can be reviewed.
+Preserve deletion records as durable evidence; incomplete identity cannot prove recreation.
+Historical snapshots remain unchanged and display a reminder that deletion history
+and finding reviews carry current decommissioning outcomes.

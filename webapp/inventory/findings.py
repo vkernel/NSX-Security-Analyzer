@@ -99,7 +99,12 @@ def synchronize(environment_id, collected_snapshot=None, job_id=None):
         events.clear()
     processed = 0
     seen = set()
+    from .deleted_objects import identities, superseded
+    deleted = identities(environment_id)
     for kind, path, name, evidence in candidates(report):
+        if superseded(deleted, path, evidence):
+            seen.add((kind, path))
+            continue
         if relevant(coverage, kind, path):
             continue  # Keep prior decisions and observations; never count uncertain evidence.
         processed += 1

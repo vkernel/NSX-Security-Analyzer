@@ -130,6 +130,42 @@ class HistoricalExecutionTests(TestCase):
         self.assertEqual(self.finding.approvals, {})
         self.assertEqual(self.finding.change_ticket, '')
 
+    def test_overlapping_snapshot_and_replay_cannot_restore_deleted_identity(self):
+        from .models import DeletionBatch, DeletionItem
+        from . import finding_recalculation as replay
+        self.finding.workflow_state = 'decommissioned'
+        self.finding.present = False
+        self.finding.change_ticket = 'CHG-deleted'
+        self.finding.save()
+        batch = DeletionBatch.objects.create(environment=self.env, manager=self.env.manager)
+        item = DeletionItem.objects.create(batch=batch, finding=self.finding, path=self.finding.path,
+            name='G', revision=self.finding.revision, status='deleted', approved_evidence=self.finding.evidence)
+        # A collection can finish after DELETE with rows retrieved before it.
+        self.row['usage'] = 'unused_candidate'
+        self.snapshot(0, [])
+        synchronize(self.env.pk)
+        self.finding.refresh_from_db()
+        self.assertFalse(self.finding.present)
+        self.assertEqual(self.finding.workflow_state, 'decommissioned')
+        self.assertFalse(Finding.objects.filter(environment=self.env, kind='unused').exists())
+        replay.queue([self.env.pk], ['empty_group', 'unused'])
+        job = replay.claim()
+        replay.run(job.pk, job.token)
+        self.finding.refresh_from_db(); job.refresh_from_db()
+        self.assertEqual(job.status, 'completed')
+        self.assertFalse(self.finding.present)
+        self.assertEqual(self.finding.change_ticket, 'CHG-deleted')
+        self.assertFalse(Finding.objects.filter(environment=self.env, kind='unused').exists())
+        # A truly new identity may be collected and reviewed normally.
+        self.row['unique_id'] = 'new-object'
+        self.snapshot(1, [])
+        synchronize(self.env.pk)
+        self.finding.refresh_from_db()
+        self.assertTrue(self.finding.present)
+        self.assertEqual(self.finding.workflow_state, 'unassigned')
+        self.assertTrue(Finding.objects.filter(environment=self.env, kind='unused').exists())
+
+
 class FlatAndDefinitionTests(SimpleTestCase):
     def test_flat_vm_and_is_supported_without_changing_collection_fast_path(self):
         from .deletion_readiness import supported_vm_group

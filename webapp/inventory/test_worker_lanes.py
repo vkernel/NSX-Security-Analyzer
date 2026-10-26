@@ -60,7 +60,7 @@ class LaneClaimsTests(TestCase):
 
 
 class SupervisorTests(SimpleTestCase):
-    def test_supervisor_starts_and_stops_all_four_lanes(self):
+    def test_supervisor_starts_and_stops_all_five_lanes(self):
         processes=[MagicMock() for _ in LANES]
         for process in processes: process.poll.return_value=None
         with patch('inventory.management.commands.audit_worker.subprocess.Popen',side_effect=processes) as spawn, patch('inventory.management.commands.audit_worker.time.sleep',side_effect=KeyboardInterrupt):
@@ -69,6 +69,7 @@ class SupervisorTests(SimpleTestCase):
         self.assertEqual(spawn.call_args_list[1].args[0][-1],'recalculation')
         self.assertEqual(spawn.call_args_list[2].args[0][-1],'comparison')
         self.assertEqual(spawn.call_args_list[3].args[0][-1], 'deletion_preview')
+        self.assertEqual(spawn.call_args_list[4].args[0][-1], 'deletion_execution')
         for process in processes:
             process.terminate.assert_called_once()
             process.wait.assert_called_once_with(timeout=15)
@@ -88,7 +89,7 @@ class SupervisorTests(SimpleTestCase):
                 self.assertEqual(comparison.call_count, int(lane == 'comparison'))
                 self.assertEqual(command.heartbeat_lanes, (lane,))
                 if lane == 'deletion_preview': deletion.assert_called_once_with(preview=True)
-                elif lane == 'collection': deletion.assert_called_once_with()
+                elif lane == 'deletion_execution': deletion.assert_called_once_with()
                 else: deletion.assert_not_called()
 
     def test_comparison_runs_while_other_queues_are_busy(self):
@@ -147,4 +148,12 @@ class DeletionLaneTests(TestCase):
 
     def test_queue_labels_explain_separate_lanes(self):
         self.assertEqual(self.preview.status_label, 'Waiting for preview worker')
-        self.assertEqual(self.execution.status_label, 'Waiting for collection lane to become available')
+        self.assertEqual(self.execution.status_label, 'Waiting for deletion worker')
+
+    def test_execution_lease_does_not_wait_for_collection(self):
+        if connection.vendor != 'postgresql': self.skipTest('PostgreSQL advisory locks')
+        with lease('collection') as collection, lease('deletion_execution') as execution:
+            self.assertIsNot(collection, False)
+            self.assertIsNot(execution, False)
+            with lease('deletion_execution') as duplicate:
+                self.assertIs(duplicate, False)

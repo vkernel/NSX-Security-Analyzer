@@ -53,7 +53,7 @@ bytecode is disposable. Private deployment files and backups are ignored by Git
 and excluded from Docker builds; they are not part of the distributed application.
 
 Administrator deletion requests are stored as batches with per-object evidence and
-outcomes. Read-only previews run in a separate lane; confirmed execution shares the collection lane. The
+outcomes. Read-only previews run in a separate lane; confirmed execution uses its own exclusive lane. The
 worker revalidates approvals and live evidence before each DELETE, never retries a
 DELETE automatically, and records uncertain outcomes separately. See the
 [workflow](finding-review-workflow.md#delete-approved-objects-from-nsx).

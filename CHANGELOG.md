@@ -2,6 +2,8 @@
 
 ## Development — 2026-10-26
 
+- Add an independent confirmed-deletion lane. Commit verified deletion evidence with finding closure and prevent overlapping snapshots/history replay from restoring deleted identities. Preserve review for newly recreated identities.
+
 - Try flat NOT and ! runtime exclusions within the existing search budget. Record failed pagination totals and duplicate/unique counts by resource type in live deletion diagnostics.
 
 - Ignore excluded runtime-record payload conflicts only during configuration dependency searches while retaining identity/count/cursor verification. Clarify inventory verification errors and contain deletion diagnostics within the results layout.

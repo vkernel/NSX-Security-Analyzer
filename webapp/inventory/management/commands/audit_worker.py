@@ -13,10 +13,10 @@ from inventory.services import claim_job, expire_jobs, fail_job, stop_requested,
 
 
 class Command(BaseCommand):
-    help = "Run independent collection, finding-review indexing, comparison and deletion-preview lanes."
+    help = "Run independent collection, finding-review indexing, comparison, deletion-preview and deletion-execution lanes."
 
     def add_arguments(self, parser):
-        parser.add_argument("--lane", choices=["all", "both", *LANES], default="all", help="Default supervises all four lanes independently; both is a legacy alias for all.")
+        parser.add_argument("--lane", choices=["all", "both", *LANES], default="all", help="Default supervises all five lanes independently; both is a legacy alias for all.")
         parser.add_argument("--once", action="store_true", help="Process at most one queued job, then exit.")
 
     def handle(self, *args, **options):
@@ -189,12 +189,12 @@ class Command(BaseCommand):
             if lane in ('all', 'both', 'deletion_preview') and self.run_deletion(preview=True):
                 if options['once']: return
                 continue
-            if lane in ('recalculation', 'comparison', 'deletion_preview'):
+            if lane in ('all', 'both', 'deletion_execution') and self.run_deletion():
+                if options['once']: return
+                continue
+            if lane in ('recalculation', 'comparison', 'deletion_preview', 'deletion_execution'):
                 if options['once']: return
                 time.sleep(2)
-                continue
-            if self.run_deletion():
-                if options['once']: return
                 continue
             with phase('worker', 'expire_stale_jobs', quiet=True):
                 expire_jobs()

@@ -239,14 +239,19 @@ def process_item(item, execute=False):
                     else:
                         before = finding.workflow_state
                         finding.workflow_state = 'decommissioned'
+                        finding.present = False
                         finding.change_ticket = batch.ticket
                         finding.revision += 1
-                        finding.save(update_fields=['workflow_state','change_ticket','revision'])
+                        finding.save(update_fields=['workflow_state','change_ticket','revision','present'])
                         event(finding, 'nsx_deleted', before, 'NSX DELETE accepted and object absence verified.', batch.requested_by,
                               {'deletion_batch':str(batch.pk), 'deletion_item':item.pk, 'change_ticket':batch.ticket, 'http_status':status})
                         from .related_decommission import close_related
                         close_related(finding, batch.requested_by, deletion_item=item)
                         item.status, item.message = 'deleted', 'Deleted from NSX and absence verified.'
+                        # Commit deletion evidence with review closure under the
+                        # environment lock, before publication can proceed.
+                        item.finished_at = timezone.now()
+                        item.save()
     except Exception as exc:
         item.status = 'uncertain' if sent else 'blocked'
         item.message = describe_error(exc)

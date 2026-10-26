@@ -70,3 +70,14 @@ class RelatedDecommissionTests(DeletionTests):
         self.item.refresh_from_db()
         self.assertEqual(self.item.verification['Related findings'][0]['id'],sibling.pk)
         self.assertContains(self.client.get(reverse('deletion-detail',args=[self.batch.pk])), 'Related findings that will also close')
+
+    def test_only_confirmed_deletion_evidence_suppresses_matching_identity(self):
+        from .deleted_objects import identities, superseded
+        self.item.status = 'uncertain'; self.item.save()
+        self.assertFalse(superseded(identities(self.env.pk), self.finding.path, self.evidence))
+        self.item.status = 'deleted'; self.item.save()
+        deleted = identities(self.env.pk)
+        self.assertTrue(superseded(deleted, self.finding.path, self.evidence))
+        self.assertTrue(superseded(deleted, self.finding.path, {}))
+        self.assertFalse(superseded(deleted, self.finding.path, dict(self.evidence, unique_id='new')))
+        self.assertFalse(superseded(identities(self.env.pk+1000), self.finding.path, self.evidence))

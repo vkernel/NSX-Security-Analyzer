@@ -5,6 +5,7 @@
 {% block extra_head %}<link rel="stylesheet" href="{% static 'report-workspace.css' %}">{% endblock %}
 
 {% block content %}
+<p class="notice">Historical collection evidence may predate or overlap an NSX deletion. Finding reviews and deletion history show the current decommissioning outcome; a snapshot does not restore a deleted object.</p>
 <a class="breadcrumb" href="{% url 'environment' snapshot.environment_id %}">← {{ snapshot.environment.name }} / History</a>
 {% if finding_link %}<div class="notice" id="finding-snapshot-link" data-path="{{ finding_link.path }}" data-name="{{ finding_link.name }}"><a href="{% url 'finding-detail' snapshot.environment_id finding_link.pk %}?return_to={{ review_return|urlencode }}">← Back to finding review</a><p role="status">Locating {{ finding_link.name }} in this evaluated snapshot…</p></div>{% elif request.GET.finding %}<div class="notice" role="status">This finding is no longer linked to this snapshot. Open its finding review to view the current evaluated snapshot.</div>{% endif %}
 {% if request.GET.object and not finding_link %}<div class="notice" id="finding-snapshot-link" data-view="{{ request.GET.view }}" data-tag="{{ request.GET.tag }}" data-scope="{{ request.GET.scope }}" data-path="{{ request.GET.object }}" data-name="{{ request.GET.object }}"><p role="status">Locating the selected object in this snapshot…</p></div>{% endif %}

@@ -494,7 +494,7 @@ single-approval or four-eyes setting. Empty-group findings use membership eviden
 **Ready for decommissioning** findings now offer **Delete from NSX — preview** to
 administrators. The review list links to a separate selection page for up to 100
 ready findings; repeated paths are deduplicated. Preview is read-only and is
-processed in an independent preview lane in the existing worker container, alongside active collections. Confirmed DELETE execution remains serialized with collection.
+processed in an independent preview lane in the existing worker container, alongside active collections. Confirmed DELETE execution uses a separate serialized deletion lane alongside collection.
 
 Supported targets are local-manager groups, custom services (including their service
 entries), DFW rules and empty DFW policies. VM/tag operations, global/project objects,

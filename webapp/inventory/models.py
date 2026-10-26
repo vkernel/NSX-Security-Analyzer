@@ -549,7 +549,7 @@ class DeletionBatch(models.Model):
         return {
             'preview_queued': 'Waiting for preview worker',
             'checking': 'Checking live deletion preview',
-            'queued': 'Waiting for collection lane to become available',
+            'queued': 'Waiting for deletion worker',
             'running': 'Executing confirmed deletion',
         }.get(self.status, self.status.replace('_', ' ').capitalize())
 

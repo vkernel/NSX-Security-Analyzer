@@ -173,6 +173,14 @@ def run(pk, token):
             current.update(status='queued', processed=0)
             return
         existing = {(f.kind, f.path): f for f in Finding.objects.filter(environment=env, kind__in=job.kinds).defer('evidence')}
+        from .deleted_objects import identities, superseded
+        deleted = identities(env.pk)
+        for key in list(states):
+            target = existing.get(key)
+            evidence = restored.get(key, target.evidence if target and key[1] in deleted else {})
+            if superseded(deleted, key[1], evidence):
+                states.pop(key)
+                existing.pop(key, None)
         # Restore evidence and presence for rows missing from the live finding state.
         restore = {key for key in states if key not in existing or not existing[key].present}
         if not restore.issubset(restored):

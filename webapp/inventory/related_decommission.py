@@ -19,9 +19,10 @@ def close_related(primary, actor, *, deletion_item=None):
     for sibling in related_findings(primary, lock=True):
         before = sibling.workflow_state
         sibling.workflow_state = 'decommissioned'
+        sibling.present = False
         sibling.change_ticket = primary.change_ticket
         sibling.revision += 1
-        sibling.save(update_fields=['workflow_state', 'change_ticket', 'revision'])
+        sibling.save(update_fields=['workflow_state', 'change_ticket', 'revision', 'present'])
         extra = {'primary_finding': primary.pk, 'change_ticket': primary.change_ticket,
                  'absence_verified': True}
         if deletion_item:

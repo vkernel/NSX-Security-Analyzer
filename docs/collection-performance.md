@@ -375,10 +375,9 @@ separate coverage limitations, not pacing failures. The collector preserves thos
 limitations when the available endpoints cannot verify the evidence; resolving a
 request timeout does not make unsupported membership checks complete.
 
-The collection worker supervises four independent subprocess lanes: at most one
+The collection worker supervises five independent subprocess lanes: at most one
 collection across all environments, one finding-review indexing/recalculation task,
-one snapshot comparison, and one read-only deletion preview. Confirmed deletion
-shares the collection lane. PostgreSQL
+one snapshot comparison, and one read-only deletion preview. Confirmed deletion runs in its own lane alongside collection. PostgreSQL
 session advisory locks enforce each lane across worker replicas, including while a
 recalculation is superseded by newly saved criteria. The work queues are independent;
 a recalculation and a comparison can run alongside a collection. Publication for the same environment
