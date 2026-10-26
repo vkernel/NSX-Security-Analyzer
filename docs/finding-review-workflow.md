@@ -733,3 +733,11 @@ The **Deletion history** tab beside **Decommissioned** lists requests, requester
 ticket, object count and outcomes, with 25 requests per page. Open a request for its
 results and saved configuration. History is restricted to administrators with deletion
 permission, as are the deletion actions.
+
+Deletion history shows up to three object names, types and individual outcomes per
+request. Expand **View all objects** (or **View object details** for small requests) to
+see every retained name and NSX path, the result message, saved configuration and linked
+finding. Object records remain visible even when the finding is no longer available.
+Search by object name, path or change ticket, and filter by object outcome and type.
+Filters must match the same object; matching requests still display their full object
+list and original totals. Pagination preserves the selected filters.

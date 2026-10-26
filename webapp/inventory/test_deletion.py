@@ -66,6 +66,36 @@ class DeletionTests(TestCase):
         self.client.force_login(get_user_model().objects.create_user('history-reader', is_staff=True))
         self.assertEqual(self.client.get(url).status_code, 403)
 
+    def test_history_filters_match_same_object_and_preserve_totals(self):
+        self.item.status='deleted'; self.item.save()
+        DeletionItem.objects.create(batch=self.batch, path='/infra/domains/default/groups/old-group',
+                                    name='Old group', revision=1, status='blocked')
+        url=reverse('deletion-history', args=[self.env.pk])
+        response=self.client.get(url, {'type':'Group', 'outcome':'deleted'})
+        self.assertContains(response, 'No matching deletion requests')
+        response=self.client.get(url, {'q':'old-group', 'type':'Group', 'outcome':'blocked'})
+        self.assertEqual(response.context['page'].paginator.count, 1)
+        batch=response.context['page'][0]
+        self.assertEqual((batch.object_count, batch.deleted_count, batch.blocked_count), (2, 1, 1))
+        self.assertContains(response, 'Old group')
+        self.assertContains(response, 'Custom service')
+        self.assertIn('outcome=blocked', response.context['query_string'])
+        self.assertEqual(self.client.get(url, {'q':'CHG-1'}).context['page'].paginator.count, 1)
+        self.assertEqual(self.client.get(url, {'type':'Unsupported'}).context['page'].paginator.count, 0)
+
+    def test_history_retains_deleted_objects_without_finding(self):
+        self.item.finding=None; self.item.status='deleted'; self.item.name='Retained service'; self.item.save()
+        for index in range(3):
+            DeletionItem.objects.create(batch=self.batch, path=f'/infra/services/extra-{index}',
+                                        name=f'Extra {index}', revision=1, status='already_absent')
+        response=self.client.get(reverse('deletion-history', args=[self.env.pk]))
+        self.assertContains(response, 'Retained service')
+        self.assertContains(response, '/infra/services/test')
+        self.assertContains(response, 'View all 4 objects')
+        self.assertContains(response, 'Already absent')
+        self.assertContains(response, reverse('deletion-configuration', args=[self.item.pk]))
+        self.assertNotContains(response, '>View finding</a>')
+
     def test_progress_fragment_is_read_only_and_stops_at_preview(self):
         self.batch.status='checking'; self.batch.confirmed_at=None; self.batch.save()
         self.item.status='pending'; self.item.save()

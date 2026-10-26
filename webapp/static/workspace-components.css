@@ -273,3 +273,12 @@ body dialog#saved-configuration-dialog{width:min(880px,calc(100vw - 32px))}
 .deletion-results code {display:block; font-size:.8rem; margin:.4rem 0}
 .deletion-deadline {color:var(--muted); font-size:.9rem}
 @media(max-width:700px) {.deletion-summary {grid-template-columns:repeat(2,minmax(0,1fr))}.deletion-steps {gap:.5rem; font-size:.85rem}.deletion-results {table-layout:auto}}
+
+.deletion-object-list {list-style:none; padding:0; margin:0}
+.deletion-object-list li {margin:0 0 .75rem; overflow-wrap:anywhere}
+.deletion-object-list small,.deletion-object-list code {display:block; margin:.35rem 0; color:var(--muted)}
+.deletion-object-details {margin-top:.75rem}
+.deletion-object-details > ul {margin-top:1rem}
+.deletion-object-details li + li {border-top:1px solid var(--line); padding-top:1rem}
+.deletion-history-table td {overflow-wrap:anywhere}
+.deletion-history-table th:nth-child(3) {width:40%}

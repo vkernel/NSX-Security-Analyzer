@@ -8,7 +8,7 @@ import urllib3
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import ValidationError
 from django.core.paginator import Paginator
-from django.db.models import Count, Q
+from django.db.models import Count, Q, Prefetch
 from django.db import transaction
 from django.http import HttpResponse, HttpResponseForbidden
 from django.shortcuts import get_object_or_404, redirect, render
@@ -320,13 +320,43 @@ def history(request, pk):
     if not permitted(request.user):
         return HttpResponseForbidden('Administrator deletion permission is required.')
     env = get_object_or_404(Environment, pk=pk)
-    batches = DeletionBatch.objects.filter(environment=env).select_related('requested_by').annotate(
+    query = request.GET.get('q', '').strip()[:255]
+    outcome = request.GET.get('outcome', '')
+    object_type = request.GET.get('type', '')
+    outcomes = {'deleted': 'Deleted', 'blocked': 'Blocked', 'already_absent': 'Already absent',
+                'failed': 'Failed', 'uncertain': 'Uncertain', 'verified': 'Verified',
+                'pending': 'Pending', 'validating': 'Rechecking live evidence', 'sending': 'Deleting'}
+    types = {'Group': 'Group', 'Service': 'Custom service', 'Rule': 'Firewall rule', 'SecurityPolicy': 'Security policy'}
+    matches = DeletionItem.objects.filter(batch__environment=env)
+    if query:
+        matches = matches.filter(Q(name__icontains=query) | Q(path__icontains=query) | Q(batch__ticket__icontains=query))
+    if outcome:
+        matches = matches.filter(status=outcome) if outcome in outcomes else matches.none()
+    if object_type:
+        matches = matches.filter(path__regex='^' + PATTERNS[object_type] + '$') if object_type in types else matches.none()
+    batches = DeletionBatch.objects.filter(environment=env)
+    if query or outcome or object_type:
+        batches = batches.filter(pk__in=matches.values('batch_id'))
+    batches = batches.select_related('requested_by').annotate(
         object_count=Count('items'), deleted_count=Count('items', filter=Q(items__status='deleted')),
         blocked_count=Count('items', filter=Q(items__status='blocked')),
         attention_count=Count('items', filter=Q(items__status__in=['failed', 'uncertain'])),
-    ).order_by('-created_at')
+    ).prefetch_related(Prefetch('items', queryset=DeletionItem.objects.defer('before', 'approved_evidence', 'approvals', 'verification').order_by('pk'), to_attr='history_items')).order_by('-created_at')
+    page = Paginator(batches, 25).get_page(request.GET.get('page'))
+    for batch in page:
+        for item in batch.history_items:
+            try:
+                item.type_label = types[target_type(item.path)]
+            except ValidationError:
+                item.type_label = 'Object'
+            item.outcome_label = outcomes.get(item.status, item.status.replace('_', ' ').capitalize())
+        batch.preview_items = batch.history_items[:3]
+    params = request.GET.copy()
+    params.pop('page', None)
     return render(request, 'inventory/deletion_history.html', {
-        'environment': env, 'page': Paginator(batches, 25).get_page(request.GET.get('page')),
+        'environment': env, 'page': page, 'query': query, 'outcome': outcome, 'object_type': object_type,
+        'outcomes': outcomes, 'object_types': types, 'filters_active': bool(query or outcome or object_type),
+        'query_string': params.urlencode(),
     })
 
 
