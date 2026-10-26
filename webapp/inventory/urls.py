@@ -2,6 +2,7 @@ from django.urls import path
 from . import activity_views, authentication_settings, keycloak_settings, system_health, views, history_views, diagnostic_views, report_views, impact, transient, deletion
 
 urlpatterns = [
+    path('environments/<int:pk>/deletions/history/', deletion.history, name='deletion-history'),
     path('environments/<int:pk>/deletions/', deletion.selection, name='deletion-selection'),
     path('deletion-items/<int:pk>/configuration/', deletion.saved_configuration, name='deletion-configuration'),
     path('deletions/<uuid:pk>/', deletion.detail, name='deletion-detail'),

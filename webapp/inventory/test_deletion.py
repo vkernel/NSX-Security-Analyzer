@@ -48,6 +48,61 @@ class DeletionTests(TestCase):
             revision=self.finding.revision, status='verified', verified_at=self.batch.confirmed_at, before=self.obj, approved_evidence=self.evidence, approvals=self.finding.approvals)
         self.client.force_login(self.user)
 
+    def test_history_is_scoped_paginated_and_permission_checked(self):
+        other = Environment.objects.create(name='Other', slug='other', manager='https://other.example')
+        DeletionBatch.objects.create(environment=other, manager=other.manager, ticket='HIDDEN-TICKET')
+        DeletionBatch.objects.bulk_create([
+            DeletionBatch(environment=self.env, manager=self.env.manager, requested_by=self.user)
+            for _ in range(25)])
+        url = reverse('deletion-history', args=[self.env.pk])
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(len(response.context['page']), 25)
+        self.assertContains(response, 'Page 1 of 2')
+        self.assertNotContains(response, 'HIDDEN-TICKET')
+        response = self.client.get(url + '?page=2')
+        self.assertContains(response, 'CHG-1')
+        self.assertEqual(response.context['page'][0].object_count, 1)
+        self.client.force_login(get_user_model().objects.create_user('history-reader', is_staff=True))
+        self.assertEqual(self.client.get(url).status_code, 403)
+
+    def test_progress_fragment_is_read_only_and_stops_at_preview(self):
+        self.batch.status='checking'; self.batch.confirmed_at=None; self.batch.save()
+        self.item.status='pending'; self.item.save()
+        url = reverse('deletion-detail', args=[self.batch.pk]) + '?fragment=1'
+        with patch.object(d,'delete_once') as delete, patch.object(d,'connection') as connect:
+            response=self.client.get(url)
+            self.assertContains(response, 'data-active="true"')
+            self.assertContains(response, '0 of 1 objects')
+            self.assertNotContains(response, '<html')
+            self.assertEqual(response.headers['Cache-Control'], 'no-store')
+            delete.assert_not_called(); connect.assert_not_called()
+        self.batch.status='preview_ready'; self.batch.checked_at=timezone.now(); self.batch.save()
+        self.item.status='verified'; self.item.verified_at=timezone.now(); self.item.save()
+        response=self.client.get(url)
+        self.assertContains(response, 'data-active="false"')
+        self.assertContains(response, 'Confirm deletion of 1 object')
+        self.assertContains(response, 'Change-ticket reference')
+        self.batch.refresh_from_db()
+        self.assertIsNone(self.batch.confirmed_at)
+        self.client.force_login(get_user_model().objects.create_user('progress-reader', is_staff=True))
+        self.assertEqual(self.client.get(url).status_code, 403)
+
+    def test_expired_confirmation_is_not_offered_and_results_are_clear(self):
+        self.batch.confirmed_at=None; self.batch.checked_at=timezone.now()-timedelta(minutes=11); self.batch.save()
+        self.item.verified_at=self.batch.checked_at; self.item.save()
+        url=reverse('deletion-detail', args=[self.batch.pk])
+        response=self.client.get(url)
+        self.assertContains(response, 'expired')
+        self.assertNotContains(response, 'id="delete-confirm-open"')
+        self.batch.status='completed'; self.batch.confirmed_at=timezone.now(); self.batch.save()
+        self.item.status='uncertain'; self.item.save()
+        response=self.client.get(url)
+        self.assertContains(response, '0 deleted · 0 blocked')
+        self.assertContains(response, '1 uncertain')
+        self.assertContains(response, 'Outcome needs verification')
+        self.assertContains(response, 'data-active="false"')
+
     def test_blocked_preview_retains_live_search_diagnostics(self):
         diagnostics = {'mode':'explicit_types', 'query':'resource_type:Group',
                        'rejected_queries':[{'query':'*', 'error':'No results'}],

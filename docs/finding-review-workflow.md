@@ -709,3 +709,27 @@ is separate; records are never merged between attempts. These counters help
 identify runtime-only duplication but do not authorize incomplete configuration
 coverage. A complete per-type configuration endpoint strategy has not been enabled;
 known-type compatibility search remains limited and cannot authorize deletion.
+
+### Deletion workspace and progress
+
+In **Ready for decommissioning**, select objects and choose **Actions → Preview deletion
+from NSX**. The preview checks objects without deleting them. Its summary separates
+ready, blocked and already absent objects. Expand verification details or diagnostics
+when a result needs attention. Review the saved configuration before confirmation.
+
+Active requests refresh every five seconds without reloading the page. Progress counts
+completed object checks or processed objects, not estimated time remaining. Long live
+searches can leave that count unchanged. Updates pause while a dialog is open or the
+browser tab is hidden; **Pause updates** affects the display only, not the worker.
+Network failures show a refresh message and do not resubmit the operation.
+
+Confirm the exact verified objects with a change ticket within the displayed deadline.
+Blocked or already absent objects are skipped. Authorization lasts one hour after
+confirmation; all execution safeguards and live checks still apply. Results distinguish
+deleted, blocked, failed and uncertain outcomes. **Create new preview** returns to the
+ready queue for deliberate selection; it never retries DELETE automatically.
+
+The **Deletion history** tab beside **Decommissioned** lists requests, requester, change
+ticket, object count and outcomes, with 25 requests per page. Open a request for its
+results and saved configuration. History is restricted to administrators with deletion
+permission, as are the deletion actions.

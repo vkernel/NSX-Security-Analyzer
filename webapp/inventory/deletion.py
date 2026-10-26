@@ -7,6 +7,8 @@ from urllib.parse import quote
 import urllib3
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import ValidationError
+from django.core.paginator import Paginator
+from django.db.models import Count, Q
 from django.db import transaction
 from django.http import HttpResponse, HttpResponseForbidden
 from django.shortcuts import get_object_or_404, redirect, render
@@ -313,6 +315,22 @@ def interrupted(pk):
 
 
 @login_required
+@require_GET
+def history(request, pk):
+    if not permitted(request.user):
+        return HttpResponseForbidden('Administrator deletion permission is required.')
+    env = get_object_or_404(Environment, pk=pk)
+    batches = DeletionBatch.objects.filter(environment=env).select_related('requested_by').annotate(
+        object_count=Count('items'), deleted_count=Count('items', filter=Q(items__status='deleted')),
+        blocked_count=Count('items', filter=Q(items__status='blocked')),
+        attention_count=Count('items', filter=Q(items__status__in=['failed', 'uncertain'])),
+    ).order_by('-created_at')
+    return render(request, 'inventory/deletion_history.html', {
+        'environment': env, 'page': Paginator(batches, 25).get_page(request.GET.get('page')),
+    })
+
+
+@login_required
 @require_http_methods(['GET','POST'])
 def selection(request, pk):
     if not permitted(request.user): return HttpResponseForbidden('Administrator deletion permission is required.')
@@ -351,7 +369,7 @@ def selection(request, pk):
                     return redirect('deletion-detail', pk=batch.pk)
     rows = env.findings.filter(workflow_state='ready',kind__in=KINDS).order_by('name')[:100]
     return render(request,'inventory/deletion_selection.html',{'environment':env,'rows':rows,'error':error,
-        'batches':DeletionBatch.objects.filter(environment=env).order_by('-created_at')[:20]})
+        })
 
 
 @login_required
@@ -385,10 +403,40 @@ def detail(request, pk):
     for item in items:
         item.related_findings = item.verification.get('Related findings', [])
         item.search_diagnostics_json = json.dumps(item.verification.get('search_diagnostics', {}), indent=2)
-    return render(request,'inventory/deletion_detail.html',{'batch':batch,'items':items,
-        'status_label':batch.status_label, 'latest_snapshot':latest, 'inventory_warnings':warnings, 'inventory_blocked':bool(latest and latest.summary.get('inventory_warnings')),
-        'error':error,'verified_count':batch.items.filter(status='verified').count(),
-        'can_confirm': batch.status=='preview_ready' and batch.requested_by_id==request.user.pk})
+    counts = {status: sum(item.status == status for item in items) for status in
+              ('pending', 'verified', 'validating', 'sending', 'deleted', 'blocked', 'already_absent', 'failed', 'uncertain')}
+    active = batch.status in ('preview_queued', 'checking', 'queued', 'running')
+    execution = bool(batch.confirmed_at)
+    done = sum(counts[status] for status in ('deleted', 'blocked', 'already_absent', 'failed', 'uncertain'))
+    if not execution:
+        done += counts['verified']
+    for item in items:
+        item.display_status = {'pending': 'Waiting for verification', 'verified': 'Ready to confirm' if not execution else 'Waiting for live checks',
+            'validating': 'Rechecking live evidence', 'sending': 'Deleting and verifying absence',
+            'deleted': 'Deleted', 'blocked': 'Blocked', 'already_absent': 'Already absent',
+            'failed': 'Deletion failed', 'uncertain': 'Outcome needs verification'}.get(item.status, item.status)
+    stamps = [item.verified_at for item in items if item.status == 'verified' and item.verified_at]
+    deadline = (batch.confirmed_at + timedelta(hours=1) if execution else
+                min(stamps + ([batch.checked_at] if batch.checked_at else [])) + timedelta(minutes=10) if stamps else None)
+    expired = bool(deadline and timezone.now() >= deadline)
+    heading = batch.status_label
+    if batch.status == 'completed':
+        heading = f"{counts['deleted']} deleted · {counts['blocked']} blocked"
+        for key, label in [('already_absent', 'already absent'), ('failed', 'failed'), ('uncertain', 'uncertain')]:
+            if counts[key]:
+                heading += f" · {counts[key]} {label}"
+    elapsed = int(((batch.finished_at or (batch.checked_at if not active and not execution else None) or timezone.now()) - batch.created_at).total_seconds())
+    context = {'batch':batch, 'environment':batch.environment, 'items':items, 'counts':counts,
+        'status_label':heading, 'active':active, 'execution':execution, 'done_count':done, 'total_count':len(items),
+        'deadline':deadline, 'expired':expired, 'updated_at':timezone.now(),
+        'elapsed_label':f'{max(0, elapsed) // 60}m {max(0, elapsed) % 60}s',
+        'latest_snapshot':latest, 'inventory_warnings':warnings, 'inventory_blocked':bool(latest and latest.summary.get('inventory_warnings')),
+        'error':error, 'verified_count':counts['verified'],
+        'can_confirm':batch.status=='preview_ready' and batch.requested_by_id==request.user.pk and not expired}
+    template = 'inventory/deletion_progress.html' if request.GET.get('fragment') == '1' and request.method == 'GET' else 'inventory/deletion_detail.html'
+    response = render(request, template, context)
+    response['Cache-Control'] = 'no-store'
+    return response
 
 
 @login_required
