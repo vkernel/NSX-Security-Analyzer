@@ -511,7 +511,7 @@ does not elevate permissions. Collection itself remains read-only.
 The confirmation dialog lists the environment, Manager and every verified target. A
 change ticket and explicit permanent-deletion checkbox are required. Only verified rows
 are submitted; blocked/already-absent rows are skipped. Confirmation belongs to the
-requesting administrator; each object preview expires ten minutes after its verification. Execution repeats checks and
+requesting administrator; each object preview must be confirmed within ten minutes of its verification. Confirmed execution is authorized for one hour. Execution repeats checks and
 blocks changed or expired previews. No force or automatic retry is used. Group deletion
 uses `fail_if_subtree_exists=true`. Search and DELETE are separate operations: NSX search
 is eventually consistent, permissions may hide dependencies, and external configuration
@@ -601,8 +601,10 @@ approvals/history, incoming references and the relevant finding condition. The
 administrator confirms the exact objects and supplies the ticket. This is additional
 execution authorization, not a substitute for finding approvals or coverage.
 
-Each object preview expires after ten minutes, including time spent waiting or checking
-other objects. Execution rechecks expiry immediately before mutation. Changed targets,
+Each object preview must be confirmed within ten minutes. Timely confirmation authorizes
+execution for one hour from confirmation, including queue wait and live verification.
+Execution repeats live checks and checks the authorization deadline immediately before
+mutation. Expired authorization requires a new preview and confirmation. Changed targets,
 changed relevant parent-policy settings, incomplete live references and failed conditions
 remain blocked. A fresh membership response cannot replace historical VDI criteria;
 fresh counters cannot replace the zero-hit observation period. Search and DELETE remain

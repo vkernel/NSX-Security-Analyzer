@@ -45,7 +45,7 @@ class DeletionTests(TestCase):
         self.batch = DeletionBatch.objects.create(environment=self.env, requested_by=self.user, manager=self.env.manager,
             status='preview_ready', checked_at=timezone.now(), confirmed_at=timezone.now(), ticket='CHG-1')
         self.item = DeletionItem.objects.create(batch=self.batch, finding=self.finding, path=self.finding.path, name='Test',
-            revision=self.finding.revision, status='verified', verified_at=timezone.now(), before=self.obj, approved_evidence=self.evidence, approvals=self.finding.approvals)
+            revision=self.finding.revision, status='verified', verified_at=self.batch.confirmed_at, before=self.obj, approved_evidence=self.evidence, approvals=self.finding.approvals)
         self.client.force_login(self.user)
 
     def test_blocked_preview_retains_live_search_diagnostics(self):
@@ -153,6 +153,37 @@ class DeletionTests(TestCase):
         self.batch.checked_at=timezone.now();self.batch.save()
         self.finding.revision+=1;self.finding.save();self.item.finding=self.finding
         self.assertEqual(self.execute_with(),0)
+
+    def test_timely_confirmation_survives_queue_wait(self):
+        self.batch.confirmed_at=timezone.now()-timedelta(minutes=30)
+        self.batch.save()
+        self.item.verified_at=self.batch.confirmed_at-timedelta(minutes=2)
+        self.item.save()
+        self.assertEqual(self.execute_with(),1)
+        self.item.refresh_from_db()
+        self.assertEqual(self.item.status,'deleted')
+
+    def test_expired_execution_authorization_blocks(self):
+        self.batch.confirmed_at=timezone.now()-timedelta(minutes=61)
+        self.batch.save()
+        self.item.verified_at=self.batch.confirmed_at
+        self.item.save()
+        self.assertEqual(self.execute_with(),0)
+        self.item.refresh_from_db()
+        self.assertIn('Execution authorization expired',self.item.message)
+
+    def test_authorization_expiring_during_final_read_blocks(self):
+        def final_read(*args):
+            self.batch.confirmed_at=timezone.now()-timedelta(hours=2)
+            self.item.verified_at=self.batch.confirmed_at
+            return self.obj
+        with patch.object(d,'connection') as connect, patch.object(d,'approvals_valid'), \
+             patch.object(d,'validate_live',return_value=self.obj), \
+             patch.object(d,'current_object',side_effect=final_read), patch.object(d,'delete_once') as delete:
+            d.process_item(self.item,execute=True)
+            delete.assert_not_called()
+        self.item.refresh_from_db()
+        self.assertIn('Execution authorization expired',self.item.message)
 
     def test_already_absent_and_interruption_are_not_success(self):
         @contextmanager
@@ -318,14 +349,15 @@ class DeletionTests(TestCase):
         @contextmanager
         def client(env): yield Mock()
         def slow_check(client, finding):
-            self.item.verified_at=timezone.now()-timedelta(minutes=11)
+            self.batch.confirmed_at=timezone.now()-timedelta(hours=2)
+            self.item.verified_at=self.batch.confirmed_at
             return self.obj
         with patch.object(d,'connection',client), patch.object(d,'guard'), patch.object(d,'validate_live',side_effect=slow_check), patch.object(d,'delete_once') as delete:
             d.process_item(self.item,execute=True)
             delete.assert_not_called()
         self.item.refresh_from_db()
         self.assertEqual(self.item.status,'blocked')
-        self.assertIn('expired during verification',self.item.message)
+        self.assertIn('Execution authorization expired',self.item.message)
 
     def test_direct_group_execution_still_requires_membership_and_reference_coverage(self):
         from .deletion_readiness import strict_group_empty

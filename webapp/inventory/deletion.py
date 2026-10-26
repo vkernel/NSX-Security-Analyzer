@@ -172,6 +172,17 @@ def guard(batch, finding, item):
     approvals_valid(finding)
 
 
+def execution_authorized(batch, item):
+    """Confirmation is timely; execution has its own bounded authorization."""
+    if not batch.confirmed_at or not batch.ticket:
+        raise ValidationError('Explicit confirmation and a change ticket are required.')
+    if (not item.verified_at or batch.confirmed_at < item.verified_at
+            or batch.confirmed_at - item.verified_at > timedelta(minutes=10)):
+        raise ValidationError('Preview expired before confirmation. Create a new preview.')
+    if timezone.now() - batch.confirmed_at > timedelta(hours=1):
+        raise ValidationError('Execution authorization expired after one hour. Create a new preview and confirm again.')
+
+
 def process_item(item, execute=False):
     batch = item.batch
     if execute and not DeletionItem.objects.filter(pk=item.pk, status='verified').update(status='validating'):
@@ -181,10 +192,8 @@ def process_item(item, execute=False):
     try:
         finding = item.finding
         guard(batch, finding, item)
-        if execute and (not batch.confirmed_at or not batch.ticket):
-            raise ValidationError('Explicit confirmation and a change ticket are required.')
-        if execute and (not item.verified_at or timezone.now() - item.verified_at > timedelta(minutes=10)):
-            raise ValidationError('Preview expired. Create a new preview.')
+        if execute:
+            execution_authorized(batch, item)
         with connection(batch.environment) as client:
             obj = validate_live(client, finding)
             if obj is None:
@@ -220,14 +229,14 @@ def process_item(item, execute=False):
                     batch.environment = env
                     guard(batch, finding, item)
                     if not env.enabled: raise ValidationError('The environment is paused.')
-                    if not item.verified_at or timezone.now() - item.verified_at > timedelta(minutes=10):
-                        raise ValidationError('Object preview expired during verification. Create a new preview.')
+                    execution_authorized(batch, item)
                     if target_type(item.path) == 'Rule':
                         parent = client.get(item.path.rsplit('/rules/', 1)[0])
                         if {k: parent.get(k) for k in ('scope','category','sequence_number','stateful')} != finding.evidence['configuration']['policy']:
                             raise ValidationError('Parent policy changed immediately before deletion.')
                     if current_object(client, item.path) != obj:
                         raise ValidationError('Object changed immediately before deletion.')
+                    execution_authorized(batch, item)
                     sent = True
                     status = delete_once(client, item.path)
                     item.http_status = status
