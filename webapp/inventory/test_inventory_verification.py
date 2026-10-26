@@ -16,8 +16,8 @@ class PaginationVerificationTests(SimpleTestCase):
                                               'resource_type': 'Group'}], 'result_count': 1}])
         resources, coverage = search_configuration(client)
         query = client.get.call_args.args[1]['query']
-        self.assertEqual(query, 'resource_type:* AND NOT (resource_type:VirtualMachine OR '
-                         'resource_type:VirtualNetworkInterface OR resource_type:GenericPolicyRealizedResource)')
+        self.assertEqual(query, 'NOT resource_type:VirtualMachine AND NOT '
+                         'resource_type:VirtualNetworkInterface AND NOT resource_type:GenericPolicyRealizedResource AND resource_type:*')
         self.assertEqual(resources[0]['resource_type'], 'Group')
         self.assertEqual(len(coverage['excluded_resource_types']), 3)
 

@@ -51,6 +51,7 @@ class DeletionTests(TestCase):
     def test_blocked_preview_retains_live_search_diagnostics(self):
         diagnostics = {'mode':'explicit_types', 'query':'resource_type:Group',
                        'rejected_queries':[{'query':'*', 'error':'No results'}],
+                       'pagination_attempts': [{'attempt':1, 'duplicates_by_resource_type': {'VirtualMachine':18}, 'unique_count':37358, 'reported_total':37376}],
                        'headers': {'Authorization':'must-not-be-saved'}}
         client = Mock(search_diagnostics=diagnostics)
         with patch.object(d,'guard'), patch.object(d,'connection') as connect, patch.object(d,'validate_live',side_effect=ValidationError('Live dependency coverage is incomplete.')), patch.object(d,'delete_once') as delete:
@@ -60,6 +61,7 @@ class DeletionTests(TestCase):
         self.assertEqual(self.item.status, 'blocked')
         self.assertEqual(self.item.verification['search_diagnostics']['query'], diagnostics['query'])
         self.assertNotIn('headers', self.item.verification['search_diagnostics'])
+        self.assertEqual(self.item.verification['search_diagnostics']['pagination_attempts'], diagnostics['pagination_attempts'])
         response = self.client.get(reverse('deletion-detail',args=[self.batch.pk]))
         self.assertContains(response, 'Live dependency-search diagnostics')
         self.assertContains(response, 'No results')

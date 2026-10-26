@@ -2,6 +2,8 @@
 
 ## Development — 2026-10-26
 
+- Try flat NOT and ! runtime exclusions within the existing search budget. Record failed pagination totals and duplicate/unique counts by resource type in live deletion diagnostics.
+
 - Ignore excluded runtime-record payload conflicts only during configuration dependency searches while retaining identity/count/cursor verification. Clarify inventory verification errors and contain deletion diagnostics within the results layout.
 
 - Add unfiltered broad configuration-search fallbacks with runtime filtering after verified pagination. Preserve inventory checks and limited fallback restrictions.

@@ -257,7 +257,7 @@ def process_item(item, execute=False):
                    'excluded_resource_types', 'rejected_queries', 'inventory_retries',
                    'inventory_coverage_retries', 'search_scans', 'raw_records',
                    'configuration_records', 'runtime_records_removed', 'missing_groups',
-                   'missing_services', 'error', 'http_status')
+                   'missing_services', 'error', 'http_status', 'pagination_attempts')
         item.verification = {**item.verification,
             'search_diagnostics': {key: diagnostics[key] for key in allowed if key in diagnostics}}
     item.finished_at = timezone.now()

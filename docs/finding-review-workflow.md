@@ -690,3 +690,20 @@ objects and cursor failures remain blocking. Dedicated VM inventory and membersh
 verification retain their existing checks. Inventory failures are identified as
 verification errors rather than an unavailable HTTP status, and the diagnostic JSON
 wraps within the results table.
+
+
+Search compatibility now tries flat NOT clauses, then flat ! clauses before the
+unfiltered broad queries. These are based on the
+[Broadcom search API boolean syntax](https://developer.broadcom.com/xapis/nsx-t-data-center-rest-api/latest/method_QuerySearch.html).
+They replace the grouped exclusion variants that returned empty results on the
+reported NSX 4.2.4.1 build 25554964 environment. Live compatibility with that build
+must still be verified; syntax documentation is not a successful production test.
+No additional scans are added to the five-scan budget.
+
+On pagination failures, live dependency-search diagnostics now include
+`pagination_attempts`: reported total, unique count, raw rows, pages, duplicate count,
+`duplicates_by_resource_type` and `unique_by_resource_type`. Each failed attempt
+is separate; records are never merged between attempts. These counters help
+identify runtime-only duplication but do not authorize incomplete configuration
+coverage. A complete per-type configuration endpoint strategy has not been enabled;
+known-type compatibility search remains limited and cannot authorize deletion.

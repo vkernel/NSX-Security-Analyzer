@@ -81,11 +81,12 @@ def parse_retry_after(value):
 class InventoryChanged(AuditError):
     """A paginated inventory did not match its advertised total."""
 
-    def __init__(self, message, reported_total=None, returned_count=None, conflicts=None):
+    def __init__(self, message, reported_total=None, returned_count=None, conflicts=None, pagination=None):
         super().__init__(message)
         self.reported_total = reported_total
         self.returned_count = returned_count
         self.conflicts = conflicts or []
+        self.pagination = pagination or {}
 
 
 class NSXClient:
@@ -232,6 +233,8 @@ class NSXClient:
                            "duplicate_count": duplicates, "attempts": attempt + 1,
                            "reason": "inventory_changed", "pagination_complete": True,
                            "reported_total": exc.reported_total, "returned_count": exc.returned_count}
+                if exc.pagination:
+                    warning["pagination"] = exc.pagination
                 if exc.conflicts:
                     warning["conflicts"] = exc.conflicts
                 # Collection workers share this client. A list append is atomic;
@@ -268,6 +271,15 @@ class NSXClient:
         expected = None
         unique_records = {}
         duplicate_count = 0
+        raw_rows = 0
+        pages = 0
+        duplicate_types = {}
+        unique_types = {}
+        def pagination_diagnostics():
+            return {'reported_total': expected, 'unique_count': total,
+                    'raw_rows': raw_rows, 'pages': pages, 'duplicate_count': duplicate_count,
+                    'duplicates_by_resource_type': dict(duplicate_types),
+                    'unique_by_resource_type': dict(unique_types)}
         conflicting = False
         conflicts = {}
         while True:
@@ -294,7 +306,13 @@ class NSXClient:
                 expected = page["result_count"]
                 if not isinstance(expected, int) or expected < 0:
                     raise AuditError("GET {}: invalid result_count".format(path))
+            pages += 1
+            raw_rows += len(results)
             for record in results:
+                resource_type = str(record.get('resource_type') or 'Unknown') if isinstance(record, dict) else 'Invalid'
+                # Bound diagnostic key cardinality without dropping accounting.
+                if resource_type not in unique_types and len(unique_types) >= 100:
+                    resource_type = 'Other'
                 identity = None
                 if isinstance(record, dict):
                     locator = record.get("path") or record.get("id") or record.get("external_id")
@@ -304,6 +322,7 @@ class NSXClient:
                 if identity is not None:
                     if identity in unique_records:
                         duplicate_count += 1
+                        duplicate_types[resource_type] = duplicate_types.get(resource_type, 0) + 1
                         # These types are discarded by configuration search. Keep
                         # identity/count accounting, but their changing payloads
                         # cannot establish a configuration-version conflict.
@@ -335,6 +354,7 @@ class NSXClient:
                         continue
                     unique_records[identity] = record
                 total += 1
+                unique_types[resource_type] = unique_types.get(resource_type, 0) + 1
             LOG.debug("Inventory %s: page=%d total=%d expected=%s continuation=%s",
                       path, len(results), total, expected, bool(page.get("cursor")))
             yield from results
@@ -344,17 +364,17 @@ class NSXClient:
                     sample["resource_type"] or "Object", sample["locator"],
                     ", ".join(sample["changed_fields"])) for sample in samples)
                 raise InventoryChanged("GET {}: conflicting versions of objects during pagination; {}".format(path, detail),
-                                       reported_total=expected, returned_count=total, conflicts=samples)
+                                       reported_total=expected, returned_count=total, conflicts=samples, pagination=pagination_diagnostics())
             if expected is not None and total == expected:
                 return
             cursor = page.get("cursor")
             if not cursor:
                 if expected is not None and total != expected:
                     raise InventoryChanged("GET {}: incomplete/changing inventory ({}/{} unique objects; {} duplicate rows)".format(
-                        path, total, expected, duplicate_count), reported_total=expected, returned_count=total)
+                        path, total, expected, duplicate_count), reported_total=expected, returned_count=total, pagination=pagination_diagnostics())
                 if expected is None and duplicate_count:
                     raise InventoryChanged("GET {}: duplicate objects during pagination; no reported total to verify completeness".format(path),
-                                           returned_count=total)
+                                           returned_count=total, pagination=pagination_diagnostics())
                 return
             if cursor in seen:
                 raise AuditError("GET {}: repeated pagination cursor".format(path))
@@ -1526,10 +1546,13 @@ def search_configuration(client, expect_resources=False):
     """Retry changing search inventories from page one; never accept partial results."""
     rejected = []
     inventory_retries = 0
-    runtime_filter = " AND NOT (" + " OR ".join(
-        "resource_type:" + kind for kind in REFERENCE_SEARCH_EXCLUDED_TYPES) + ")"
-    queries = ("resource_type:*" + runtime_filter, "*" + runtime_filter, "resource_type:*", "*", " OR ".join(
-        "resource_type:" + kind for kind in REFERENCE_SEARCH_TYPES))
+    # Broadcom documents flat NOT / ! clauses. Avoid the grouped negation
+    # forms that some managers accept but answer with an empty result.
+    exclusions = ["resource_type:" + kind for kind in REFERENCE_SEARCH_EXCLUDED_TYPES]
+    queries = (" AND ".join("NOT " + term for term in exclusions) + " AND resource_type:*",
+               " AND ".join("!" + term for term in exclusions) + " AND resource_type:*",
+               "resource_type:*", "*", " OR ".join(
+                   "resource_type:" + kind for kind in REFERENCE_SEARCH_TYPES))
     for index, query in enumerate(queries):
         explicit = index == len(queries) - 1
         diagnostics = {"query": query, "mode": "explicit_types" if explicit else "all_types",
@@ -1552,8 +1575,10 @@ def search_configuration(client, expect_resources=False):
                     resources = list(client.items("/search/query", {"query": query}, **options))
                     break
                 except InventoryChanged as exc:
+                    diagnostics.setdefault('pagination_attempts', []).append(
+                        {'attempt': attempt + 1, **exc.pagination})
                     if attempt == attempts - 1:
-                        raise InventoryChanged("NSX search inventory remained incomplete/changing after {} attempt(s). {}".format(attempts, exc)) from exc
+                        raise InventoryChanged("NSX search inventory remained incomplete/changing after {} attempt(s). {}".format(attempts, exc), reported_total=exc.reported_total, returned_count=exc.returned_count, conflicts=exc.conflicts, pagination=exc.pagination) from exc
                     inventory_retries += 1
                     delay = 2 ** (attempt + 1)
                     LOG.warning("NSX search inventory changed during pagination; restarting from page one in %ss (attempt %d/%d).",

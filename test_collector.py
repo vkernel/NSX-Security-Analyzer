@@ -1424,6 +1424,38 @@ examples.forEach((_,index) => {
             with self.assertRaises(nsx.InventoryChanged):
                 nsx.verified_configuration_search(client, [self.group], [])
 
+    @patch.object(nsx.time, 'sleep')
+    def test_search_failure_reports_duplicate_types_for_each_attempt(self, sleep):
+        vm = {'resource_type':'VirtualMachine','id':'vm'}
+        group = dict(self.group, resource_type='Group')
+        pages = [{'results':[vm, group], 'result_count':4, 'cursor':'next'},
+                 {'results':[vm, group]}]
+        client = self.client_with_pages(pages * 3)
+        with self.assertRaises(nsx.InventoryChanged) as raised:
+            nsx.verified_configuration_search(client, [group], [])
+        self.assertEqual(raised.exception.reported_total, 4)
+        attempts = client.search_diagnostics['pagination_attempts']
+        self.assertEqual(len(attempts), 3)
+        for attempt in attempts:
+            self.assertEqual(attempt['duplicates_by_resource_type'], {'VirtualMachine':1, 'Group':1})
+            self.assertEqual(attempt['unique_by_resource_type'], {'VirtualMachine':1, 'Group':1})
+            self.assertEqual(attempt['unique_count'], 2)
+            self.assertEqual(attempt['raw_rows'], 4)
+            self.assertEqual(attempt['reported_total'], 4)
+            self.assertEqual(attempt['pages'], 2)
+        # Matching raw row totals must not turn partial unique inventory into success.
+        self.assertEqual(client.search_diagnostics['status'], 'failed')
+
+    def test_flat_negation_queries_are_broad_and_bounded(self):
+        client = Mock()
+        client.items.side_effect = [[], [self.group]]
+        _, coverage = nsx.verified_configuration_search(client, [self.group], [])
+        queries = [call.args[1]['query'] for call in client.items.call_args_list]
+        self.assertTrue(queries[0].startswith('NOT resource_type:VirtualMachine AND NOT '))
+        self.assertTrue(queries[1].startswith('!resource_type:VirtualMachine AND !'))
+        self.assertTrue(all('(' not in query and ' OR ' not in query for query in queries))
+        self.assertEqual(coverage['mode'], 'all_types')
+
     def test_unfiltered_broad_search_filters_runtime_after_pagination(self):
         client = self.client_with_pages([
             {'results': [], 'result_count': 0},
@@ -1481,8 +1513,8 @@ examples.forEach((_,index) => {
         client.items.side_effect = [nsx.AuditError("unsupported wildcard field", 400), iter([self.group])]
         resources, coverage = nsx.search_configuration(client)
         self.assertEqual(coverage["mode"], "all_types")
-        self.assertEqual(coverage["query"], "* AND NOT (resource_type:VirtualMachine OR "
-                         "resource_type:VirtualNetworkInterface OR resource_type:GenericPolicyRealizedResource)")
+        self.assertEqual(coverage["query"], "!resource_type:VirtualMachine AND "
+                         "!resource_type:VirtualNetworkInterface AND !resource_type:GenericPolicyRealizedResource AND resource_type:*")
         self.assertEqual(resources, [self.group])
 
     def test_search_does_not_retry_authentication_or_pagination_failures(self):
