@@ -199,14 +199,14 @@ class NSXClient:
             raise AuditError("GET {}: expected a JSON object".format(path))
         return data
 
-    def items(self, path, params=None, page_size=1000, verification_owner=False):
+    def items(self, path, params=None, page_size=1000, verification_owner=False, configuration_search=False):
         """Retry inconsistent inventories; never hide failed pages or broken cursors."""
         for attempt in range(1 if verification_owner else 3):
             records = []
             identities = set()
             duplicates = 0
             try:
-                for record in self._items_once(path, params, page_size):
+                for record in self._items_once(path, params, page_size, configuration_search=configuration_search):
                     identity = None
                     if isinstance(record, dict):
                         # IDs can repeat across resource types and parent objects.
@@ -242,7 +242,7 @@ class NSXClient:
             yield from records
             return
 
-    def _items_once(self, path, params=None, page_size=1000):
+    def _items_once(self, path, params=None, page_size=1000, configuration_search=False):
         params = dict(params or {})
         vm_default_sort = path == "/infra/realized-state/virtual-machines" and "sort_by" not in params
         if vm_default_sort:
@@ -304,6 +304,12 @@ class NSXClient:
                 if identity is not None:
                     if identity in unique_records:
                         duplicate_count += 1
+                        # These types are discarded by configuration search. Keep
+                        # identity/count accounting, but their changing payloads
+                        # cannot establish a configuration-version conflict.
+                        if (configuration_search and path == "/search/query"
+                                and record.get("resource_type") in REFERENCE_SEARCH_EXCLUDED_TYPES):
+                            continue
                         previous = unique_records[identity]
                         ignored_fields = set()
                         if (path == "/infra/realized-state/virtual-machines"
@@ -1542,7 +1548,7 @@ def search_configuration(client, expect_resources=False):
                         if budget['remaining'] <= 0:
                             raise AuditError('Search verification exhausted its shared five-scan budget; no complete coverage was accepted.')
                         budget['remaining'] -= 1
-                    options = {'verification_owner': True} if isinstance(client, NSXClient) else {}
+                    options = {'verification_owner': True, 'configuration_search': True} if isinstance(client, NSXClient) else {}
                     resources = list(client.items("/search/query", {"query": query}, **options))
                     break
                 except InventoryChanged as exc:

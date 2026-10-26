@@ -246,3 +246,10 @@ body dialog#saved-configuration-dialog{width:min(880px,calc(100vw - 32px))}
 .selection-action-menu{position:relative}
 .selection-action-options{position:absolute;right:0;top:100%;z-index:20;min-width:270px;display:grid;gap:8px;padding:12px;background:var(--app-surface,#fff);border:1px solid var(--line);border-radius:10px;box-shadow:0 8px 24px #10182820}
 .selection-action-options small{max-width:280px;color:var(--muted)}
+
+/* Keep long search errors inside their column on deletion result pages. */
+.deletion-results {width:100%; table-layout:fixed}
+.deletion-results th:first-child {width:25%}
+.deletion-results th:nth-child(2) {width:12%}
+.deletion-results td {overflow-wrap:anywhere; vertical-align:top}
+.deletion-search-diagnostics {white-space:pre-wrap; overflow-wrap:anywhere; word-break:break-word; max-width:100%; max-height:28rem; overflow:auto}

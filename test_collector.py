@@ -1396,6 +1396,34 @@ examples.forEach((_,index) => {
         self.assertNotIn('NOT', coverage['query'])
         self.assertEqual(coverage['resource_types'], [])
 
+    @patch.object(nsx.time, 'sleep')
+    def test_configuration_search_ignores_only_excluded_runtime_payload_conflicts(self, sleep):
+        for resource_type in nsx.REFERENCE_SEARCH_EXCLUDED_TYPES:
+            first = {'resource_type': resource_type, 'id':'vm', 'power_state':'ON'}
+            changed = dict(first, power_state='OFF', host_id='moved')
+            pages = [{'results':[first], 'result_count':2, 'cursor':'next'},
+                     {'results':[changed, self.group]}]
+            client = self.client_with_pages(pages)
+            resources, coverage = nsx.verified_configuration_search(client, [self.group], [])
+            self.assertEqual(resources, [self.group])
+            self.assertEqual(coverage['status'], 'verified')
+            # Generic search retains strict comparison even on the same endpoint.
+            client = self.client_with_pages(pages)
+            with self.assertRaises(nsx.InventoryChanged):
+                list(client.items('/search/query', verification_owner=True))
+
+    @patch.object(nsx.time, 'sleep')
+    def test_configuration_search_still_blocks_configuration_and_count_conflicts(self, sleep):
+        original = dict(self.group, display_name='old')
+        changed = dict(original, display_name='new')
+        for pages in ([{'results':[original], 'result_count':2, 'cursor':'next'},
+                       {'results':[changed, {'path':'/infra/services/s'}]}],
+                      [{'results':[{'resource_type':'VirtualMachine', 'id':'vm'}], 'result_count':3, 'cursor':'next'},
+                       {'results':[{'resource_type':'VirtualMachine', 'id':'vm', 'power_state':'OFF'}, self.group]}]):
+            client = self.client_with_pages(pages * 3)
+            with self.assertRaises(nsx.InventoryChanged):
+                nsx.verified_configuration_search(client, [self.group], [])
+
     def test_unfiltered_broad_search_filters_runtime_after_pagination(self):
         client = self.client_with_pages([
             {'results': [], 'result_count': 0},

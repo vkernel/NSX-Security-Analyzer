@@ -681,3 +681,12 @@ The explicit-type compatibility query remains limited and cannot authorize delet
 All alternatives and retries share the existing five-scan budget; authentication,
 incomplete pagination and exhausted verification remain blocking. Unfiltered scans
 can retrieve more records and take longer on busy managers.
+
+For configuration dependency searches only, duplicate runtime records excluded from
+that analysis are tracked for identity and completeness but their payload versions
+are not compared. Changes to VM/VIF runtime fields therefore do not invalidate a
+configuration scan. Configuration-object conflicts, unique-count mismatches, missing
+objects and cursor failures remain blocking. Dedicated VM inventory and membership
+verification retain their existing checks. Inventory failures are identified as
+verification errors rather than an unavailable HTTP status, and the diagnostic JSON
+wraps within the results table.

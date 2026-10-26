@@ -13,6 +13,12 @@ from .finding_workflow import review_fingerprint
 
 
 class DeleteTransportTests(SimpleTestCase):
+    def test_inventory_failure_is_not_reported_as_missing_http_status(self):
+        message = d.describe_error(d.collector.InventoryChanged('conflicting configuration versions'))
+        self.assertIn('Live inventory verification failed', message)
+        self.assertIn('conflicting configuration versions', message)
+        self.assertNotIn('HTTP unavailable', message)
+
     def test_allowlist_and_no_retry_redirect_or_force(self):
         client = Mock(base_url='https://nsx.example/policy/api/v1', timeout=10, headers={})
         client.http.request.return_value.status = 200

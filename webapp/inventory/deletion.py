@@ -156,6 +156,8 @@ def delete_once(client, path):
 
 def describe_error(exc):
     if isinstance(exc, ValidationError): return '; '.join(exc.messages)
+    if isinstance(exc, collector.InventoryChanged):
+        return 'Live inventory verification failed: ' + str(exc)[:2000] + '. Review live dependency-search diagnostics. No DELETE retry was performed.'
     if isinstance(exc, collector.AuditError): return 'NSX verification failed (HTTP {}). No DELETE retry was performed.'.format(exc.status_code or 'unavailable')
     return 'Operation interrupted or failed. Check NSX and the audit record before starting another deletion.'
 
