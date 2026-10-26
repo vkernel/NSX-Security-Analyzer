@@ -394,12 +394,15 @@ def my_work(request):
     ordering = {'oldest': ['assigned_at', 'pk'], 'name': ['name', 'pk'], 'environment': ['environment__name', 'name', 'pk']}.get(sort, ['assigned_at', 'pk'])
     page = Paginator(rows.order_by(*ordering), preferences(request).page_size).get_page(request.GET.get('page'))
     from .finding_workflow import approval_readiness
+    from .deletion import permitted, KINDS
+    show_deletion_controls = queue == 'ready' and permitted(request.user)
     for finding in page:
+        finding.can_delete = bool(show_deletion_controls and finding.owner_id and finding.kind in KINDS)
         finding.readiness = approval_readiness(finding)
         finding.approval_count = len([key for key in ('owner', 'second') if key in finding.approvals])
 
     from urllib.parse import urlencode
-    return render(request, 'inventory/my_work.html', {'page': page, 'review_return': request.get_full_path(), 'queue': queue, 'query': term, 'environments': Environment.objects.only('pk','name'), 'work_environment': selected_environment, 'sort': sort, 'query_string': urlencode({'queue': queue, 'q': term, 'environment':selected_environment, 'sort':sort})})
+    return render(request, 'inventory/my_work.html', {'page': page, 'show_deletion_controls': show_deletion_controls, 'review_return': request.get_full_path(), 'queue': queue, 'query': term, 'environments': Environment.objects.only('pk','name'), 'work_environment': selected_environment, 'sort': sort, 'query_string': urlencode({'queue': queue, 'q': term, 'environment':selected_environment, 'sort':sort})})
 
 
 @login_required

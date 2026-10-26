@@ -60,6 +60,7 @@ def event(finding, action, before, reason, actor=None, extra=None):
     label = user_label(actor)[:255] if actor else 'System'
     FindingEvent.objects.create(finding=finding, actor=actor, actor_label=label,
         message=f'{dict(STATES).get(before, before)} → {dict(STATES)[finding.workflow_state]}: {reason}', details=details)
+    details['actor_label'] = label
     record('finding.' + action, 'Finding', finding.pk, actor=actor.pk if actor else '', details=details)
 
 

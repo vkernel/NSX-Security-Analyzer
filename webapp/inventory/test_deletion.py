@@ -48,6 +48,40 @@ class DeletionTests(TestCase):
             revision=self.finding.revision, status='verified', verified_at=self.batch.confirmed_at, before=self.obj, approved_evidence=self.evidence, approvals=self.finding.approvals)
         self.client.force_login(self.user)
 
+    def test_my_work_ready_selection_uses_existing_preview_flow(self):
+        response=self.client.get(reverse('my-work'), {'queue':'ready'})
+        self.assertContains(response, 'id="work-deletion-selection" hidden')
+        self.assertContains(response, f'value="{self.finding.pk}:{self.finding.revision}"')
+        self.assertContains(response, reverse('deletion-selection', args=[self.env.pk]))
+        self.assertContains(response, 'Preview deletion from NSX')
+        self.assertNotContains(self.client.get(reverse('my-work'), {'queue':'assigned'}), 'id="work-delete-preview"')
+        with patch.object(d,'delete_once') as delete:
+            response=self.client.post(reverse('deletion-selection', args=[self.env.pk]),
+                                      {'selected':[f'{self.finding.pk}:{self.finding.revision}']})
+            self.assertEqual(response.status_code,302)
+            batch=DeletionBatch.objects.exclude(pk=self.batch.pk).get()
+            self.assertEqual(batch.status,'preview_queued')
+            self.assertEqual(batch.items.get().finding_id,self.finding.pk)
+            delete.assert_not_called()
+        self.client.force_login(get_user_model().objects.create_user('work-operator',is_staff=True))
+        self.assertNotContains(self.client.get(reverse('my-work'), {'queue':'ready'}), 'id="work-delete-preview"')
+        self.assertEqual(self.client.post(reverse('deletion-selection', args=[self.env.pk]),
+                         {'selected':[f'{self.finding.pk}:{self.finding.revision}']}).status_code,403)
+
+    def test_my_work_cross_environment_selection_is_rejected_server_side(self):
+        other=Environment.objects.create(name='Other',slug='work-other',manager='https://other.example')
+        finding=Finding.objects.create(environment=other, name='Other service',path='/infra/services/other',
+            kind='unused_service',owner=self.user,workflow_state='ready',qualification='eligible',
+            first_seen=timezone.now(),last_seen=timezone.now(),evaluated_at=timezone.now())
+        response=self.client.get(reverse('my-work'), {'queue':'ready'})
+        self.assertContains(response, f'data-environment="{other.pk}"')
+        self.assertContains(response, f'data-environment="{self.env.pk}"')
+        count=DeletionBatch.objects.count()
+        response=self.client.post(reverse('deletion-selection', args=[self.env.pk]),
+            {'selected':[f'{self.finding.pk}:{self.finding.revision}',f'{finding.pk}:{finding.revision}']})
+        self.assertContains(response,'Some selected findings are no longer ready')
+        self.assertEqual(DeletionBatch.objects.count(),count)
+
     def test_history_is_scoped_paginated_and_permission_checked(self):
         other = Environment.objects.create(name='Other', slug='other', manager='https://other.example')
         DeletionBatch.objects.create(environment=other, manager=other.manager, ticket='HIDDEN-TICKET')

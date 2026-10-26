@@ -741,3 +741,29 @@ finding. Object records remain visible even when the finding is no longer availa
 Search by object name, path or change ticket, and filter by object outcome and type.
 Filters must match the same object; matching requests still display their full object
 list and original totals. Pagination preserves the selected filters.
+
+Administrators can also select supported objects directly in **My work → Ready for
+decommissioning**, then choose **Actions → Preview deletion from NSX**. Select up to
+100 findings from one environment per request; use the Environment filter to narrow a
+cross-environment queue. The same revision checks, deduplication, read-only preview,
+confirmation and live deletion safeguards apply. Other work queues and users without
+deletion permission do not display these controls.
+
+### Activity timeline and audit history
+
+**Activity → All activity** combines background jobs, retained review decisions and
+expandable NSX deletion requests. **Running tasks** shows queued/running collections,
+indexing, comparisons and (for deletion administrators) previews and execution. It
+refreshes automatically. **Audit history** pages through retained review and deletion
+audit records, including confirmation and individual outcomes. These are read-only
+views of existing records, not a new event store.
+
+Filter by environment, type, actor name, date range, object name/path or change ticket,
+and outcome/review state (for example `deleted`, `blocked`, `ready`). Object and actor
+filters apply to review/deletion records; job overview search matches environment or
+progress text. Overview results are bounded; use Audit history for older review events.
+Dates are inclusive. Events without a recorded actor are labelled System/background
+worker. New deletion lifecycle records distinguish worker activity from the confirming
+administrator. A finished batch is not proof of deletion: inspect each object's result.
+Deletion details and configuration links require deletion permission. Old events can
+lack names or actor labels; missing records cannot be reconstructed by this view.

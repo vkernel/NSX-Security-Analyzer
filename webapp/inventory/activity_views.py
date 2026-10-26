@@ -3,6 +3,8 @@ from django.contrib.auth.decorators import login_required
 from django.shortcuts import render, get_object_or_404, redirect
 from django.urls import reverse
 from django.views.decorators.http import require_GET
+from . import activity_feed
+from django.core.paginator import Paginator
 from .models import AuditJob, Environment, FindingRecalculation, SnapshotComparison, Snapshot
 
 
@@ -12,8 +14,15 @@ def activity(request):
     selected = request.GET.get('environment', '')
     kind = request.GET.get('type', '')
     state = request.GET.get('status', '')
+    tab = request.GET.get('tab', 'all')
+    if tab not in ('all', 'running', 'audit'): tab = 'all'
+    options = activity_feed.filters(request)
+    if tab == 'running': state = 'active'
     tasks = []
     def limited(query, time_field):
+        query = activity_feed.dated(query, options, time_field)
+        if tab == 'audit' or options['actor'] or options['outcome']:
+            return []
         if state == 'active':
             return query.filter(status__in=['queued', 'running']).order_by(time_field)[:60]
         if state == 'failed':
@@ -42,8 +51,25 @@ def activity(request):
             tasks.append(dict(kind='Snapshot comparison', environment=job.after.environment.name,
                 status='completed' if job.ready else job.status, at=job.created_at,
                 detail=job.error, url=reverse('snapshot-comparison', args=[job.after.environment_id])+f'?before={job.before_id}&after={job.after_id}'))
-    tasks.sort(key=lambda task: (task['status'] not in ('queued', 'running'), -task['at'].timestamp()))
-    response = render(request, 'inventory/activity.html', dict(tasks=tasks, environments=Environment.objects.only('id','name'), selected=selected, kind=kind, state=state))
+    if options['q']:
+        tasks = [task for task in tasks if options['q'].casefold() in (task['environment'] + ' ' + task['detail']).casefold()]
+    if kind in ('', 'deletion') and tab != 'audit':
+        tasks += activity_feed.deletion_cards(request, options, selected, state == 'active')
+    page = None
+    if tab == 'audit':
+        page = Paginator(activity_feed.audit_rows(request, options, selected, kind), 50).get_page(request.GET.get('page'))
+        tasks = activity_feed.audit_cards(page)
+    elif tab == 'all' and state != 'active':
+        tasks += activity_feed.audit_cards(activity_feed.audit_rows(request, options, selected, kind).filter(action__startswith='finding.').exclude(action__startswith='finding.nsx_')[:100])
+    tasks.sort(key=lambda task: task['at'], reverse=True)
+    params=request.GET.copy(); params.pop('page', None)
+    response = render(request, 'inventory/activity.html', dict(tasks=tasks, environments=Environment.objects.only('id','name'),
+        selected=selected, kind=kind, state=state, tab=tab, filters=options, page=page, query_string=params.urlencode(),
+        can_delete=activity_feed.permitted(request.user),
+        outcome_choices=[('deleted','Deleted'),('blocked','Blocked'),('already_absent','Already absent'),
+            ('failed','Failed'),('uncertain','Uncertain'),('verified','Preview verified'),
+            ('owner_review','Owner review'),('second_review','Awaiting second approval'),('ready','Ready for decommissioning'),
+            ('rejected','Rejected'),('decommissioned','Decommissioned'),('unassigned','Unassigned')]))
     response['Cache-Control'] = 'private, no-store'
     return response
 

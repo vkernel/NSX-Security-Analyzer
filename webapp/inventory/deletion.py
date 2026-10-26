@@ -279,7 +279,7 @@ def process_item(item, execute=False):
     item.finished_at = timezone.now()
     item.save()
     record('nsx.deletion_' + item.status, 'DeletionItem', item.pk, actor=batch.requested_by_id or '',
-           details={'batch':str(batch.pk), 'path':item.path, 'environment_id':batch.environment_id,
+           details={'batch':str(batch.pk), 'name':item.name, 'path':item.path, 'environment_id':batch.environment_id,
                     'ticket':batch.ticket, 'http_status':item.http_status, 'message':item.message})
 
 
@@ -296,6 +296,8 @@ def run(pk):
     batch = DeletionBatch.objects.select_related('environment','requested_by').get(pk=pk)
     if batch.status not in ('checking','running'): return
     execute = batch.status == 'running'
+    record('nsx.deletion_execution_started' if execute else 'nsx.deletion_preview_started',
+           'DeletionBatch', batch.pk, actor='', details={'environment_id':batch.environment_id, 'ticket':batch.ticket})
     for item in batch.items.select_related('finding').order_by('pk'):
         item.batch = batch
         if execute and item.status != 'verified': continue
@@ -304,6 +306,9 @@ def run(pk):
     if execute: batch.finished_at = timezone.now()
     else: batch.checked_at = timezone.now()
     batch.save()
+    record('nsx.deletion_execution_finished' if execute else 'nsx.deletion_preview_finished',
+           'DeletionBatch', batch.pk, actor='', details={'environment_id':batch.environment_id, 'ticket':batch.ticket,
+           'message':'Processing finished; individual object outcomes determine whether deletion succeeded.'})
 
 
 def interrupted(pk):
