@@ -662,3 +662,22 @@ either a single condition or multiple conditions joined only by AND. It still
 requires explicit empty VM, IP and port results plus all existing retained-history,
 identity, approval and dependency checks. OR, nested, mixed and extended definitions
 remain blocked. This does not change collection membership shortcuts.
+
+
+### Live dependency-search diagnostics
+
+Deletion preview results include an expandable **Live dependency-search diagnostics**
+section, including on blocked items. Copy its JSON to share the successful/attempted
+query, rejected alternatives, search mode, HTTP status/error, coverage retries and
+runtime filtering counts. These are live preview/execution diagnostics, separate
+from the saved collection report. Existing previews are not retroactively updated.
+
+Search first tries broad queries with server-side runtime exclusions. If NSX rejects
+them or returns no configuration despite known group/service inventory, it tries
+`resource_type:*` and `*` without exclusions. It verifies complete pagination first,
+then removes VirtualMachine, VirtualNetworkInterface and GenericPolicyRealizedResource
+records locally. Direct group/service inventory must still be present in the result.
+The explicit-type compatibility query remains limited and cannot authorize deletion.
+All alternatives and retries share the existing five-scan budget; authentication,
+incomplete pagination and exhausted verification remain blocking. Unfiltered scans
+can retrieve more records and take longer on busy managers.

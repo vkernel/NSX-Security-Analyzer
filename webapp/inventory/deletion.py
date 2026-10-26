@@ -112,6 +112,7 @@ def validate_live(client, finding):
     groups = [g for d in domains for g in collector.objects(client, d['path'] + '/groups')]
     services = collector.objects(client, '/infra/services')
     resources, coverage = collector.verified_configuration_search(client, groups, services)
+    client.search_diagnostics = coverage
     if coverage.get('mode') != 'all_types' or coverage.get('errors') or coverage.get('failed'):
         raise ValidationError('Live dependency coverage is incomplete. Automated deletion is blocked; manual verification cannot override this.')
     if not any(r.get('path') == finding.path for r in resources):
@@ -174,6 +175,7 @@ def process_item(item, execute=False):
     if execute and not DeletionItem.objects.filter(pk=item.pk, status='verified').update(status='validating'):
         return
     sent = False
+    client = None
     try:
         finding = item.finding
         guard(batch, finding, item)
@@ -246,6 +248,16 @@ def process_item(item, execute=False):
     except Exception as exc:
         item.status = 'uncertain' if sent else 'blocked'
         item.message = describe_error(exc)
+    diagnostics = getattr(client, 'search_diagnostics', None)
+    if isinstance(diagnostics, dict):
+        # Persist only search metadata, never result objects, headers or credentials.
+        allowed = ('query', 'mode', 'status', 'runtime_filtering', 'resource_types',
+                   'excluded_resource_types', 'rejected_queries', 'inventory_retries',
+                   'inventory_coverage_retries', 'search_scans', 'raw_records',
+                   'configuration_records', 'runtime_records_removed', 'missing_groups',
+                   'missing_services', 'error', 'http_status')
+        item.verification = {**item.verification,
+            'search_diagnostics': {key: diagnostics[key] for key in allowed if key in diagnostics}}
     item.finished_at = timezone.now()
     item.save()
     record('nsx.deletion_' + item.status, 'DeletionItem', item.pk, actor=batch.requested_by_id or '',
@@ -356,6 +368,7 @@ def detail(request, pk):
     items = list(batch.items.select_related('finding'))
     for item in items:
         item.related_findings = item.verification.get('Related findings', [])
+        item.search_diagnostics_json = json.dumps(item.verification.get('search_diagnostics', {}), indent=2)
     return render(request,'inventory/deletion_detail.html',{'batch':batch,'items':items,
         'status_label':batch.status_label, 'latest_snapshot':latest, 'inventory_warnings':warnings, 'inventory_blocked':bool(latest and latest.summary.get('inventory_warnings')),
         'error':error,'verified_count':batch.items.filter(status='verified').count(),

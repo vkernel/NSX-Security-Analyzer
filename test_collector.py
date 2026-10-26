@@ -982,11 +982,11 @@ examples.forEach((_,index) => {
         self.assertTrue(report["testing"])
         self.assertEqual(report["performance"]["workers"], 1)
         self.assertEqual(client.retries, 0)
-        # Empty search results try all three compatible query variants, once each.
-        self.assertEqual(client.get.call_count, 15)
+        # Empty search results try all five compatible query variants, once each.
+        self.assertEqual(client.get.call_count, 17)
         searches = [call for call in client.get.call_args_list if call.args[0] == "/search/query"]
-        self.assertEqual(len(searches), 3)
-        self.assertEqual(len({call.args[1]["query"] for call in searches}), 3)
+        self.assertEqual(len(searches), 5)
+        self.assertEqual(len({call.args[1]["query"] for call in searches}), 5)
         self.assertEqual(report["groups_scanned"], 1)
         self.assertEqual(report["custom_services_scanned"], 1)
         self.assertTrue(all(r["usage"] == "unknown" for r in report["objects"]))
@@ -1368,11 +1368,11 @@ examples.forEach((_,index) => {
     def test_search_compatibility_retries_400_with_explicit_types(self):
         client = Mock()
         client.items.side_effect = [nsx.AuditError("unsupported resource type wildcard", 400),
-                                    nsx.AuditError("resource type required", 400), iter([self.group])]
+                                    nsx.AuditError("resource type required", 400), nsx.AuditError("wildcard rejected", 400), nsx.AuditError("wildcard rejected", 400), iter([self.group])]
         resources, coverage = nsx.search_configuration(client)
         self.assertEqual(resources, [self.group])
         self.assertEqual(coverage["mode"], "explicit_types")
-        self.assertEqual(len(coverage["rejected_queries"]), 2)
+        self.assertEqual(len(coverage["rejected_queries"]), 4)
         self.assertIn("resource_type:Rule", coverage["query"])
         self.assertNotIn("*", coverage["query"])
 
@@ -1387,14 +1387,40 @@ examples.forEach((_,index) => {
         client.get = lambda path, params: (calls.append(dict(params)), get(path, params))[1]
         resources, coverage = nsx.verified_configuration_search(client, [self.group], [])
         self.assertEqual(resources, [self.group])
-        self.assertEqual(coverage['mode'], 'explicit_types')
+        self.assertEqual(coverage['mode'], 'all_types')
         self.assertEqual(len(coverage['rejected_queries']), 2)
         self.assertTrue(all(row['reason'] == 'empty_with_known_inventory'
                             for row in coverage['rejected_queries']))
         self.assertEqual(len(calls), 3)
         self.assertTrue(all('cursor' not in call for call in calls))
         self.assertNotIn('NOT', coverage['query'])
-        self.assertEqual(coverage['resource_types'], list(nsx.REFERENCE_SEARCH_TYPES))
+        self.assertEqual(coverage['resource_types'], [])
+
+    def test_unfiltered_broad_search_filters_runtime_after_pagination(self):
+        client = self.client_with_pages([
+            {'results': [], 'result_count': 0},
+            {'results': [], 'result_count': 0},
+            {'results': [{'resource_type': 'VirtualMachine', 'path': '/runtime/vm'}], 'result_count': 2, 'cursor': 'next'},
+            {'results': [self.group]},
+        ])
+        resources, coverage = nsx.verified_configuration_search(client, [self.group], [])
+        self.assertEqual(resources, [self.group])
+        self.assertEqual(coverage['mode'], 'all_types')
+        self.assertEqual(coverage['query'], 'resource_type:*')
+        self.assertEqual(coverage['runtime_records_removed'], 1)
+        self.assertEqual(coverage['raw_records'], 2)
+        self.assertEqual(coverage['status'], 'verified')
+
+    def test_bare_wildcard_fallback_and_explicit_scope(self):
+        client = Mock()
+        client.items.side_effect = [[], [], [], [self.group]]
+        _, coverage = nsx.verified_configuration_search(client, [self.group], [])
+        self.assertEqual(coverage['query'], '*')
+        self.assertEqual(coverage['runtime_filtering'], 'local')
+        client.items.side_effect = [[], [], [], [], [self.group]]
+        _, coverage = nsx.verified_configuration_search(client, [self.group], [])
+        self.assertEqual(coverage['mode'], 'explicit_types')
+        self.assertEqual(len(coverage['rejected_queries']), 4)
 
     def test_empty_filtered_search_uses_broad_alternative_when_possible(self):
         client = Mock()
@@ -1417,10 +1443,10 @@ examples.forEach((_,index) => {
         for fallback in ([], [self.group]):
             with self.subTest(fallback=fallback):
                 client = Mock()
-                client.items.side_effect = [[], [], fallback] * 3
+                client.items.side_effect = ([[], [], [], [], fallback] if not fallback else [[], [], fallback]) * 3
                 with self.assertRaisesRegex(nsx.AuditError, 'services=1/1'):
                     nsx.verified_configuration_search(client, [self.group], [{'path': '/infra/services/s'}])
-                self.assertEqual(client.items.call_count, 9)
+                self.assertEqual(client.items.call_count, 15 if not fallback else 9)
 
     def test_search_compatibility_preserves_broad_scope_when_possible(self):
         client = Mock()
@@ -1543,7 +1569,7 @@ examples.forEach((_,index) => {
         client.items.side_effect = nsx.AuditError("query rejected", 400)
         with self.assertRaisesRegex(nsx.AuditError, "all search query variants"):
             nsx.search_configuration(client)
-        self.assertEqual(client.items.call_count, 3)
+        self.assertEqual(client.items.call_count, 5)
 
     def test_http_error_includes_nsx_details_and_status(self):
         client = object.__new__(nsx.NSXClient)

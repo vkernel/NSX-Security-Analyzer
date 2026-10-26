@@ -42,6 +42,23 @@ class DeletionTests(TestCase):
             revision=self.finding.revision, status='verified', verified_at=timezone.now(), before=self.obj, approved_evidence=self.evidence, approvals=self.finding.approvals)
         self.client.force_login(self.user)
 
+    def test_blocked_preview_retains_live_search_diagnostics(self):
+        diagnostics = {'mode':'explicit_types', 'query':'resource_type:Group',
+                       'rejected_queries':[{'query':'*', 'error':'No results'}],
+                       'headers': {'Authorization':'must-not-be-saved'}}
+        client = Mock(search_diagnostics=diagnostics)
+        with patch.object(d,'guard'), patch.object(d,'connection') as connect, patch.object(d,'validate_live',side_effect=ValidationError('Live dependency coverage is incomplete.')), patch.object(d,'delete_once') as delete:
+            connect.return_value.__enter__.return_value = client
+            d.process_item(self.item)
+        self.item.refresh_from_db()
+        self.assertEqual(self.item.status, 'blocked')
+        self.assertEqual(self.item.verification['search_diagnostics']['query'], diagnostics['query'])
+        self.assertNotIn('headers', self.item.verification['search_diagnostics'])
+        response = self.client.get(reverse('deletion-detail',args=[self.batch.pk]))
+        self.assertContains(response, 'Live dependency-search diagnostics')
+        self.assertContains(response, 'No results')
+        delete.assert_not_called()
+
     def test_approval_validation_requires_valid_current_decisions(self):
         with patch.object(d, 'approval_readiness', return_value={'status':'ready','coverage':{}}), patch.object(d,'coverage_changed',return_value=False):
             d.approvals_valid(self.finding)

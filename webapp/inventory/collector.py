@@ -1522,9 +1522,16 @@ def search_configuration(client, expect_resources=False):
     inventory_retries = 0
     runtime_filter = " AND NOT (" + " OR ".join(
         "resource_type:" + kind for kind in REFERENCE_SEARCH_EXCLUDED_TYPES) + ")"
-    queries = ("resource_type:*" + runtime_filter, "*" + runtime_filter, " OR ".join(
+    queries = ("resource_type:*" + runtime_filter, "*" + runtime_filter, "resource_type:*", "*", " OR ".join(
         "resource_type:" + kind for kind in REFERENCE_SEARCH_TYPES))
     for index, query in enumerate(queries):
+        explicit = index == len(queries) - 1
+        diagnostics = {"query": query, "mode": "explicit_types" if explicit else "all_types",
+                       "excluded_resource_types": list(REFERENCE_SEARCH_EXCLUDED_TYPES),
+                       "runtime_filtering": "local" if index in (2, 3) else "query",
+                       "resource_types": list(REFERENCE_SEARCH_TYPES) if explicit else [],
+                       "rejected_queries": rejected, "status": "checking"}
+        client.search_diagnostics = diagnostics
         try:
             # Start each alternative from page one, discarding any partial attempt.
             attempts = 1 if getattr(client, "testing", False) is True else 3
@@ -1548,7 +1555,13 @@ def search_configuration(client, expect_resources=False):
                     time.sleep(delay)
             if any(not isinstance(obj, dict) for obj in resources):
                 raise AuditError("Search returned a non-object result")
-            if not resources and expect_resources and index < len(queries) - 1:
+            # Pagination/unique-count verification has completed over the raw result
+            # before removing runtime rows. Never filter individual pages first.
+            raw_count = len(resources)
+            resources = [obj for obj in resources if obj.get('resource_type') not in REFERENCE_SEARCH_EXCLUDED_TYPES]
+            diagnostics.update(raw_records=raw_count, configuration_records=len(resources),
+                               runtime_records_removed=raw_count-len(resources))
+            if not resources and expect_resources and not explicit:
                 # Some managers accept a query but return an empty result. Direct
                 # group/service inventory proves that an empty search is not
                 # sufficient. Try the next syntax, then validate its coverage.
@@ -1556,15 +1569,14 @@ def search_configuration(client, expect_resources=False):
                                  "error": "No results despite non-empty group/service inventory"})
                 LOG.warning("Search returned no results despite known inventory; trying compatible query syntax.")
                 continue
-            return resources, {"query": query, "mode": "explicit_types" if index == 2 else "all_types",
-                               "excluded_resource_types": list(REFERENCE_SEARCH_EXCLUDED_TYPES),
-                               "resource_types": list(REFERENCE_SEARCH_TYPES) if index == 2 else [],
-                               "rejected_queries": rejected, "inventory_retries": inventory_retries}
+            diagnostics.update(status="search_complete", inventory_retries=inventory_retries)
+            return resources, diagnostics
         except AuditError as exc:
+            diagnostics.update(status="failed", error=str(exc)[:2000], http_status=exc.status_code)
             if exc.status_code != 400:
                 raise
-            rejected.append({"query": query, "error": str(exc)})
-            LOG.warning("Search query rejected (HTTP 400); trying compatible query syntax." if index < 2
+            rejected.append({"query": query, "error": str(exc)[:2000], "http_status": exc.status_code})
+            LOG.warning("Search query rejected (HTTP 400); trying compatible query syntax." if not explicit
                         else "All search query variants were rejected.")
     raise AuditError("NSX rejected all search query variants. " + rejected[-1]["error"], status_code=400)
 
@@ -1585,6 +1597,7 @@ def verified_configuration_search(client, groups, services, testing=False):
         missing = missing_groups | missing_services
         if not missing or testing:
             coverage["inventory_coverage_retries"] = attempt
+            coverage["status"] = "verified" if not testing else "testing"
             budget = getattr(client, '_search_scan_budget', None)
             if isinstance(budget, dict):
                 coverage['search_scans'] = 5 - budget['remaining']
@@ -1599,6 +1612,7 @@ def verified_configuration_search(client, groups, services, testing=False):
         ).format(len(missing), len(missing_groups), len(expected_groups),
                  len(missing_services), len(expected_services), len(resources),
                  len(found), coverage.get("query", "<unknown>"), sample)
+        coverage.update(status="incomplete", error=detail[:2000], missing_groups=len(missing_groups), missing_services=len(missing_services))
         if attempt == attempts - 1:
             raise AuditError(detail + " Coverage could not be verified after {} attempts; "
                              "possible search query, indexing, or path-scope mismatch.".format(attempts))
@@ -2075,7 +2089,7 @@ def feature_guide():
 <p>On Snapshot history, select two eligible snapshots from the same page and choose <strong>Compare selected</strong>. Before is the older timestamp and After the newer; a third selection is disabled until one is cleared. Testing/imported snapshots and equal timestamps cannot be compared. For snapshots on different pages, use the compact Earlier snapshot → Later snapshot selectors on Compare snapshots. Preparing results runs in the comparison queue; saved pairs are reused.</p>
 <p>Administrators use <strong>Audit &amp; diagnostics → Start diagnostic collection</strong> to open the environment dialog. Detailed logging lasts up to 15 minutes from submission and does not restart an active collection. In Review approvals, expand <strong>How approvals work</strong> for details; the impact of saving on existing reviews stays visible. Selection shortcuts require JavaScript; direct finding forms and comparison selectors remain available.</p>
 <h3>Keeping your place in finding reviews</h3><p>Assignment and review progress are shown separately. Released work can retain approvals but requires an owner before approval or completion. The active queue is highlighted. Opening a finding preserves its queue filters and page in the back link; Previous and Next follow the filtered Finding reviews order. Blocked actions explain the reason beside the decision controls and link to coverage or collection status.</p>
-<h3>Confirmed NSX deletion</h3><p>Select rows in Finding reviews to reveal Actions → Delete from NSX or Return to unassigned. Deletion previews use those selections and reject changed revisions. Deletion history remains accessible without a selection. If the latest full collection has inventory warnings, the preview shows the warning details and collection links. Resolve the warning, complete a verified collection and finding evaluation, then create a new preview; saved object eligibility alone does not override this safeguard.</p><p>Administrators can preview deletion from a ready finding or select up to 100 ready findings on the environment deletion page. Live checks require unchanged approved identity/configuration, valid approvals and unrestricted successful dependency-search coverage; referenced, protected or unsupported objects are blocked. A confirmation dialog names every verified object and requires a change ticket. Read-only previews run in a separate lane within the existing worker container, alongside collection. Confirmed deletion waits for the collection lane and repeats checks before each DELETE. No force or automatic DELETE retries are used. Verified deletion also closes related findings for the same environment, path and object identity, preserving their decisions and linking to the primary review. The confirmation lists these related findings. Manual completion requires a successful live absence check before closing related reviews. Only verified absence marks the review decommissioned. Already-absent, blocked, failed and uncertain outcomes remain separate. Bulk deletion is not atomic. Search and DELETE are not atomic either: external changes and unindexed dependencies remain possible. VM and tag deletion are excluded. Saved pre-deletion evidence is retained in deletion records.</p>
+<h3>Confirmed NSX deletion</h3><p>Blocked previews include Live dependency-search diagnostics: expand and copy the JSON to share query failures and coverage details. Broad search can fall back to unfiltered queries, with runtime records removed locally only after complete pagination verification. Limited explicit-type search remains insufficient for automated deletion.</p><p>Select rows in Finding reviews to reveal Actions → Delete from NSX or Return to unassigned. Deletion previews use those selections and reject changed revisions. Deletion history remains accessible without a selection. If the latest full collection has inventory warnings, the preview shows the warning details and collection links. Resolve the warning, complete a verified collection and finding evaluation, then create a new preview; saved object eligibility alone does not override this safeguard.</p><p>Administrators can preview deletion from a ready finding or select up to 100 ready findings on the environment deletion page. Live checks require unchanged approved identity/configuration, valid approvals and unrestricted successful dependency-search coverage; referenced, protected or unsupported objects are blocked. A confirmation dialog names every verified object and requires a change ticket. Read-only previews run in a separate lane within the existing worker container, alongside collection. Confirmed deletion waits for the collection lane and repeats checks before each DELETE. No force or automatic DELETE retries are used. Verified deletion also closes related findings for the same environment, path and object identity, preserving their decisions and linking to the primary review. The confirmation lists these related findings. Manual completion requires a successful live absence check before closing related reviews. Only verified absence marks the review decommissioned. Already-absent, blocked, failed and uncertain outcomes remain separate. Bulk deletion is not atomic. Search and DELETE are not atomic either: external changes and unindexed dependencies remain possible. VM and tag deletion are excluded. Saved pre-deletion evidence is retained in deletion records.</p>
 <p><strong>How to proceed:</strong> open a ready finding → Delete from NSX — preview, or select ready findings on the deletion page. Preview and execution share the collection lane and wait while it is busy. Use Refresh results to see progress. Review saved-snapshot impact and every live-check result, then open Review permanent deletion, enter the ticket and confirm the exact targets. The requesting administrator must confirm within ten minutes of verification; execution rechecks expiry and evidence. Closing the dialog cancels submission, but queued execution has no cancellation or automatic rollback.</p>
 <p><strong>Reading results:</strong> verified means ready for confirmation, not deleted. Deleted means DELETE was accepted and a subsequent read confirmed absence. Already_absent does not mark the review decommissioned. Blocked means checks did not permit deletion; failed means the request was rejected. Uncertain or interrupted outcomes require checking NSX before another attempt. A completed batch can include unsuccessful rows. Normal snapshot retention does not remove deletion records; environments with these records are protected from deletion.</p>
 <p><strong>Supported targets:</strong> local-manager groups, custom services and their service entries, DFW rules and empty DFW policies. Empty policies require a fresh snapshot containing identity and configuration. Global/project objects and VM/tag operations are excluded. The environment account needs appropriate NSX CRUD permissions; ordinary collection remains read-only. Limited dependency-search coverage cannot be overridden by manual verification for this operation.</p>

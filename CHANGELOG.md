@@ -1,5 +1,10 @@
 # Changelog
 
+## Development — 2026-10-26
+
+- Add unfiltered broad configuration-search fallbacks with runtime filtering after verified pagination. Preserve inventory checks and limited fallback restrictions.
+- Save and show live dependency-search diagnostics on deletion previews, including blocked results.
+
 ## Development — 2026-10-23
 
 - Support flat VM Name/Tag AND conditions for direct deletion verification. Close and cross-link related findings only after verified object absence, preserve approvals, and restart review for recreated object identities.
