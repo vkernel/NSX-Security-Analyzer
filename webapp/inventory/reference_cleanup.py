@@ -180,7 +180,7 @@ def finish_rule(child, item, outcome):
                         'http_status': child.http_status, 'cleanup_parent_item': item.pk, 'message': child.message})
 
 
-def validate_approvals(item):
+def validate_approvals(item, *, require_complete=True):
     from .deletion import permitted
     required_count = requirement(item.finding)
     digest = fingerprint(item)
@@ -193,7 +193,7 @@ def validate_approvals(item):
         if not permitted(actor):
             raise ValidationError('A reference cleanup reviewer is no longer authorized.')
         actors.add(str(actor.pk))
-    if required_count not in (1, 2) or len(actors) < required_count:
+    if required_count not in (1, 2) or (require_complete and len(actors) < required_count):
         raise ValidationError(f'Reference cleanup needs {required_count} distinct administrator approval(s) for the exact rule changes.')
 
 

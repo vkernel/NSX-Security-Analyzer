@@ -18,7 +18,8 @@
     }
     return path.join('/');
   }
-  function blocked(root) {
+  function blocked(root, {allowError=false}={}) {
+    if (!allowError && root.querySelector('[data-preserve-error]')) return 'Updates paused to keep the error visible. Review it, then use Refresh now.';
     if (document.querySelector('dialog[open]')) return 'Updates paused while a dialog is open. Background work continues.';
     if ([...root.querySelectorAll('input[type="file"]')].some(node=>node.files?.length))
       return 'Updates paused to preserve your selected file. Background work continues.';
@@ -26,8 +27,8 @@
       return 'Updates paused while you edit a field. Background work continues.';
     return '';
   }
-  function replace(root, next) {
-    const reason=blocked(root);
+  function replace(root, next, options={}) {
+    const reason=blocked(root, options);
     if (reason) return reason;
     const active=root.contains(document.activeElement) ? key(document.activeElement, root) : null;
     const details=new Map([...root.querySelectorAll('details')].map(node=>[key(node,root),node.open]));

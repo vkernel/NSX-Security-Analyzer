@@ -890,3 +890,20 @@ The execution progress bar appears only after confirmation. Waiting reviews show
 approval progress; verified plans show the confirmation deadline. Both cleanup and
 deletion pages update while waiting. Historical decisions remain available, and no
 expiry automatically retries any operation.
+
+
+### Troubleshooting a second cleanup approval
+
+An invalid earlier decision (changed plan fingerprint or a reviewer who is no longer
+eligible) is an approval error, not a missing second reviewer. The page displays the
+specific reason at the top and pauses automatic refresh so the error remains visible.
+The rejected submission does not add a decision or queue revalidation. Correct the
+underlying issue or create a new preview and obtain fresh approvals.
+
+The first reviewer sees **Your approval is recorded** and cannot approve twice. A
+second eligible administrator sees **Submit second approval**. After a successful
+second approval, the task moves to read-only revalidation. Only the requester sees
+**Continue to execution confirmation** when verification passes.
+
+Cleanup task rows use one primary review action. **More** contains links to the
+original finding and deletion request; affected rules expand within the row.

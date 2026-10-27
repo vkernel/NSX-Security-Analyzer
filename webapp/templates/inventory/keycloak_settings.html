@@ -1,6 +1,6 @@
 {% extends 'base.html' %}{% block content %}
 <a class="breadcrumb" href="{% url 'administration' %}">← Administration</a>
-<div class="page-heading"><div><h1>Authentication providers</h1><p class="lead">Configure single sign-on and verified certificate trust. Local sign-in stays available.</p></div></div>
+{% include 'components/page_header.html' with title='Authentication providers' description='Configure single sign-on and verified certificate trust. Local sign-in stays available.' eyebrow='' only %}
 {% include 'inventory/authentication_tabs.html' %}<h2>Keycloak</h2>
 <p>{% if legacy %}No GUI settings saved yet. Existing deployment settings are used as a fallback.{% else %}Saved GUI settings override deployment Keycloak settings on every web pod. No restart is needed.{% endif %}</p>
 <p>Configure this exact redirect URI in your Keycloak client: <code>{{ callback_url }}</code></p>

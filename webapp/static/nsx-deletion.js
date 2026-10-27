@@ -8,7 +8,7 @@
   };
   async function refresh(manual = false) {
     if (busy || document.hidden || !region()) return;
-    const reason = window.RefreshRegion.blocked(region());
+    const reason = window.RefreshRegion.blocked(region(), {allowError:manual});
     if (reason) { status(reason); return; }
     busy = true;
     const controller = new AbortController();
@@ -22,7 +22,7 @@
       const next = page.getElementById('deletion-progress');
       if (!next) throw new Error('Missing status region');
       if (paused && !manual) return;
-      const reason = window.RefreshRegion.replace(region(), next);
+      const reason = window.RefreshRegion.replace(region(), next, {allowError:manual});
       if (reason) { status(reason); return; }
       if (paused) {
         const toggle = next.querySelector('[data-toggle-refresh]');

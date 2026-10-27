@@ -76,3 +76,61 @@ test('deletion timer refreshes focused disclosure and stops on terminal state', 
   assert.equal(calls,1);
   dom.window.close();
 });
+
+test('automatic refresh preserves validation errors until explicit refresh', () => {
+  const dom=setup('<div id="results"><p role="alert" data-preserve-error>Approval could not be recorded</p></div>'),w=dom.window;
+  const root=w.document.getElementById('results');
+  assert.match(w.RefreshRegion.replace(root,next(w,'<div id="results">Updated</div>')),/error visible/);
+  assert.match(root.textContent,/Approval/);
+  assert.equal(w.RefreshRegion.replace(root,next(w,'<div id="results">Updated</div>'),{allowError:true}),'');
+  assert.equal(root.textContent,'Updated');
+  dom.window.close();
+});
+
+test('shared refresh pause controls do not submit forms or lose reading state', async () => {
+  const dom=setup('<div data-task-refresh-controls hidden><span data-live-status></span><button data-task-refresh>Refresh</button><button data-task-pause>Pause</button></div><div id="results" data-live-region data-poll="true">old</div>'),w=dom.window;
+  let calls=0,poll;
+  w.setTimeout=fn=>{poll=fn;};
+  w.fetch=async()=>{calls++;return {ok:true,text:async()=>'<div id="results" data-poll="true">new</div>'};};
+  w.eval(source('live-tasks.js'));
+  w.document.querySelector('[data-task-pause]').click();
+  await poll();
+  assert.equal(calls,0);
+  assert.equal(w.document.querySelector('[data-task-pause]').getAttribute('aria-pressed'),'true');
+  w.document.querySelector('[data-task-refresh]').click();
+  await new Promise(resolve=>setImmediate(resolve));
+  assert.equal(calls,1);
+  assert.match(w.document.querySelector('[data-live-status]').textContent,/paused/);
+  dom.window.close();
+});
+
+test('action menus close with Escape and selection preview stays read-only', () => {
+  const dom=setup('<main id="main"><div class="cleanup-task-actions"><details open><summary>More</summary><a href="/history">History</a></details></div><form data-preview-selection><input type="checkbox" name="finding" value="1"><span data-selected-count></span><button data-preview-selected>Preview</button></form></main>'),w=dom.window;
+  w.eval(source('interface-patterns.js'));
+  const menu=w.document.querySelector('details'),link=menu.querySelector('a');
+  link.focus();link.dispatchEvent(new w.KeyboardEvent('keydown',{key:'Escape',bubbles:true}));
+  assert.equal(menu.open,false);assert.equal(w.document.activeElement,menu.querySelector('summary'));
+  const button=w.document.querySelector('button');
+  assert.equal(button.disabled,true);
+  const input=w.document.querySelector('input');input.checked=true;input.dispatchEvent(new w.Event('change',{bubbles:true}));
+  assert.equal(button.disabled,false);assert.equal(button.textContent,'Preview 1 selected object');
+  dom.window.close();
+});
+
+test('collection-only pages share pause and manual refresh controls', async () => {
+  const dom=setup('<div data-task-refresh-controls hidden><span data-live-status></span><button data-task-refresh>Refresh</button><button data-task-pause>Pause</button></div><div data-job="1" data-status="running"><span class="pill">Running</span><div class="collection-details"></div></div>'),w=dom.window;
+  let tick,calls=0;
+  w.setTimeout=fn=>{tick=fn;return 1;};
+  w.fetch=async()=>{calls++;return {ok:true,json:async()=>({jobs:[{id:'1',status:'succeeded',label:'Completed',progress:{stage:'Finished'},result_url:'/result'}]})};};
+  w.eval(source('workspace.js'));w.eval(source('live-tasks.js'));
+  assert.equal(w.document.querySelector('[data-task-refresh-controls]').hidden,false);
+  w.document.querySelector('[data-task-pause]').click();
+  await tick();assert.equal(calls,0);
+  w.document.querySelector('[data-task-refresh]').click();
+  await new Promise(resolve=>setImmediate(resolve));
+  assert.equal(calls,1);
+  assert.equal(w.document.querySelector('.pill').textContent,'Completed');
+  assert.equal(w.document.querySelector('[data-task-pause]').disabled,true);
+  assert.equal(w.document.querySelector('.collection-details a').getAttribute('href'),'/result');
+  dom.window.close();
+});

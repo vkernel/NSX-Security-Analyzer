@@ -678,17 +678,25 @@ def reference_cleanup(request, pk):
                     raise ValidationError('Review and explicitly approve the displayed rule changes.')
                 if any(str(d.get('actor_id')) == str(request.user.pk) for d in item.cleanup_approvals):
                     raise ValidationError('You already approved this plan. A distinct administrator must provide the second approval when required.')
-                item.cleanup_approvals.append({'actor_id': str(request.user.pk), 'actor_name': user_label(request.user),
-                    'fingerprint': digest, 'at': timezone.now().isoformat()})
+                # Validate existing decisions before accepting another one. Invalid evidence
+                # or revoked permissions must not masquerade as a missing reviewer.
+                cleanup.validate_approvals(item, require_complete=False)
+                decisions = list(item.cleanup_approvals)
+                item.cleanup_approvals = decisions + [{'actor_id': str(request.user.pk), 'actor_name': user_label(request.user),
+                    'fingerprint': digest, 'at': timezone.now().isoformat()}]
                 item.status = 'cleanup_review'
-                try:
-                    cleanup.validate_approvals(item)
+                if len({str(d.get('actor_id')) for d in item.cleanup_approvals}) >= required_count:
+                    try:
+                        cleanup.validate_approvals(item)
+                    except ValidationError:
+                        item.cleanup_approvals = decisions
+                        raise
                     item.status = 'cleanup_recheck'
                     item.message = 'Required cleanup approvals recorded. Fresh live verification is queued; no changes have been authorized.'
                     batch.status = 'preview_queued'
                     batch.save(update_fields=['status'])
-                except ValidationError:
-                    item.message = 'Reference cleanup awaits the remaining required administrator approval.'
+                else:
+                    item.message = 'Your cleanup approval is recorded. A different administrator must provide the remaining approval.'
                 item.save(update_fields=['cleanup_approvals', 'status', 'message'])
                 record('nsx.deletion_cleanup_approved', 'DeletionItem', item.pk, actor=request.user.pk,
                        details={'environment_id': batch.environment_id, 'batch': str(batch.pk), 'path': item.path,
@@ -729,12 +737,20 @@ def reference_cleanup(request, pk):
         phase_message = f'{max(0, required_count - len(item.cleanup_approvals))} more distinct administrator approval(s) required. Execution has not started.'
     elif waiting:
         phase_message = 'Approvals recorded. The requesting administrator must confirm execution with a change ticket. Execution has not started.'
+    approved_by_me = any(str(d.get('actor_id')) == str(request.user.pk) for d in item.cleanup_approvals)
+    if waiting and item.status == 'cleanup_review' and approved_by_me:
+        phase_message = 'Your approval is recorded. Waiting for a different eligible administrator; you cannot provide the second approval.'
+    if error:
+        active = False
+        phase_label = 'Approval action could not be completed'
+        phase_message = error
     outcomes = {row['path']: row for row in item.cleanup_results}
     plan_rows = [{**change, 'outcome': outcomes.get(change['path'])} for change in item.cleanup_plan]
     template = ('inventory/reference_cleanup_progress.html' if request.method == 'GET' and request.GET.get('fragment') == '1'
                 else 'inventory/reference_cleanup.html')
     response = render(request, template, {'item': item, 'batch': batch,
         'active': active, 'executing': executing, 'waiting': waiting, 'phase_label': phase_label,
+        'approved_by_me': approved_by_me, 'is_requester': batch.requested_by_id == request.user.pk,
         'phase_message': phase_message, 'review_expired': review_expired, 'closed': closed or item.status == 'cleanup_rejected', 'deadline': deadline,
         'can_revalidate': item.status == 'verified' and batch.status == 'preview_ready' and not batch.confirmed_at and batch.requested_by_id == request.user.pk,
         'show_operations': bool(batch.confirmed_at or item.cleanup_results),

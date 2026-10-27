@@ -1,0 +1,4 @@
+<header class="page-heading app-page-header">
+  <div>{% if eyebrow %}<p class="eyebrow">{{ eyebrow }}</p>{% endif %}<h1>{{ title }}</h1>{% if description %}<p class="lead">{{ description }}</p>{% endif %}{% if context_name %}<p class="page-context">Environment · <strong>{{ context_name }}</strong></p>{% endif %}</div>
+  {% if action_url and action_label %}<div class="page-actions"><a class="button {% if action_primary %}primary{% endif %}" href="{{ action_url }}">{{ action_label }}</a></div>{% endif %}
+</header>

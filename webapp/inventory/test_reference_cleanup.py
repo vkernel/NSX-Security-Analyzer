@@ -629,3 +629,48 @@ class ReferenceCleanupTests(TestCase):
         self.assertTrue(all(call.args[1] is False for call in process.call_args_list))
         pending.refresh_from_db()
         self.assertEqual(pending.status, 'cleanup_review')
+
+    def test_invalid_prior_approval_is_not_reported_as_missing_second_review(self):
+        self.preview()
+        WorkspacePolicy.objects.update_or_create(pk=1, defaults={'required_approvals': 2})
+        self.approve()
+        self.item.cleanup_approvals[0]['fingerprint'] = 'old-plan'
+        self.item.save(update_fields=['cleanup_approvals'])
+        second = get_user_model().objects.create_superuser('loop-reviewer', password='test')
+        self.client.force_login(second)
+        url = reverse('deletion-reference-cleanup', args=[self.item.pk])
+        with patch.object(d, 'approvals_valid', return_value={}):
+            response = self.client.post(url, {'approve': 'yes', 'fingerprint': cleanup.fingerprint(self.item)})
+        self.assertContains(response, 'Reference cleanup plan changed; new approval is required')
+        self.assertContains(response, 'Approval action could not be completed')
+        self.assertContains(response, 'data-active="false"')
+        self.assertContains(response, 'Automatic updates paused')
+        self.item.refresh_from_db(); self.batch.refresh_from_db()
+        self.assertEqual(len(self.item.cleanup_approvals), 1)
+        self.assertEqual(self.batch.status, 'preview_ready')
+        self.nsx.http.request.assert_not_called()
+
+    def test_revoked_prior_reviewer_error_does_not_accept_second_decision(self):
+        self.preview()
+        WorkspacePolicy.objects.update_or_create(pk=1, defaults={'required_approvals': 2})
+        self.approve()
+        self.item.cleanup_approvals[0]['actor_id'] = '99999999'
+        self.item.save(update_fields=['cleanup_approvals'])
+        second = get_user_model().objects.create_superuser('new-reviewer', password='test')
+        self.client.force_login(second)
+        response = self.approve(second, revalidate=False)
+        self.assertContains(response, 'reviewer is no longer authorized')
+        self.assertContains(response, 'data-active="false"')
+        self.item.refresh_from_db()
+        self.assertEqual(len(self.item.cleanup_approvals), 1)
+
+    def test_first_reviewer_sees_recorded_decision_and_secondary_actions_are_grouped(self):
+        self.preview()
+        WorkspacePolicy.objects.update_or_create(pk=1, defaults={'required_approvals': 2})
+        self.approve()
+        response = self.client.get(reverse('deletion-reference-cleanup', args=[self.item.pk]))
+        self.assertContains(response, 'Your approval is recorded')
+        self.assertNotContains(response, 'Submit second approval')
+        response = self.client.get(reverse('my-work'))
+        self.assertContains(response, 'cleanup-task-actions')
+        self.assertContains(response, '<summary class="button">More</summary>', html=True)

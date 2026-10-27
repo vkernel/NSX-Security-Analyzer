@@ -1,5 +1,5 @@
 {% extends 'base.html' %}{% block content %}
-<div class="page-heading"><div><h1>Workspace overview</h1><p class="lead">Collection health and the areas that need attention.</p></div><a class="button" href="{% url 'environment-directory' %}">View environments</a></div>
+{% url 'environment-directory' as directory_url %}{% include 'components/page_header.html' with title='Workspace overview' description='Collection health and the areas that need attention.' action_url=directory_url action_label='View environments' only %}
 <div class="operational-metrics">
 <a class="{% if failed_count %}metric-error{% endif %}" href="{% url 'all-collections' %}?status=failed"><span>Failed collections</span><strong>{{ failed_count }}</strong><small>Last 24 hours</small></a>
 <a class="{% if stale_count %}metric-warning{% endif %}" href="#environment-health"><span>Stale or uncollected</span><strong>{{ stale_count }}</strong><small>Environment freshness</small></a>
