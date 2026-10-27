@@ -48,7 +48,7 @@ def audit_rows(request, options, selected, kind):
     rows = AuditEvent.objects.filter(allowed)
     if not permitted(request.user):
         rows = rows.exclude(action__startswith='finding.nsx_')
-    if kind == 'approval': rows = rows.filter(action__startswith='finding.')
+    if kind == 'approval': rows = rows.filter(Q(action__startswith='finding.') | Q(action__in=['nsx.deletion_cleanup_approved', 'nsx.deletion_cleanup_rejected']))
     elif kind == 'deletion': rows = rows.filter(Q(action__startswith='nsx.deletion_') | Q(action='nsx.access_denied', target_type='DeletionItem'))
     elif kind: rows = rows.none()
     if selected:
@@ -97,7 +97,12 @@ def audit_cards(rows):
         if str(batch) in batch_ids:
             url = reverse('deletion-detail', args=[batch])
             link_label = 'View deletion request'
+        if entry.target_type == 'DeletionItem' and action.startswith('deletion_cleanup_') and entry.target_id.isdecimal():
+            url = reverse('deletion-reference-cleanup', args=[entry.target_id])
+            link_label = 'Review cleanup plan'
         label = action.replace('_',' ').capitalize()
+        label = {'deletion_cleanup_approved': 'Cleanup approval recorded', 'deletion_cleanup_rejected': 'Cleanup rejected',
+                 'deletion_cleanup_recheck': 'Cleanup revalidating'}.get(action, label)
         if action == 'approve':
             label = 'Second approval' if data.get('from') == 'second_review' else 'First approval' if data.get('to') == 'second_review' else 'Approval (single approver)'
         cards.append(dict(kind=label, category='deletion' if is_deletion else 'approval',

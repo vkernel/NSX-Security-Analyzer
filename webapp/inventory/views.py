@@ -575,6 +575,18 @@ def notifications(request):
             items.append({'id': 'finding-'+str(event['pk']), 'label': 'Finding assigned to you' if event['details__action']=='assign' else 'Finding awaiting independent approval',
                 'environment': event['finding__environment__name'], 'at': event['created_at'].isoformat(), 'unread': not seen or event['created_at']>seen,
                 'url': reverse('finding-detail', args=[event['finding__environment_id'], event['finding_id']])})
+    if personal.notification_reviews:
+        from .cleanup_tasks import tasks as cleanup_tasks
+        from django.utils.dateparse import parse_datetime
+        for task in cleanup_tasks(request.user):
+            item = task['item']
+            stamp = parse_datetime(item.cleanup_approvals[-1]['at']) if item.cleanup_approvals and item.status == 'cleanup_review' else task['at']
+            if stamp < timezone.now() - timedelta(days=days): continue
+            is_unread = not seen or stamp > seen
+            unread += int(is_unread)
+            items.append({'id': 'cleanup-' + str(item.pk), 'label': 'Firewall reference cleanup · ' + task['label'],
+                          'environment': item.batch.environment.name, 'at': stamp.isoformat(), 'unread': is_unread,
+                          'url': task['url']})
     items.sort(key=lambda item: item['at'], reverse=True)
     return JsonResponse({'items': items[:50], 'unread': unread})
 

@@ -158,7 +158,10 @@ def findings(request, pk):
         release_eligible += int(row.can_release)
     params = request.GET.copy()
     params.pop('page', None)
+    from .cleanup_tasks import tasks as cleanup_tasks
+    cleanup_queue = 'second' if request.GET.get('review') == 'second_review' else None
     return render(request, 'inventory/findings.html', {'environment': environment, 'page': page,
+        'cleanup_tasks': cleanup_tasks(request.user, environment=environment.pk, query=query, queue=cleanup_queue),
         'release_eligible': release_eligible, 'review_return': request.get_full_path(),
         'show_release_controls': request.user.is_staff and request.GET.get('owner') != 'none',
         'filters_active': any(request.GET.get(key, '').strip() for key in ('q', 'kind', 'review', 'owner')),
@@ -402,7 +405,8 @@ def my_work(request):
         finding.approval_count = len([key for key in ('owner', 'second') if key in finding.approvals])
 
     from urllib.parse import urlencode
-    return render(request, 'inventory/my_work.html', {'page': page, 'show_deletion_controls': show_deletion_controls, 'review_return': request.get_full_path(), 'queue': queue, 'query': term, 'environments': Environment.objects.only('pk','name'), 'work_environment': selected_environment, 'sort': sort, 'query_string': urlencode({'queue': queue, 'q': term, 'environment':selected_environment, 'sort':sort})})
+    from .cleanup_tasks import tasks as cleanup_tasks
+    return render(request, 'inventory/my_work.html', {'cleanup_tasks': cleanup_tasks(request.user, environment=selected_environment, query=term, queue=queue), 'page': page, 'show_deletion_controls': show_deletion_controls, 'review_return': request.get_full_path(), 'queue': queue, 'query': term, 'environments': Environment.objects.only('pk','name'), 'work_environment': selected_environment, 'sort': sort, 'query_string': urlencode({'queue': queue, 'q': term, 'environment':selected_environment, 'sort':sort})})
 
 
 @login_required

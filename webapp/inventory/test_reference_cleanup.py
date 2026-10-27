@@ -67,12 +67,17 @@ class ReferenceCleanupTests(TestCase):
         self.item.refresh_from_db()
         self.assertEqual(self.item.status, 'cleanup_review', self.item.message)
 
-    def approve(self, user=None):
+    def approve(self, user=None, revalidate=True):
         if user: self.client.force_login(user)
         with patch.object(d, 'approvals_valid', return_value={}):
             response = self.client.post(reverse('deletion-reference-cleanup', args=[self.item.pk]),
                 {'approve': 'yes', 'fingerprint': cleanup.fingerprint(self.item)})
         self.item.refresh_from_db()
+        if revalidate and self.item.status == 'cleanup_recheck':
+            self.batch.refresh_from_db()
+            self.batch.status = 'checking'; self.batch.save()
+            with self.live(): d.run(self.batch.pk)
+            self.item.refresh_from_db(); self.batch.refresh_from_db()
         return response
 
     def confirm(self):
@@ -139,7 +144,7 @@ class ReferenceCleanupTests(TestCase):
         with patch.object(d, 'approvals_valid', return_value={}):
             self.assertContains(self.client.post(url, {'approve': 'yes', 'fingerprint': 'wrong'}), 'explicitly approve')
         self.item.verified_at = timezone.now() - timedelta(minutes=11); self.item.save()
-        self.assertContains(self.approve(), 'expired')
+        self.assertEqual(self.approve().status_code, 302)
         user = get_user_model().objects.create_user('operator', is_staff=True)
         self.client.force_login(user)
         self.assertEqual(self.client.get(url).status_code, 403)
@@ -514,7 +519,8 @@ class ReferenceCleanupTests(TestCase):
         url = reverse('deletion-reference-cleanup', args=[self.item.pk])
         response = self.client.get(url, {'fragment': '1'})
         self.assertContains(response, 'Awaiting cleanup approvals')
-        self.assertContains(response, 'aria-label="Cleanup operations"')
+        self.assertNotContains(response, 'aria-label="Cleanup operations"')
+        self.assertContains(response, 'aria-label="Cleanup approvals"')
         self.assertContains(response, 'data-active="true"')
         self.assertNotContains(response, '<html')
         self.assertIn('no-store', response['Cache-Control'])
@@ -526,3 +532,100 @@ class ReferenceCleanupTests(TestCase):
         self.item.status = 'blocked'; self.item.save()
         self.assertContains(self.client.get(url), 'data-active="false"')
         self.nsx.http.request.assert_not_called()
+
+    def test_partial_approval_remains_reviewable_after_ten_minutes(self):
+        self.preview()
+        WorkspacePolicy.objects.update_or_create(pk=1, defaults={'required_approvals': 2})
+        self.approve()
+        self.item.verified_at = timezone.now() - timedelta(days=2)
+        self.item.save(update_fields=['verified_at'])
+        response = self.client.get(reverse('deletion-reference-cleanup', args=[self.item.pk]), {'fragment': '1'})
+        self.assertContains(response, 'Awaiting cleanup approvals')
+        self.assertNotContains(response, 'Preview expired')
+        self.assertNotContains(response, 'aria-label="Cleanup operations"')
+        self.assertContains(response, 'data-active="true"')
+        self.nsx.http.request.assert_not_called()
+
+    def test_unexpired_parent_polls_for_approval_and_expiry_updates(self):
+        self.preview()
+        response = self.client.get(reverse('deletion-detail', args=[self.batch.pk]))
+        self.assertContains(response, 'data-active="true"')
+
+    def test_second_review_task_and_notification_exclude_first_reviewer(self):
+        self.preview()
+        WorkspacePolicy.objects.update_or_create(pk=1, defaults={'required_approvals': 2})
+        self.approve()
+        from .cleanup_tasks import tasks
+        self.assertEqual(tasks(self.user, queue='second'), [])
+        second = get_user_model().objects.create_superuser('cleanup-reviewer', password='test')
+        self.client.force_login(second)
+        self.assertEqual(len(tasks(second, queue='second')), 1)
+        response = self.client.get(reverse('my-work'), {'queue': 'second'})
+        self.assertContains(response, 'Firewall reference cleanup')
+        self.assertContains(response, reverse('deletion-reference-cleanup', args=[self.item.pk]))
+        self.assertTrue(any(row['id'] == 'cleanup-' + str(self.item.pk) for row in self.client.get(reverse('notifications')).json()['items']))
+        self.approve(second, revalidate=False)
+        self.assertEqual(self.item.status, 'cleanup_recheck')
+        self.batch.refresh_from_db()
+        self.assertEqual(self.batch.status, 'preview_queued')
+        self.nsx.http.request.assert_not_called()
+        self.batch.status = 'checking'; self.batch.save()
+        with self.live(): d.run(self.batch.pk)
+        self.item.refresh_from_db(); self.batch.refresh_from_db()
+        self.assertEqual(self.item.status, 'verified')
+        self.assertEqual(len(self.item.cleanup_approvals), 2)
+        self.assertIsNone(self.batch.confirmed_at)
+        self.client.force_login(self.user)
+        self.assertTrue(any('Ready to confirm' in row['label'] for row in self.client.get(reverse('notifications')).json()['items']))
+
+    def test_changed_plan_during_revalidation_requires_new_review(self):
+        self.preview(); self.approve(revalidate=False)
+        self.state[self.rule['path']]['_revision'] += 1
+        self.batch.refresh_from_db(); self.batch.status = 'checking'; self.batch.save()
+        with self.live(): d.run(self.batch.pk)
+        self.item.refresh_from_db()
+        self.assertEqual(self.item.status, 'blocked')
+        self.assertIn('renewed cleanup approvals', self.item.message)
+        self.nsx.http.request.assert_not_called()
+
+    def test_reject_requires_reason_and_stops_review_without_writes(self):
+        self.preview()
+        url = reverse('deletion-reference-cleanup', args=[self.item.pk])
+        self.assertContains(self.client.post(url, {'action': 'reject'}), 'Provide a reason')
+        self.assertEqual(self.client.post(url, {'action': 'reject', 'reason': 'Rule still required'}).status_code, 302)
+        self.item.refresh_from_db()
+        self.assertEqual(self.item.status, 'cleanup_rejected')
+        self.assertIn('Rule still required', self.item.message)
+        self.assertContains(self.client.get(url), 'Cleanup rejected')
+        self.assertEqual(self.approve().status_code, 200)
+        self.nsx.http.request.assert_not_called()
+
+    def test_expired_confirmation_can_revalidate_without_new_approval(self):
+        self.preview(); self.approve()
+        decisions = deepcopy(self.item.cleanup_approvals)
+        self.item.verified_at = timezone.now() - timedelta(minutes=11); self.item.save()
+        url = reverse('deletion-reference-cleanup', args=[self.item.pk])
+        self.assertContains(self.client.get(url), 'Revalidate approved plan')
+        with patch.object(d, 'approvals_valid', return_value={}):
+            self.assertEqual(self.client.post(url, {'action': 'revalidate'}).status_code, 302)
+        self.batch.refresh_from_db(); self.batch.status = 'checking'; self.batch.save()
+        with self.live(): d.run(self.batch.pk)
+        self.item.refresh_from_db()
+        self.assertEqual(self.item.status, 'verified')
+        self.assertEqual(self.item.cleanup_approvals, decisions)
+        self.nsx.http.request.assert_not_called()
+
+
+    def test_revalidation_refreshes_approved_peers_but_not_pending_reviews(self):
+        self.preview(); self.approve(revalidate=False)
+        peer = DeletionItem.objects.create(batch=self.batch, finding=self.finding, path='/infra/services/peer',
+                                           name='Peer', revision=1, status='verified')
+        pending = DeletionItem.objects.create(batch=self.batch, finding=self.finding, path='/infra/services/pending',
+                                              name='Pending', revision=1, status='cleanup_review')
+        self.batch.refresh_from_db(); self.batch.status = 'checking'; self.batch.save()
+        with patch.object(d, 'process_item') as process:
+            d.run(self.batch.pk)
+        self.assertEqual({call.args[0].pk for call in process.call_args_list}, {self.item.pk, peer.pk})
+        self.assertTrue(all(call.args[1] is False for call in process.call_args_list))
+        pending.refresh_from_db()
+        self.assertEqual(pending.status, 'cleanup_review')

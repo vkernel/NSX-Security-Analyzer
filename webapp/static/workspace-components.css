@@ -285,3 +285,22 @@ body dialog#saved-configuration-dialog{width:min(880px,calc(100vw - 32px))}
 
 .object-evidence-links {display:flex; flex-wrap:wrap; gap:.5rem 1rem; margin:.75rem 0; font-size:.875rem}
 .object-evidence-links .muted {font-size:.85rem}
+
+/* Shared operation panels for deletion previews and reference cleanup. */
+.operation-eyebrow {font-size:.75rem; letter-spacing:.08em; text-transform:uppercase; color:var(--muted); font-weight:600; margin-bottom:.5rem}
+.operation-state {border-top:3px solid var(--app-accent); box-shadow:0 2px 8px #10243a06}
+.operation-state-warning {border-top-color:#c68a21; background:#fffcf5}
+.operation-state-heading {display:flex; align-items:center; justify-content:space-between; gap:1rem; flex-wrap:wrap}
+.operation-state-heading h2 {margin:0}
+.operation-actions {display:flex; flex-wrap:wrap; gap:.6rem; margin-top:1.25rem}
+.operation-meter {max-width:42rem; margin:1.25rem 0}
+.operation-meter label {display:flex; justify-content:space-between; gap:1rem; margin-bottom:.5rem; color:var(--muted)}
+.deletion-progress-card progress {appearance:none; border:0; border-radius:6px; overflow:hidden; background:var(--app-surface-soft); height:8px}
+.deletion-progress-card progress::-webkit-progress-bar {background:var(--app-surface-soft); border-radius:6px}
+.deletion-progress-card progress::-webkit-progress-value {background:var(--app-accent); border-radius:6px}
+.deletion-progress-card progress::-moz-progress-bar {background:var(--app-accent); border-radius:6px}
+.deletion-confirm-summary summary {cursor:pointer; font-weight:600; font-size:1rem}
+.cleanup-changes {table-layout:fixed; width:100%; margin-top:1rem}
+.cleanup-changes th:first-child {width:14%}
+.cleanup-changes td {vertical-align:top; overflow-wrap:anywhere}
+@media(max-width:700px) {.cleanup-changes {table-layout:auto}.operation-state-heading {align-items:flex-start}}

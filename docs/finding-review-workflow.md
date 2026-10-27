@@ -807,13 +807,22 @@ Choose **Review reference cleanup** to inspect policy/rule names, enabled status
 current/proposed values. The plan needs separate administrator approval using the
 strictest of the finding's existing requirement and current group/firewall-rule
 settings under **Administration → Review approvals**. Four-eyes requires two distinct,
-currently authorized administrators. Share the cleanup page URL with the second
-administrator. Existing finding decisions do not approve the firewall edits.
+currently authorized administrators. After the first approval, eligible second reviewers
+find the linked task in **My work → Available for second approval**, finding reviews,
+and review notifications. The first approver cannot provide the second approval.
+The task lists the environment, group, first approver, proposed rule changes and
+links to the original finding and deletion request. Reviewers can approve or reject
+with a required reason. Existing finding decisions do not approve firewall edits.
 
 The requesting administrator returns to the deletion request and explicitly confirms
-both the rule changes and deletion with a change ticket. All approvals and confirmation
-must fit the existing ten-minute preview window. Confirmation does not extend the
-one-hour execution authorization. Expired plans require a fresh preview and approvals.
+both the rule changes and deletion with a change ticket. Cleanup approvals are
+asynchronous and do not expire after ten minutes. Completing the required approvals
+queues fresh read-only verification in the existing preview worker. Only the exact
+unchanged group and plan retain their approvals. Changed objects, references, rules
+or invalid approvals block execution and require a new review. After successful
+verification, the requester receives a **Ready to confirm** notification and has ten
+minutes to confirm. An expired confirmation can use **Revalidate approved plan**;
+it never automatically executes. Confirmed execution remains limited to one hour.
 
 Execution repeats object, membership, dependency and approval checks. Each rule update
 uses the approved `_revision`, with redirects, force and automatic retries disabled,
@@ -868,3 +877,16 @@ If a firewall modification/deletion is denied, execution for that group stops an
 the group is not deleted. Earlier successful changes remain recorded; remaining
 rules show Not attempted. Fix the environment service account permissions, review
 the recorded outcomes, and create a fresh preview. Writes are not retried automatically.
+
+
+Cleanup task states are Awaiting cleanup approval / Awaiting second approval,
+Revalidating, Ready to confirm, Executing, and Completed / Needs attention. Rejected
+plans retain the rejection reason and cannot be executed. These states are exposed
+through My work, finding reviews, Activity and deletion history. Notification review
+preferences are respected. Approval and revalidation requests are read-only with
+respect to NSX; writes require the requester's separate final confirmation.
+
+The execution progress bar appears only after confirmation. Waiting reviews show
+approval progress; verified plans show the confirmation deadline. Both cleanup and
+deletion pages update while waiting. Historical decisions remain available, and no
+expiry automatically retries any operation.

@@ -130,7 +130,7 @@ class DeletionTests(TestCase):
         self.assertContains(response, reverse('deletion-configuration', args=[self.item.pk]))
         self.assertNotContains(response, '>View finding</a>')
 
-    def test_progress_fragment_is_read_only_and_stops_at_preview(self):
+    def test_progress_fragment_is_read_only_and_tracks_review_deadline(self):
         self.batch.status='checking'; self.batch.confirmed_at=None; self.batch.save()
         self.item.status='pending'; self.item.save()
         url = reverse('deletion-detail', args=[self.batch.pk]) + '?fragment=1'
@@ -144,7 +144,7 @@ class DeletionTests(TestCase):
         self.batch.status='preview_ready'; self.batch.checked_at=timezone.now(); self.batch.save()
         self.item.status='verified'; self.item.verified_at=timezone.now(); self.item.save()
         response=self.client.get(url)
-        self.assertContains(response, 'data-active="false"')
+        self.assertContains(response, 'data-active="true"')
         self.assertContains(response, 'Confirm deletion of 1 object')
         self.assertContains(response, 'Change-ticket reference')
         self.batch.refresh_from_db()
