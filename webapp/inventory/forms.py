@@ -4,6 +4,14 @@ from .credentials import encrypt_password
 
 
 class EnvironmentForm(forms.ModelForm):
+    max_concurrent_requests = forms.IntegerField(
+        label="Maximum concurrent NSX requests", min_value=1, max_value=32, required=False,
+        help_text="Default 8; range 1–32. Applies to newly queued collections for this environment. Adaptive concurrency may use fewer requests. No worker restart is needed.")
+
+    def clean_max_concurrent_requests(self):
+        value = self.cleaned_data.get("max_concurrent_requests")
+        return self.instance.max_concurrent_requests if value is None else value
+
     ca_upload = forms.FileField(label="CA certificate file", required=False,
         widget=forms.FileInput(attrs={"accept": ".pem,.crt,.cer"}),
         help_text="Optional PEM certificate or bundle, up to 1 MB. Stored with this environment; no worker path needed.")
@@ -80,7 +88,7 @@ class EnvironmentForm(forms.ModelForm):
     class Meta:
         model = Environment
         fields = ["name", "slug", "manager", "username", "password",
-                  "ca_upload", "remove_ca", "insecure", "timeout", "retries", "enabled", "sync_interval_minutes"]
+                  "ca_upload", "remove_ca", "insecure", "timeout", "retries", "max_concurrent_requests", "enabled", "sync_interval_minutes"]
         labels = {"sync_interval_minutes": "Automatic sync", "slug": "Environment ID", "manager": "NSX Manager",
                   "insecure": "Disable TLS certificate validation"}
         help_texts = {"insecure": "Leave unchecked to verify the manager using the saved approved certificate or the system trust store.", "sync_interval_minutes": "Full inventory syncs run automatically at this interval. The first sync runs after one interval. Paused environments do not sync.", "slug": "A stable identifier, for example east-datacenter."}
@@ -182,6 +190,12 @@ class FindingReviewForm(forms.Form):
         from django.contrib.auth import get_user_model
         finding, actor = kwargs.pop('finding', None), kwargs.pop('actor', None)
         super().__init__(*args, **kwargs)
+        # Default new assignments to the current eligible reviewer. Submitted
+        # choices (including a cleared field) must survive validation errors.
+        if (not self.is_bound and finding and not finding.owner_id
+                and not self.initial.get('owner') and actor
+                and actor.is_active and actor.is_staff):
+            self.initial['owner'] = actor.pk
         selected = self.data.get(self.add_prefix('owner')) if self.is_bound else self.initial.get('owner')
         selected = int(selected) if str(selected or '').isdigit() and len(str(selected)) < 19 else None
         self.fields['owner'].queryset = get_user_model().objects.filter(pk=selected, is_active=True, is_staff=True).select_related('keycloakidentity', 'ldapidentity')
@@ -204,19 +218,36 @@ class FindingReviewForm(forms.Form):
             labels = dict(self.fields['action'].choices)
             self.fields['action'].choices = [(key, labels[key]) for key in allowed]
         self.fields['owner'].help_text = 'Search by name or email. Only active operators and administrators can own reviews. Keycloak and LDAP users must sign in once before appearing here. Reassigning owned work resets approvals. Assigning released work preserves its existing review progress.'
-        self.fields['change_ticket'].help_text = 'Required when recording decommissioning. This application does not delete NSX objects.'
+        self.fields['change_ticket'].help_text = 'Required when recording decommissioning. To delete through NSX, use the separate administrator deletion preview and confirmation.'
+
+
+class BulkAssignmentForm(forms.Form):
+    owner = ReviewerChoiceField(queryset=None, label='Assign to')
+
+    def __init__(self, *args, **kwargs):
+        kwargs.setdefault('auto_id', 'bulk_%s')
+        super().__init__(*args, **kwargs)
+        # Reuse the reviewer search and active-account validation from single assignment.
+        review = FindingReviewForm(self.data if self.is_bound else None, initial=self.initial)
+        self.fields['owner'].queryset = review.fields['owner'].queryset
+        self.fields['owner'].widget.attrs.update(review.fields['owner'].widget.attrs)
+        self.fields['owner'].widget.attrs['id'] = 'bulk-assignment-owner'
+        # The enhanced combobox validates its hidden select on submit.
+        self.fields['owner'].widget.attrs['required'] = False
+        self.use_required_attribute = False
+        self.fields['owner'].help_text = review.fields['owner'].help_text
 
 
 class FindingPolicyForm(forms.ModelForm):
     class Meta:
         from .models import FindingPolicy
         model = FindingPolicy
-        fields = ['zero_hits_days', 'empty_group_days', 'unused_days', 'empty_policy_days',
+        fields = ['zero_hits_days', 'empty_group_days', 'unused_days', 'unused_service_days', 'empty_policy_days',
                   'disabled_days', 'minimum_observations', 'maximum_gap_hours']
         labels = {'zero_hits_days': 'Firewall rules with zero hits (days)', 'empty_group_days': 'Empty groups (days)',
-                  'unused_days': 'Unused groups and objects (days)', 'empty_policy_days': 'Empty firewall policies (days)',
+                  'unused_days': 'Unused groups (days)', 'unused_service_days': 'Unused custom services (days)', 'empty_policy_days': 'Empty firewall policies (days)',
                   'disabled_days': 'Disabled firewall rules (days)'}
-        help_texts = {field: '0 shows confirmed conditions in the latest retained full collection. 1 requires at least 24 hours of supported history plus the minimum observations. Saving recalculates from existing history.' for field in fields[:5]}
+        help_texts = {field: '0 shows confirmed conditions in the latest retained full collection. 1 requires at least 24 hours of supported history plus the minimum observations. Saving recalculates from existing history.' for field in fields[:6]}
         help_texts['minimum_observations'] = 'Required when the waiting period is at least 1 day. With 0 days, one confirmed observation is enough.'
         help_texts['maximum_gap_hours'] = '0 uses twice the environment collection interval with a minimum of 24 hours. A longer gap restarts observation.'
 
@@ -226,7 +257,7 @@ class FindingFilterForm(forms.Form):
     from .models import Finding
     q = forms.CharField(required=False, label='Search name or path', max_length=255)
     kind = forms.ChoiceField(required=False, choices=[('', 'All finding types')] + list(LABELS.items()))
-    review = forms.ChoiceField(required=False, choices=[('', 'All workflow stages')] + Finding._meta.get_field('workflow_state').choices)
+    review = forms.ChoiceField(required=False, choices=[('', 'All workflow stages'), ('suppressed', 'Suppressed')] + Finding._meta.get_field('workflow_state').choices)
     owner = forms.ChoiceField(required=False)
     sort = forms.ChoiceField(required=False, choices=[('name', 'Name'), ('kind', 'Finding type'), ('status', 'Review status')])
     direction = forms.ChoiceField(required=False, choices=[('asc', 'Ascending'), ('desc', 'Descending')])
@@ -246,5 +277,18 @@ class ReviewApprovalsForm(forms.ModelForm):
     class Meta:
         from .models import WorkspacePolicy
         model = WorkspacePolicy
-        fields = ['required_approvals']
-        labels = {'required_approvals': 'Approval requirement'}
+        fields = ['required_approvals', 'groups_approvals', 'services_approvals', 'rules_approvals', 'policies_approvals', 'execution_mode', 'groups_execution', 'services_execution', 'rules_execution', 'policies_execution']
+        labels = {'required_approvals': 'Default approval mode', 'execution_mode': 'Who can confirm execution? Default', 'groups_execution': 'Groups: execution confirmation', 'services_execution': 'Custom services: execution confirmation', 'rules_execution': 'Firewall rules: execution confirmation', 'policies_execution': 'Firewall policies: execution confirmation', 'groups_approvals': 'Groups (including VDI)', 'services_approvals': 'Custom services', 'rules_approvals': 'Firewall rules', 'policies_approvals': 'Firewall policies'}
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        for name in self.Meta.fields[1:]:
+            self.fields[name].required = False
+
+    def clean(self):
+        data = super().clean()
+        for name in self.Meta.fields[1:]:
+            if data.get(name) is None:
+                data[name] = (self.instance.execution_mode or 'requester') if name == 'execution_mode' else '' if name.endswith('_execution') else 0
+        data['execution_mode'] = data.get('execution_mode') or self.instance.execution_mode or 'requester'
+        return data

@@ -6,7 +6,8 @@ flowchart LR
   Web --> DB[(PostgreSQL)]
   Scheduler[Sync scheduler] --> DB
   Worker[Collection worker] --> DB
-  Worker -->|HTTPS GET| NSX[NSX Local Manager]
+  Worker -->|Collection and preview: HTTPS GET| NSX[NSX Local Manager]
+  Worker -->|Confirmed approved deletion: HTTPS DELETE| NSX
 ```
 
 The web process handles authentication, environment configuration, queued collection
@@ -50,3 +51,9 @@ Tests and historical migrations are required project files: tests validate behav
 and migration history allows existing databases to upgrade safely. Generated Python
 bytecode is disposable. Private deployment files and backups are ignored by Git
 and excluded from Docker builds; they are not part of the distributed application.
+
+Administrator deletion requests are stored as batches with per-object evidence and
+outcomes. Read-only previews run in a separate lane; confirmed execution uses its own exclusive lane. The
+worker revalidates approvals and live evidence before each DELETE, never retries a
+DELETE automatically, and records uncertain outcomes separately. See the
+[workflow](finding-review-workflow.md#delete-approved-objects-from-nsx).

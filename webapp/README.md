@@ -8,7 +8,7 @@
 
 See [snapshot maintenance and stopping collections](../docs/snapshot-maintenance.md) for the optional refresh container and staff-only stop controls.
 
-A web application for read-only NSX security analysis. PostgreSQL
+A web application for read-only NSX security analysis, with a separate administrator-confirmed deletion workflow for approved objects. PostgreSQL
 stores environments, audit jobs and snapshots. A separate worker collects inventory;
 web requests never wait for an NSX audit to finish. All environment configuration, collections and report exploration are managed through
 the web interface.
@@ -216,8 +216,8 @@ HTTP 400/404/405/501 start at six hours. Repeated failures double the delay up t
 reused. Missing/unmapped counters in a successful bulk response do not trigger
 this cooldown.
 Additional worker replicas do not increase the global one-collection limit. Keep
-`audit_worker --lane all` (the default) for all three task queues, or use separately
-sized `collection`, `recalculation` and `comparison` lane processes with the same
+`audit_worker --lane all` (the default) for all five task queues, or use separately
+sized `collection`, `recalculation`, `comparison`, `deletion_preview` and `deletion_execution` lane processes with the same
 image and database. Account for their combined memory usage. See
 [resource sizing](../docs/resource-sizing.md#concurrent-collection-and-finding-history-replay).
 
@@ -510,3 +510,9 @@ Follow the [Kubernetes conversion guide](../deploy/kubernetes/README.md) before 
 Configure optional single sign-on in **Administration → Authentication providers → Keycloak**.
 The GUI stores credentials and approved certificate trust; no Keycloak YAML settings
 are needed for a new setup. See [Keycloak authentication setup](../docs/keycloak.md).
+
+
+Approved NSX object deletion is available through a separate administrator preview and
+explicit confirmation workflow. Collection remains read-only. See
+[deletion workflow](../docs/finding-review-workflow.md#delete-approved-objects-from-nsx)
+for supported targets, permissions, verification limits and partial-result handling.

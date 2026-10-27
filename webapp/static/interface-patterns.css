@@ -1,0 +1,91 @@
+/* Shared interface contract: all pages, report workspaces, light/dark themes. */
+body[data-theme] {--ui-radius:12px; --ui-gap:1.25rem; --ui-shadow:0 2px 8px #10243a08}
+.workspace-main {line-height:1.6}
+.workspace-main h1 {font-size:clamp(1.65rem,2.2vw,2.15rem); letter-spacing:-.025em; line-height:1.25; overflow-wrap:anywhere}
+.workspace-main h2 {font-size:1.2rem; line-height:1.4; letter-spacing:-.01em}
+.workspace-main .page-heading,.workspace-main .report-toolbar {gap:1rem; align-items:flex-start; margin-bottom:1.5rem}
+.page-heading>div {min-width:0}
+.page-heading .lead {color:var(--muted); margin:.55rem 0 0; max-width:72ch}
+.page-context {color:var(--muted); font-size:.85rem; margin:.5rem 0 0}
+.page-actions,.form-actions {display:flex; gap:.65rem; align-items:center; flex-wrap:wrap}
+.workspace-main :is(.form-card,.deletion-confirm-summary,.deletion-progress-card,.environment-summary,.settings-panel) {border-radius:var(--ui-radius); box-shadow:var(--ui-shadow); background:var(--app-surface); color:var(--ink)}
+body[data-theme] .operation-state-warning {background:var(--warning-bg); border-top-color:var(--warning-text)}
+.workspace-main :is(.notice,.form-error-summary) {border-radius:8px; line-height:1.6}
+.workspace-main [role=alert]:not(input):not(textarea) {border-inline-start:4px solid var(--error-text); background:var(--error-bg); color:var(--error-text); padding:1rem 1.25rem; border-radius:8px; overflow-wrap:anywhere}
+.workspace-main :is(.notice.warning,.review-readiness.blocked) {background:var(--warning-bg); color:var(--warning-text)}
+.status-badge {display:inline-flex; align-items:center; padding:.25rem .6rem; border-radius:6px; font-size:.8rem; font-weight:600; line-height:1.5; max-width:100%; white-space:normal}
+.status-neutral {background:var(--app-surface-soft); color:var(--muted)}
+.status-info {background:var(--info-bg); color:var(--info-text)}
+.status-success {background:var(--success-bg); color:var(--success-text)}
+.status-warning {background:var(--warning-bg); color:var(--warning-text)}
+.status-error {background:var(--error-bg); color:var(--error-text)}
+body[data-theme] :is(.button.danger,button.danger) {background:var(--error-text); border-color:var(--error-text); color:var(--app-surface)}
+body[data-theme] :is(.button.danger,button.danger):hover {filter:brightness(.9); background:var(--error-text); color:var(--app-surface)}
+.workspace-main .directory-toolbar {display:flex; flex-wrap:wrap; gap:.8rem; box-shadow:none}
+.directory-toolbar label {display:grid; gap:.35rem; color:var(--muted); font-size:.85rem; min-width:0}
+.directory-toolbar input[type=search] {min-width:min(18rem,75vw)}
+.workspace-main .table-scroll {max-width:100%; overflow:auto; border:1px solid var(--line); border-radius:var(--ui-radius)}
+.workspace-main .table-scroll:focus-visible {outline:2px solid var(--focus); outline-offset:3px}
+.workspace-main :is(.table-scroll,.table-widget) table {margin:0; border-collapse:collapse; width:100%}
+.workspace-main th {text-align:start; font-weight:600; white-space:normal}
+.workspace-main :is(td,th) {padding:.85rem 1rem}
+.workspace-main td {line-height:1.5}
+.workspace-main :is(td,th) :is(code,.host) {overflow-wrap:anywhere; font-size:.8rem}
+.workspace-main .pagination {display:flex; gap:.75rem; flex-wrap:wrap; align-items:center; justify-content:flex-end; margin:1rem 0; font-size:.85rem}
+.pagination a {display:inline-flex; min-height:40px; align-items:center; padding:.4rem .8rem; border:1px solid var(--line); background:var(--app-surface); border-radius:7px}
+.app-empty-state {padding:2.25rem 1.5rem; text-align:center; border:0; box-shadow:none}
+.app-empty-state strong {display:block; font-size:1.05rem}
+.app-empty-state p {max-width:60ch; margin:.6rem auto 1rem; color:var(--muted)}
+.workspace-main details>summary {cursor:pointer; min-height:32px; padding-block:.3rem}
+.workspace-main details>summary:focus-visible {outline:2px solid var(--focus); outline-offset:3px; border-radius:4px}
+.workspace-main details>pre,.workspace-main details pre {white-space:pre-wrap; overflow-wrap:anywhere; max-height:30rem; overflow:auto}
+.workspace-main .breadcrumb {display:inline-flex; align-items:center; min-height:36px; margin-bottom:.6rem; font-size:.85rem}
+.ui-refresh-toolbar {display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:.75rem; border:1px solid var(--line); padding:.75rem 1rem; background:var(--app-surface); border-radius:8px; margin-bottom:1rem}
+.ui-refresh-toolbar[hidden] {display:none}
+.ui-refresh-toolbar p {margin:0; color:var(--muted); font-size:.85rem}
+.ui-refresh-toolbar .page-actions {margin:0}
+.workspace-main .deletion-steps,.workspace-main .review-progress {gap:.75rem; flex-wrap:wrap; padding:0; margin:1rem 0 1.5rem}
+.workspace-main .deletion-steps li,.workspace-main .review-progress li {font-size:.85rem}
+.ui-selection-count {font-weight:600; color:var(--ink); margin-right:.8rem}
+body.reduced-motion *,body.reduced-motion *::before,body.reduced-motion *::after {scroll-behavior:auto!important; animation:none!important; transition:none!important}
+@media(prefers-reduced-motion:reduce) {*,*::before,*::after {scroll-behavior:auto!important; animation:none!important; transition:none!important}}
+@media(max-width:700px) {
+  .workspace-main .page-heading {flex-direction:column; align-items:stretch}
+  .page-actions .button,.operation-actions .button {flex:1; text-align:center}
+  .workspace-main :is(.form-card,.deletion-confirm-summary,.deletion-progress-card) {padding:1rem}
+  .directory-toolbar>label {flex:1 1 100%}
+  .directory-toolbar input,.directory-toolbar select {width:100%; min-width:0}
+  .workspace-main :is(td,th) {padding:.7rem}
+  .workspace-main .pagination {justify-content:center}
+}
+@media(forced-colors:active) {.status-badge,progress,.button {border:1px solid CanvasText}}
+
+.task-cancel-form {margin-top:1.5rem}
+.task-cancel-form textarea {display:block; width:100%; min-height:6rem; resize:vertical}
+
+/* Shared reading hierarchy: actions first, supporting evidence on demand. */
+.environment-fixed {display:flex;flex-direction:column;min-width:0;gap:.1rem}
+.environment-fixed a {font-weight:650;color:var(--ink);max-width:22rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.environment-fixed small,.scope-status {font-size:.75rem}
+.scope-status:empty {display:none}
+.application-topbar .topbar-actions {margin-left:auto}
+.workspace-main .decision-settings {border:0;padding:0;margin:0 0 1.75rem;min-width:0}
+.decision-settings legend {font-size:1.15rem;font-weight:650;padding:0}
+.workspace-main .technical-details,.workspace-main .evidence-disclosure,.configuration-comparison {margin:.75rem 0;color:var(--ink)}
+.technical-details summary,.evidence-disclosure summary,.configuration-comparison summary {font-size:.875rem;color:var(--muted);cursor:pointer;padding:.35rem 0}
+.evidence-disclosure[open] nav {display:flex;flex-direction:column;align-items:flex-start;gap:.65rem;padding:.7rem 0}
+.workspace-main summary:focus-visible,.workspace-main a:focus-visible,.workspace-main button:focus-visible,.workspace-switcher summary:focus-visible {outline:3px solid #2563eb;outline-offset:3px}
+.workspace-main .operation-state {border-left:4px solid #2563eb}
+.workspace-main .operation-state-warning {border-left-color:#b45309}
+.workspace-main .deletion-confirm-summary h2 {margin-top:0}
+.workspace-main .deletion-results td {vertical-align:top;padding-top:1.25rem;padding-bottom:1.25rem}
+.workspace-main .deletion-results td:first-child>a {font-weight:650}
+.workspace-main .deletion-results p {max-width:72ch;line-height:1.6}
+@media(max-width:600px){.environment-fixed {max-width:42vw}.environment-fixed small{display:none}.scope-status{max-width:40vw}}
+
+.workflow-status {padding:1rem 1.25rem;margin:1rem 0 1.5rem;border:1px solid var(--line);border-radius:12px;background:var(--app-surface)}
+.workflow-status h2 {font-size:1.05rem;margin:0 0 .5rem}.workflow-status p {max-width:78ch;margin:.5rem 0;line-height:1.6}
+.advanced-filter-fields {display:flex;flex-wrap:wrap;gap:1rem;padding:1rem 0}.scope-retry {margin-top:.4rem}.change-summary {padding-left:1.2rem;line-height:1.6;font-weight:550}
+
+.workspace-main .deletion-summary {grid-template-columns:repeat(auto-fit,minmax(155px,1fr));gap:.75rem}
+.workspace-main .deletion-summary>div {padding:.85rem 1rem}.workspace-main .deletion-summary strong {font-size:1.35rem}

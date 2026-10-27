@@ -52,21 +52,25 @@ def snapshot_list():
 def dashboard(request):
     from .usability import freshness, policy
     options = policy()
-    cards = page_queries.cards(page_queries.environments(), options)
+    scoped = request.GET.get('environment', '')
+    scope = {'environment_id': scoped} if scoped.isdecimal() and len(scoped) < 19 else {'environment_id': -1} if scoped else {}
+    envs = page_queries.environments()
+    if scoped: envs = envs.filter(pk=scope['environment_id'])
+    cards = page_queries.cards(envs, options)
     from django.utils import timezone
     from datetime import timedelta
-    failed_count = AuditJob.objects.filter(status='failed', finished_at__gte=timezone.now()-timedelta(hours=24)).count()
-    jobs = page_queries.jobs()[:8]
+    failed_count = AuditJob.objects.filter(**scope).filter(status='failed', finished_at__gte=timezone.now()-timedelta(hours=24)).count()
+    jobs = page_queries.jobs().filter(**scope)[:8]
     from .models import Finding
     from django.db.models import Count
-    finding_counts = list(Finding.objects.filter(present=True).values('qualification').annotate(total=Count('pk')))
+    finding_counts = list(Finding.objects.filter(**scope).filter(present=True).values('qualification').annotate(total=Count('pk')))
     return render(request, "inventory/dashboard.html", {
         "stale_count":sum(card['freshness']['stale'] for card in cards), "failed_count":failed_count,
-        "running_count":AuditJob.objects.filter(status='running').count(), "queued_count":AuditJob.objects.filter(status='queued').count(),
+        "running_count":AuditJob.objects.filter(**scope).filter(status='running').count(), "queued_count":AuditJob.objects.filter(**scope).filter(status='queued').count(),
         "new_issue_count":sum((card['latest'].display_summary.get('new_coverage_issues') or 0) for card in cards if card['latest']),
         "finding_counts": finding_counts, "cards": cards, "jobs": jobs, "environment_count": len(cards),
-        "snapshot_count": Snapshot.objects.count(),
-        "active_count": AuditJob.objects.filter(status__in=["queued", "running"]).count(),
+        "snapshot_count": Snapshot.objects.filter(**scope).count(),
+        "active_count": AuditJob.objects.filter(**scope).filter(status__in=["queued", "running"]).count(),
     })
 
 
@@ -89,6 +93,7 @@ def environment_detail(request, pk):
 @never_cache
 def environment_edit(request, pk=None):
     environment = get_object_or_404(page_queries.environments(), pk=pk) if pk else None
+    saved_credentials = {'manager':environment.manager, 'username':environment.username, 'password':environment.password_ciphertext} if environment else None
     import time
     from .certificates import retrieve_manager
     from .certificates import origin, DiscoveryError
@@ -129,6 +134,19 @@ def environment_edit(request, pk=None):
                 raise DiscoveryError('To trust the retrieved certificate, keep TLS verification enabled and do not select certificate removal or upload a replacement.')
         except DiscoveryError as exc:
             form.add_error(None, str(exc))
+    if request.method == 'POST' and request.POST.get('action') == 'test_credentials':
+        from django.http import JsonResponse
+        from .connection_test import test_credentials
+        if form.is_valid():
+            ok, result = test_credentials(form, saved_credentials,
+                ca_preview['pem'] if request.POST.get('trust_retrieved') == 'on' else None)
+        else:
+            ok, result = False, 'Check the environment fields before testing.'
+        record('environment.credentials_tested', 'Environment', pk or 'new', outcome='success' if ok else 'failed')
+        if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+            return JsonResponse({'ok':ok, 'message':result, 'errors':form.errors.get_json_data()})
+        return render(request, 'inventory/environment_form.html', {'form':form, 'environment':environment,
+            'ca_preview':ca_preview, 'credential_test_result':result + ' Re-enter any new password before saving.'})
     if request.method == "POST" and form.is_valid():
         # Prevent origin changes from mixing manager inventories under one history.
         with transaction.atomic():
@@ -237,7 +255,8 @@ def snapshot_detail(request, pk):
     finding_id = request.GET.get('finding', '')
     if finding_id.isdecimal():
         finding_link = Finding.objects.filter(pk=finding_id, environment_id=snapshot.environment_id, snapshot_id=snapshot.pk).first()
-    request.session['selected_environment'] = snapshot.environment_id
+    if request.headers.get('X-Environment-Check') != '1':
+        request.session['selected_environment'] = snapshot.environment_id
     history = list(Snapshot.objects.filter(environment_id=snapshot.environment_id)
                    .only("id", "generated_at", "testing")[:50])
     if not any(item.pk == snapshot.pk for item in history):
@@ -561,6 +580,31 @@ def notifications(request):
             items.append({'id': 'finding-'+str(event['pk']), 'label': 'Finding assigned to you' if event['details__action']=='assign' else 'Finding awaiting independent approval',
                 'environment': event['finding__environment__name'], 'at': event['created_at'].isoformat(), 'unread': not seen or event['created_at']>seen,
                 'url': reverse('finding-detail', args=[event['finding__environment_id'], event['finding_id']])})
+    if personal.notification_reviews:
+        from .cleanup_tasks import tasks as cleanup_tasks
+        from django.utils.dateparse import parse_datetime
+        for task in cleanup_tasks(request.user):
+            item = task['item']
+            stamp = parse_datetime(item.cleanup_approvals[-1]['at']) if item.cleanup_approvals and item.status == 'cleanup_review' else task['at']
+            if stamp < timezone.now() - timedelta(days=days): continue
+            is_unread = not seen or stamp > seen
+            unread += int(is_unread)
+            items.append({'id': 'cleanup-' + str(item.pk), 'label': 'Firewall reference cleanup · ' + task['label'],
+                          'environment': item.batch.environment.name, 'at': stamp.isoformat(), 'unread': is_unread,
+                          'url': task['url']})
+    if personal.notification_reviews:
+        from .deletion import permitted
+        if permitted(request.user):
+            from .models import AuditEvent
+            cancelled = AuditEvent.objects.filter(action='nsx.deletion_cleanup_cancelled', details__notify_reviewers=True,
+                created_at__gte=timezone.now()-timedelta(days=days)).exclude(actor_id_text=str(request.user.pk)).order_by('-created_at')[:50]
+            for decision in cancelled:
+                if not decision.target_id.isdecimal(): continue
+                is_unread = not seen or decision.created_at > seen
+                unread += int(is_unread)
+                items.append({'id': 'cleanup-cancelled-' + str(decision.pk), 'label': 'Cleanup plan cancelled — approval no longer required',
+                    'environment': '', 'at': decision.created_at.isoformat(), 'unread': is_unread,
+                    'url': reverse('deletion-reference-cleanup', args=[decision.target_id])})
     items.sort(key=lambda item: item['at'], reverse=True)
     return JsonResponse({'items': items[:50], 'unread': unread})
 
@@ -588,7 +632,8 @@ def workspace_section(request, section):
         environment = None
     environment = environment or environments.first()
     if environment:
-        request.session['selected_environment'] = environment.pk
+        if request.headers.get('X-Environment-Check') != '1':
+            request.session['selected_environment'] = environment.pk
         if section == 'collections':
             return redirect('collection-history', pk=environment.pk)
         if section == 'activity':
@@ -599,7 +644,7 @@ def workspace_section(request, section):
         if snapshot and section in sections:
             allowed = set(sections.values()) | {'overview','all-groups','unused-groups','empty-groups','unknown-membership','unused-services','empty-policies','zero-hit-rules','disabled-rules','unknown-statistics','empty-group-rules','dfw-scope-rules','tags-both','tags-vm_only','tags-group_only','tags-other_only','tags-unknown','coverage','tags-coverage'}
             panel = request.GET.get('panel')
-            return redirect(reverse('snapshot',args=[snapshot.pk])+'#'+(panel if panel in allowed else sections[section]))
+            return redirect(reverse('snapshot',args=[snapshot.pk])+'?browse=1#'+(panel if panel in allowed else sections[section]))
     return render(request, 'inventory/section_empty.html', {'environment':environment,'section_name':section.title()})
 
 
@@ -622,6 +667,8 @@ def environment_directory(request):
 @require_GET
 def all_collections(request):
     jobs = page_queries.jobs()
+    scope = request.GET.get('environment', '')
+    if scope: jobs = jobs.filter(environment_id=scope) if scope.isdecimal() and len(scope)<19 else jobs.none()
     state=request.GET.get('status','')
     if state in AuditJob.Status.values:
         jobs=jobs.filter(status=state)

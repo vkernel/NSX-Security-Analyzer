@@ -1,0 +1,6 @@
+{% extends 'base.html' %}{% load static %}{% block content %}
+<a class="breadcrumb" href="{% url 'deletion-history' batch.environment_id %}">← Deletion history</a>
+{% include 'inventory/deletion_progress.html' %}
+{% include 'inventory/deletion_configuration_dialog.html' %}
+{% endblock %}
+{% block scripts %}<script src="{% static 'nsx-deletion.js' %}" defer></script>{% endblock %}

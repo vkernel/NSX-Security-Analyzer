@@ -1,0 +1,19 @@
+<div id="cleanup-task-results" data-live-region data-poll="{% if cleanup_tasks %}true{% else %}false{% endif %}">
+{% if cleanup_tasks %}
+<section class="deletion-confirm-summary" aria-label="Firewall reference cleanup tasks">
+  <h2>Firewall reference cleanup</h2>
+  <p class="muted">Review the exact firewall changes before group deletion.</p>
+  {% include 'components/bulk_toolbar.html' with bulk_kind='cleanup' bulk_id='bulk-cleanup' %}
+  <div class="table-scroll"><table class="cleanup-task-table">
+    <thead><tr><th><input type="checkbox" data-bulk-all="bulk-cleanup" aria-label="Select cleanup plans on this page"></th><th>Group / environment</th><th>Proposed changes</th><th>Progress</th><th>Actions</th></tr></thead>
+    <tbody>{% for task in cleanup_tasks %}<tr>
+      <td><input type="checkbox" id="bulk-cleanup-choice-{{ task.item.pk }}" data-bulk-choice="bulk-cleanup" data-bulk-allowed="cancel export" value="{{ task.item.pk }}" aria-label="Select {{ task.item.name }} cleanup"></td><td><strong>{{ task.item.name }}</strong><small>{{ task.item.batch.environment.name }}</small></td>
+      <td>{{ task.summary }}<details><summary>View affected rules</summary>{% for change in task.item.cleanup_plan %}<div>{% if change.action == 'delete_rule' %}Delete{% else %}Modify{% endif %} {{ change.policy_name }} / {{ change.name }}</div>{% endfor %}</details></td>
+      <td><span class="deletion-badge">{{ task.label }}</span><small>{{ task.approvals }} / {{ task.required }} approvals</small>{% if task.first_approver %}<small>First approver: {{ task.first_approver }}</small>{% endif %}</td>
+      <td><div class="cleanup-task-actions"><a class="button primary" href="{{ task.url }}">{{ task.action_label }}</a><details><summary class="button">More</summary><nav aria-label="Related cleanup records"><a href="{% url 'task-cancel' 'cleanup' task.item.pk %}">Cancel cleanup plan</a><a href="{% url 'deletion-detail' task.item.batch_id %}">View deletion request</a>{% if task.item.finding_id %}<a href="{% url 'finding-detail' task.item.batch.environment_id task.item.finding_id %}">View original finding</a>{% endif %}</nav></details></div></td>
+    </tr>{% endfor %}</tbody>
+  </table></div>
+</section>
+{% endif %}
+
+</div>

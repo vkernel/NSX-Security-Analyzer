@@ -136,3 +136,55 @@ class AdaptiveRequestTests(SimpleTestCase):
         started = self.control.acquire()
         self.control.release(started, error, 'rule_statistics')
         self.assertEqual(self.control.limit, 1)
+
+
+class FairSchedulingTests(SimpleTestCase):
+    def test_waiting_request_cannot_be_overtaken_by_reentering_worker(self):
+        import time
+        control = AdaptiveRequests(maximum=1)
+        first = control.acquire()
+        order = []
+        threads = []
+        def work(label):
+            started = control.acquire(endpoint=label)
+            order.append(label)
+            control.release(started, endpoint=label)
+        try:
+            for index, label in enumerate(('firewall', 'membership')):
+                thread = threading.Thread(target=work, args=(label,))
+                thread.start(); threads.append(thread)
+                deadline = time.monotonic() + 2
+                while time.monotonic() < deadline:
+                    with control.condition:
+                        if len(control.waiters) == index + 1:
+                            break
+                    time.sleep(.001)
+                else:
+                    self.fail('Request did not enter the queue')
+        finally:
+            control.release(first)
+            for thread in threads:
+                thread.join(timeout=2)
+        self.assertEqual(order, ['firewall', 'membership'])
+        self.assertEqual(control.active, 0)
+        self.assertEqual(len(control.waiters), 0)
+        self.assertGreater(control.summary()['queue_wait_seconds']['firewall'], 0)
+
+    def test_expired_waiter_is_removed_and_next_request_can_enter(self):
+        control = AdaptiveRequests(maximum=1, clock=lambda: 10)
+        with self.assertRaises(TimeoutError):
+            control.acquire(deadline=9)
+        self.assertEqual(len(control.waiters), 0)
+        started = control.acquire()
+        control.release(started)
+        self.assertEqual(control.active, 0)
+
+    def test_configurable_ceiling_retains_default_and_validates_range(self):
+        self.assertEqual(AdaptiveRequests().maximum, 8)
+        for maximum in (1, 12, 16, 32):
+            control = AdaptiveRequests(maximum=maximum)
+            self.assertEqual(control.maximum, maximum)
+            self.assertLessEqual(control.limit, maximum)
+        for maximum in (0, 33, -1):
+            with self.assertRaises(ValueError):
+                AdaptiveRequests(maximum=maximum)

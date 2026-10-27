@@ -18,6 +18,137 @@ def rendered_document(report):
     return nsx._render_report(report, fragments=False)
 
 
+class AccessDiagnosticsTests(unittest.TestCase):
+    def test_denied_get_records_safe_details_without_retry(self):
+        for status in (401, 403):
+            client = nsx.NSXClient('https://nsx.example', 'test', 'secret-password')
+            client.http = Mock()
+            client.http.request.return_value = Mock(status=status, data=b'sensitive response body', headers={})
+            with self.assertRaises(nsx.AuditError) as raised:
+                client.get('/infra/services')
+            self.assertEqual(client.http.request.call_count, 1)
+            self.assertEqual(raised.exception.status_code, status)
+            self.assertIn('GET /infra/services', str(raised.exception))
+            self.assertNotIn('sensitive', str(raised.exception))
+            self.assertEqual(client.access_failures[0]['http_status'], status)
+            nsx.record_access_failure(client, 'GET', '/infra/services', status)
+            self.assertEqual(len(client.access_failures), 1)
+            self.assertEqual(client.access_failures[0]['count'], 2)
+
+
+class TypedMembershipTests(unittest.TestCase):
+    def group(self, member_type):
+        return {'path': '/g', 'expression': [{'resource_type': 'Condition',
+            'member_type': member_type, 'key': 'Tag', 'operator': 'EQUALS', 'value': 'test'}]}
+
+    def test_vm_fast_path_requires_exact_current_empty_evidence(self):
+        group = self.group('VirtualMachine'); group['path'] = '/infra/domains/default/groups/test'
+        client = Mock(membership_hints={})
+        client.get.return_value = {'results':[], 'result_count':0}
+        self.assertEqual(nsx.membership(client,group,vm_fast=True)[0], 'empty')
+        self.assertEqual(client.get.call_count,1)
+        for payload in ({'results':[]}, {'results':[], 'result_count':0, 'cursor':'more'}):
+            client.get.reset_mock(); client.get.return_value = payload
+            nsx.membership(client,group,vm_fast=True)
+            self.assertEqual(client.get.call_count,3)
+        for key,value in [('remote_path','/remote'), ('extended_expression',[{}])]:
+            self.assertFalse(nsx.vm_fast_eligible(dict(group, **{key:value})))
+        group['expression'][0]['operator'] = 'NOT_EQUALS'
+        self.assertFalse(nsx.vm_fast_eligible(group))
+
+    def test_verification_discrepancy_rechecks_shortcuts_before_publication(self):
+        fixed = nsx.datetime(2026, 10, 22, tzinfo=nsx.timezone.utc)
+        paths = ['/infra/domains/default/groups/g'+str(i) for i in range(200)]
+        sampled = lambda p: int(nsx.hashlib.sha256((str(fixed.date())+p).encode()).hexdigest(),16)%20 == 0
+        paths = [next(p for p in paths if sampled(p)), next(p for p in paths if not sampled(p))]
+        groups = [dict(self.group('VirtualMachine'),path=p) for p in paths]
+        client = Mock(membership_hints={}, vm_fast_disabled=False)
+        client.items.side_effect = lambda path, params=None, **kw: {
+            '/infra/domains':[{'path':'/infra/domains/default'}],
+            '/infra/domains/default/groups':groups, '/infra/services':[], '/search/query':groups,
+            '/infra/domains/default/security-policies':[], '/infra/tags':[],
+            '/infra/realized-state/virtual-machines':[]}[path]
+        client.get.side_effect = lambda path, params=None: ({'results':[{'id':'ip'}], 'result_count':1}
+            if path.endswith('/ip-addresses') else {'results':[], 'result_count':0})
+        with patch.object(nsx, 'datetime', wraps=nsx.datetime) as clock:
+            clock.now.return_value = fixed
+            result = nsx.audit(client,workers=2)
+        stats = result['performance']['membership']['vm_fast_path']
+        self.assertEqual(stats['rechecked'],1)
+        self.assertTrue(stats['disabled'])
+        self.assertEqual(stats['used'],0)
+        self.assertTrue(all(r['membership']=='nonempty' for r in result['objects']))
+
+    def test_only_inapplicable_endpoints_are_omitted(self):
+        for kind, expected in [('VirtualMachine', 3), ('Segment', 3), ('VIF', 2), ('SegmentPort', 2)]:
+            client = Mock(membership_hints={})
+            client.get.return_value = {'results': [], 'result_count': 0}
+            self.assertEqual(nsx.membership(client, self.group(kind))[0], 'empty')
+            self.assertEqual(client.get.call_count, expected)
+
+    def test_nested_mixed_unknown_and_extended_keep_full_checks(self):
+        for expression in ([{'resource_type':'PathExpression', 'paths':['/child']}],
+                           [{'resource_type':'NestedExpression', 'expressions': self.group('VIF')['expression']}],
+                           self.group('VIF')['expression'] + [{'resource_type':'ConjunctionOperator', 'conjunction_operator':'OR'}] + self.group('Segment')['expression'],
+                           [{'resource_type':'Condition', 'member_type':'Unknown'}], []):
+            self.assertEqual(nsx.membership_endpoints({'expression': expression}), nsx.MEMBERSHIP_ENDPOINTS)
+        group = self.group('VIF'); group['extended_expression'] = [{}]
+        self.assertEqual(nsx.membership_endpoints(group), nsx.MEMBERSHIP_ENDPOINTS)
+
+    def test_fresh_probes_detect_changes_and_failures(self):
+        group = self.group('VirtualMachine')
+        client = Mock(membership_hints={'/g': 'virtual-machines'})
+        client.get.return_value = {'results': [], 'result_count': 0}
+        self.assertEqual(nsx.membership(client, group)[0], 'empty')
+        client.get.reset_mock()
+        client.get.return_value = {'results': [{'id': 'vm-without-ip'}]}
+        self.assertEqual(nsx.membership(client, group)[0], 'nonempty')
+        self.assertEqual(client.get.call_count, 1)
+        client.get.side_effect = nsx.AuditError('failed current probe')
+        self.assertEqual(nsx.membership(client, group)[0], 'unknown')
+        client.get.side_effect = None
+        client.get.return_value = {'results': [], 'cursor': 'more'}
+        self.assertEqual(nsx.membership(client, group)[0], 'unknown')
+
+    def test_vm_comparison_preserves_followup_positive_evidence(self):
+        group = self.group('VirtualMachine')
+        for payloads, status, comparison in (
+            ([{'results': []}, {'results': []}, {'results': []}], 'empty', 'All three checks empty'),
+            ([{'results': []}, {'results': [{'id': 'ip'}]}], 'nonempty', 'VM empty but IP or port members found'),
+            ([{'results': []}, {'results': [], 'cursor': 'more'}, {'results': []}], 'unknown', 'VM empty but follow-up incomplete'),
+            ([{'results': []}, nsx.AuditError('failed'), {'results': []}], 'unknown', 'VM empty but follow-up incomplete'),
+            ([{'results': [{'id': 'vm-no-ip'}]}], 'nonempty', 'VM members found'),
+        ):
+            client = Mock(membership_hints={})
+            client.get.side_effect = payloads
+            probe = nsx.MembershipProbe(client)
+            self.assertEqual(nsx.membership(probe, group)[0], status)
+            self.assertEqual(probe.vm_comparison(), comparison)
+            self.assertEqual(client.get.call_count, len(payloads))
+        client = Mock(membership_hints={'/g': 'ip-addresses'})
+        client.get.return_value = {'results': [{'id': 'ip'}]}
+        probe = nsx.MembershipProbe(client)
+        self.assertEqual(nsx.membership(probe, group)[0], 'nonempty')
+        self.assertEqual(probe.vm_comparison(), 'VM check unavailable or not reached')
+        self.assertEqual(client.get.call_count, 1)
+
+    def test_missing_bulk_identity_cooldown_never_reuses_counters(self):
+        rule = {'path': '/p/rules/a'}
+        client = Mock(statistics_backoff={})
+        client.items.return_value = [{'statistics': {'results': [{'internal_rule_id': '123', 'hit_count': 0}], 'result_count': 1}}]
+        first = nsx.policy_statistics(client, {'path':'/p'}, [rule], defer_fallback=True)[rule['path']]
+        self.assertEqual(first['statistics_fallback_code'], 'missing_identity')
+        self.assertIn('statistics_bulk_retry_at', first)
+        prior = {'manager':'nsx', 'generated_at':nsx.datetime.now(nsx.timezone.utc).isoformat(),
+                 'dfw':{'rules':[dict(first, policy_path='/p')]}}
+        client.statistics_backoff = nsx.statistics_backoff(prior, 'nsx')
+        client.items.reset_mock()
+        second = nsx.policy_statistics(client, {'path':'/p'}, [rule], defer_fallback=True)[rule['path']]
+        self.assertTrue(second['_pending_statistics'])
+        self.assertEqual(second['statistics_fallback_code'], 'cooldown')
+        client.items.assert_not_called()
+
+
 class InventoryTests(unittest.TestCase):
     @patch.object(nsx.time, 'sleep')
     def test_search_coverage_retries_discard_incomplete_attempts(self, sleep):
@@ -124,12 +255,13 @@ class InventoryTests(unittest.TestCase):
         self.assertEqual(dfw['collection_diagnostics']['unsupported_rules'], 1)
         self.assertEqual(dfw['collection_diagnostics']['bulk_policies'], 0)
 
-    def test_timeout_recovery_is_single_sequential_pass(self):
+    def test_timeout_recovery_is_bounded_parallel_pass(self):
         import threading
         lock = threading.Lock()
         calls = {}
         active = 0
         maximum_retry_active = 0
+        retry_barrier = __import__("threading").Barrier(2, timeout=3)
         client = Mock()
         client.statistics_backoff = {}
         def items(path, **kwargs):
@@ -147,6 +279,7 @@ class InventoryTests(unittest.TestCase):
                 self.assertEqual(set(calls), {'/p/rules/a/statistics', '/p/rules/b/statistics'})
                 active += 1
                 maximum_retry_active = max(active, maximum_retry_active)
+            retry_barrier.wait()
             with lock: active -= 1
             if '/a/' in path: return [{'hit_count': 4}]
             try: raise TimeoutError('read timed out')
@@ -154,9 +287,9 @@ class InventoryTests(unittest.TestCase):
         client.items.side_effect = items
         with patch.object(nsx.time, 'sleep') as sleep:
             dfw, _ = nsx.audit_dfw(client, [{'path': '/d'}], workers=2)
-        sleep.assert_called_once_with(2)
+        sleep.assert_not_called()
         self.assertEqual(list(calls.values()), [2, 2])
-        self.assertEqual(maximum_retry_active, 1)
+        self.assertEqual(maximum_retry_active, 2)
         self.assertEqual([r['hit_status'] for r in dfw['rules']], ['traffic_recorded','unknown'])
         self.assertEqual(dfw['collection_diagnostics']['timeout_recoveries'], 1)
         self.assertEqual(dfw['collection_diagnostics']['timeout_retries'], 2)
@@ -867,11 +1000,11 @@ examples.forEach((_,index) => {
         self.assertTrue(report["testing"])
         self.assertEqual(report["performance"]["workers"], 1)
         self.assertEqual(client.retries, 0)
-        # Empty search results try all three compatible query variants, once each.
-        self.assertEqual(client.get.call_count, 15)
+        # Empty search results try all five compatible query variants, once each.
+        self.assertEqual(client.get.call_count, 17)
         searches = [call for call in client.get.call_args_list if call.args[0] == "/search/query"]
-        self.assertEqual(len(searches), 3)
-        self.assertEqual(len({call.args[1]["query"] for call in searches}), 3)
+        self.assertEqual(len(searches), 5)
+        self.assertEqual(len({call.args[1]["query"] for call in searches}), 5)
         self.assertEqual(report["groups_scanned"], 1)
         self.assertEqual(report["custom_services_scanned"], 1)
         self.assertTrue(all(r["usage"] == "unknown" for r in report["objects"]))
@@ -939,7 +1072,7 @@ examples.forEach((_,index) => {
         rule = {"path": "/p/rules/a", "id": "a", "rule_id": 100}
         for counters in ({"results": [{"rule": "a", "hit_count": 0}], "result_count": 2},
                          {"results": [{"rule": "a", "hit_count": 0}], "cursor": "more"},
-                         {"results": [{"internal_rule_id": "100", "hit_count": 0}]}):
+                         {"results": [{"internal_rule_id": "999", "hit_count": 0}]}):
             client = Mock()
             client.items.side_effect = [[{"enforcement_point": "ep", "statistics": counters}],
                                        [{"hit_count": 5}]]
@@ -974,6 +1107,35 @@ examples.forEach((_,index) => {
         client.items.assert_called_once_with("/p/statistics", page_size=None)
         self.assertEqual(recovered["statistics_source"], "policy")
         self.assertEqual(recovered["hit_count"], 12)
+
+    def test_bulk_identity_mapping_is_explicit_and_conflicts_fall_back(self):
+        rule = {'path':'/p/rules/a', 'id':'a', 'rule_id':42, 'internal_rule_id':'realized-a'}
+        for counter in ({'rule_path':rule['path'], 'hit_count':7},
+                        {'internal_rule_id':'realized-a', 'hit_count':7}):
+            client = Mock(statistics_backoff={})
+            client.items.return_value = [counter]
+            result = nsx.policy_statistics(client, {'path':'/p'}, [rule], defer_fallback=True)[rule['path']]
+            self.assertEqual(result['statistics_source'], 'policy')
+            self.assertEqual(result['hit_count'], 7)
+        client.items.return_value = [{'rule':'a', 'rule_path':'/wrong', 'hit_count':0}]
+        result = nsx.policy_statistics(client, {'path':'/p'}, [rule], defer_fallback=True)[rule['path']]
+        self.assertTrue(result['_pending_statistics'])
+        rule.pop('internal_rule_id')
+        client.items.return_value = [{'internal_rule_id':42, 'hit_count':0}]
+        self.assertEqual(nsx.policy_statistics(client, {'path':'/p'}, [rule], defer_fallback=True)[rule['path']]['statistics_source'], 'policy')
+
+    def test_numeric_bulk_ids_do_not_match_policy_object_ids_or_ambiguous_rules(self):
+        client = Mock(statistics_backoff={})
+        client.items.return_value = [{'enforcement_point':'ep', 'statistics':{
+            'result_count':1, 'results':[{'internal_rule_id':'4090','hit_count':7}]}}]
+        for rules in ([{'path':'/p/rules/4090','id':'4090'}],
+                      [{'path':'/p/rules/a','rule_id':4090}, {'path':'/p/rules/b','rule_id':4090}]):
+            result = nsx.policy_statistics(client, {'path':'/p'}, rules, defer_fallback=True)
+            self.assertTrue(all(row.get('_pending_statistics') for row in result.values()))
+        rules = [{'path':'/p/rules/a','rule_id':4090}, {'path':'/p/rules/b','rule_id':4091}]
+        result = nsx.policy_statistics(client, {'path':'/p'}, rules, defer_fallback=True)
+        self.assertEqual(result[rules[0]['path']]['hit_count'],7)
+        self.assertTrue(result[rules[1]['path']]['_pending_statistics'])
 
     def test_policy_statistics_batches_rules(self):
         rules = [{"path": "/p/rules/a", "id": "a"}, {"path": "/p/rules/b", "id": "b"}]
@@ -1224,11 +1386,11 @@ examples.forEach((_,index) => {
     def test_search_compatibility_retries_400_with_explicit_types(self):
         client = Mock()
         client.items.side_effect = [nsx.AuditError("unsupported resource type wildcard", 400),
-                                    nsx.AuditError("resource type required", 400), iter([self.group])]
+                                    nsx.AuditError("resource type required", 400), nsx.AuditError("wildcard rejected", 400), nsx.AuditError("wildcard rejected", 400), iter([self.group])]
         resources, coverage = nsx.search_configuration(client)
         self.assertEqual(resources, [self.group])
         self.assertEqual(coverage["mode"], "explicit_types")
-        self.assertEqual(len(coverage["rejected_queries"]), 2)
+        self.assertEqual(len(coverage["rejected_queries"]), 4)
         self.assertIn("resource_type:Rule", coverage["query"])
         self.assertNotIn("*", coverage["query"])
 
@@ -1243,14 +1405,100 @@ examples.forEach((_,index) => {
         client.get = lambda path, params: (calls.append(dict(params)), get(path, params))[1]
         resources, coverage = nsx.verified_configuration_search(client, [self.group], [])
         self.assertEqual(resources, [self.group])
-        self.assertEqual(coverage['mode'], 'explicit_types')
+        self.assertEqual(coverage['mode'], 'all_types')
         self.assertEqual(len(coverage['rejected_queries']), 2)
         self.assertTrue(all(row['reason'] == 'empty_with_known_inventory'
                             for row in coverage['rejected_queries']))
         self.assertEqual(len(calls), 3)
         self.assertTrue(all('cursor' not in call for call in calls))
         self.assertNotIn('NOT', coverage['query'])
-        self.assertEqual(coverage['resource_types'], list(nsx.REFERENCE_SEARCH_TYPES))
+        self.assertEqual(coverage['resource_types'], [])
+
+    @patch.object(nsx.time, 'sleep')
+    def test_configuration_search_ignores_only_excluded_runtime_payload_conflicts(self, sleep):
+        for resource_type in nsx.REFERENCE_SEARCH_EXCLUDED_TYPES:
+            first = {'resource_type': resource_type, 'id':'vm', 'power_state':'ON'}
+            changed = dict(first, power_state='OFF', host_id='moved')
+            pages = [{'results':[first], 'result_count':2, 'cursor':'next'},
+                     {'results':[changed, self.group]}]
+            client = self.client_with_pages(pages)
+            resources, coverage = nsx.verified_configuration_search(client, [self.group], [])
+            self.assertEqual(resources, [self.group])
+            self.assertEqual(coverage['status'], 'verified')
+            # Generic search retains strict comparison even on the same endpoint.
+            client = self.client_with_pages(pages)
+            with self.assertRaises(nsx.InventoryChanged):
+                list(client.items('/search/query', verification_owner=True))
+
+    @patch.object(nsx.time, 'sleep')
+    def test_configuration_search_still_blocks_configuration_and_count_conflicts(self, sleep):
+        original = dict(self.group, display_name='old')
+        changed = dict(original, display_name='new')
+        for pages in ([{'results':[original], 'result_count':2, 'cursor':'next'},
+                       {'results':[changed, {'path':'/infra/services/s'}]}],
+                      [{'results':[{'resource_type':'VirtualMachine', 'id':'vm'}], 'result_count':3, 'cursor':'next'},
+                       {'results':[{'resource_type':'VirtualMachine', 'id':'vm', 'power_state':'OFF'}, self.group]}]):
+            client = self.client_with_pages(pages * 3)
+            with self.assertRaises(nsx.InventoryChanged):
+                nsx.verified_configuration_search(client, [self.group], [])
+
+    @patch.object(nsx.time, 'sleep')
+    def test_search_failure_reports_duplicate_types_for_each_attempt(self, sleep):
+        vm = {'resource_type':'VirtualMachine','id':'vm'}
+        group = dict(self.group, resource_type='Group')
+        pages = [{'results':[vm, group], 'result_count':4, 'cursor':'next'},
+                 {'results':[vm, group]}]
+        client = self.client_with_pages(pages * 3)
+        with self.assertRaises(nsx.InventoryChanged) as raised:
+            nsx.verified_configuration_search(client, [group], [])
+        self.assertEqual(raised.exception.reported_total, 4)
+        attempts = client.search_diagnostics['pagination_attempts']
+        self.assertEqual(len(attempts), 3)
+        for attempt in attempts:
+            self.assertEqual(attempt['duplicates_by_resource_type'], {'VirtualMachine':1, 'Group':1})
+            self.assertEqual(attempt['unique_by_resource_type'], {'VirtualMachine':1, 'Group':1})
+            self.assertEqual(attempt['unique_count'], 2)
+            self.assertEqual(attempt['raw_rows'], 4)
+            self.assertEqual(attempt['reported_total'], 4)
+            self.assertEqual(attempt['pages'], 2)
+        # Matching raw row totals must not turn partial unique inventory into success.
+        self.assertEqual(client.search_diagnostics['status'], 'failed')
+
+    def test_flat_negation_queries_are_broad_and_bounded(self):
+        client = Mock()
+        client.items.side_effect = [[], [self.group]]
+        _, coverage = nsx.verified_configuration_search(client, [self.group], [])
+        queries = [call.args[1]['query'] for call in client.items.call_args_list]
+        self.assertTrue(queries[0].startswith('NOT resource_type:VirtualMachine AND NOT '))
+        self.assertTrue(queries[1].startswith('!resource_type:VirtualMachine AND !'))
+        self.assertTrue(all('(' not in query and ' OR ' not in query for query in queries))
+        self.assertEqual(coverage['mode'], 'all_types')
+
+    def test_unfiltered_broad_search_filters_runtime_after_pagination(self):
+        client = self.client_with_pages([
+            {'results': [], 'result_count': 0},
+            {'results': [], 'result_count': 0},
+            {'results': [{'resource_type': 'VirtualMachine', 'path': '/runtime/vm'}], 'result_count': 2, 'cursor': 'next'},
+            {'results': [self.group]},
+        ])
+        resources, coverage = nsx.verified_configuration_search(client, [self.group], [])
+        self.assertEqual(resources, [self.group])
+        self.assertEqual(coverage['mode'], 'all_types')
+        self.assertEqual(coverage['query'], 'resource_type:*')
+        self.assertEqual(coverage['runtime_records_removed'], 1)
+        self.assertEqual(coverage['raw_records'], 2)
+        self.assertEqual(coverage['status'], 'verified')
+
+    def test_bare_wildcard_fallback_and_explicit_scope(self):
+        client = Mock()
+        client.items.side_effect = [[], [], [], [self.group]]
+        _, coverage = nsx.verified_configuration_search(client, [self.group], [])
+        self.assertEqual(coverage['query'], '*')
+        self.assertEqual(coverage['runtime_filtering'], 'local')
+        client.items.side_effect = [[], [], [], [], [self.group]]
+        _, coverage = nsx.verified_configuration_search(client, [self.group], [])
+        self.assertEqual(coverage['mode'], 'explicit_types')
+        self.assertEqual(len(coverage['rejected_queries']), 4)
 
     def test_empty_filtered_search_uses_broad_alternative_when_possible(self):
         client = Mock()
@@ -1273,18 +1521,18 @@ examples.forEach((_,index) => {
         for fallback in ([], [self.group]):
             with self.subTest(fallback=fallback):
                 client = Mock()
-                client.items.side_effect = [[], [], fallback] * 3
+                client.items.side_effect = ([[], [], [], [], fallback] if not fallback else [[], [], fallback]) * 3
                 with self.assertRaisesRegex(nsx.AuditError, 'services=1/1'):
                     nsx.verified_configuration_search(client, [self.group], [{'path': '/infra/services/s'}])
-                self.assertEqual(client.items.call_count, 9)
+                self.assertEqual(client.items.call_count, 15 if not fallback else 9)
 
     def test_search_compatibility_preserves_broad_scope_when_possible(self):
         client = Mock()
         client.items.side_effect = [nsx.AuditError("unsupported wildcard field", 400), iter([self.group])]
         resources, coverage = nsx.search_configuration(client)
         self.assertEqual(coverage["mode"], "all_types")
-        self.assertEqual(coverage["query"], "* AND NOT (resource_type:VirtualMachine OR "
-                         "resource_type:VirtualNetworkInterface OR resource_type:GenericPolicyRealizedResource)")
+        self.assertEqual(coverage["query"], "!resource_type:VirtualMachine AND "
+                         "!resource_type:VirtualNetworkInterface AND !resource_type:GenericPolicyRealizedResource AND resource_type:*")
         self.assertEqual(resources, [self.group])
 
     def test_search_does_not_retry_authentication_or_pagination_failures(self):
@@ -1313,11 +1561,10 @@ examples.forEach((_,index) => {
         sleep.assert_called_once_with(2)
 
     @patch.object(nsx.time, "sleep")
-    def test_changing_search_has_bounded_retries_and_returns_warning(self, sleep):
+    def test_changing_search_has_bounded_retries_and_rejects_partial_results(self, sleep):
         client = self.client_with_pages([{"results": [{"path": "/partial"}], "result_count": 2}] * 3)
-        resources, coverage = nsx.search_configuration(client)
-        self.assertEqual(resources, [{"path": "/partial"}])
-        self.assertEqual(client.inventory_warnings[0]["attempts"], 3)
+        with self.assertRaises(nsx.InventoryChanged):
+            nsx.search_configuration(client)
         self.assertEqual(client.get.call_count, 3)
         self.assertEqual([call.args[0] for call in sleep.call_args_list], [2, 4])
 
@@ -1330,12 +1577,77 @@ examples.forEach((_,index) => {
         self.assertEqual(client.items.call_count, 1)
         sleep.assert_not_called()
 
+    @patch.object(nsx.time, 'sleep')
+    def test_search_scan_budget_is_shared_across_coverage_retries(self, sleep):
+        client = self.client_with_pages([])
+        client.items = Mock(return_value=[])
+        with self.assertRaisesRegex(nsx.AuditError, 'five-scan budget'):
+            nsx.verified_configuration_search(client, [self.group], [])
+        self.assertEqual(client.items.call_count, 5)
+
+    def test_counter_retry_budget_leaves_unretried_rules_unknown(self):
+        clock = [0.0]
+        calls = {}
+        client = Mock()
+        client.statistics_backoff = {}
+        def items(path, **kwargs):
+            if path == '/d/security-policies': return [{'path':'/p'}]
+            if path == '/p/rules': return [{'path':'/p/rules/a'}, {'path':'/p/rules/b'}]
+            if path == '/p/statistics': raise nsx.AuditError('unavailable')
+            calls[path] = calls.get(path, 0) + 1
+            if calls[path] > 1:
+                clock[0] += 31
+            try: raise TimeoutError('timed out')
+            except TimeoutError as exc: raise nsx.AuditError('timed out') from exc
+        client.items.side_effect = items
+        with patch.object(nsx.time, 'monotonic', side_effect=lambda: clock[0]):
+            dfw, _ = nsx.audit_dfw(client, [{'path':'/d'}], workers=1)
+        self.assertEqual(dfw['collection_diagnostics']['timeout_retries'], 1)
+        self.assertEqual(dfw['collection_diagnostics']['timeout_retries_skipped'], 1)
+        self.assertTrue(all(rule['hit_status'] == 'unknown' for rule in dfw['rules']))
+
+    def test_expired_counter_phase_does_not_start_http_request(self):
+        client = self.client_with_pages([])
+        del client.get
+        client.request_context = __import__('threading').local()
+        client.request_context.phase_deadline = nsx.time.monotonic() - 1
+        client._get = Mock()
+        with self.assertRaisesRegex(nsx.AuditError, 'budget exhausted'):
+            client.get('/p/rules/r/statistics')
+        client._get.assert_not_called()
+
+    def test_membership_probe_counts_without_changing_membership(self):
+        client = Mock()
+        client.membership_hints = {}
+        client.get.return_value = {'results': []}
+        probe = nsx.MembershipProbe(client)
+        self.assertEqual(nsx.membership(probe, {'path': '/groups/a'})[0], 'empty')
+        self.assertEqual(probe.calls, 4)
+        self.assertEqual(sum(v['no_members_returned'] for v in probe.endpoints.values()), 4)
+        client.get.return_value = {'results': ['192.0.2.1']}
+        probe = nsx.MembershipProbe(client)
+        self.assertEqual(nsx.membership(probe, {'path': '/groups/a'})[0], 'nonempty')
+        self.assertEqual(probe.calls, 1)
+        self.assertEqual(probe.endpoints['ip-addresses']['positive'], 1)
+        probe = nsx.MembershipProbe(client)
+        nsx.membership(probe, {'path': '/groups/a', 'expression': [{'resource_type':'IPAddressExpression', 'ip_addresses':['192.0.2.1']}]})
+        self.assertEqual(probe.calls, 0)
+
+    def test_bulk_fallback_code_does_not_include_payload_values(self):
+        client = Mock()
+        client.statistics_backoff = {}
+        client.items.return_value = [{'statistics': {'internal_rule_id':'private-marker', 'hit_count':0}}]
+        result = nsx.policy_statistics(client, {'path':'/p'}, [{'path':'/p/rules/r'}], defer_fallback=True)
+        row = result['/p/rules/r']
+        self.assertEqual(row['statistics_fallback_code'], 'missing_identity')
+        self.assertNotIn('private-marker', row['statistics_fallback_reason'])
+
     def test_search_failure_never_becomes_empty_inventory(self):
         client = Mock()
         client.items.side_effect = nsx.AuditError("query rejected", 400)
         with self.assertRaisesRegex(nsx.AuditError, "all search query variants"):
             nsx.search_configuration(client)
-        self.assertEqual(client.items.call_count, 3)
+        self.assertEqual(client.items.call_count, 5)
 
     def test_http_error_includes_nsx_details_and_status(self):
         client = object.__new__(nsx.NSXClient)
@@ -1562,7 +1874,7 @@ examples.forEach((_,index) => {
     @patch.object(nsx.time, "sleep")
     def test_truncated_inventory_warns(self, sleep):
         client = self.client_with_pages([{"results": [1], "result_count": 2}] * 3)
-        self.assertEqual(list(client.items("/search/query")), [1])
+        self.assertEqual(list(client.items("/infra/realized-state/virtual-machines")), [1])
         self.assertEqual(len(client.inventory_warnings), 1)
 
     def test_repeated_cursor_fails(self):

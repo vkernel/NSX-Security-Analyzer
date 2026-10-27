@@ -1,0 +1,4 @@
+{% extends 'base.html' %}{% load static %}{% block content %}
+{% include 'inventory/reference_cleanup_progress.html' %}
+{% endblock %}
+{% block scripts %}<script src="{% static 'nsx-deletion.js' %}" defer></script>{% endblock %}

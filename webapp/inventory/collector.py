@@ -59,10 +59,38 @@ def configure_logging(debug=False):
 class AuditError(Exception):
     """A request or inventory completeness check failed."""
 
-    def __init__(self, message, status_code=None, retry_after=None):
+    def __init__(self, message, status_code=None, retry_after=None, method=None, path=None):
         super().__init__(message)
         self.status_code = status_code
         self.retry_after = retry_after
+        self.method, self.path = method, path
+
+
+def access_message(method, path, status):
+    operation = str(method or 'API').upper()
+    endpoint = str(path or 'NSX API').split('?', 1)[0].replace('\r', '').replace('\n', '')[:1000]
+    reason = ('NSX rejected the service account credentials. Check the configured username/password and account status.'
+              if status == 401 else 'NSX denied this operation. Check the environment service account permissions for this object and operation.')
+    return f'{operation} {endpoint}: HTTP {status}. {reason}'
+
+
+def record_access_failure(client, method, path, status):
+    if status not in (401, 403):
+        return None
+    message = access_message(method, path, status)
+    LOG.warning('%s', message)
+    if not isinstance(getattr(client, 'access_failures', None), list):
+        client.access_failures = []
+        client.access_failure_lock = threading.Lock()
+    row = {'method': method, 'path': str(path).split('?', 1)[0].replace('\r', '').replace('\n', '')[:1000], 'http_status': status,
+           'message': message, 'at': datetime.now(timezone.utc).isoformat(), 'count': 1}
+    with client.access_failure_lock:
+        existing = next((r for r in client.access_failures if (r['method'], r['path'], r['http_status']) == (method, row['path'], status)), None)
+        if existing:
+            existing['count'] += 1
+        elif len(client.access_failures) < 100:
+            client.access_failures.append(row)
+    return row
 
 
 def parse_retry_after(value):
@@ -81,11 +109,12 @@ def parse_retry_after(value):
 class InventoryChanged(AuditError):
     """A paginated inventory did not match its advertised total."""
 
-    def __init__(self, message, reported_total=None, returned_count=None, conflicts=None):
+    def __init__(self, message, reported_total=None, returned_count=None, conflicts=None, pagination=None):
         super().__init__(message)
         self.reported_total = reported_total
         self.returned_count = returned_count
         self.conflicts = conflicts or []
+        self.pagination = pagination or {}
 
 
 class NSXClient:
@@ -117,6 +146,8 @@ class NSXClient:
         self.retries = retries
         self.testing = False
         self.inventory_warnings = []
+        self.access_failures = []
+        self.access_failure_lock = threading.Lock()
         self.context = context
         self.metrics_lock = threading.Lock()
         self.metrics = {"requests": 0, "retries": 0}
@@ -128,12 +159,14 @@ class NSXClient:
         bulk = path.endswith("/statistics") and "/rules/" not in path
         retries = 0 if bulk else getattr(self, "retries", 0)
         retry_deadline = min(time.monotonic() + 60, getattr(self, "request_deadline", float("inf")))
+        phase_deadline = getattr(getattr(self, 'request_context', None), 'phase_deadline', float('inf'))
+        retry_deadline = min(retry_deadline, phase_deadline)
         if hasattr(self, "request_context"):
             self.request_context.deadline = retry_deadline
         for attempt in range(retries + 1):
             if hasattr(self, "request_context"):
                 retry_deadline = self.request_context.deadline
-            if attempt and time.monotonic() >= retry_deadline:
+            if (attempt or phase_deadline != float("inf")) and time.monotonic() >= retry_deadline:
                 raise AuditError("GET {}: retry time budget exhausted".format(path))
             if hasattr(self, "metrics_lock"):
                 with self.metrics_lock:
@@ -170,9 +203,17 @@ class NSXClient:
         if params:
             url += "?" + urlencode(params)
         timeout = self.bulk_timeout if path.endswith("/statistics") and "/rules/" not in path else self.timeout
+        phase_deadline = getattr(getattr(self, 'request_context', None), 'phase_deadline', float('inf'))
+        remaining = phase_deadline - time.monotonic()
+        if remaining <= 0:
+            raise AuditError('Counter recovery time budget exhausted')
+        timeout = min(timeout, remaining)
         try:
             response = self.http.request("GET", url, headers=self.headers, redirect=False,
-                retries=False, timeout=urllib3.Timeout(connect=timeout, read=timeout), pool_timeout=timeout)
+                retries=False, timeout=urllib3.Timeout(total=timeout if phase_deadline != float("inf") else None, connect=timeout, read=timeout), pool_timeout=timeout)
+            if response.status in (401, 403):
+                failure = record_access_failure(self, 'GET', path, response.status)
+                raise AuditError(failure['message'], status_code=response.status, method='GET', path=path)
             if not 200 <= response.status < 300:
                 detail = ""
                 try:
@@ -192,14 +233,14 @@ class NSXClient:
             raise AuditError("GET {}: expected a JSON object".format(path))
         return data
 
-    def items(self, path, params=None, page_size=1000):
+    def items(self, path, params=None, page_size=1000, verification_owner=False, configuration_search=False):
         """Retry inconsistent inventories; never hide failed pages or broken cursors."""
-        for attempt in range(3):
+        for attempt in range(1 if verification_owner else 3):
             records = []
             identities = set()
             duplicates = 0
             try:
-                for record in self._items_once(path, params, page_size):
+                for record in self._items_once(path, params, page_size, configuration_search=configuration_search):
                     identity = None
                     if isinstance(record, dict):
                         # IDs can repeat across resource types and parent objects.
@@ -214,6 +255,8 @@ class NSXClient:
                         identities.add(identity)
                     records.append(record)
             except InventoryChanged as exc:
+                if verification_owner:
+                    raise  # Search owns retries; never return a partial search as complete.
                 LOG.warning("Inventory verification endpoint=%s attempt=%s unique=%s duplicates=%s reason=%s",
                             path, attempt + 1, len(records), duplicates, exc)
                 if attempt < 2:
@@ -223,6 +266,8 @@ class NSXClient:
                            "duplicate_count": duplicates, "attempts": attempt + 1,
                            "reason": "inventory_changed", "pagination_complete": True,
                            "reported_total": exc.reported_total, "returned_count": exc.returned_count}
+                if exc.pagination:
+                    warning["pagination"] = exc.pagination
                 if exc.conflicts:
                     warning["conflicts"] = exc.conflicts
                 # Collection workers share this client. A list append is atomic;
@@ -233,7 +278,7 @@ class NSXClient:
             yield from records
             return
 
-    def _items_once(self, path, params=None, page_size=1000):
+    def _items_once(self, path, params=None, page_size=1000, configuration_search=False):
         params = dict(params or {})
         vm_default_sort = path == "/infra/realized-state/virtual-machines" and "sort_by" not in params
         if vm_default_sort:
@@ -259,6 +304,15 @@ class NSXClient:
         expected = None
         unique_records = {}
         duplicate_count = 0
+        raw_rows = 0
+        pages = 0
+        duplicate_types = {}
+        unique_types = {}
+        def pagination_diagnostics():
+            return {'reported_total': expected, 'unique_count': total,
+                    'raw_rows': raw_rows, 'pages': pages, 'duplicate_count': duplicate_count,
+                    'duplicates_by_resource_type': dict(duplicate_types),
+                    'unique_by_resource_type': dict(unique_types)}
         conflicting = False
         conflicts = {}
         while True:
@@ -285,7 +339,13 @@ class NSXClient:
                 expected = page["result_count"]
                 if not isinstance(expected, int) or expected < 0:
                     raise AuditError("GET {}: invalid result_count".format(path))
+            pages += 1
+            raw_rows += len(results)
             for record in results:
+                resource_type = str(record.get('resource_type') or 'Unknown') if isinstance(record, dict) else 'Invalid'
+                # Bound diagnostic key cardinality without dropping accounting.
+                if resource_type not in unique_types and len(unique_types) >= 100:
+                    resource_type = 'Other'
                 identity = None
                 if isinstance(record, dict):
                     locator = record.get("path") or record.get("id") or record.get("external_id")
@@ -295,6 +355,13 @@ class NSXClient:
                 if identity is not None:
                     if identity in unique_records:
                         duplicate_count += 1
+                        duplicate_types[resource_type] = duplicate_types.get(resource_type, 0) + 1
+                        # These types are discarded by configuration search. Keep
+                        # identity/count accounting, but their changing payloads
+                        # cannot establish a configuration-version conflict.
+                        if (configuration_search and path == "/search/query"
+                                and record.get("resource_type") in REFERENCE_SEARCH_EXCLUDED_TYPES):
+                            continue
                         previous = unique_records[identity]
                         ignored_fields = set()
                         if (path == "/infra/realized-state/virtual-machines"
@@ -320,6 +387,7 @@ class NSXClient:
                         continue
                     unique_records[identity] = record
                 total += 1
+                unique_types[resource_type] = unique_types.get(resource_type, 0) + 1
             LOG.debug("Inventory %s: page=%d total=%d expected=%s continuation=%s",
                       path, len(results), total, expected, bool(page.get("cursor")))
             yield from results
@@ -329,17 +397,17 @@ class NSXClient:
                     sample["resource_type"] or "Object", sample["locator"],
                     ", ".join(sample["changed_fields"])) for sample in samples)
                 raise InventoryChanged("GET {}: conflicting versions of objects during pagination; {}".format(path, detail),
-                                       reported_total=expected, returned_count=total, conflicts=samples)
+                                       reported_total=expected, returned_count=total, conflicts=samples, pagination=pagination_diagnostics())
             if expected is not None and total == expected:
                 return
             cursor = page.get("cursor")
             if not cursor:
                 if expected is not None and total != expected:
                     raise InventoryChanged("GET {}: incomplete/changing inventory ({}/{} unique objects; {} duplicate rows)".format(
-                        path, total, expected, duplicate_count), reported_total=expected, returned_count=total)
+                        path, total, expected, duplicate_count), reported_total=expected, returned_count=total, pagination=pagination_diagnostics())
                 if expected is None and duplicate_count:
                     raise InventoryChanged("GET {}: duplicate objects during pagination; no reported total to verify completeness".format(path),
-                                           returned_count=total)
+                                           returned_count=total, pagination=pagination_diagnostics())
                 return
             if cursor in seen:
                 raise AuditError("GET {}: repeated pagination cursor".format(path))
@@ -453,8 +521,92 @@ def group_definition(group):
 MEMBERSHIP_ENDPOINTS = ("ip-addresses", "virtual-machines", "logical-ports", "logical-switches")
 
 
+class MembershipProbe:
+    """Count logical probes without storing object paths, payloads or identities."""
+    def __init__(self, client):
+        self.client = client
+        self.calls = 0
+        self.endpoints = {}
+        self.results = {}
+
+    def __getattr__(self, name):
+        return getattr(self.client, name)
+
+    def get(self, path, params=None):
+        self.calls += 1
+        endpoint = path.rsplit('/', 1)[-1]
+        counts = self.endpoints.setdefault(endpoint, {'calls': 0, 'positive': 0, 'no_members_returned': 0, 'errors': 0})
+        counts['calls'] += 1
+        try:
+            page = self.client.get(path, params)
+        except Exception:
+            counts['errors'] += 1
+            self.results[endpoint] = 'error'
+            raise
+        if isinstance(page.get('results'), list):
+            count = page.get('result_count', 0)
+            positive = bool(page['results']) or (type(count) is int and count > 0)
+            counts['positive' if positive else 'no_members_returned'] += 1
+            self.results[endpoint] = ('incomplete' if type(count) is not int or count < 0
+                                     else 'positive' if positive
+                                     else 'incomplete' if page.get('cursor') else 'negative')
+        else:
+            counts['errors'] += 1
+            self.results[endpoint] = 'incomplete'
+        return page
+
+    def vm_comparison(self):
+        # This is diagnostic evidence only, never an input to finding decisions.
+        vm = self.results.get('virtual-machines')
+        if vm == 'positive':
+            return 'VM members found'
+        if vm == 'negative' and not any(key in self.results for key in ('ip-addresses', 'logical-ports')):
+            return 'VM-only fast path; follow-ups omitted'
+        if vm != 'negative':
+            return 'VM check unavailable or not reached'
+        others = [self.results.get(key) for key in ('ip-addresses', 'logical-ports')]
+        if 'positive' in others:
+            return 'VM empty but IP or port members found'
+        if all(value == 'negative' for value in others):
+            return 'All three checks empty'
+        return 'VM empty but follow-up incomplete'
+
+
+def membership_endpoints(group):
+    """Prune only documented inapplicable endpoints for simple typed conditions.
+
+    Path/nested/unknown expressions retain all probes. No previous result is used
+    as negative evidence. Keep effective IP/port checks even for VM conditions.
+    """
+    if group.get('extended_expression') or group.get('group_type') not in (None, [], ''):
+        return MEMBERSHIP_ENDPOINTS
+    expressions = group.get('expression')
+    if not isinstance(expressions, list) or not expressions or len(expressions) % 2 != 1:
+        return MEMBERSHIP_ENDPOINTS
+    types = set()
+    for index, expression in enumerate(expressions):
+        if not isinstance(expression, dict):
+            return MEMBERSHIP_ENDPOINTS
+        if index % 2:
+            if expression.get('resource_type') != 'ConjunctionOperator' or expression.get('conjunction_operator') not in ('AND', 'OR'):
+                return MEMBERSHIP_ENDPOINTS
+            continue
+        if (expression.get('resource_type') != 'Condition'
+                or expression.get('member_type') not in ('VirtualMachine', 'VIF', 'Segment', 'SegmentPort')
+                or not all(expression.get(key) for key in ('key', 'operator', 'value'))
+                or expression.get('expressions')):
+            return MEMBERSHIP_ENDPOINTS
+        types.add(expression['member_type'])
+    if len(types) != 1:
+        return MEMBERSHIP_ENDPOINTS
+    member_type = next(iter(types))
+    return tuple(endpoint for endpoint in MEMBERSHIP_ENDPOINTS
+                 if (endpoint != 'virtual-machines' or member_type == 'VirtualMachine')
+                 and (endpoint != 'logical-switches' or member_type == 'Segment'))
+
+
 def membership_order(group, previous=None):
-    """Order existence probes; never omit negative checks based on configuration."""
+    """Order existence probes; previous results are ordering hints, not evidence."""
     preferred = []
     if previous in MEMBERSHIP_ENDPOINTS:
         preferred.append(previous)
@@ -549,7 +701,24 @@ def membership_scope(group, group_inventory=None, cache=None):
     return explicit, tuple(issues), tuple(limitations)
 
 
-def membership(client, group, group_inventory=None, scope=None):
+def vm_fast_eligible(group):
+    """Only local, single positive VM conditions; no composed/extended membership."""
+    expressions = group.get('expression')
+    if (group.get('extended_expression') or group.get('group_type') not in (None, [], '')
+            or group.get('_origin_site_id') or group.get('remote_path')
+            or not group.get('path', '').startswith('/infra/domains/')
+            or not isinstance(expressions, list) or len(expressions) != 1):
+        return False
+    condition = expressions[0]
+    return (isinstance(condition, dict) and condition.get('resource_type') == 'Condition'
+            and condition.get('member_type') == 'VirtualMachine'
+            and condition.get('key') in ('Tag', 'Name')
+            and condition.get('operator') == 'EQUALS'
+            and isinstance(condition.get('value'), str) and bool(condition['value'])
+            and not condition.get('expressions'))
+
+
+def membership(client, group, group_inventory=None, scope=None, vm_fast=False):
     """Positive evidence wins; negative results require supported, successful checks."""
     explicit, issues, limitations = scope if scope is not None else membership_scope(group, group_inventory)
     issues, limitations = list(issues), list(limitations)
@@ -557,7 +726,12 @@ def membership(client, group, group_inventory=None, scope=None):
         return "nonempty", ["Contains explicit IP/MAC members"]
     hints = getattr(client, "membership_hints", {})
     previous = hints.get(group["path"]) if isinstance(hints, dict) else None
-    for endpoint in membership_order(group, previous):
+    planned_endpoints = membership_endpoints(group)
+    fast = vm_fast and vm_fast_eligible(group) and not issues and not limitations
+    order = ['virtual-machines', 'ip-addresses', 'logical-ports'] if fast else membership_order(group, previous)
+    for endpoint in order:
+        if endpoint not in planned_endpoints:
+            continue
         try:
             # Only existence is needed; do not download a large membership list.
             page = client.get(group["path"] + "/members/" + endpoint, {"page_size": 1})
@@ -568,6 +742,8 @@ def membership(client, group, group_inventory=None, scope=None):
                 raise AuditError("{}: invalid result_count".format(endpoint))
             if page["results"] or count > 0:
                 return "nonempty", ["Resolved members found: " + endpoint]
+            if fast and endpoint == 'virtual-machines' and type(page.get('result_count')) is int and page['result_count'] == 0 and not page.get('cursor'):
+                return 'empty', ['VM-only definition: current VM membership endpoint returned zero members; effective IP/port checks omitted.']
             if page.get("cursor"):
                 issues.append(endpoint + ": empty first page with continuation cursor")
         except AuditError as exc:
@@ -722,9 +898,20 @@ def policy_statistics(client, policy, rules, defer_fallback=False):
         for key in (rule["path"], rule.get("id", rule["path"].rsplit("/", 1)[-1]), rule.get("rule_id")):
             if key is not None:
                 aliases.setdefault(str(key), set()).add(rule["path"])
+    internal_aliases = {}
+    for rule in rules:
+        # Rule.rule_id is the system-assigned datapath/statistics identifier.
+        # NSX 4.2 returns it as a string internal_rule_id in bulk counters.
+        # Keep this namespace separate from user-supplied policy object IDs.
+        internal_id = rule.get('internal_rule_id')
+        if internal_id is None and type(rule.get('rule_id')) is int and rule['rule_id'] > 0:
+            internal_id = rule['rule_id']
+        if internal_id is not None:
+            internal_aliases.setdefault(str(internal_id), set()).add(rule['path'])
     samples = {r["path"]: [] for r in rules}
     scopes = set()
     fallback_reason = None
+    fallback_code = None
     retry_at = None
     backoff = getattr(client, "statistics_backoff", {})
     cached = backoff.get(policy["path"]) if isinstance(backoff, dict) else None
@@ -739,6 +926,7 @@ def policy_statistics(client, policy, rules, defer_fallback=False):
         if cached:
             fallback_reason, retry_at = cached["reason"], cached["retry_at"]
             entries = []
+            fallback_code = 'cooldown'
         else:
             try:
                 entries = list(client.items(policy["path"] + "/statistics", page_size=None))
@@ -766,14 +954,34 @@ def policy_statistics(client, policy, rules, defer_fallback=False):
             for counter in counters:
                 if not isinstance(counter, dict):
                     raise AuditError("Invalid policy counter")
-                identity = counter.get("rule", counter.get("rule_id"))
-                matches = aliases.get(str(identity), set())
+                identities = [counter[key] for key in ('rule', 'rule_id', 'rule_path') if counter.get(key) is not None]
+                identity = identities[0] if identities else (counter.get('internal_rule_id') if str(counter.get('internal_rule_id')) in internal_aliases else None)
+                candidates = [aliases.get(str(value), set()) for value in identities]
+                if counter.get('internal_rule_id') is not None:
+                    candidates.append(internal_aliases.get(str(counter['internal_rule_id']), set()))
+                matches = set.intersection(*candidates) if candidates else set()
                 if len(matches) != 1:
-                    raise AuditError("Unmapped or ambiguous policy counter (identity fields: {})".format(
+                    raise AuditError(("Missing policy counter identity" if identity is None else "Unmapped or ambiguous policy counter") + " (identity fields: {})".format(
                         ", ".join(k for k in ("rule", "rule_id", "internal_rule_id") if k in counter) or "none"))
                 samples[next(iter(matches))].append({"enforcement_point": scope, "statistics": counter})
     except AuditError as exc:
         fallback_reason = str(exc)
+        if exc.status_code:
+            fallback_code = 'http_error'
+        else:
+            message = str(exc)
+            fallback_code = next((code for prefix, code in (
+                ('Missing policy counter identity', 'missing_identity'),
+                ('Unmapped or ambiguous policy counter', 'unmapped_or_ambiguous_identity'),
+                ('Incomplete nested policy statistics', 'incomplete_nested_counters'),
+                ('Invalid nested policy statistics', 'invalid_nested_counters'),
+                ('Invalid policy statistics', 'invalid_policy_statistics'),
+                ('Invalid policy counter', 'invalid_counter'),
+            ) if message.startswith(prefix)), 'transport_or_other_error')
+        if fallback_code in ('missing_identity', 'unmapped_or_ambiguous_identity'):
+            failures = min(failures + 1, 10)
+            retry_at = (datetime.now(timezone.utc) + timedelta(minutes=30)).isoformat()
+            fallback_reason = "GET " + policy["path"] + "/statistics: " + fallback_reason
         samples = {r["path"]: [] for r in rules}
     results = {}
     for rule in rules:
@@ -786,6 +994,7 @@ def policy_statistics(client, policy, rules, defer_fallback=False):
             LOG.debug("Policy statistics fallback for %s: %s", rule["path"], reason)
             result = {"_pending_statistics": True} if defer_fallback else rule_statistics(client, rule)
             result["statistics_source"] = "rule"
+            result['statistics_fallback_code'] = fallback_code or ('invalid_rule_counters' if complete else 'missing_or_duplicate_scope_counters')
             result["statistics_fallback_reason"] = reason
             if retry_at:
                 result["statistics_bulk_failures"] = failures
@@ -816,7 +1025,9 @@ def audit_dfw(client, domains, workers=4, testing=False):
             rule_lists = list(pool.map(read_rules, domain_policies))
         for policy, (policy_rules, error) in zip(domain_policies, rule_lists):
             configuration.append(policy)
-            record = {"name": policy.get("display_name", policy.get("id", "")),
+            record = {"configuration": {k:v for k,v in policy.items() if not k.startswith("_")},
+                      "unique_id": policy.get("unique_id"), "created_at": policy.get("_create_time"),
+                      "name": policy.get("display_name", policy.get("id", "")),
                       "path": policy["path"], "domain": domain["path"],
                       "category": policy.get("category", "Unspecified"),
                       "system_owned": bool(policy.get("_system_owned")),
@@ -867,7 +1078,7 @@ def audit_dfw(client, domains, workers=4, testing=False):
         return policy_statistics(client, policy, policy_rules, defer_fallback=True)
     statistics = {}
     diagnostics = {"bulk_policies": 0, "bulk_successes": 0, "bulk_skipped": 0,
-                   "fallback_rules": 0, "fallback_reasons": {}, "timeout_retries": 0,
+                   "fallback_rules": 0, "fallback_reasons": {}, "fallback_details": {}, "timeout_retries": 0,
                    "timeout_recoveries": 0, "unsupported_rules": 0}
     def fallback(rule, metadata):
         result = rule_statistics(client, rule)
@@ -877,7 +1088,9 @@ def audit_dfw(client, domains, workers=4, testing=False):
     # Submit only bounded work; prioritize newly discovered fallbacks over more
     # bulk probes. No worker waits on another future in the same executor.
     queue = deque((check, (job,), job[1]) for job in jobs)
-    statistics_workers = min(workers, 2)
+    # All requests still acquire the shared client limiter. Allow counter tasks
+    # to use spare capacity without raising the configured HTTP concurrency.
+    statistics_workers = max(1, workers)
     diagnostics["statistics_workers"] = statistics_workers
     with ThreadPoolExecutor(max_workers=statistics_workers) as pool:
         active = {}
@@ -914,24 +1127,67 @@ def audit_dfw(client, domains, workers=4, testing=False):
                             category = "cooldown" if skipped else "http_error" if "HTTP " in reason else "timeout" if "timed out" in reason.lower() else "incomplete_or_unavailable"
                             reasons = diagnostics["fallback_reasons"]
                             reasons[category] = reasons.get(category, 0) + 1
+                            code = metadata.get('statistics_fallback_code', 'unclassified')
+                            details = diagnostics['fallback_details']
+                            details[code] = details.get(code, 0) + 1
                             queue.appendleft((fallback, (rule, metadata), None))
     # Retry only transport timeouts, after all first-pass statistics have finished.
     # This avoids overlapping recovery requests and preserves first-attempt evidence.
     retry_rules = [r for r in rules if statistics[r["path"]].get("statistics_error_kind") == "timeout"]
     if retry_rules and not testing:
-        time.sleep(2)
-        for rule in retry_rules:
-            previous = statistics[rule["path"]]
-            recovered = rule_statistics(client, rule)
-            for key in ("statistics_source", "statistics_fallback_reason", "statistics_bulk_failures",
-                        "statistics_bulk_retry_at", "statistics_bulk_skipped"):
-                if key in previous:
-                    recovered[key] = previous[key]
-            recovered["statistics_retry"] = {"attempts": 1, "initial_notes": previous["notes"],
-                "initial_checked_at": previous["statistics_checked_at"]}
-            statistics[rule["path"]] = recovered
-            diagnostics["timeout_retries"] += 1
-            diagnostics["timeout_recoveries"] += int(recovered["hit_status"] in {"zero_hits", "traffic_recorded"})
+        retry_started = time.monotonic()
+        retry_deadline = retry_started + 30
+        pending_rules = iter(retry_rules)
+        diagnostics['timeout_retry_workers'] = min(workers, 2)
+        diagnostics['timeout_retry_budget_seconds'] = 30
+        if isinstance(client, NSXClient) and not hasattr(client, 'request_context'):
+            client.request_context = threading.local()
+        def retry_rule(rule):
+            context = getattr(client, 'request_context', None) if isinstance(client, NSXClient) else None
+            if context is not None:
+                context.phase_deadline = retry_deadline
+            try:
+                return rule, rule_statistics(client, rule)
+            except TimeoutError:
+                if time.monotonic() >= getattr(client, 'request_deadline', float('inf')):
+                    raise
+                result = dict(statistics[rule['path']])
+                result['notes'] = list(result['notes']) + ['Counter recovery time budget exhausted; evidence remains unknown.']
+                return rule, result
+            finally:
+                if context is not None:
+                    del context.phase_deadline
+        with ThreadPoolExecutor(max_workers=min(workers, 2)) as pool:
+            active = set()
+            exhausted = False
+            while active or not exhausted:
+                while not exhausted and len(active) < min(workers, 2):
+                    if time.monotonic() >= retry_deadline:
+                        exhausted = True
+                        break
+                    rule = next(pending_rules, None)
+                    if rule is None:
+                        exhausted = True
+                        break
+                    active.add(pool.submit(retry_rule, rule))
+                if not active:
+                    break
+                done, active = wait(active, return_when=FIRST_COMPLETED)
+                for future in done:
+                    rule, recovered = future.result()
+                    previous = statistics[rule['path']]
+                    for key in ('statistics_source', 'statistics_fallback_reason', 'statistics_fallback_code', 'statistics_bulk_failures',
+                                'statistics_bulk_retry_at', 'statistics_bulk_skipped'):
+                        if key in previous:
+                            recovered[key] = previous[key]
+                    recovered['statistics_retry'] = {'attempts': 1, 'initial_notes': previous['notes'],
+                        'initial_checked_at': previous['statistics_checked_at']}
+                    statistics[rule['path']] = recovered
+                    diagnostics['timeout_retries'] += 1
+                    diagnostics['timeout_recoveries'] += int(recovered['hit_status'] in {'zero_hits', 'traffic_recorded'})
+        diagnostics['timeout_retry_seconds'] = round(time.monotonic() - retry_started, 3)
+        diagnostics['timeout_retries_skipped'] = len(retry_rules) - diagnostics['timeout_retries']
+
     for row in rules:
         row.update(statistics[row["path"]])
     return {"policies": policies, "rules": rules, "errors": errors,
@@ -1323,21 +1579,39 @@ def search_configuration(client, expect_resources=False):
     """Retry changing search inventories from page one; never accept partial results."""
     rejected = []
     inventory_retries = 0
-    runtime_filter = " AND NOT (" + " OR ".join(
-        "resource_type:" + kind for kind in REFERENCE_SEARCH_EXCLUDED_TYPES) + ")"
-    queries = ("resource_type:*" + runtime_filter, "*" + runtime_filter, " OR ".join(
-        "resource_type:" + kind for kind in REFERENCE_SEARCH_TYPES))
+    # Broadcom documents flat NOT / ! clauses. Avoid the grouped negation
+    # forms that some managers accept but answer with an empty result.
+    exclusions = ["resource_type:" + kind for kind in REFERENCE_SEARCH_EXCLUDED_TYPES]
+    queries = (" AND ".join("NOT " + term for term in exclusions) + " AND resource_type:*",
+               " AND ".join("!" + term for term in exclusions) + " AND resource_type:*",
+               "resource_type:*", "*", " OR ".join(
+                   "resource_type:" + kind for kind in REFERENCE_SEARCH_TYPES))
     for index, query in enumerate(queries):
+        explicit = index == len(queries) - 1
+        diagnostics = {"query": query, "mode": "explicit_types" if explicit else "all_types",
+                       "excluded_resource_types": list(REFERENCE_SEARCH_EXCLUDED_TYPES),
+                       "runtime_filtering": "local" if index in (2, 3) else "query",
+                       "resource_types": list(REFERENCE_SEARCH_TYPES) if explicit else [],
+                       "rejected_queries": rejected, "status": "checking"}
+        client.search_diagnostics = diagnostics
         try:
             # Start each alternative from page one, discarding any partial attempt.
             attempts = 1 if getattr(client, "testing", False) is True else 3
             for attempt in range(attempts):
                 try:
-                    resources = list(client.items("/search/query", {"query": query}))
+                    budget = getattr(client, '_search_scan_budget', None)
+                    if isinstance(budget, dict):
+                        if budget['remaining'] <= 0:
+                            raise AuditError('Search verification exhausted its shared five-scan budget; no complete coverage was accepted.')
+                        budget['remaining'] -= 1
+                    options = {'verification_owner': True, 'configuration_search': True} if isinstance(client, NSXClient) else {}
+                    resources = list(client.items("/search/query", {"query": query}, **options))
                     break
                 except InventoryChanged as exc:
+                    diagnostics.setdefault('pagination_attempts', []).append(
+                        {'attempt': attempt + 1, **exc.pagination})
                     if attempt == attempts - 1:
-                        raise InventoryChanged("NSX search inventory remained incomplete/changing after {} attempt(s). {}".format(attempts, exc)) from exc
+                        raise InventoryChanged("NSX search inventory remained incomplete/changing after {} attempt(s). {}".format(attempts, exc), reported_total=exc.reported_total, returned_count=exc.returned_count, conflicts=exc.conflicts, pagination=exc.pagination) from exc
                     inventory_retries += 1
                     delay = 2 ** (attempt + 1)
                     LOG.warning("NSX search inventory changed during pagination; restarting from page one in %ss (attempt %d/%d).",
@@ -1345,7 +1619,13 @@ def search_configuration(client, expect_resources=False):
                     time.sleep(delay)
             if any(not isinstance(obj, dict) for obj in resources):
                 raise AuditError("Search returned a non-object result")
-            if not resources and expect_resources and index < len(queries) - 1:
+            # Pagination/unique-count verification has completed over the raw result
+            # before removing runtime rows. Never filter individual pages first.
+            raw_count = len(resources)
+            resources = [obj for obj in resources if obj.get('resource_type') not in REFERENCE_SEARCH_EXCLUDED_TYPES]
+            diagnostics.update(raw_records=raw_count, configuration_records=len(resources),
+                               runtime_records_removed=raw_count-len(resources))
+            if not resources and expect_resources and not explicit:
                 # Some managers accept a query but return an empty result. Direct
                 # group/service inventory proves that an empty search is not
                 # sufficient. Try the next syntax, then validate its coverage.
@@ -1353,21 +1633,22 @@ def search_configuration(client, expect_resources=False):
                                  "error": "No results despite non-empty group/service inventory"})
                 LOG.warning("Search returned no results despite known inventory; trying compatible query syntax.")
                 continue
-            return resources, {"query": query, "mode": "explicit_types" if index == 2 else "all_types",
-                               "excluded_resource_types": list(REFERENCE_SEARCH_EXCLUDED_TYPES),
-                               "resource_types": list(REFERENCE_SEARCH_TYPES) if index == 2 else [],
-                               "rejected_queries": rejected, "inventory_retries": inventory_retries}
+            diagnostics.update(status="search_complete", inventory_retries=inventory_retries)
+            return resources, diagnostics
         except AuditError as exc:
+            diagnostics.update(status="failed", error=str(exc)[:2000], http_status=exc.status_code)
             if exc.status_code != 400:
                 raise
-            rejected.append({"query": query, "error": str(exc)})
-            LOG.warning("Search query rejected (HTTP 400); trying compatible query syntax." if index < 2
+            rejected.append({"query": query, "error": str(exc)[:2000], "http_status": exc.status_code})
+            LOG.warning("Search query rejected (HTTP 400); trying compatible query syntax." if not explicit
                         else "All search query variants were rejected.")
     raise AuditError("NSX rejected all search query variants. " + rejected[-1]["error"], status_code=400)
 
 
 def verified_configuration_search(client, groups, services, testing=False):
     """Verify search coverage against direct inventory; discard incomplete attempts."""
+    if isinstance(client, NSXClient):
+        client._search_scan_budget = {'remaining': 5}
     expected_groups = {obj["path"] for obj in groups}
     expected_services = {obj["path"] for obj in services}
     attempts = 1 if testing else 3
@@ -1380,6 +1661,10 @@ def verified_configuration_search(client, groups, services, testing=False):
         missing = missing_groups | missing_services
         if not missing or testing:
             coverage["inventory_coverage_retries"] = attempt
+            coverage["status"] = "verified" if not testing else "testing"
+            budget = getattr(client, '_search_scan_budget', None)
+            if isinstance(budget, dict):
+                coverage['search_scans'] = 5 - budget['remaining']
             return resources, coverage
         # Do not presume index lag: query behavior and path differences can
         # produce the same symptom. Keep the task error useful and bounded.
@@ -1391,6 +1676,7 @@ def verified_configuration_search(client, groups, services, testing=False):
         ).format(len(missing), len(missing_groups), len(expected_groups),
                  len(missing_services), len(expected_services), len(resources),
                  len(found), coverage.get("query", "<unknown>"), sample)
+        coverage.update(status="incomplete", error=detail[:2000], missing_groups=len(missing_groups), missing_services=len(missing_services))
         if attempt == attempts - 1:
             raise AuditError(detail + " Coverage could not be verified after {} attempts; "
                              "possible search query, indexing, or path-scope mismatch.".format(attempts))
@@ -1420,6 +1706,18 @@ def audit(client, workers=4, testing=False, progress=None):
     for inventory in inventories[:-1]:
         groups.extend(inventory)
     services = inventories[-1]
+    scope_diagnostics = {'domains': [{'path': domain['path'], 'groups': len(inventory),
+                         'unique_groups': len({g['path'] for g in inventory})}
+                        for domain, inventory in zip(domains, inventories[:-1])],
+                         'group_rows': len(groups), 'unique_group_paths': len({g['path'] for g in groups})}
+    # Identical repeated paths need only one probe; conflicting data must not be
+    # silently selected as evidence.
+    unique_groups = {}
+    for group in groups:
+        if group['path'] in unique_groups and unique_groups[group['path']] != group:
+            raise AuditError('Conflicting group inventory for ' + group['path'])
+        unique_groups[group['path']] = group
+    groups = list(unique_groups.values())
     all_groups = groups
     # The UI name can differ from the ID/path; flags can also be absent.
     groups = [g for g in all_groups
@@ -1452,12 +1750,53 @@ def audit(client, workers=4, testing=False, progress=None):
     LOG.info("Checking membership for %d groups...", len(groups))
     membership_progress = {"completed": 0, "last_log": time.monotonic()}
     membership_lock = threading.Lock()
+    membership_diagnostics = {'groups_checked': 0, 'probe_calls': 0, 'calls_per_group': {}, 'outcomes': {}, 'endpoints': {}, 'typed_probe_groups': 0, 'inapplicable_probes_omitted': 0, 'vm_probe_comparison': {}}
     group_inventory = {g["path"]: g for g in all_groups}
     scope_cache = {}
     scopes = {g['path']: membership_scope(g, group_inventory, scope_cache) for g in groups}
+    fast_paths = set()
+    verification_failed = threading.Event()
+    # Rotate verification daily; Sunday performs a comprehensive pass.
+    verification_day = datetime.now(timezone.utc).date()
+    fast_disabled = getattr(client, 'vm_fast_disabled', False) is True
+    full_verification = fast_disabled or verification_day.weekday() == 6
+    membership_diagnostics['vm_fast_path'] = {'eligible':0, 'used':0, 'verification_groups':0,
+                                             'rechecked':0, 'disabled':fast_disabled, 'full_verification':full_verification}
     def check_membership(group):
-        result = membership(client, group, group_inventory, scopes[group['path']])
+        probe = MembershipProbe(client)
+        eligible = not testing and vm_fast_eligible(group)
+        verify = eligible and (full_verification or int(hashlib.sha256((str(verification_day) + group['path']).encode()).hexdigest(), 16) % 20 == 0)
+        fast = eligible and not verify
+        result = membership(probe, group, group_inventory, scopes[group['path']], vm_fast=fast)
+        used = bool(result[0] == 'empty' and fast and probe.calls == 1)
+        if verify and (probe.results.get('virtual-machines') in ('error', 'incomplete') or (probe.results.get('virtual-machines') == 'negative' and probe.vm_comparison() != 'All three checks empty')):
+            verification_failed.set()
         with membership_lock:
+            membership_diagnostics['groups_checked'] += 1
+            fast_stats = membership_diagnostics['vm_fast_path']
+            fast_stats['eligible'] += int(eligible)
+            fast_stats['verification_groups'] += int(verify)
+            fast_stats['used'] += int(used)
+            if used:
+                fast_paths.add(group['path'])
+            if membership_endpoints(group) == ('ip-addresses', 'virtual-machines', 'logical-ports'):
+                comparisons = membership_diagnostics['vm_probe_comparison']
+                outcome = probe.vm_comparison()
+                comparisons[outcome] = comparisons.get(outcome, 0) + 1
+            if probe.calls and len(membership_endpoints(group)) < len(MEMBERSHIP_ENDPOINTS):
+                membership_diagnostics['typed_probe_groups'] += 1
+                # Count actual avoided calls only when the complete plan ran.
+                if result[0] != 'nonempty':
+                    membership_diagnostics['inapplicable_probes_omitted'] += len(MEMBERSHIP_ENDPOINTS) - len(membership_endpoints(group))
+            membership_diagnostics['probe_calls'] += probe.calls
+            distribution = membership_diagnostics['calls_per_group']
+            distribution[str(probe.calls)] = distribution.get(str(probe.calls), 0) + 1
+            outcomes = membership_diagnostics['outcomes']
+            outcomes[result[0]] = outcomes.get(result[0], 0) + 1
+            for endpoint, counts in probe.endpoints.items():
+                aggregate = membership_diagnostics['endpoints'].setdefault(endpoint, {key: 0 for key in counts})
+                for key, value in counts.items():
+                    aggregate[key] += value
             membership_progress["completed"] += 1
             now = time.monotonic()
             if now-membership_progress["last_log"] >= 30 or membership_progress["completed"] == len(groups):
@@ -1469,6 +1808,27 @@ def audit(client, workers=4, testing=False, progress=None):
         started = time.perf_counter()
         with ThreadPoolExecutor(max_workers=workers) as members_pool:
             result = dict(zip((g["path"] for g in groups), members_pool.map(check_membership, groups)))
+            if verification_failed.is_set():
+                membership_diagnostics['vm_fast_path']['disabled'] = True
+            if verification_failed.is_set() and fast_paths:
+                # A discrepancy invalidates every shortcut result in this run.
+                targets = [g for g in groups if g['path'] in fast_paths]
+                def recheck(group):
+                    probe = MembershipProbe(client)
+                    checked = membership(probe, group, group_inventory, scopes[group['path']])
+                    with membership_lock:
+                        membership_diagnostics['probe_calls'] += probe.calls
+                        for endpoint, counts in probe.endpoints.items():
+                            aggregate = membership_diagnostics['endpoints'].setdefault(endpoint, {key:0 for key in counts})
+                            for key, value in counts.items():
+                                aggregate[key] += value
+                    return checked
+                for group, checked in zip(targets, members_pool.map(recheck, targets)):
+                    membership_diagnostics['outcomes'][result[group['path']][0]] -= 1
+                    membership_diagnostics['outcomes'][checked[0]] = membership_diagnostics['outcomes'].get(checked[0], 0) + 1
+                    result[group['path']] = checked
+                membership_diagnostics['vm_fast_path']['rechecked'] = len(targets)
+                membership_diagnostics['vm_fast_path']['used'] = 0
         return result, round(time.perf_counter()-started, 2)
 
     # All retrieval tasks use the same client's adaptive request limiter. Keep diagnostic
@@ -1576,7 +1936,8 @@ def audit(client, workers=4, testing=False, progress=None):
     return {"inventory_warnings": getattr(client, "inventory_warnings", []) if isinstance(getattr(client, "inventory_warnings", []), list) else [],
             "inventory": inventory, "tags": tags, "testing": testing, "generated_at": datetime.now(timezone.utc).isoformat(),
             "performance": {"workers": workers, "elapsed_seconds": round(time.perf_counter() - started, 2),
-                            "phases_seconds": phases,
+                            "phases_seconds": phases, "membership": membership_diagnostics, "collection_scope": scope_diagnostics,
+                            "access_failures": client.access_failures if isinstance(getattr(client, "access_failures", None), list) else [],
                             "http": dict(client.metrics) if isinstance(getattr(client, "metrics", None), dict) else {}},
             "scope": ("TESTING SAMPLE: first record per list, first domain only" if testing else "Local Manager /infra; references in visible Policy search index"),
             "usage_definition": "No configuration reference found; not a traffic analysis or deletion approval",
@@ -1745,16 +2106,31 @@ def feature_guide():
 <div class="section-eyebrow">Help &amp; coverage</div><h2>Report user guide</h2>
 <p>Use this guide to understand what the report checks, how to explore its results and what each finding means. This report displays a saved database snapshot. Opening it or filtering it does not modify NSX.</p>
 
+<p><strong>Collection performance:</strong> counter tasks share the configured NSX request limit with membership tasks and can use spare capacity. Diagnostics show group rows and unique paths per domain to explain workload changes. Tag relationships use bounded database batches. Missing bulk counter identities retain individual-rule fallback. Simple local single-condition VM Name/Tag equality groups can use a fresh explicit zero VM result; mixed or uncertain definitions retain full checks. Daily rotating verification and full Sunday checks detect discrepancies; any discrepancy rechecks shortcuts and disables the fast path for subsequent collections.</p>
+<h3>Cleanup impact preview</h3>
+<p>Groups, custom services, firewall rules and policies have a read-only Impact preview in object details and finding reviews. It shows collected direct and nested configuration dependencies, referencing rule fields and policy containment. Links open the exact object in the same snapshot. Cycles, unresolved references and truncated chains are marked. This is not a traffic simulation or deletion approval; no detected references does not prove safe deletion. VM deletion and tag assignment removal have separate previews with potential membership effects explicitly labelled.</p>
+<h3>Investigating collection duration</h3>
+<p>VM probe comparison reports whether the existing IP or port checks find members when the VM check is empty. It adds no requests and does not change finding or approval decisions. Agreement in a collection is diagnostic evidence, not a guarantee that follow-up checks can be removed. HTTPS connections already use a shared reusable pool.</p>
+<p>Simple single-member-type conditions omit documented inapplicable membership endpoints; mixed, nested and uncertain definitions retain all checks. Every collection obtains fresh membership evidence. Bulk counters with missing or ambiguous rule identity use a 30-minute bulk retry cooldown while individual counters remain freshly collected. Finding publication avoids rewriting unchanged JSON evidence.</p>
+<p>New collections record the collecting worker build and configured request ceiling. Membership workload shows probes per group and endpoint outcomes; request-capacity waiting is separate from rate pacing. Set Maximum concurrent NSX requests in Edit environment → Advanced request settings (default 8, range 1–32). Changes apply to newly queued collections for that environment without restarting the worker. Waiting requests are served in FIFO order. Compare collections at higher limits cautiously; verification and adaptive backoff remain enabled.</p>
+<p>Open Collections → Diagnostics for retrieval phase times, HTTP retries, throttling and endpoint costs. Membership endpoints are measured separately. The publication timeline shows environment lock waits. Concurrent phase and request times overlap and must not be added together. Search verification shares a five-scan limit; counter timeout recovery uses at most two concurrent requests and a 30-second budget. Unresolved counters remain unknown and incomplete search coverage is not accepted.</p>
 <h3>Editing settings and review drafts</h3>
 <p>Editing forms show unsaved changes and, with JavaScript enabled, warn before you leave. This does not autosave: use the save or review action explicitly. Connection tests and certificate previews do not save settings. After validation fails, follow the error summary links to the fields that need correction. Authentication forms group connection details, user lookup (LDAPS), role mapping and certificate trust. Save controls stay visible on desktop and follow the form on narrow screens.</p>
 
+<h3>Expected transient emptiness</h3>
+<p>Choose Always suppress or Monitor prolonged emptiness in the policy GUI. Monitoring has its own empty period (14 days by default), minimum observations (3) and maximum gap (24 hours). Saving replays retained history. Eligible groups appear as Prolonged empty VDI group under Empty group reviews. Returning members, unknown evidence and excessive gaps interrupt qualification; active cleanup approvals are invalidated when eligibility is lost. This means empty in every qualifying observation, not proof of continuous emptiness between collections. Overlapping policies use the oldest enabled match.</p>
+<p>Administrators can open Administration → Finding review criteria → Manage transient-emptiness policies to configure an exact, case-sensitive membership tag scope, reason and environment. Preview uses saved group definitions. Only pure positive VM Tag EQUALS conditions in that scope match; mixed and nested definitions are excluded. The scope is part of the membership condition, not a metadata tag on the group.</p>
+<p>In Always suppress mode, matching empty-group findings move to Finding reviews → Suppressed and cannot receive cleanup approval. Ownership and history remain, while active cleanup approvals are invalidated. Inventory evidence and separate unused-object findings remain unchanged. Saving queues retained-history recalculation without NSX calls. Disabling restores normal criteria, not old approvals. Policy changes are audited; no external script changes are required.</p>
 <h3>Finding review criteria and retained history</h3>
+<p>Custom services have a separate <strong>Unused custom services (days)</strong> criterion and <strong>Unused custom service</strong> finding-type filter. Groups use <strong>Unused groups (days)</strong>. On upgrade, service criteria inherit the previous shared value and existing reviews retain their ownership, history and approvals. They are unused-object candidates when no configuration references are found and observation/evidence requirements are met. Built-in/system-owned, referenced and audit-excluded services are excluded. Check snapshot usage and <strong>Why some findings are not listed</strong> if a service is absent. Empty-group criteria and transient-emptiness policies do not apply to services.</p>
 <p>From a finding review, <strong>View object in evaluated snapshot</strong> opens the exact object path and its details in the saved evaluation snapshot. Use <strong>Back to finding review</strong> to return. Missing objects are reported explicitly; this may be a historical snapshot rather than the newest collection.</p>
 <p>Open <strong>Administration → Finding review criteria</strong>, select global defaults or an environment override, set days and save. A worker replays retained successful full snapshots; no fresh collection is needed. Wait for the recalculation to complete, then clear review filters. Environment overrides take precedence over global defaults.</p>
 <p><strong>0 days</strong> means one confirmed observation with no waiting period. <strong>2 days</strong> requires at least 48 hours and <strong>3 days</strong> at least 72 hours between qualifying snapshots, plus the minimum observations (three by default). Time after the latest snapshot does not count. The start is the earliest observation in the current supported sequence, not necessarily the first collection ever saved.</p>
 <p>The automatic maximum gap is twice the current collection interval, with a minimum of 24 hours. An explicit nonzero gap setting overrides this. Unknown, excluded, missing or opposite evidence interrupts a sequence; gaps beyond the allowance and relevant identity/configuration changes restart it. Empty-group continuity ignores unrelated reference/usage changes; zero-hit continuity ignores statistics-source changes but still requires fresh zero counters.</p>
 <p>Finding reviews lists eligible findings and retains pending, rejected and completed decisions. Expand <strong>Why some findings are not listed</strong> for counts and explanations. Observing means time/count requirements are pending; insufficient evidence means qualification cannot be established. Retention limits the history available. Recalculation preserves owners, review decisions and notes and does not rewrite historical snapshot assessments. After upgrading, save criteria again to replay history using the corrected rules.</p>
 <p>While criteria recalculation is queued, running or failed, affected finding types cannot receive first or second approval or record decommissioning completion using their previous eligibility. Unaffected types remain reviewable and rejection remains available. If recalculation fails, an administrator must save the criteria again and wait for successful completion. Normal evidence checks still apply afterward.</p>
+<h3>Recovering a first approval after a collection gap</h3>
+<p>Administrators can open an Owner review finding and choose <strong>Preview approval recovery</strong> in Review history. Recovery requires retained proof of a gap-only interruption, completed recalculation, current eligible evidence, unchanged identity and coverage, and the same active owner. Missing or ambiguous evidence blocks recovery. Explicit confirmation restores only the original first approval and records a separate administrator event. An independent second approval is still required; increasing the gap setting alone does not restore approvals.</p>
 <h3>Reading observation badges</h3>
 <p>A badge such as <strong>zero hits: Eligible for review</strong> describes whether the configured evidence requirements are met. The line beneath it means <strong>complete observed days / required days · successful observations</strong>.</p>
 <div class="table-wrap"><table><thead><tr><th>Example</th><th>Meaning</th></tr></thead><tbody>
@@ -1766,27 +2142,35 @@ def feature_guide():
 <p><strong>Eligible for review is not approval to delete.</strong> Check the rule's purpose, dependencies and evidence. Zero recorded counters do not prove that no traffic occurred between checks.</p>
 <h3>Finding approvals</h3>
 <p>Open My work for assigned reviews, available second approvals and approved changes across environments. Reviewer selection searches by name or email; lists show each review’s required approval count.</p>
-<p>Administrators choose Single approval or Two-person approval (default) in Administration → Review approvals. Single approval moves the assigned owner's approved finding directly to Ready for decommissioning. Saving also updates open reviews; changed requirements restart the owner review and preserve previous approvals in audit history. Rejected reviews stay rejected; completed decommissioning records keep their original requirement. After upgrading, save the setting once to update older reviews.</p>
-<p>Assign an active operator or administrator as owner. The owner manually checks the finding and approves or rejects it with a reason. In two-person mode, approval then requires a different operator or administrator; administrators cannot approve their own first decision. Two approvals mark the finding Ready for decommissioning. Perform the change outside this application and record completion with a change-ticket reference. No NSX objects are deleted automatically.</p>
-<p>Approvals require fresh, eligible evidence from the latest full collection. Coverage is checked for the finding: confirmed empty membership, fresh zero counters, explicit disabled state, or a confirmed empty policy. Unused-object approvals require unrestricted reference search or successful compatibility search with independent, documented dependency checks and an evidence reference from each required reviewer. Failed or unrecorded searches remain blocked; manual approval does not make limited coverage complete. The review page shows readiness before submission, stage-specific decision buttons, evidence and a review-history timeline. Unrelated object-check warnings do not block approval; inventory verification warnings pause all finding evaluation and approval for that environment. Missing indexed evidence and relevant incomplete checks also block approval. Relevant changes, disappearance or loss of eligibility reset pending approvals. Unchanged new collections preserve them. Reassigning already-owned work clears approvals; assigning released work preserves its saved stage and valid approvals. Rejected reviews can be reopened with a reason. Use the review queue tabs and notification bell for pending work. Export audit history from a finding to retain its decisions and reviewed evidence independently of snapshot retention.</p>
+<p>Administrators configure a workspace default and category overrides in Administration → Review approvals. Use Preview changes before saving. Only open reviews whose effective requirement changes have approvals reset; owners and history remain. Single approval requires the assigned owner; four-eyes requires an additional, different reviewer. See Approval modes by category below.</p>
+<p>Assign an active operator or administrator as owner. The owner manually checks the finding and approves or rejects it with a reason. In two-person mode, approval then requires a different operator or administrator; administrators cannot approve their own first decision. Two approvals mark the finding Ready for decommissioning. Perform the change externally and record completion, or use the separate administrator Delete from NSX preview. Actual deletion requires a change ticket and explicit confirmation; approvals alone never trigger DELETE.</p>
+<p>Approvals require fresh, eligible evidence from the latest full collection. Coverage is checked for the finding: confirmed empty membership, fresh zero counters, explicit disabled state, or a confirmed empty policy. Unused-object approvals require unrestricted reference search or successful compatibility search with independent, documented dependency checks and an evidence reference from each required reviewer. Failed or unrecorded searches remain blocked; manual approval does not make limited coverage complete. The review page shows readiness before submission, stage-specific decision buttons, evidence and a review-history timeline. Unrelated object-check warnings do not block approval; inventory verification warnings pause findings requiring the affected evidence. Unclassified warnings remain blocking for all findings; temporary inventory uncertainty preserves decisions. Missing indexed evidence and relevant incomplete checks also block approval. Relevant changes, disappearance or loss of eligibility reset pending approvals. Unchanged new collections preserve them. Reassigning already-owned work clears approvals; assigning released work preserves its saved stage and valid approvals. Rejected reviews can be reopened with a reason. Use the review queue tabs and notification bell for pending work. Export audit history from a finding to retain its decisions and reviewed evidence independently of snapshot retention.</p>
 <h3>Compact review actions and returning work to unassigned</h3>
 <p>Released findings with preserved approvals appear in Unassigned with an Awaiting assignment label. They are excluded from the Awaiting second approval and Ready for decommissioning queues, including My work, until an owner is assigned. Assignment restores the saved review stage and valid approvals; all normal evidence checks still apply.</p>
 <p>On a finding detail page, use the direct <strong>Assign owner</strong> button when assignment is the only available action. When multiple actions are available, use <strong>Actions</strong>. Search and select a reviewer in the single Owner field. Assigning unassigned work requires no reason; reassignment, release, reopening and review decisions still require one. Assignment remains recorded in audit history. Approval evidence, manual verification and completion requirements remain on the review page. Cancel or Escape closes a dialog without submitting. Validation failures show the original form and entered values.</p>
-<p>In <strong>Finding reviews</strong>, select eligible rows to show the selected count and <strong>Return to unassigned</strong>. Enter the required shared reason in its dialog. <strong>Clear selection</strong> clears the page selection; cancellation keeps it. The Unassigned view hides the Select column and bulk-return controls. Mixed views show checkboxes only for findings you can release. Selection is limited to the displayed page, up to 100 findings per submission. The server checks every revision and permission again and explains skipped rows.</p>
+<p>In <strong>Finding reviews</strong>, select eligible rows to show the selected count and <strong>Return to unassigned</strong>. Enter the required shared reason in its dialog. <strong>Clear selection</strong> clears the page selection; cancellation keeps it. In <strong>Unassigned</strong>, select rows or use the header checkbox, then choose <strong>Actions → Assign owner</strong>. Search by name or email and assign the selection to an active operator or administrator. Assignments require no reason and are audited individually; released reviews keep their valid approvals. Rows changed or assigned since selection are skipped with an explanation. Mixed views show checkboxes for findings you can assign or release; each action checks the complete selection. Selection is limited to the displayed page, up to 100 findings per submission. The server checks every revision and permission again and explains skipped rows.</p>
 <p>Operators release only their own work; administrators may release anyone’s. The Unassigned queue means no owner, independently of review stage. Release preserves review history and valid approvals. An owner is required before another approval or completion, and the original first approver cannot give the second approval after reassignment. Completed reviews must first be reopened by an administrator with a reason; prior approvals and the change reference remain in history. Reopening does not undo NSX changes. Policy or evidence changes can still invalidate approvals.</p>
 <h3>Comparing selected snapshots and diagnostic actions</h3>
 <p>On Snapshot history, select two eligible snapshots from the same page and choose <strong>Compare selected</strong>. Before is the older timestamp and After the newer; a third selection is disabled until one is cleared. Testing/imported snapshots and equal timestamps cannot be compared. For snapshots on different pages, use the compact Earlier snapshot → Later snapshot selectors on Compare snapshots. Preparing results runs in the comparison queue; saved pairs are reused.</p>
 <p>Administrators use <strong>Audit &amp; diagnostics → Start diagnostic collection</strong> to open the environment dialog. Detailed logging lasts up to 15 minutes from submission and does not restart an active collection. In Review approvals, expand <strong>How approvals work</strong> for details; the impact of saving on existing reviews stays visible. Selection shortcuts require JavaScript; direct finding forms and comparison selectors remain available.</p>
 <h3>Keeping your place in finding reviews</h3><p>Assignment and review progress are shown separately. Released work can retain approvals but requires an owner before approval or completion. The active queue is highlighted. Opening a finding preserves its queue filters and page in the back link; Previous and Next follow the filtered Finding reviews order. Blocked actions explain the reason beside the decision controls and link to coverage or collection status.</p>
+<h3>Bulk actions across pages</h3><p>Select rows to reveal <strong>Actions</strong>. The header checkbox selects up to 100 items on the current page. My work includes an Unassigned queue with Assign to me. Owned reviews support reassignment with a reason (approvals reset), release with valid approvals preserved, and evidence export. Administrators can preview ready deletions from one environment. Pending reference cleanup plans can be cancelled or exported, but each plan is approved individually. Deletion history exports outcomes and saved configurations, including all objects in each selected request. Inventory group and service tables support selected exports, side-by-side detail comparison and links to related finding reviews. Collections support diagnostic exports and queued cancellation; stop running collections individually.</p><p>Changes require a confirmation screen. Incompatible selections disable actions with an explanation. Results distinguish succeeded, skipped and failed items. The server rechecks permissions, revisions and task status; history remains available. Return to list preserves filters and the current page.</p><h3>Testing environment credentials</h3><p>In environment settings, enter the new service account and password, then choose Test credentials before Save environment. The test uses the entered TLS settings and one read-only Policy API request; it does not save credentials or alter the schedule. Success verifies basic API read access, not every collection or deletion permission. Enter a password when changing the username or Manager; the saved password is only reused for the unchanged account and Manager.</p><h3>Activity and audit history</h3><p>Activity now includes retained review decisions and grouped deletion requests. Use All activity for the timeline, Running tasks for automatically refreshed queues, or Audit history for paginated review and deletion events. Filter by environment, type, actor, date, object name/path or ticket and outcome. Expand deletion batches for individual results and saved configuration. A completed request does not mean all its objects were deleted. Deletion details require administrator deletion permission.</p><h3>Confirmed NSX deletion</h3><p>Blocked previews include Live dependency-search diagnostics: expand and copy the JSON to share query failures and coverage details. Broad search can fall back to unfiltered queries, with runtime records removed locally only after complete pagination verification. Limited explicit-type search remains insufficient for automated deletion.</p><p>Select rows in Finding reviews to reveal Actions → Preview deletion from NSX or Return to unassigned. Administrators can also select supported objects in My work → Ready for decommissioning and choose Actions → Preview deletion from NSX. Select up to 100 findings from one environment per preview; use the Environment filter when needed. Deletion previews use those selections and reject changed revisions. The Deletion history tab beside Decommissioned lists requester, change ticket, object count and outcomes. History shows object names, types and individual outcomes; expand a batch for all paths, saved configuration and linked findings. Search by name, path or ticket and filter by object outcome and type. Filters match the same object while keeping full request totals. Open a request for its results and saved configuration. Active requests refresh every five seconds, with completed-object progress and elapsed time. Pause updates affects only the display; refreshing never resubmits a deletion. Expanded details continue refreshing while preserving open sections, focus and scroll position. Updates pause with an explicit message while a dialog is open or a field in the refreshed region is being edited. Technical verification and search diagnostics are expandable. Confirm verified objects within ten minutes; timely confirmation allows up to one hour for execution, including fresh live checks. Expired requests need a new preview and confirmation. If the latest full collection has inventory warnings, the preview shows the warning details and collection links. Resolve the warning, complete a verified collection and finding evaluation, then create a new preview; saved object eligibility alone does not override this safeguard.</p><p>Administrators can preview deletion from a ready finding or select up to 100 ready findings on the environment deletion page. Live checks require unchanged approved identity/configuration, valid approvals and unrestricted successful dependency-search coverage; protected or unsupported objects are blocked. Referenced empty groups can enter the separate reference-cleanup review described below. A confirmation dialog names every verified object and requires a change ticket. Read-only previews run in a separate lane within the existing worker container, alongside collection. Confirmed deletion runs in its own lane alongside collection and repeats checks before each DELETE. No force or automatic DELETE retries are used. Verified deletion also closes related findings for the same environment, path and object identity, preserving their decisions and linking to the primary review. The confirmation lists these related findings. Manual completion requires a successful live absence check before closing related reviews. Only verified absence marks the review decommissioned. Already-absent, blocked, failed and uncertain outcomes remain separate. Bulk deletion is not atomic. Search and DELETE are not atomic either: external changes and unindexed dependencies remain possible. VM and tag deletion are excluded. Saved pre-deletion evidence is retained in deletion records.</p>
+<p><strong>How to proceed:</strong> open a ready finding → Delete from NSX — preview, or select ready findings on the deletion page. Preview and execution have independent lanes in the existing worker container; each processes one batch at a time. Use Refresh results to see progress. Review saved-snapshot impact and every live-check result, then open Review permanent deletion, enter the ticket and confirm the exact targets. An eligible execution administrator must confirm within ten minutes of verification; execution rechecks expiry and evidence. Closing the dialog cancels submission, but queued execution has no cancellation or automatic rollback.</p>
+<p><strong>Reading results:</strong> verified means ready for confirmation, not deleted. Deleted means DELETE was accepted and a subsequent read confirmed absence. Already_absent does not mark the review decommissioned. Blocked means checks did not permit deletion; failed means the request was rejected. Uncertain or interrupted outcomes require checking NSX before another attempt. A completed batch can include unsuccessful rows. Normal snapshot retention does not remove deletion records; environments with these records are protected from deletion.</p>
+<p><strong>Supported targets:</strong> local-manager groups, custom services and their service entries, DFW rules and empty DFW policies. Empty policies require a fresh snapshot containing identity and configuration. Global/project objects and VM/tag operations are excluded. The environment account needs appropriate NSX CRUD permissions; ordinary collection remains read-only. Limited dependency-search coverage cannot be overridden by manual verification for this operation.</p>
+<h3>Page scope and reading details</h3><p>The top environment selector filters lists and keeps the current section. All environments is available for Overview, My work, Activity and Collections. Individual findings, deletion requests, cleanup plans and historical snapshots show their fixed environment instead. Global settings hide the selector. Expand Evidence &amp; history, Object path or Compare configuration for supporting details. Blocking errors stay visible. Approval settings separate who approves from who executes, with optional category overrides.</p><h3>Who can confirm execution</h3><p>Administration → Review approvals provides a workspace default and per-category execution settings: Requester only, Either approver, or Requester or either approver. Every executor needs administrator deletion permission. Reference cleanup uses the exact cleanup-plan approvers and must satisfy both group and firewall-rule settings. Eligible objects can execute in a linked request while other objects remain pending. Requester and executor are recorded separately.</p><h3>Remaining work and navigation</h3><p>Preview remaining work selects only unfinished, still-ready findings from a finished request. It creates a fresh read-only preview and rebuilds cleanup from current NSX configuration; completed changes are excluded and execution must be confirmed again. Active finding lists omit rejected and completed reviews; their history tabs retain them. Environment switching checks availability first and offers Retry if that check fails, keeping the current page visible.</p><h3>Partial cleanup</h3><p>Known revision and last-modified metadata changes do not invalidate an otherwise unchanged rule or parent policy. Updates use the fresh verified revision. Configuration, identity and protection changes still block execution and identify the changed fields. If earlier operations succeeded, Partially completed shows their retained outcomes. Review them and create a fresh preview for remaining work; there is no automatic rollback or retry.</p><h3>Access failures and cleanup progress</h3><p>Review reference cleanup shows approval progress before confirmation and operation progress after execution is confirmed, refreshing every five seconds while active. Cleanup reviews are asynchronous; a partial approval does not start NSX changes. After final approval, fresh read-only verification must confirm the exact unchanged plan before a ten-minute execution confirmation window starts. Expired confirmation offers revalidation of the approved plan. Expanded details stay open; Pause updates and Refresh now are available. Approval records a decision; final execution confirmation is still required. Read-only previews and credential tests do not prove write permission. HTTP 401 and 403 responses identify the method and object path in diagnostics, operation results, worker logs and administrator Activity. A denied firewall change stops that group cleanup. Earlier successful changes remain recorded. Correct account permissions and create a fresh preview; writes are not retried automatically.</p><h3>Removing an empty group referenced by firewall rules</h3><p>A verified empty group referenced only in ordinary local DFW source/destination lists can show Reference cleanup required. Choose Review reference cleanup to see each policy, rule, enabled status and current/proposed lists. When other local groups remain, the plan proposes removing only the selected reference. When the verified empty group is the sole source or destination, the plan explicitly proposes deleting that firewall rule before the group. Review every rule marked Delete; it needs separate cleanup approval and final execution confirmation. No ANY replacement or parent-policy deletion is performed. Exclusions, Applied To, protected objects, unsupported dependencies and rules with their own incoming references remain blocked.</p><p>The exact rule edits need separate administrator approval using the stricter group/firewall-rule approval mode; four-eyes requires distinct administrators. Existing finding approvals do not authorize firewall edits. Second reviewers find linked cleanup tasks in My work and finding reviews, with in-app review notifications. The first approver cannot provide the second approval. Approve the exact changes or reject with a reason. Approvals do not have a ten-minute deadline; after all approvals, the worker revalidates the group and plan. Changed evidence requires a new review. Successful verification notifies eligible execution administrators to return to the deletion request and explicitly confirm the rule changes plus deletion with a ticket within ten minutes. If confirmation expires, revalidate the approved plan. No NSX changes occur until final confirmation.</p><p>Execution repeats live checks, uses revision-checked rule updates or explicitly approved rule deletions, verifies each result, then repeats full dependency and membership verification before deleting the group. No updates or deletion are automatically retried. Changes are not atomic: if a later step fails, earlier verified rule edits and deletions remain. Deleted rules have their own deletion-history entries, original configuration and identity evidence; related rule findings close only after verified absence. View rule cleanup and outcomes from deletion history for per-rule results and saved original/proposed configurations for manual reconstruction. If selected groups share a rule, a later item can require a fresh preview because an earlier item changed that rule.</p>
+<h3>Direct empty-group execution verification</h3><p>For already-approved local groups with one or more positive VM Name or Tag equality conditions joined only by AND, a deletion preview may use fresh retained qualified history when intervening snapshots contain only the recognized global VM pagination warning. Each snapshot must still show unchanged identity/configuration and empty membership. Normal approvals stay paused. Mixed/nested/extended definitions, missing or unknown evidence, other warnings, changed criteria, stale history and exceeded observation gaps remain blocked.</p><p>Both preview and execution require explicit zero VM, IP-address and logical-port membership results, without errors or continuation cursors. No VM-only shortcut is used and no historical observations are added. Unrestricted live dependency verification and the administrator's separate execution confirmation remain mandatory.</p>
+<h3>Saved deletion configuration</h3><p>Administrators can use View deleted configuration from deletion results or the related finding. The dialog shows original object identity/path, recorded Manager, ticket, timestamps and outcome; groups also show tags and membership expressions. Copy JSON and Download JSON provide the saved raw configuration. The link opens a standalone page when JavaScript is unavailable.</p><p>Saved before deletion means historical preview data, not a live read. These records survive normal snapshot retention. No recovery API or automatic recreation is performed. Raw JSON includes server-generated fields that may need removal before API reuse. Check NSX before manually recreating an object, particularly for uncertain outcomes. Dynamic membership uses current inventory, VDI automation may change it, and separately removed references are not restored.</p>
+<h3>Approval modes by category</h3><p>Administration → Review approvals provides a workspace default plus overrides for Groups (including VDI), Custom services, Firewall rules and Firewall policies. Choose Inherit default, Single approval or Four-eyes. Preview changes shows effective modes and affected open review counts without saving. Saving resets approvals only for open reviews whose effective mode changes; owners and audit history remain. Rejected and completed reviews stay unchanged. Finding details show the setting source. Evidence and observation safeguards still apply.</p>
 <h3>Workspace controls, evidence and administration</h3><p>Main pages show collection status, current activity and relevant warnings. Tables keep Search, Filters and Sort visible; Columns, advanced search and Export are under More options. Version/build details are under Administration. Environment addresses and next collection times are on the environment detail page. Open a collection’s Diagnostics for request counts, retries, concurrency and stage timings. Observation methodology, technical evidence and detailed error information are expandable. Freshness, limited coverage and approval blockers remain visible. Finding review recalculation outcomes remain available under Administration → Finding review criteria.</p>
 <p>Tables provide Filters, Sort and Columns; active filter chips can be removed individually. On small screens use Table options. The evidence drawer separates Overview, Relationships and Technical details, with Expand on desktop. VM relationships load in pages only when expanded. Finding evidence offers labeled values and raw details. Snapshot comparisons show before/after values. Remembered table preferences follow your personal settings.</p>
 <p>Administration groups authentication (Keycloak and primary/secondary LDAPS), finding criteria, retention, shared freshness/notification policies, system health and audit diagnostics. Personal notification and display preferences are under Personal settings. The overview highlights failed collections and stale environments. Stop requested means cancellation is awaiting worker acknowledgement; it is not confirmation that work has stopped.</p>
-<h3>Following work across queues</h3><p>Open <strong>Activity</strong> in the top bar to follow collections, finding review indexing and comparisons together. Filter by environment, type or status. Task status refreshes while visible, without reloading forms or snapshot selections. Comparisons offer name/path search and change-type filters with totals for the full pair. My work shows review progress, assignment age and evidence readiness; expand Why for blockers. Readiness is rechecked when recording a decision.</p>
+<h3>Reading task status and using actions</h3><p>Task pages show the current status and next step separately from technical evidence. Expand verification details to inspect evidence without stopping updates. Use Pause updates to read at your own pace or Refresh now to request the latest status; pausing never stops background work. Automatic refresh preserves expanded sections and draft fields, and waits while you edit a field or use a dialog. Validation errors remain visible until you explicitly refresh. A refresh failure does not mean the background task failed.</p><p>My work and finding reviews show the actions available to your account. Use More for secondary links such as the related deletion request. Approval and execution are separate steps. Status badges describe outcomes; Completed means processing finished, so check each object result. Wide tables can be scrolled with the keyboard. Display settings control theme, density and refresh interval.</p><h3>Cancelling work</h3><p>Firewall reference cleanup is an active task queue: rejected and cancelled plans leave the queue and remain in history. Use More → Cancel cleanup plan to withdraw only that object’s plan; other objects and original finding approvals are retained. Deletion requests can be cancelled during preview or while waiting for execution, but not after execution starts. Read the scope and explicitly confirm cancellation. Running read-only tasks show Cancellation requested until the worker stops; late results cannot authorize deletion. Administrators can also cancel comparisons and review recalculation, preserving previously published results. Collections use Stop collection. Pause updates only stops browser refresh.</p><h3>Following work across queues</h3><p>Open <strong>Activity</strong> in the top bar to follow collections, finding review indexing and comparisons together. Filter by environment, type or status. Task status refreshes while visible, without reloading forms or snapshot selections. Comparisons offer name/path search and change-type filters with totals for the full pair. My work shows review progress, assignment age and evidence readiness; expand Why for blockers. Readiness is rechecked when recording a decision.</p>
 <h3>Collection pacing and coverage limitations</h3>
 <p>Waiting for a collection worker means the job is queued. One collection, one finding-review indexing/recalculation task and one snapshot comparison can run alongside each other. Additional jobs of each type wait in their own queue; same-environment publication may briefly wait for the other task to finish its database transaction.</p>
 <p>Shared pacing and HTTP 429 cooldown waits do not consume the individual request retry budget; the overall collection deadline still applies. Compatibility search is used when NSX rejects unrestricted queries or returns an empty broad result despite nonempty directly collected groups/services, and its limited resource-type coverage remains visible. Unsupported identity/container checks and configured exclusions are not proof of empty membership. Older snapshots keep their original request errors: upgrading or rebuilding an index does not repeat those NSX checks.</p>
-<h3>Inventory changed during collection</h3>
-<p>Inventory pagination checks unique identities, conflicting versions and the reported total. A mismatch restarts that endpoint from page one, with 2- and 4-second delays, for three attempts in total. Attempts are never merged. An unresolved mismatch can leave a browsable snapshot with coverage warnings, while finding evaluation and approval are paused. Existing finding presence and observation progress are not advanced; historical recalculation skips unverified snapshots. Comparisons mark missing objects as Presence uncertain.</p>
+<h3>Inventory changed during collection</h3><p>Coverage is scoped conservatively. Dedicated VM inventory warnings pause empty-group and tag-dependent evidence, while unused services or rule findings can continue if their own reference/configuration/counter evidence is complete. Group-specific membership pagination warnings pause that group; firewall rule inventory warnings pause firewall and unused-object reference checks. Unclassified endpoints and configuration-search inventory inconsistencies block all finding types. Collection and historical recalculation skip affected observations without counting them as successful checks; normal maximum-gap rules still apply. Verified configuration changes invalidate approvals even during a pause.</p><p>Ready findings require an additional execution authorization: live preview → administrator confirmation and ticket → repeated checks → DELETE. Each object preview expires ten minutes after verification. Preview confirms identity, approved configuration, required approvals/history, live reference coverage and its finding condition. Confirmation never overrides incomplete evidence, stale history or failed live checks. Existing preview records without per-object verification timestamps must be recreated after upgrade.</p>
+<p>Inventory pagination checks unique identities, conflicting versions and the reported total. A mismatch restarts that endpoint from page one, with 2- and 4-second delays, for three attempts in total. Attempts are never merged. An unresolved mismatch can leave a browsable snapshot with coverage warnings, while affected finding evaluation and approval are paused. Affected finding presence and observation progress are not advanced; historical recalculation skips those affected observations. Comparisons mark missing objects as Presence uncertain.</p>
 <p>VM inventory requests explicitly sort by external ID to reduce unstable page ordering. If NSX rejects this automatic sort on page one, the collector logs a fallback to unsorted requests. Sorting does not guarantee an atomic inventory; all completeness checks and retry limits remain in place.</p>
 <p>For example, <strong>1237/1238 unique objects; 1 duplicate rows</strong> means 1,237 distinct identities were returned against a reported count of 1,238. The repeated row does not fill the gap. This may reflect inventory churn, page overlap or an inconsistent count; the message alone does not identify the cause. No small discrepancy is silently accepted.</p>
 <p>On the dedicated VM endpoint, duplicate differences only in _last_sync_time, compute_ids, guest_info, host_id, local_id_on_host, power_state or source are tolerated as runtime churn. Displayed runtime details are first-observed values. Tags, names, deletion state, other fields, identity and completeness remain checked. This exception does not apply to configuration search.</p>
@@ -1820,6 +2204,7 @@ def feature_guide():
 </ul>
 <p>Disabled rules and references from other groups or services still count as usage. Self-references and realization records do not. Built-in services and default/system groups are excluded from cleanup findings. Antrea/container groups are included in reference checks. Unsupported membership scope is labeled Not supported; failed or incomplete API checks are reported as Unknown.</p>
 <p><strong>Not supported</strong> membership means identity, container or nested/path criteria cannot be fully resolved by these checks; this is a scope limitation, not an empty-group finding or collection failure.</p>
+<p><strong>VM and tag impact previews</strong> are available from saved-snapshot evidence drawers. VM deletion shows explicit paths and potential tag-condition chains to groups, rules and policies. For tags, select a VM assignment to preview its removal. This does not delete a catalog entry or model traffic. Dynamic conditions, other criteria and incomplete coverage can change the result; potential relationships are not confirmed membership changes.</p>
 <p><strong>Empty</strong> means the supported membership checks returned no members. <strong>Has members</strong> means explicit IP/MAC entries or resolved members were found. An empty group may still be referenced by a rule. Membership methods identify tag conditions, other dynamic conditions, IP/MAC addresses, explicit objects, nested groups or segment/port paths. The membership-definition popup shows configured criteria; its JSON preserves AND/OR structure and is not a resolved member list.</p>
 
 <h3>Distributed firewall overview and segmentation indicator</h3>
@@ -2108,7 +2493,7 @@ def _render_report(report, *, fragments, indexed=False, row_sink=None):
         if report.get("testing"):
             description = "Testing sample only. " + description
         sections += '<section data-panel id="{}" tabindex="-1"><h2>{} <span class="count">{}</span></h2><p class="muted">{}</p>{}</section>'.format(anchor, title, display_number(len(items)), description, table(items))
-    inventory_notice = ('<h3>Inventory verification warnings</h3><p>Inventory changed during collection. Finding evaluation and approval are paused; run another collection.</p><ul>' + ''.join(
+    inventory_notice = ('<h3>Inventory verification warnings</h3><p>Inventory changed during collection. Findings requiring the affected evidence are paused; existing decisions are retained. Unknown warning scopes remain blocking.</p><ul>' + ''.join(
         '<li>{}: {}</li>'.format(safe(w['endpoint']), safe(w['detail'])) for w in report.get('inventory_warnings', [])) + '</ul>') if report.get('inventory_warnings') else ''
     coverage_errors = "".join('<li>{}</li>'.format(safe(error)) for error in dfw["errors"])
     coverage_notice = ('<p><strong>DFW inventory incomplete.</strong> Some policy/rule lists could not be read. '

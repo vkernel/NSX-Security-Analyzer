@@ -28,14 +28,15 @@ just HTTP 400 query rejections. Each alternative starts from page one; rejected
 queries and the successful query scope are recorded. The explicit-type fallback
 retains its narrower coverage limitation. An actually empty direct inventory
 does not trigger this compatibility fallback.
-If any paths are absent, collection retries the complete search up to three times
-(waiting two and four seconds), discarding each incomplete result rather than
-merging attempts. Persistent gaps fail the task and report missing group/service
+If any paths are absent, collection retries coverage up to three times
+(waiting two and four seconds). Compatibility queries, changing-inventory retries
+and coverage retries share a maximum of five search scans. Search pagination does
+not start an additional nested retry loop. Each attempt discards incomplete results;
+partial search results are never accepted as verified coverage. Persistent gaps fail the task and report missing group/service
 counts, returned record/path counts, the query, and up to three missing path
 samples. A gap alone does not establish indexing lag: query behavior or path
 scope may also explain it. Testing samples skip this completeness check; HTTP
-errors are not retried by this coverage check. Existing pagination warnings
-remain in force even if a subsequent coverage attempt finds every expected path.
+errors are not retried by this coverage check. Non-search inventory warnings remain in force even when search coverage succeeds.
 
 New snapshots save DFW strategy counts in `dfw.collection_diagnostics`: policies evaluated, fully successful bulk policies, policies skipped during cooldown, fallback rules and categorized reasons (counted per rule). Empty policies are excluded.
 
@@ -53,7 +54,7 @@ References: [NSX policy statistics](https://developer.broadcom.com/xapis/nsx-t-d
 
 Ethernet policy rules are retained in inventory with **Not supported** activity and no hit count. Their statistics endpoints are not queried. An explicit NSX HTTP 400 / error 500209 response is also recognized as unsupported. This does not establish zero traffic. Unsupported rules remain in inventory totals, are shown separately from unknown statistics, and cannot qualify as historical zero-activity evidence.
 
-After the first statistics pass completes, transport timeouts get one recovery pass, one rule at a time, following a two-second delay. HTTP errors and malformed results do not trigger this recovery. The recovery uses the existing request timeout and HTTP retry policy. Initial timeout notes and timestamps are retained in `statistics_retry`; a failed recovery stays unknown. Diagnostics count timeout retries, recoveries, and unsupported rules. A collection can take longer when recovering missing evidence.
+After the first statistics pass completes, transport timeouts get one recovery pass with at most two concurrent requests (one in single-worker mode). A shared 30-second recovery budget limits admissions, pacing waits, transport timeouts and HTTP retries. In-flight calls finish or time out; this is not a hard process-kill deadline. Rules that cannot be retried retain unknown evidence. HTTP errors and malformed results do not trigger this recovery. Initial timeout notes and timestamps are retained in `statistics_retry`. Diagnostics count retries, recoveries, skipped retries and recovery duration. The overall collection deadline still applies.
 
 Statistics tasks are capped at two concurrent workers in addition to the shared adaptive request limiter. Inventory concurrency is unchanged. Sequential recovery runs after that pool completes. Compare one versus two using equivalent read-only rule requests before raising this cap; a short comparison does not establish capacity for every manager.
 
@@ -374,9 +375,9 @@ separate coverage limitations, not pacing failures. The collector preserves thos
 limitations when the available endpoints cannot verify the evidence; resolving a
 request timeout does not make unsupported membership checks complete.
 
-The collection worker supervises three independent subprocess lanes: at most one
+The collection worker supervises five independent subprocess lanes: at most one
 collection across all environments, one finding-review indexing/recalculation task,
-and one snapshot comparison. PostgreSQL
+one snapshot comparison, and one read-only deletion preview. Confirmed deletion runs in its own lane alongside collection. PostgreSQL
 session advisory locks enforce each lane across worker replicas, including while a
 recalculation is superseded by newly saved criteria. The work queues are independent;
 a recalculation and a comparison can run alongside a collection. Publication for the same environment
@@ -607,12 +608,14 @@ counts, and duplicate counts. No percentage of missing objects is silently accep
 Failed requests, invalid responses, repeated cursors and deadline exhaustion remain
 retrieval errors and retain their existing error/unknown-coverage handling.
 
-Because references cross inventory areas, a snapshot with an inventory verification
-warning conservatively pauses all finding evaluation and approval for that environment.
-Existing finding presence and observations remain unchanged; historical recalculation
-skips these snapshots. Snapshot comparisons label missing objects **Presence uncertain**,
-not Added/Removed. Retention preserves the last verified full snapshot as a baseline,
-and prior-run hints use a snapshot without inventory verification warnings.
+Inventory warnings use conservative per-finding evidence scopes. Dedicated VM inventory
+warnings pause empty-group/tag evidence, while unaffected findings may advance only
+with their required evidence complete. Group membership warnings are scoped to their
+target. Firewall inventory inconsistencies also block unused-object reference checks.
+Unclassified warnings remain blocking for all findings. Publication and history replay
+preserve affected decisions without counting partial observations. Verified changes
+and normal observation/freshness criteria still apply. Snapshot comparisons and
+retention continue to use conservative complete-inventory baselines.
 
 Allow changes to settle, then collect again. A verified collection resumes normal
 finding evaluation. Persistent mismatches in a quiet environment warrant checking
@@ -655,3 +658,156 @@ with configuration consumers. Exclusion happens before pagination, so the count
 check uses the filtered query's reported total. VM tag assignments still use the
 dedicated VM inventory endpoint, with its verification checks intact. Search
 coverage records the excluded types; configuration conflicts continue to warn.
+
+
+## Collection performance details
+
+Open **Collections → Diagnostics** to see retrieval phase times, request/retry and
+throttling counts, aggregate pacing wait, and endpoint costs. Membership endpoints
+are measured separately. Phase and request times overlap; do not sum them as elapsed
+collection time. Older snapshots may lack these metrics. The saved publication timeline
+includes `wait_for_environment_lock` to distinguish contention from evidence processing.
+
+Collection reuses its in-memory report for finding synchronization only when it still
+matches the latest snapshot of that environment. Other callers retain the database
+fallback. Recalculation prepares restoration evidence before taking the environment
+lock, then rechecks snapshot, policy and restoration state before writing. Approval
+recovery reads historical evidence in bulk instead of querying each snapshot separately.
+These changes preserve freshness, coverage verification and atomic publication.
+
+Compare the phase times for equivalent inventory sizes before changing concurrency.
+Automatic request limits and fresh membership checks remain in effect. There is no
+assumed speedup percentage: NSX latency, throttling and database resources determine
+the improvement in each environment.
+
+
+## Membership-heavy collections and fair scheduling
+
+The shared request limiter serves waiting requests in FIFO order. A worker finishing
+one request cannot take a new slot ahead of an already queued firewall, search or
+membership request. This improves fairness; it does not reserve capacity for a lane
+or remove the overall rate limiter and adaptive backoff.
+
+Set **Maximum concurrent NSX requests** under **Edit environment → Advanced request
+settings** (default **8**, valid range **1–32**). This is saved per environment in
+the database and captured when a collection is queued. Existing queued or running
+collections keep their captured settings; older queued jobs without this setting
+use eight. No ConfigMap, environment variable or worker restart is needed. Start with the
+unchanged default, then compare equivalent full collections at 12 and 16 if NSX
+latency and throttling remain healthy. This is a ceiling, not a guaranteed number
+of active requests; adaptive concurrency still starts at at most two. Do not assume
+a proportional speedup or raise it to compensate for incomplete evidence.
+
+New snapshots record the collecting worker's version, full build revision, build
+time and configured ceiling. **Collections → Diagnostics → Collecting worker**
+shows that saved identity, independently of the web app footer. Older snapshots
+show “Not recorded”; they are not relabelled with the current worker's build.
+
+**Membership workload** reports logical probes, groups checked, the distribution
+of probes per group (including zero-call explicit-member groups), result categories
+and endpoint response counts. Logical probes exclude internal HTTP retries. A
+response with no members is not proof of emptiness; all existing verification
+rules remain intact. Request capacity wait is reported separately per endpoint
+family and is cumulative across workers, not additional elapsed time.
+
+Bulk-counter fallback details distinguish missing identity, unmapped/ambiguous
+identity, incomplete nested counters, invalid counters, missing/duplicate scope
+counters, HTTP errors and cooldown. Counts represent affected rules. These codes
+contain no raw response values and do not relax counter completeness checks.
+
+
+### Type-specific membership probes and fresh evidence
+
+Simple flat Condition expressions with one known member type now omit only
+inapplicable endpoints. VirtualMachine conditions keep VM, IP and logical-port
+checks; Segment conditions keep switch, IP and logical-port checks; VIF and
+SegmentPort conditions keep IP and logical-port checks. Mixed types, nested or
+path expressions, extended identity criteria and uncertain definitions retain all
+four probes. Diagnostics show typed-plan groups and omitted probes.
+
+This follows Broadcom's endpoint applicability documentation for
+[VM members](https://developer.broadcom.com/xapis/nsx-t-data-center-rest-api/latest/method_GetGroupVMMembers.html),
+[logical-switch members](https://developer.broadcom.com/xapis/nsx-t-data-center-rest-api/latest/method_GetGroupLSMembers.html)
+and [effective logical-port members](https://developer.broadcom.com/xapis/nsx-t-data-center-rest-api/latest/method_GetGroupLPMembers.html).
+A VM without an IP is still found by the VM probe. Every required negative probe
+must succeed without an unexplained continuation cursor. Prior empty results are
+never reused as current evidence; previous positive endpoints only guide ordering.
+Approval evidence continues to use the latest full evaluated collection.
+
+Bulk policy responses lacking an unambiguous rule identity receive a 30-minute
+cooldown before another bulk attempt. Individual rule counters are still fetched
+fresh on every collection. Internal realized IDs are not guessed to be policy IDs:
+Broadcom's [RuleStatistics schema](https://developer.broadcom.com/xapis/nsx-t-data-center-rest-api/latest/types_RuleStatistics.html)
+allows multiple realized rules per policy rule. Existing completeness checks and
+per-rule fallback remain. This reduces repeated unsuccessful bulk attempts but
+does not eliminate individual requests when identities are unavailable.
+
+Finding publication advances observations, eligibility, workflow state and snapshot
+assessments as before, but rewrites the JSON evidence only when its fingerprint
+changes. Publication remains atomic. No historical snapshots or approvals are
+silently repurposed to speed up collection.
+
+
+### Validating a potential VM-only shortcut
+
+**Collections → Diagnostics → VM membership check comparison** counts results
+for simple VM-only definitions using the existing requests. It separates agreement,
+a negative VM response followed by positive IP/port evidence, incomplete follow-up,
+and cases where the VM check was not reached. No additional requests are made and
+no group paths or member identities are stored in these counters.
+
+A prior positive endpoint hint can stop the probes before the VM request; that
+case is not counted as agreement. Empty pages with a continuation cursor and
+invalid counts are not accepted as negative evidence in the comparison. Even zero
+disagreements in one collection do not prove that a VM-only shortcut is safe.
+Finding and approval decisions retain all applicable fresh checks.
+
+The collector already uses one shared bounded urllib3 connection pool with TLS
+connection reuse, validated by an HTTPS integration test. This diagnostic update
+does not increase worker count or concurrency and does not promise a further
+collection-time reduction. The next collection can provide evidence to assess
+whether further probe reduction is appropriate.
+
+### Request scheduling and indexing
+
+Firewall counter tasks can use spare capacity up to the configured worker count;
+all HTTP requests still pass through the same shared concurrency and pacing
+limits. This does not increase the configured concurrent NSX requests or require
+additional worker replicas. Bulk policy probes remain limited to one active probe.
+
+Tag and scope relationships are inserted in bounded batches shared across snapshot
+records, reducing small database inserts. Snapshot publication remains atomic.
+
+Collection diagnostics include group counts and unique paths per domain. Identical
+repeated group paths are probed once; conflicting definitions fail collection.
+Compare these counts before comparing collection durations across builds.
+
+Bulk counter parsing accepts exact rule paths and maps statistics internal_rule_id
+to the system-assigned numeric Rule.rule_id within the same policy (or an explicit
+internal_rule_id if supplied). User-supplied object IDs and display names are never
+used as internal-ID mappings. Duplicate and conflicting mappings require fallback. Missing or conflicting mappings retain individual-rule
+fallback. The NSX 4.2 response format with internal_rule_id strings and numeric
+Rule.rule_id values is supported without extra mapping requests. Existing bulk
+failure cooldowns expire normally before that policy is tried again.
+
+### Restricted VM membership fast path
+
+Local groups containing exactly one VirtualMachine Name or Tag EQUALS condition
+can use a fresh VM membership response with an explicit result_count of zero,
+an empty results list and no cursor. This establishes VM membership for that
+restricted definition; effective IP/port checks are omitted and recorded in notes.
+Remote, mixed, nested, extended and other conditions keep their full probe plan.
+Missing counts, cursors, scope limitations and failures cannot use the shortcut.
+No historical negative membership cache is used.
+
+Approximately 5% of eligible paths receive full checks, rotating daily in UTC;
+Sunday uses full checks for every group. A verification discrepancy reruns every
+shortcut result before publication and disables shortcuts in subsequent collections.
+Sampling detects discrepancies but is not proof that all endpoints always agree.
+The diagnostics distinguish shortcut results, full verification and rechecks.
+
+Inventory scope diagnostics compare audited group paths with the previous usable
+snapshot from the same manager, showing added/removed counts and up to ten samples.
+They identify changes in collected paths, not the administrative cause of a change.
+Actual speed improvements must be measured on a new deployed collection of a
+comparable workload; offline tests do not establish production duration.

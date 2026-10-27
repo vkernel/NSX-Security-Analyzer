@@ -8,6 +8,7 @@ import hashlib
 import json
 from .audit_events import record
 from .user_labels import user_label
+from .approval_modes import required
 
 STATES = [('unassigned', 'Unassigned'), ('owner_review', 'Owner review'),
           ('second_review', 'Awaiting second approval'), ('ready', 'Ready for decommissioning'),
@@ -16,19 +17,22 @@ FIELDS = ['workflow_state', 'approvals', 'change_ticket', 'required_approvals']
 
 
 @transaction.atomic
-def apply_approval_policy(required, actor):
+def apply_approval_policy(settings, actor):
     """Restart open reviews under the new policy without manufacturing approval."""
     from .models import Environment, Finding
+    from .approval_modes import required
     count = 0
     # Match the environment -> finding lock order used by review decisions.
     for env in Environment.objects.order_by('pk').select_for_update():
         findings = Finding.objects.select_for_update().defer('evidence').filter(environment=env).exclude(
-            workflow_state='decommissioned').exclude(required_approvals=required)
+            workflow_state__in=['rejected', 'decommissioned'])
         for finding in findings.iterator(chunk_size=100):
+            effective = required(finding.kind, settings)
+            if finding.required_approvals == effective: continue
             before = finding.workflow_state
             prior = {'previous_required_approvals': finding.required_approvals,
                      'prior_approvals': finding.approvals}
-            finding.required_approvals = required
+            finding.required_approvals = effective
             finding.approvals = {}
             if before != 'rejected':
                 finding.workflow_state = 'owner_review' if finding.owner_id else 'unassigned'
@@ -43,6 +47,7 @@ def apply_approval_policy(required, actor):
 
 def review_fingerprint(kind, evidence):
     # Counter acquisition method can change without changing configuration or condition.
+    kind = 'unused' if kind == 'unused_service' else kind  # Preserve existing service approval identity.
     stable = {key: value for key, value in evidence.items() if key != 'statistics_source'}
     return hashlib.sha256(json.dumps([kind, stable], sort_keys=True, separators=(',', ':')).encode()).hexdigest()
 
@@ -55,6 +60,7 @@ def event(finding, action, before, reason, actor=None, extra=None):
     label = user_label(actor)[:255] if actor else 'System'
     FindingEvent.objects.create(finding=finding, actor=actor, actor_label=label,
         message=f'{dict(STATES).get(before, before)} → {dict(STATES)[finding.workflow_state]}: {reason}', details=details)
+    details['actor_label'] = label
     record('finding.' + action, 'Finding', finding.pk, actor=actor.pk if actor else '', details=details)
 
 
@@ -83,7 +89,7 @@ def coverage_key(search):
 
 
 def coverage_changed(finding, search):
-    if finding.kind != 'unused' or not finding.approvals.get('owner'):
+    if finding.kind not in ('unused', 'unused_service') or not finding.approvals.get('owner'):
         return False
     saved = finding.approvals['owner'].get('coverage_key')
     return saved != coverage_key(search) if saved else compatibility_search(search)
@@ -97,7 +103,7 @@ def relevant_evidence_error(kind, row, search_coverage, stamp, interval_minutes)
         return 'This object is excluded from finding checks and cannot be approved.'
     if kind == 'empty_group':
         return '' if row.get('membership') == 'empty' else 'Group membership was not confirmed empty in this collection.'
-    if kind == 'unused':
+    if kind in ('unused', 'unused_service'):
         if row.get('usage') != 'unused_candidate':
             return 'Reference checks did not confirm this object as an unused candidate.'
         if not isinstance(search_coverage, dict) or search_coverage.get('errors') or search_coverage.get('failed') or (search_coverage.get('mode') != 'all_types' and not compatibility_search(search_coverage)):
@@ -120,8 +126,12 @@ def relevant_evidence_error(kind, row, search_coverage, stamp, interval_minutes)
     return 'This finding type does not have sufficient supported evidence for decommissioning approval.'
 
 
-def approval_readiness(finding):
+def approval_readiness(finding, *, deletion_live=False):
     def blocked(message): return {'status': 'blocked', 'message': message}
+    from .transient import matching, policies_for
+    transient_policy = matching(finding.evidence, policies_for(finding.environment_id)) if finding.kind == 'empty_group' else None
+    if transient_policy and transient_policy.mode == 'suppress':
+        return blocked('Suppressed: expected transient emptiness under the configured policy.')
     from .usability import policy
     recalculation = FindingRecalculation.objects.filter(environment_id=finding.environment_id).values('status', 'kinds').first()
     if (recalculation and recalculation['status'] in ('queued', 'running', 'failed')
@@ -131,24 +141,37 @@ def approval_readiness(finding):
         return blocked('Finding criteria recalculation is pending or running. Wait for it to complete before approval or recording completion.')
     if not finding.present or finding.qualification != 'eligible':
         return blocked('The finding must be currently observed and eligible for review.')
-    latest = finding.environment.snapshots.filter(testing=False, imported=False).only('pk', 'generated_at').first()
-    if latest and Snapshot.objects.filter(pk=latest.pk).values_list('summary__inventory_warnings', flat=True).get():
-        return blocked('Inventory changed during the latest collection. Run a verified collection before approval.')
+    latest = finding.environment.snapshots.filter(testing=False, imported=False).only('pk', 'generated_at', 'summary').first()
+    from .evidence_coverage import snapshot_issues, relevant
+    affected = relevant(snapshot_issues(latest), finding.kind, finding.path) if latest else []
+    execution_source = None
+    direct_blockers = []
+    if deletion_live and affected:
+        from .deletion_readiness import historical_group_evidence
+        execution_source = historical_group_evidence(finding, latest, blockers=direct_blockers)
+    if affected and execution_source is None:
+        return {'status':'blocked', 'verification_paused':True,
+                'message':'Verification paused; existing decisions are retained. Required evidence is incomplete: ' +
+                          '; '.join(sorted({issue['scope'] for issue in affected})) + '. ' + ('Direct live verification unavailable: ' + ' '.join(direct_blockers) if direct_blockers else 'Run a collection with verified relevant coverage.')}
+
+    if execution_source is not None:
+        latest = execution_source
     if not latest or latest.pk != finding.snapshot_id:
         return blocked('Review evidence has not been updated to the latest full collection.')
     if latest.generated_at < timezone.now() - timedelta(hours=policy().stale_hours):
         return blocked('Collection evidence is stale. Run a new full collection before approval.')
     # Read one compact object, never the full report or rendered evidence.
-    view = 'inventory' if finding.kind in ('empty_group', 'unused') else 'dfw'
+    view = 'inventory' if finding.kind in ('empty_group', 'unused', 'unused_service') else 'dfw'
     row = SnapshotRecord.objects.filter(snapshot=latest, view=view, compact__path=finding.path).values_list('compact', flat=True).first()
-    search = Snapshot.objects.filter(pk=latest.pk).values_list('report__search_coverage', flat=True).get() if finding.kind == 'unused' else None
+    search = Snapshot.objects.filter(pk=latest.pk).values_list('report__search_coverage', flat=True).get() if finding.kind in ('unused', 'unused_service') else None
     error = relevant_evidence_error(finding.kind, row, search, latest.generated_at, finding.environment.sync_interval_minutes)
     if error: return blocked(error)
-    manual = finding.kind == 'unused' and compatibility_search(search)
+    manual = finding.kind in ('unused', 'unused_service') and compatibility_search(search)
     return {'status': 'manual' if manual else 'ready',
-            'message': 'Reference-search coverage is limited. Each reviewer must independently check dependencies outside the collected search results.' if manual else 'Relevant saved evidence is current and supports review.',
-            'coverage': search if finding.kind == 'unused' else {},
-            'coverage_key': coverage_key(search) if finding.kind == 'unused' else '', 'row': row}
+            'message': 'The collection searched a defined list of object types. Dependencies outside that scope are not verified. Each required reviewer must independently document additional dependency checks and provide an evidence reference.' if manual else 'Relevant saved evidence is current and supports review.',
+            'coverage': search if finding.kind in ('unused', 'unused_service') else {},
+            'coverage_key': coverage_key(search) if finding.kind in ('unused', 'unused_service') else '', 'row': row,
+            'requires_direct_membership': execution_source is not None}
 
 
 def evidence_error(finding):
@@ -194,7 +217,7 @@ def decide(finding, actor, action, reason, owner=None, ticket='', manual_verifie
         from .usability import policy
         resume = finding.owner_id is None and before in ('second_review', 'ready', 'rejected')
         if not resume:
-            finding.required_approvals = policy().required_approvals
+            finding.required_approvals = required(finding.kind, policy())
         finding.owner = owner
         if not resume:
             finding.workflow_state, finding.approvals = 'owner_review', {}
@@ -207,7 +230,7 @@ def decide(finding, actor, action, reason, owner=None, ticket='', manual_verifie
         elif before != 'rejected':
             raise ValidationError('Only rejected or completed reviews can be reopened manually.')
         from .usability import policy
-        finding.required_approvals = policy().required_approvals
+        finding.required_approvals = required(finding.kind, policy())
         finding.workflow_state = 'owner_review' if finding.owner_id else 'unassigned'
         finding.approvals = {}
     elif action in ('approve', 'reject'):
@@ -274,3 +297,19 @@ def decide(finding, actor, action, reason, owner=None, ticket='', manual_verifie
     finding.revision += 1
     finding.save(update_fields=FIELDS + ['owner', 'revision'])
     event(finding, action, before, reason, actor, extra)
+    if action == 'complete':
+        from .related_decommission import related_findings, close_related
+        if related_findings(finding).exists():
+            from .deletion import connection, current_object, target_type
+            from .collector import AuditError
+            try:
+                target_type(finding.path)
+                with connection(finding.environment) as client:
+                    absent = current_object(client, finding.path) is None
+            except (AuditError, ValidationError, OSError):
+                absent = False
+            if absent:
+                close_related(finding, actor)
+            else:
+                event(finding, 'related_closure_pending', finding.workflow_state,
+                      'Related findings remain open: live object absence could not be verified. No DELETE was sent.', actor)

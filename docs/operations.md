@@ -361,3 +361,66 @@ Action dialogs, including diagnostic collection and table column filters, use a 
 Open **Activity** in the top bar to follow collections, finding review indexing and snapshot comparisons together. Filter by environment, task type or active/failed status. Each type has its own worker queue. The view is bounded to 30 active and 30 recent tasks per type (60 when filtering by status); finding indexing shows the latest task per environment. Comparison age is time since its original request, not measured processing duration.
 
 Activity, comparison preparation and finding recalculation status refresh while their page is visible, using your refresh interval. Updates pause inside a focused task region or an expanded detail to avoid interrupting reading. Collection state changes update in place instead of reloading the page, preserving snapshot selections. Follow **View collection result** when finished. Refresh the finding list after recalculation to load its new membership.
+
+## Upgrading approval settings and confirmed deletion
+
+Back up PostgreSQL and retain the existing encryption secret. Apply migrations
+`0045_category_approval_modes` and `0046_approved_nsx_deletion` before starting the
+matching web, worker and scheduler images. For development deployments, pin the same
+`development-<commit>` image on all components, including the migration Job.
+Category overrides initially inherit the workspace default; inspect **Administration →
+Review approvals → Preview changes** before changing effective approval requirements.
+
+Deletion previews use an independent lane in the existing worker container. Confirmed DELETE execution also uses an independent lane; collection does not occupy either deletion queue. Refresh the deletion request page
+for progress. Do not restart a worker during a confirmed deletion unless necessary;
+interrupted or uncertain outcomes require checking NSX before a new request.
+
+Collection uses read-only requests. Optional deletion uses the saved environment
+credentials with their existing NSX permissions; a read-only NSX account cannot
+perform it. Only application administrators can request and confirm deletion.
+Deleting a finding or a snapshot is not a request to delete the NSX object.
+Deletion records retain configuration and approval evidence beyond snapshot retention,
+and protect their environment from deletion. Include them in database backup/access
+controls. See the [deletion walkthrough](finding-review-workflow.md#using-the-deletion-preview)
+for supported objects, safeguards and per-object outcomes.
+
+### Inspecting deleted object configuration
+
+Use **View deleted configuration** in a deletion result to inspect, copy or download
+its saved JSON for manual work in NSX. This administrator-only viewer never contacts
+NSX. Keep downloads under the same access controls as inventory exports; they can
+include internal addresses, tags and policy details. A historical record is not proof
+of current absence: check NSX before recreating anything after an uncertain outcome.
+See [manual recreation guidance](finding-review-workflow.md#view-saved-configuration-for-manual-recreation).
+
+### Scoped verification upgrade
+
+Migration `0047_deletion_verification` records per-object deletion verification time
+and check results. Recreate older previews after rollout. Collection already retries
+inconsistent pagination up to three times per endpoint; this upgrade scopes finding
+pauses to known affected evidence and leaves unknown failures blocking. It does not
+increase workers, accept missing inventory percentages, or add automatic recovery.
+
+When upgrading to independent deletion previews, stop the old worker before starting
+the updated worker; do not overlap old and new workers because old versions claim
+both deletion queues under the collection lease. Deploy matching web/worker images.
+The default `audit_worker` supervises the new `deletion_preview` lane automatically.
+Custom explicit-lane deployments must also run `--lane deletion_preview`. Monitor
+its heartbeat alongside collection, recalculation and comparison. No new schema
+migration is required. Preview adds read-only NSX traffic while collection runs;
+existing confirmation, expiry and live execution checks remain mandatory.
+
+
+When upgrading to independent deletion execution, stop the old worker before starting
+the new one: older builds claim execution under the collection lease. The default
+worker starts `deletion_execution` automatically; explicit-lane deployments must add
+it and include it in heartbeat checks. There is no additional deployment or schema
+migration. Allow memory for the extra lane and concurrent read-only NSX verification.
+Final guarded deletion coordinates with publication through the environment lock;
+that lock includes bounded final NSX requests, not the whole collection or preflight.
+Verified deletion records and finding closure commit together. Publication and history
+replay suppress evidence for those deleted identities, including new finding kinds
+from an overlapping snapshot. A new identity at the same path can be reviewed.
+Preserve deletion records as durable evidence; incomplete identity cannot prove recreation.
+Historical snapshots remain unchanged and display a reminder that deletion history
+and finding reviews carry current decommissioning outcomes.

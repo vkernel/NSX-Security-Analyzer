@@ -14,6 +14,14 @@
       if(row.path){const identity=make('div',null,'evidence-identity');identity.append(make('code',row.path));const copy=make('button','Copy path');copy.type='button';copy.dataset.copyPath=row.path;identity.append(copy);groups.get('Technical details').push(identity);}
     }
     if(row?.statistics_checked_at){const timing=make('p','Counters checked: '),time=make('time');time.dateTime=row.statistics_checked_at;time.textContent=new Date(row.statistics_checked_at).toString();if(window.workspaceTime){const template=document.createElement('template');template.innerHTML=window.workspaceTime(row.statistics_checked_at);timing.append(template.content);}else timing.append(time);groups.get('Technical details').push(timing);}
+    const impactBase=document.querySelector('[data-impact-base]')?.dataset.impactBase;
+    if(impactBase && row?.path && (row.kind==='group' || row.inventory_type==='Group' || row.policy_path || row.rule_count!==undefined)){
+      const link=make('a','Impact preview','button');link.href=impactBase+'?'+new URLSearchParams({path:row.path});groups.get('Overview').push(link);
+    }
+    if(impactBase && (row?.inventory_type==='Virtual machine' || row?.inventory_type==='Tag')){
+      const params=row.inventory_type==='Tag'?{action:'remove-tag',scope:row.scope||'',tag:row.name}:{action:'delete-vm',path:row.path};
+      const link=make('a','Impact preview','button');link.href=impactBase+'?'+new URLSearchParams(params);groups.get('Overview').push(link);
+    }
     if(summary.children.length)groups.get('Overview').push(summary);
     for(const node of nodes){
       // Explicit sections are emitted by new reports. Keep older saved reports readable.
@@ -83,13 +91,6 @@
     if(sidebar){sidebar.inert=mobile.matches;toggle?.addEventListener('click',()=>menu(!document.body.classList.contains('navigation-open')));backdrop.addEventListener('click',()=>menu(false));document.querySelector('.mobile-nav-close').addEventListener('click',()=>menu(false));mobile.addEventListener('change',()=>{menu(false);sidebar.inert=mobile.matches;});}
     document.addEventListener('keydown',event=>{if(event.key==='Escape'){if(document.body.classList.contains('navigation-open'))menu(false);document.querySelectorAll('.topbar-actions details[open],.search-options[open],.column-layout[open],.table-filter-menu[open],.filter-control[open]').forEach(details=>{details.open=false;details.querySelector('summary').focus();});}if(event.key==='Tab'&&mobile.matches&&document.body.classList.contains('navigation-open')){const focusable=Array.from(sidebar.querySelectorAll('a,button')),first=focusable[0],last=focusable.at(-1);if(event.shiftKey&&document.activeElement===first){event.preventDefault();last.focus();}else if(!event.shiftKey&&document.activeElement===last){event.preventDefault();first.focus();}}});
     document.addEventListener('click',event=>{document.querySelectorAll('.topbar-actions details[open],.search-options[open],.column-layout[open],.table-filter-menu[open],.filter-control[open]').forEach(details=>{if(!event.composedPath().includes(details))details.open=false;});});
-    const switcher=document.getElementById('environment-switcher');
-    switcher?.addEventListener('change',()=>{
-      if(!switcher.value)return;const analysisPage=location.pathname.match(/^\/environments\/\d+\/(compare|coverage|findings)(?:\/|$)/);if(analysisPage){location.href='/environments/'+encodeURIComponent(switcher.value)+'/'+analysisPage[1]+'/';return;}let section='environment';const hash=location.hash.slice(1);
-      if(document.body.classList.contains('snapshot-page'))section=/polic|rule|statistics|dfw/.test(hash)?'rules':/service/.test(hash)?'services':/tag/.test(hash)?'tags':/guide|coverage/.test(hash)?'help':'inventory';
-      else if(location.pathname.includes('rule-history'))section='activity';else if(location.pathname.includes('collections'))section='collections';
-      location.href='/workspace/'+section+'/?environment='+encodeURIComponent(switcher.value)+(hash?'&panel='+encodeURIComponent(hash):'');
-    });
     const snapshot=document.getElementById('snapshot-switcher');if(snapshot){const label=snapshot.closest('.snapshot-select'),home=label.parentElement;const place=()=>{if(mobile.matches)home.append(label);else document.getElementById('snapshot-topbar-slot').append(label);};place();mobile.addEventListener('change',place);}
     const tabs=document.querySelector('.report-section-tabs');
     const inventory=[['VMs','all-vms'],['Groups','all-groups'],['Services','all-services'],['Tags','tags-all'],['Scopes','tags-scopes']];

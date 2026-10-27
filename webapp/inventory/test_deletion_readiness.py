@@ -1,0 +1,180 @@
+from copy import deepcopy
+from datetime import timedelta
+from unittest.mock import Mock
+from django.test import TestCase, SimpleTestCase
+from django.utils import timezone
+from .deletion_readiness import historical_group_evidence, strict_group_empty
+from .evidence_coverage import issues
+from .finding_workflow import approval_readiness
+from .findings import synchronize
+from .models import Environment, FindingPolicy, Finding, Snapshot, SnapshotRecord
+
+
+class DirectMembershipTests(SimpleTestCase):
+    def setUp(self):
+        self.group={'path':'/infra/domains/default/groups/g', 'expression':[
+            {'resource_type':'Condition','member_type':'VirtualMachine','key':'Tag','operator':'EQUALS','value':'VDI|yes'}]}
+
+    def test_requires_all_three_explicit_empty_results(self):
+        client=Mock(); client.get.return_value={'results':[],'result_count':0}
+        self.assertTrue(strict_group_empty(client,self.group))
+        self.assertEqual(client.get.call_count,3)
+        for bad in ({'results':[]}, {'results':[],'result_count':False}, {'results':[],'result_count':0,'cursor':'next'},
+                    {'results':[{'id':'member'}],'result_count':1}, {'results':[],'result_count':0,'error_message':'failed'}):
+            client.get.side_effect=[{'results':[],'result_count':0},bad]
+            self.assertFalse(strict_group_empty(client,self.group))
+
+    def test_composed_or_nested_groups_do_not_use_exception(self):
+        for expressions in ([], [{'resource_type':'PathExpression','paths':['/infra/groups/nested']}], self.group['expression']*2):
+            client=Mock()
+            self.assertFalse(strict_group_empty(client,dict(self.group,expression=expressions)))
+            client.get.assert_not_called()
+
+
+class HistoricalExecutionTests(TestCase):
+    def setUp(self):
+        self.env=Environment.objects.create(name='Direct',slug='direct',manager='https://nsx.example')
+        self.policy=FindingPolicy.objects.create(empty_group_days=0,minimum_observations=2,maximum_gap_hours=24)
+        self.config={'resource_type':'Group','path':'/infra/domains/default/groups/g','unique_id':'same',
+            'expression':[{'resource_type':'Condition','member_type':'VirtualMachine','key':'Name','operator':'EQUALS','value':'test'}]}
+        self.row={'path':self.config['path'],'name':'G','kind':'group','membership':'empty','usage':'used',
+                  'configuration':self.config,'unique_id':'same','created_at':1}
+        self.source=self.snapshot(-5,[])
+        synchronize(self.env.pk)
+        self.finding=Finding.objects.get(environment=self.env,kind='empty_group')
+        self.finding.workflow_state='ready'; self.finding.save()
+        self.warning={'endpoint':'/infra/realized-state/virtual-machines','detail':'Duplicate VM row'}
+        self.latest=self.snapshot(-1,[self.warning])
+        synchronize(self.env.pk)
+        self.finding.refresh_from_db()
+
+    def snapshot(self,minutes,warnings):
+        report={'objects':[deepcopy(self.row)],'inventory_warnings':warnings,'search_coverage':{'mode':'all_types'}}
+        snap=Snapshot.objects.create(environment=self.env,generated_at=timezone.now()+timedelta(minutes=minutes),report=report,
+            summary={'inventory_warnings':bool(warnings),'evidence_coverage':issues(report)})
+        SnapshotRecord.objects.create(snapshot=snap,ordinal=1,view='inventory',name='G',sort_name='g',compact={k:deepcopy(v) for k,v in self.row.items() if not isinstance(v,(dict,list))},
+            data=deepcopy(self.row),columns=[],sort_values={},search_basic='',search_evidence='')
+        return snap
+
+    def test_execution_only_preserves_history_and_normal_approval_block(self):
+        count=self.finding.observation_count
+        self.assertEqual(approval_readiness(self.finding)['status'],'blocked')
+        ready=approval_readiness(self.finding,deletion_live=True)
+        self.assertEqual(ready['status'],'ready')
+        self.assertTrue(ready['requires_direct_membership'])
+        self.finding.refresh_from_db()
+        self.assertEqual(self.finding.observation_count,count)
+        self.assertEqual(self.finding.snapshot_id,self.source.pk)
+
+    def test_changed_policy_or_stale_history_blocks(self):
+        self.policy.empty_group_days=10; self.policy.save()
+        self.assertIsNone(historical_group_evidence(self.finding,self.latest))
+        self.policy.empty_group_days=0; self.policy.save()
+        self.finding.last_seen=timezone.now()-timedelta(days=2)
+        self.assertIsNone(historical_group_evidence(self.finding,self.latest))
+
+    def test_missing_changed_or_nonempty_current_evidence_blocks(self):
+        record=SnapshotRecord.objects.get(snapshot=self.latest)
+        for change in ({'membership':'unknown'},{'membership':'nonempty'},{'unique_id':'new'}, {'configuration':{}}):
+            changed=dict(self.row,**change)
+            record.compact={k:v for k,v in changed.items() if not isinstance(v,(dict,list))}
+            record.data=changed; record.save()
+            self.assertIsNone(historical_group_evidence(self.finding,self.latest))
+        record.delete()
+        self.assertIsNone(historical_group_evidence(self.finding,self.latest))
+
+    def test_other_warning_or_newer_verified_snapshot_blocks(self):
+        for warnings in ([{'endpoint':'/search/query'}],[]):
+            newer=self.snapshot(0,warnings)
+            self.assertIsNone(historical_group_evidence(self.finding,newer))
+            newer.delete()
+
+    def test_preview_explains_definition_and_history_blockers(self):
+        self.finding.evidence = dict(self.finding.evidence, configuration={})
+        result = approval_readiness(self.finding, deletion_live=True)
+        self.assertEqual(result['status'], 'blocked')
+        self.assertIn('[unsupported_group_definition]', result['message'])
+        self.finding.refresh_from_db()
+        self.policy.empty_group_days = 10
+        self.policy.save()
+        result = approval_readiness(self.finding, deletion_live=True)
+        self.assertIn('[criteria_changed]', result['message'])
+        self.assertNotIn('Direct live verification', approval_readiness(self.finding)['message'])
+
+    def test_intermediate_blocker_identifies_collection(self):
+        record = SnapshotRecord.objects.get(snapshot=self.latest)
+        record.compact['membership'] = 'unknown'
+        record.save()
+        result = approval_readiness(self.finding, deletion_live=True)
+        self.assertIn('[membership_not_empty]', result['message'])
+        self.assertIn(str(self.latest.pk), result['message'])
+        self.assertEqual(result['status'], 'blocked')
+
+    def test_gap_blocker_has_configured_limit(self):
+        from unittest.mock import patch
+        with patch('inventory.deletion_readiness.timezone.now', return_value=self.finding.last_seen + timedelta(hours=25)):
+            result = approval_readiness(self.finding, deletion_live=True)
+        self.assertIn('[history_gap_exceeded]', result['message'])
+        self.assertIn('24 hours', result['message'])
+
+    def test_recreated_object_does_not_inherit_decommissioning(self):
+        self.finding.workflow_state = 'decommissioned'
+        self.finding.change_ticket = 'OLD'
+        self.finding.approvals = {'owner': {'actor_id': 'old'}}
+        self.finding.save()
+        self.row['unique_id'] = 'recreated'
+        self.snapshot(0, [])
+        synchronize(self.env.pk)
+        self.finding.refresh_from_db()
+        self.assertEqual(self.finding.workflow_state, 'unassigned')
+        self.assertEqual(self.finding.approvals, {})
+        self.assertEqual(self.finding.change_ticket, '')
+
+    def test_overlapping_snapshot_and_replay_cannot_restore_deleted_identity(self):
+        from .models import DeletionBatch, DeletionItem
+        from . import finding_recalculation as replay
+        self.finding.workflow_state = 'decommissioned'
+        self.finding.present = False
+        self.finding.change_ticket = 'CHG-deleted'
+        self.finding.save()
+        batch = DeletionBatch.objects.create(environment=self.env, manager=self.env.manager)
+        item = DeletionItem.objects.create(batch=batch, finding=self.finding, path=self.finding.path,
+            name='G', revision=self.finding.revision, status='deleted', approved_evidence=self.finding.evidence)
+        # A collection can finish after DELETE with rows retrieved before it.
+        self.row['usage'] = 'unused_candidate'
+        self.snapshot(0, [])
+        synchronize(self.env.pk)
+        self.finding.refresh_from_db()
+        self.assertFalse(self.finding.present)
+        self.assertEqual(self.finding.workflow_state, 'decommissioned')
+        self.assertFalse(Finding.objects.filter(environment=self.env, kind='unused').exists())
+        replay.queue([self.env.pk], ['empty_group', 'unused'])
+        job = replay.claim()
+        replay.run(job.pk, job.token)
+        self.finding.refresh_from_db(); job.refresh_from_db()
+        self.assertEqual(job.status, 'completed')
+        self.assertFalse(self.finding.present)
+        self.assertEqual(self.finding.change_ticket, 'CHG-deleted')
+        self.assertFalse(Finding.objects.filter(environment=self.env, kind='unused').exists())
+        # A truly new identity may be collected and reviewed normally.
+        self.row['unique_id'] = 'new-object'
+        self.snapshot(1, [])
+        synchronize(self.env.pk)
+        self.finding.refresh_from_db()
+        self.assertTrue(self.finding.present)
+        self.assertEqual(self.finding.workflow_state, 'unassigned')
+        self.assertTrue(Finding.objects.filter(environment=self.env, kind='unused').exists())
+
+
+class FlatAndDefinitionTests(SimpleTestCase):
+    def test_flat_vm_and_is_supported_without_changing_collection_fast_path(self):
+        from .deletion_readiness import supported_vm_group
+        from .collector import vm_fast_eligible
+        condition = {'resource_type':'Condition', 'member_type':'VirtualMachine', 'key':'Tag', 'operator':'EQUALS', 'value':'scope|tag'}
+        group = {'path':'/infra/domains/default/groups/g', 'expression':[condition, {'resource_type':'ConjunctionOperator', 'conjunction_operator':'AND'}, dict(condition, value='other|tag')]}
+        self.assertTrue(supported_vm_group(group))
+        self.assertFalse(vm_fast_eligible(group))
+        client=Mock(); client.get.return_value={'results':[], 'result_count':0}
+        self.assertTrue(strict_group_empty(client, group)); self.assertEqual(client.get.call_count, 3)
+        for changed in ([condition, condition], [condition, {'resource_type':'ConjunctionOperator', 'conjunction_operator':'OR'}, condition], [dict(condition, member_type='Segment')], [dict(condition, operator='NOTEQUALS')]):
+            self.assertFalse(supported_vm_group(dict(group, expression=changed)))

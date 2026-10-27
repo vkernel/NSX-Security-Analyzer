@@ -1,7 +1,16 @@
 from django.urls import path
-from . import activity_views, authentication_settings, keycloak_settings, system_health, views, history_views, diagnostic_views, report_views
+from . import activity_views, authentication_settings, keycloak_settings, system_health, views, history_views, diagnostic_views, report_views, impact, transient, deletion, task_cancellation, bulk_actions
 
 urlpatterns = [
+    path("bulk/<str:kind>/", bulk_actions.bulk, name="bulk-actions"),
+    path('tasks/<str:kind>/<str:pk>/cancel/', task_cancellation.cancel, name='task-cancel'),
+    path('deletion-items/<int:pk>/reference-cleanup/', deletion.reference_cleanup, name='deletion-reference-cleanup'),
+    path('environments/<int:pk>/deletions/history/', deletion.history, name='deletion-history'),
+    path('environments/<int:pk>/deletions/', deletion.selection, name='deletion-selection'),
+    path('deletion-items/<int:pk>/configuration/', deletion.saved_configuration, name='deletion-configuration'),
+    path('deletions/<uuid:pk>/', deletion.detail, name='deletion-detail'),
+    path('administration/transient-emptiness/', transient.settings_view, name='transient-emptiness'),
+    path("snapshots/<uuid:pk>/impact/", impact.impact_preview, name="impact-preview"),
     path('collections/<uuid:pk>/result/', activity_views.collection_result, name='collection-result'),
     path('activity/', activity_views.activity, name='activity'),
     path('administration/environments/', views.environment_schedules, name='environment-schedules'),
@@ -19,6 +28,7 @@ urlpatterns = [
     path('environments/<int:pk>/compare/', history_views.comparison, name='snapshot-comparison'),
     path('environments/<int:pk>/coverage/', history_views.coverage, name='collection-coverage'),
     path('environments/<int:pk>/findings/', history_views.findings, name='findings'),
+    path('environments/<int:pk>/findings/<int:finding_id>/recover-approval/', history_views.approval_recovery, name='approval-recovery'),
     path('environments/<int:pk>/findings/<int:finding_id>/history.json', history_views.finding_history_export, name='finding-history-export'),
     path('environments/<int:pk>/findings/<int:finding_id>/', history_views.finding_detail, name='finding-detail'),
     path('workspace/<slug:section>/', views.workspace_section, name='workspace-section'),

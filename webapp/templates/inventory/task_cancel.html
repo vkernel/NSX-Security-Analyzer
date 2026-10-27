@@ -1,0 +1,9 @@
+{% extends 'base.html' %}{% block content %}
+<a class="breadcrumb" href="{{ back }}">← Back to task</a>
+{% include 'components/page_header.html' with title=title description=description context_name=environment.name only %}
+<section class="form-card"><h2>{{ target_label }}</h2><code class="review-wrap">{{ target_path }}</code>{% if available %}<form method="post" class="task-cancel-form">{% csrf_token %}
+<div class="form-field"><label for="cancel-reason">Reason (optional)</label><textarea id="cancel-reason" name="reason" maxlength="2000" rows="3"></textarea></div>
+<p><label><input type="checkbox" name="confirm" value="yes" required> I confirm cancellation. History will be retained.</label></p>
+<div class="form-actions"><button class="button danger">{{ title }}</button><a class="button" href="{{ back }}">Keep task</a></div>
+</form>{% else %}<p role="status">This task can no longer be cancelled. Review its current status and outcomes.</p><a class="button" href="{{ back }}">View task</a>{% endif %}</section>
+{% endblock %}

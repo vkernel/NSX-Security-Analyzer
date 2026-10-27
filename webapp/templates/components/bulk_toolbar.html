@@ -1,0 +1,14 @@
+{% if user.is_staff or bulk_kind == 'inventory' %}
+<div class="finding-selection-bar" data-bulk-toolbar="{{ bulk_id }}" hidden>
+<strong data-bulk-count role="status" aria-live="polite">0 selected</strong>
+<div class="finding-selection-actions"><details class="selection-action-menu"><summary class="button">Actions</summary><div class="selection-action-options">
+{% if bulk_kind == 'findings' %}
+<button class="button" type="button" data-bulk-action="assign_me">Assign to me</button><button class="button" type="button" data-bulk-action="reassign">Reassign owner</button><button class="button" type="button" data-bulk-action="release">Return to unassigned</button>{% if user.is_superuser %}<button class="button" type="button" data-bulk-action="preview" data-bulk-one-environment>Preview deletion from NSX</button>{% endif %}<button class="button" type="button" data-bulk-action="export">Export selected evidence</button>
+{% elif bulk_kind == 'cleanup' %}<button class="button" type="button" data-bulk-action="cancel">Cancel selected plans</button><button class="button" type="button" data-bulk-action="export">Export selected plans</button>
+{% elif bulk_kind == 'history' %}<button class="button" type="button" data-bulk-action="export">Export selected outcomes</button><button class="button" type="button" data-bulk-action="configurations">Download saved configurations</button>
+{% elif bulk_kind == 'collections' %}<button class="button" type="button" data-bulk-action="cancel">Cancel queued collections</button><button class="button" type="button" data-bulk-action="export">Export selected diagnostics</button>
+{% elif bulk_kind == 'inventory' %}<button class="button" type="button" data-bulk-action="export">Export selected objects</button><button class="button" type="button" data-bulk-action="compare">Compare selected details</button><button class="button" type="button" data-bulk-action="reviews">View related finding reviews</button>{% endif %}
+</div></details><button class="button finding-selection-clear" type="button" data-bulk-clear>Clear selection</button></div><small data-bulk-help>Selection applies to this page only, up to 100 items.</small>
+</div>
+<form id="{{ bulk_id }}" method="post" action="{% url 'bulk-actions' bulk_kind %}" data-bulk-submit>{% csrf_token %}<input type="hidden" name="return_to" value="{{ request.get_full_path }}">{% if snapshot %}<input type="hidden" name="snapshot" value="{{ snapshot.pk }}">{% endif %}<input type="hidden" name="action"><div data-bulk-values></div></form>
+{% endif %}

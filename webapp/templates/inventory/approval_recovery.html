@@ -1,0 +1,11 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="page-heading"><h1>Recover previous first approval</h1></div>
+<section class="form-card"><h2>{{ finding.name }}</h2><p>{{ finding.path }}</p>
+<p>This restores only the original owner approval. A different reviewer must still provide the second approval. Nothing is changed in NSX.</p>
+{% if error %}<p class="notice" role="alert" data-preserve-error>{{ error }}</p>{% endif %}
+<p><strong>{% if recovery.allowed %}Recoverable{% else %}Recovery blocked{% endif %}</strong>: {{ recovery.reason }}</p>
+{% if recovery.allowed %}<dl><dt>Original approver</dt><dd>{{ recovery.decision.actor_name }}</dd><dt>Original approval time</dt><dd>{{ recovery.decision.at }}</dd><dt>Original reason</dt><dd>{{ recovery.decision.reason }}</dd></dl>
+<form method="post">{% csrf_token %}<input type="hidden" name="revision" value="{{ finding.revision }}"><input type="hidden" name="event_id" value="{{ recovery.event_id }}"><label><input type="checkbox" name="confirm" value="yes" required> Recover this original first approval and record my administrator action in history.</label><div class="form-actions"><button class="button primary" type="submit">Recover first approval</button></div></form>{% endif %}
+<a class="button" href="{% url 'finding-detail' environment.pk finding.pk %}">Back to finding</a></section>
+{% endblock %}

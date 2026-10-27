@@ -136,7 +136,8 @@ def snapshot_data(request, pk):
                     path = request.GET.get('path', '')
                     if not path:
                         raise ValueError('An object path is required.')
-                    rows = rows.filter(compact__path=path).exclude(view='vms')
+                    rows = rows.filter(compact__path=path)
+                    rows = rows.filter(view='vms') if request.GET.get('view') == 'vms' else rows.exclude(view='vms')
                 row = rows.only('ordinal', 'view').order_by('ordinal').first()
                 if row is None:
                     return JsonResponse({'error': 'This object is not available in this evaluated snapshot. Saved finding evidence remains available in the review.'}, status=404)

@@ -11,8 +11,8 @@ from django.http import HttpResponseForbidden
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 from django.views.decorators.http import require_GET, require_http_methods
-from .models import Environment, Finding, FindingEvent
-from .forms import SnapshotComparisonForm, FindingReviewForm
+from .models import Environment, Finding, FindingEvent, DeletionItem
+from .forms import SnapshotComparisonForm, FindingReviewForm, BulkAssignmentForm
 from .findings import LABELS
 from .preferences import preferences
 
@@ -71,6 +71,12 @@ def coverage(request, pk):
 
 def filtered_findings(request, environment, params):
     rows = environment.findings.filter(Q(present=True, qualification='eligible') | Q(workflow_state__in=['owner_review','second_review','ready','rejected','decommissioned'])).select_related('owner__keycloakidentity', 'owner__ldapidentity').defer('evidence', 'approvals')
+    if not params.get('review'):
+        rows = rows.exclude(workflow_state__in=['rejected', 'decommissioned'])
+    if params.get('review') == 'suppressed':
+        rows = environment.findings.filter(qualification='suppressed').select_related('owner__keycloakidentity', 'owner__ldapidentity').defer('evidence', 'approvals')
+    else:
+        rows = rows.exclude(qualification='suppressed')
     from .forms import FindingFilterForm
     from django.db.models import F
     form = FindingFilterForm(params or {'sort': 'name', 'direction': 'asc'})
@@ -81,7 +87,7 @@ def filtered_findings(request, environment, params):
         if values['q']:
             rows = rows.filter(Q(name__icontains=values['q']) | Q(path__icontains=values['q']))
         if values['kind']: rows = rows.filter(kind=values['kind'])
-        if values['review']:
+        if values['review'] and values['review'] != 'suppressed':
             rows = rows.filter(workflow_state=values['review'])
             if values['review'] in ('second_review', 'ready'):
                 rows = rows.filter(owner__isnull=False)
@@ -106,8 +112,16 @@ def findings(request, pk):
         from .finding_workflow import decide
         selections = request.POST.getlist('selected')
         reason = request.POST.get('reason', '').strip()
-        if request.POST.get('action') != 'unassign' or not reason or len(reason) > 5000 or not 1 <= len(selections) <= 100:
-            messages.error(request, 'Select 1–100 findings and provide a reason of at most 5000 characters.')
+        action = request.POST.get('action')
+        owner = None
+        if action == 'assign':
+            assignment = BulkAssignmentForm(request.POST)
+            if not assignment.is_valid():
+                messages.error(request, 'Choose an active operator or administrator as owner; no findings were assigned.')
+                return redirect(request.get_full_path())
+            owner = assignment.cleaned_data['owner']
+        if action not in ('assign', 'unassign') or (action == 'unassign' and not reason) or len(reason) > 5000 or not 1 <= len(selections) <= 100:
+            messages.error(request, 'Select 1–100 findings. Returning findings to unassigned also requires a reason of at most 5000 characters.')
             return redirect(request.get_full_path())
         released, skipped = 0, []
         with transaction.atomic():
@@ -122,16 +136,22 @@ def findings(request, pk):
                 finding = Finding.objects.select_for_update().filter(pk=finding_id, environment=environment).first()
                 if finding is None:
                     skipped.append('Finding no longer available in this environment.')
+                elif action == 'assign' and finding.owner_id:
+                    skipped.append(f'{finding.name}: already assigned; existing owner retained.')
                 elif finding.revision != revision:
                     skipped.append(f'{finding.name}: changed since selection; reload before retrying.')
                 else:
                     try:
-                        decide(finding, request.user, 'unassign', reason)
+                        decide(finding, request.user, action, reason, owner=owner)
                     except ValidationError as exc:
                         skipped.append(f'{finding.name}: {"; ".join(exc.messages)}')
                     else:
                         released += 1
-        messages.success(request, f'Returned {released} finding(s) to unassigned; skipped {len(skipped)}.')
+        if action == 'assign':
+            from .user_labels import user_label
+            messages.success(request, f'Assigned {released} finding(s) to {user_label(owner)}; skipped {len(skipped)}.')
+        else:
+            messages.success(request, f'Returned {released} finding(s) to unassigned; skipped {len(skipped)}.')
         for detail in skipped:
             messages.warning(request, detail)
         return redirect(request.get_full_path())
@@ -140,17 +160,28 @@ def findings(request, pk):
     qualification_counts = list(environment.findings.values('qualification').annotate(total=Count('pk')).order_by('qualification'))
     rows, form, query = filtered_findings(request, environment, request.GET)
     page = Paginator(rows, preferences(request).page_size).get_page(request.GET.get('page'))
+    from .deletion import KINDS
+    from .evidence_coverage import snapshot_issues, relevant
+    latest = environment.snapshots.filter(testing=False, imported=False).only('pk', 'summary').first()
+    coverage = snapshot_issues(latest) if latest else []
     release_eligible = 0
     for row in page:
-        row.label = LABELS.get(row.kind, row.kind)
+        row.label = 'Prolonged empty VDI group' if row.qualification_reason.startswith('Prolonged empty VDI group') else LABELS.get(row.kind, row.kind)
+        row.can_assign = bool(request.user.is_staff and not row.owner_id and row.workflow_state != 'decommissioned')
         row.can_release = bool(request.user.is_staff and row.owner_id and row.workflow_state != 'decommissioned'
                                and (row.owner_id == request.user.pk or request.user.is_superuser))
+        row.verification_paused = bool(relevant(coverage, row.kind, row.path))
+        row.can_delete = bool(request.user.is_superuser and row.owner_id and row.workflow_state == 'ready' and row.kind in KINDS)
         release_eligible += int(row.can_release)
     params = request.GET.copy()
     params.pop('page', None)
+    from .cleanup_tasks import tasks as cleanup_tasks
+    cleanup_queue = {'second_review': 'second', 'ready': 'ready', 'owner_review': 'assigned'}.get(request.GET.get('review'), request.GET.get('review') or None)
     return render(request, 'inventory/findings.html', {'environment': environment, 'page': page,
+        'cleanup_tasks': cleanup_tasks(request.user, environment=environment.pk, query=query, queue=cleanup_queue),
         'release_eligible': release_eligible, 'review_return': request.get_full_path(),
-        'show_release_controls': request.user.is_staff and request.GET.get('owner') != 'none',
+        'show_release_controls': request.user.is_staff,
+        'assignment_form': BulkAssignmentForm(initial={'owner': request.user.pk}),
         'filters_active': any(request.GET.get(key, '').strip() for key in ('q', 'kind', 'review', 'owner')),
         'qualification_counts': qualification_counts, 'query': query, 'filter_form': form, 'query_string': params.urlencode(),
         'recalculation': environment.finding_recalculation if hasattr(environment, 'finding_recalculation') else None})
@@ -179,6 +210,8 @@ def finding_detail(request, pk, finding_id):
             data = form.cleaned_data
             if data['revision'] != finding.revision:
                 form.add_error(None, 'This finding changed while you were reviewing it. Reload the page before saving.')
+            elif data['action'] == 'approve' and request.session.get('impact_preview_' + str(finding.pk)) not in (None, str(finding.snapshot_id)):
+                form.add_error(None, 'The snapshot changed since your impact preview. Open Impact preview again before approving.')
             else:
                 try:
                     decide(finding, request.user, data['action'], data['note'], data['owner'], data['change_ticket'], data['manual_verified'], data['manual_checks'], data['evidence_reference'])
@@ -209,7 +242,11 @@ def finding_detail(request, pk, finding_id):
     required_approvals = finding.required_approvals
     if finding.workflow_state == 'unassigned':
         from .usability import policy
-        required_approvals = policy().required_approvals
+        from .approval_modes import required
+        required_approvals = required(finding.kind, policy())
+    from .approval_modes import source
+    from .usability import policy as current_approval_policy
+    approval_source = source(finding.kind, current_approval_policy()) if finding.workflow_state not in ('rejected', 'decommissioned') else 'Recorded review requirement'
     approval_label = dict(Finding._meta.get_field('required_approvals').choices)[required_approvals]
     if required_approvals == 1:
         steps = [(key, label) for key, label in steps if key != 'second_review']
@@ -223,11 +260,13 @@ def finding_detail(request, pk, finding_id):
     owner_name, _, owner_detail = owner_label.partition(' · ')
     page = Paginator(finding.events.select_related('actor__keycloakidentity', 'actor__ldapidentity').defer('details'), 20).get_page(request.GET.get('page'))
     return render(request, 'inventory/finding_detail.html', {'environment': environment, 'finding': finding,
+        'deletion_records': DeletionItem.objects.filter(finding=finding).exclude(before={}).select_related('batch').order_by('-pk') if request.user.is_superuser else [],
+        'impact_supported': '/groups/' in finding.path or '/security-policies/' in finding.path,
         'review_return': review_return, 'review_navigation': navigation(request, environment, finding, review_return),
         'can_unassign': bool(request.user.is_staff and finding.owner_id and finding.workflow_state != 'decommissioned'
                              and (finding.owner_id == request.user.pk or request.user.is_superuser)),
-        'required_approvals': required_approvals, 'approval_label': approval_label,
-        'label': LABELS.get(finding.kind, finding.kind), 'form': form, 'page': page, 'approval_decisions': decisions, 'readiness': readiness, 'can_decide': can_decide, 'progress': progress, 'facts': facts, 'owner_name': owner_name, 'owner_detail': owner_detail,
+        'required_approvals': required_approvals, 'approval_label': approval_label, 'approval_source': approval_source,
+        'label': 'Prolonged empty VDI group' if finding.qualification_reason.startswith('Prolonged empty VDI group') else LABELS.get(finding.kind, finding.kind), 'form': form, 'page': page, 'approval_decisions': decisions, 'readiness': readiness, 'can_decide': can_decide, 'progress': progress, 'facts': facts, 'owner_name': owner_name, 'owner_detail': owner_detail,
         'query_string': urlencode({'return_to': review_return}),
         'evidence': json.dumps(finding.evidence, indent=2, ensure_ascii=False) if request.GET.get('evidence') == '1' else None})
 
@@ -307,16 +346,21 @@ def review_approvals(request):
     from .forms import ReviewApprovalsForm
     if not request.user.is_superuser:
         return HttpResponseForbidden('Administrator access is required.')
+    from .approval_modes import preview
+    previewed = False
     with transaction.atomic():
         policy = WorkspacePolicy.objects.select_for_update().filter(pk=1).first() or WorkspacePolicy(pk=1)
         form = ReviewApprovalsForm(request.POST if request.method == 'POST' else None, instance=policy)
         if request.method == 'POST' and form.is_valid():
-            form.save()
-            from .finding_workflow import apply_approval_policy
-            changed = apply_approval_policy(policy.required_approvals, request.user)
-            messages.success(request, f'Approval requirement saved. Updated {changed} open reviews; affected approvals must be repeated.')
-            return redirect('review-approvals')
-    return render(request, 'inventory/review_approvals.html', {'form': form})
+            if request.POST.get('action') == 'preview':
+                previewed = True
+            else:
+                form.save()
+                from .finding_workflow import apply_approval_policy
+                changed = apply_approval_policy(policy, request.user)
+                messages.success(request, f'Approval and execution settings saved. {changed} open reviews require new approval because their approval count changed.')
+                return redirect('review-approvals')
+    return render(request, 'inventory/review_approvals.html', {'form': form, 'mode_rows': preview(policy), 'previewed': previewed})
 
 
 @login_required
@@ -325,7 +369,7 @@ def comparison_retry(request, comparison_id):
     from .models import SnapshotComparison
     from django.urls import reverse
     pair = get_object_or_404(SnapshotComparison, pk=comparison_id)
-    SnapshotComparison.objects.filter(pk=pair.pk, status='failed', ready=False).update(status='queued', error='')
+    SnapshotComparison.objects.filter(pk=pair.pk, status__in=['failed', 'cancelled'], ready=False).update(status='queued', error='')
     return redirect(reverse('snapshot-comparison', args=[pair.after.environment_id]) + f'?before={pair.before_id}&after={pair.after_id}')
 
 
@@ -353,9 +397,10 @@ def my_work(request):
     if not request.user.is_staff:
         return HttpResponseForbidden('Operator access required.')
     queue = request.GET.get('queue', 'assigned')
-    if queue not in ('assigned', 'second', 'ready'): queue = 'assigned'
-    rows = Finding.objects.select_related('environment', 'owner__keycloakidentity', 'owner__ldapidentity').defer('evidence', 'approvals')
-    if queue == 'assigned': rows = rows.filter(owner=request.user, workflow_state='owner_review')
+    if queue not in ('assigned', 'second', 'ready', 'unassigned'): queue = 'assigned'
+    rows = Finding.objects.exclude(qualification='suppressed').select_related('environment', 'owner__keycloakidentity', 'owner__ldapidentity').defer('evidence', 'approvals')
+    if queue == 'unassigned': rows = rows.filter(owner__isnull=True, present=True, qualification='eligible').exclude(workflow_state='decommissioned')
+    elif queue == 'assigned': rows = rows.filter(owner=request.user, workflow_state='owner_review')
     elif queue == 'second':
         rows = rows.filter(workflow_state='second_review', required_approvals=2, owner__isnull=False).exclude(owner=request.user).exclude(approvals__owner__actor_id=str(request.user.pk))
     else: rows = rows.filter(workflow_state='ready', owner__isnull=False)
@@ -371,9 +416,42 @@ def my_work(request):
     ordering = {'oldest': ['assigned_at', 'pk'], 'name': ['name', 'pk'], 'environment': ['environment__name', 'name', 'pk']}.get(sort, ['assigned_at', 'pk'])
     page = Paginator(rows.order_by(*ordering), preferences(request).page_size).get_page(request.GET.get('page'))
     from .finding_workflow import approval_readiness
+    from .deletion import permitted, KINDS
+    show_deletion_controls = queue == 'ready' and permitted(request.user)
     for finding in page:
+        finding.can_release = bool(finding.owner_id and finding.workflow_state != 'decommissioned' and (finding.owner_id == request.user.pk or request.user.is_superuser))
+        finding.can_assign = not finding.owner_id and finding.workflow_state != 'decommissioned'
+        finding.can_delete = bool(show_deletion_controls and finding.owner_id and finding.kind in KINDS)
         finding.readiness = approval_readiness(finding)
         finding.approval_count = len([key for key in ('owner', 'second') if key in finding.approvals])
 
     from urllib.parse import urlencode
-    return render(request, 'inventory/my_work.html', {'page': page, 'review_return': request.get_full_path(), 'queue': queue, 'query': term, 'environments': Environment.objects.only('pk','name'), 'work_environment': selected_environment, 'sort': sort, 'query_string': urlencode({'queue': queue, 'q': term, 'environment':selected_environment, 'sort':sort})})
+    from .cleanup_tasks import tasks as cleanup_tasks
+    return render(request, 'inventory/my_work.html', {'cleanup_tasks': cleanup_tasks(request.user, environment=selected_environment, query=term, queue=queue), 'page': page, 'show_deletion_controls': show_deletion_controls, 'review_return': request.get_full_path(), 'queue': queue, 'query': term, 'environments': Environment.objects.only('pk','name'), 'work_environment': selected_environment, 'sort': sort, 'query_string': urlencode({'queue': queue, 'q': term, 'environment':selected_environment, 'sort':sort})})
+
+
+@login_required
+@require_http_methods(['GET', 'POST'])
+def approval_recovery(request, pk, finding_id):
+    if not request.user.is_active or not request.user.is_superuser:
+        return HttpResponseForbidden('Administrator access is required.')
+    from .approval_recovery import preview, recover
+    from django.core.exceptions import ValidationError
+    from contextlib import nullcontext
+    error = ''
+    with transaction.atomic() if request.method == 'POST' else nullcontext():
+        environment = get_object_or_404(Environment.objects.select_for_update() if request.method == 'POST' else Environment.objects, pk=pk)
+        rows = Finding.objects.select_for_update() if request.method == 'POST' else Finding.objects
+        finding = get_object_or_404(rows, environment=environment, pk=finding_id)
+        if request.method == 'POST':
+            try:
+                if request.POST.get('confirm') != 'yes':
+                    raise ValidationError('Confirm recovery of the first approval.')
+                recover(finding, request.user, request.POST.get('revision'), request.POST.get('event_id'))
+            except ValidationError as exc:
+                error = '; '.join(exc.messages)
+            else:
+                messages.success(request, 'Original first approval recovered. Independent second approval is required.')
+                return redirect('finding-detail', pk=pk, finding_id=finding_id)
+        result = preview(finding)
+    return render(request, 'inventory/approval_recovery.html', {'environment': environment, 'finding': finding, 'recovery': result, 'error': error})

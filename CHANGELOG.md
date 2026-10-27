@@ -1,5 +1,41 @@
 # Changelog
 
+## Development — 2026-10-26
+
+- Add an independent confirmed-deletion lane. Commit verified deletion evidence with finding closure and prevent overlapping snapshots/history replay from restoring deleted identities. Preserve review for newly recreated identities.
+
+- Try flat NOT and ! runtime exclusions within the existing search budget. Record failed pagination totals and duplicate/unique counts by resource type in live deletion diagnostics.
+
+- Ignore excluded runtime-record payload conflicts only during configuration dependency searches while retaining identity/count/cursor verification. Clarify inventory verification errors and contain deletion diagnostics within the results layout.
+
+- Add unfiltered broad configuration-search fallbacks with runtime filtering after verified pagination. Preserve inventory checks and limited fallback restrictions.
+- Save and show live dependency-search diagnostics on deletion previews, including blocked results.
+
+## Development — 2026-10-23
+
+- Support flat VM Name/Tag AND conditions for direct deletion verification. Close and cross-link related findings only after verified object absence, preserve approvals, and restart review for recreated object identities.
+
+- Run read-only deletion previews in an independent supervised lane in the existing worker container. Keep confirmed deletion serialized with collection; add queue labels and preview heartbeat monitoring.
+
+- Deletion previews now explain why direct group verification is unavailable,
+  including collection-specific evidence failures and observation gap limits,
+  instead of showing only the generic VM inventory warning.
+
+- Add an execution-only direct membership path for already-approved simple VM groups when only global VM pagination is incomplete. Retain fresh qualified history and require explicit zero VM/IP/port checks, unchanged evidence and full live dependency verification.
+
+- Scope inventory-verification pauses to supported evidence dependencies; retain decisions during affected inventory uncertainty and keep unclassified failures blocking.
+- Apply the same coverage scopes to collection publication, historical recalculation and approval readiness. Preserve observation thresholds and normal unknown-evidence handling.
+- Add selected-row Actions for deletion previews and release; show coverage blockers and per-object verification results. Explicit administrator confirmation remains separate from finding approvals.
+- Add migration `0047_deletion_verification`; per-object previews expire after ten minutes and legacy previews must be recreated.
+
+- Add administrator-only saved deletion configuration dialogs with copy/download JSON, group details and manual recreation guidance. History is read-only; no recovery API is implemented.
+
+- Add category-specific single/four-eyes approval settings, a read-only settings preview and targeted approval resets.
+- Clarify limited dependency-search verification for groups and custom services independently of approval count.
+- Add administrator-only single/bulk NSX deletion previews, explicit ticketed confirmation, live revalidation and per-object durable outcomes. Deletion shares the collection lane; no automatic DELETE retry or rollback.
+- Add migrations `0045_category_approval_modes` and `0046_approved_nsx_deletion`; deploy migrations and matching web/worker images together.
+- Update Help & coverage, review instructions and operations guidance. Existing screenshots are labelled as predating the new controls.
+
 ## 0.5.3 — 2026-10-13
 
 - Add compact finding Actions dialogs and contextual bulk return to unassigned, preserving permissions, revision checks, review history and valid approvals.

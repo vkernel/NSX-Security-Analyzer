@@ -49,10 +49,12 @@ def read(snapshot_id, ordinal, section='summary', page=0):
     return {'items': items[:PAGE_SIZE], 'page': page, 'has_next': len(items) > PAGE_SIZE}
 
 
-def index_record(record, metadata):
+def index_record(record, metadata, batch=None):
     """Normalize the already prepared row without rendering or reloading its report."""
     from .models import SnapshotRelationship
-    batch = []
+    own_batch = batch is None
+    if own_batch:
+        batch = []
     def add(section, position, data):
         batch.append(SnapshotRelationship(record=record, section=section, position=position, data=data))
         if len(batch) >= 250:
@@ -75,4 +77,4 @@ def index_record(record, metadata):
             rule = metadata['firewall_rules'][edge['rule']]
             add('firewall_references', i, {**{k: rule.get(k) for k in ('name', 'path', 'rule_id', 'disabled')},
                                           **{k: edge.get(k) for k in ('via_group', 'tag_use')}})
-    if batch: SnapshotRelationship.objects.bulk_create(batch, batch_size=250)
+    if own_batch and batch: SnapshotRelationship.objects.bulk_create(batch, batch_size=250)

@@ -8,12 +8,13 @@ from django.dispatch import receiver
 from .audit_events import record
 
 FIELDS = {
+    'TransientEmptinessPolicy': ('name', 'enabled', 'environment_id', 'tag_scope', 'reason', 'mode', 'empty_days', 'minimum_observations', 'maximum_gap_hours'),
     'LDAPConfiguration': ('enabled', 'server_url', 'secondary_server_url', 'user_base', 'username_attribute', 'identity_attribute', 'viewer_group', 'operator_group', 'admin_group'),
     'KeycloakConfiguration': ('enabled', 'issuer', 'client_id', 'role_source', 'viewer_role', 'operator_role', 'admin_role'),
     'Environment': ('name', 'slug', 'manager', 'enabled', 'sync_interval_minutes', 'insecure', 'timeout', 'retries'),
     'RetentionPolicy': ('enabled', 'snapshot_days', 'testing_days', 'collection_days'),
-    'FindingPolicy': ('scope', 'zero_hits_days', 'empty_group_days', 'unused_days', 'empty_policy_days', 'disabled_days', 'minimum_observations', 'maximum_gap_hours'),
-    'WorkspacePolicy': ('required_approvals', 'stale_hours', 'notify_failed', 'notify_completed', 'notify_coverage'),
+    'FindingPolicy': ('scope', 'zero_hits_days', 'empty_group_days', 'unused_days', 'unused_service_days', 'empty_policy_days', 'disabled_days', 'minimum_observations', 'maximum_gap_hours'),
+    'WorkspacePolicy': ('execution_mode', 'groups_execution', 'services_execution', 'rules_execution', 'policies_execution', 'required_approvals', 'groups_approvals', 'services_approvals', 'rules_approvals', 'policies_approvals', 'stale_hours', 'notify_failed', 'notify_completed', 'notify_coverage'),
     'UserPreferences': ('page_size', 'report_page_size', 'history_days', 'landing_page', 'remember_tables', 'remember_menus', 'density', 'refresh_seconds', 'timezone', 'date_format', 'theme', 'text_size', 'high_contrast', 'reduced_motion', 'preferred_environment_id'),
     'User': ('is_active', 'is_staff', 'is_superuser'),
     'Group': ('name',),

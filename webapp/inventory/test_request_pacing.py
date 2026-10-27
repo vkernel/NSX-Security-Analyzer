@@ -119,7 +119,7 @@ class QueuedBudgetTests(SimpleTestCase):
         client._get = Mock(side_effect=[AuditError('busy', 503), {'results': []}])
         with patch('inventory.collector.time.monotonic', side_effect=lambda: now[0]):
             adapt_requests(client)
-            def wait_for_slot(*args): now[0] += 70
+            def wait_for_slot(*args, **kwargs): now[0] += 70
             with patch.object(client.request_pacer, 'acquire', side_effect=wait_for_slot), patch('inventory.collector.time.sleep'):
                 self.assertEqual(client.get('/test'), {'results': []})
                 self.assertGreaterEqual(client.request_context.deadline, 200)

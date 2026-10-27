@@ -35,6 +35,27 @@ class FindingRecalculationTests(TestCase):
         self.assertEqual(job.status, 'completed')
         return Finding.objects.get(environment=self.env, kind='empty_group')
 
+    def test_publication_skips_unchanged_evidence_but_advances_observation(self):
+        self.snapshot(0)
+        synchronize(self.env.pk)
+        before = Finding.objects.get(environment=self.env, kind='empty_group')
+        latest = self.snapshot(1)
+        with patch.object(Finding.objects, 'bulk_update', wraps=Finding.objects.bulk_update) as update:
+            synchronize(self.env.pk)
+        fields = [call.args[1] for call in update.call_args_list]
+        self.assertTrue(fields)
+        self.assertFalse(any('evidence' in selected for selected in fields))
+        current = Finding.objects.get(pk=before.pk)
+        self.assertEqual(current.evidence, before.evidence)
+        self.assertEqual(current.observation_count, before.observation_count + 1)
+        self.assertEqual(current.snapshot_id, latest.pk)
+        data = report()
+        data['objects'][0]['configuration'] = {'changed': True}
+        self.snapshot(2, data=data)
+        synchronize(self.env.pk)
+        current.refresh_from_db()
+        self.assertEqual(current.evidence['configuration'], {'changed': True})
+
     def test_existing_history_qualifies_without_collection_and_preserves_reviews(self):
         for day in range(4):
             self.snapshot(day)
@@ -113,7 +134,7 @@ class FindingRecalculationTests(TestCase):
     def test_save_queues_only_affected_types_and_respects_overrides(self):
         other = Environment.objects.create(name='Other', slug='other', manager='https://other.example')
         FindingPolicy.objects.create(scope=str(other.pk), environment=other)
-        fields = ('zero_hits_days', 'empty_group_days', 'unused_days', 'empty_policy_days', 'disabled_days', 'minimum_observations', 'maximum_gap_hours')
+        fields = ('zero_hits_days', 'empty_group_days', 'unused_days', 'unused_service_days', 'empty_policy_days', 'disabled_days', 'minimum_observations', 'maximum_gap_hours')
         data = {field: getattr(self.policy, field) for field in fields}
         data['empty_group_days'] = 1
         self.assertEqual(self.client.post(reverse('finding-policy'), data).status_code, 302)

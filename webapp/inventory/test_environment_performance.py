@@ -82,7 +82,9 @@ class EnvironmentPerformanceTests(TestCase):
             with patch('inventory.findings.synchronize', side_effect=AssertionError('Synchronized on GET')), CaptureQueriesContext(connection) as queries:
                 response = self.client.get(reverse(name, args=args))
             self.assertEqual(response.status_code, 200)
-            self.assertFalse(any('FOR UPDATE' in q['sql'] or '"report"' in q['sql'] for q in queries))
+            self.assertFalse(any('FOR UPDATE' in q['sql'] for q in queries))
+            # Legacy coverage reads only JSON subkeys, never the complete report.
+            self.assertFalse(any('"report"' in q['sql'] and not any(op in q['sql'] for op in ('->', '#>', 'JSON_EXTRACT')) for q in queries))
 
     def test_coverage_fetches_only_current_issue_page(self):
         report = sample_report()

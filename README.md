@@ -8,7 +8,7 @@
 
 See [snapshot maintenance and stopping collections](docs/snapshot-maintenance.md) for optional refresh jobs and collection cancellation.
 
-A read-only NSX Policy inventory and security review workspace. Collect inventory
+An NSX Policy inventory and security review workspace with read-only collection and explicitly confirmed administrator deletion of approved objects. Collect inventory
 from multiple NSX Managers, explore firewall rules and reference evidence, and
 compare saved snapshots in a PostgreSQL-backed web application.
 
@@ -90,7 +90,7 @@ with password **`NSXSecurityA!`**. The application requires you to replace this 
 No manual account-creation command is needed with release **0.5.2**.
 
 Open **http://localhost:8000** and sign in. In **Administration**, add an
-environment with its NSX Manager address, username and password. Retrieve and review its certificate if required and select a sync interval. You can also run a collection
+environment with its NSX Manager address, username and password. Retrieve and review its certificate if required and select a sync interval. Use **Test credentials** before saving to verify the entered account and TLS settings with a read-only Policy API request. Testing does not save credentials or change the collection schedule. It verifies basic read access, not all collection or deletion permissions. When changing the account or Manager, enter its password; a blank password can test the saved credential only for the unchanged account and Manager. You can also run a collection
 from the environment page. For a preview, choose **Environments → Add environment → Create demo environment**.
 
 Keep `DJANGO_SECRET_KEY` stable: it is used to protect saved manager credentials.

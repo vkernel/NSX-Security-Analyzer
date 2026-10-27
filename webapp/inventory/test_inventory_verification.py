@@ -16,19 +16,20 @@ class PaginationVerificationTests(SimpleTestCase):
                                               'resource_type': 'Group'}], 'result_count': 1}])
         resources, coverage = search_configuration(client)
         query = client.get.call_args.args[1]['query']
-        self.assertEqual(query, 'resource_type:* AND NOT (resource_type:VirtualMachine OR '
-                         'resource_type:VirtualNetworkInterface OR resource_type:GenericPolicyRealizedResource)')
+        self.assertEqual(query, 'NOT resource_type:VirtualMachine AND NOT '
+                         'resource_type:VirtualNetworkInterface AND NOT resource_type:GenericPolicyRealizedResource AND resource_type:*')
         self.assertEqual(resources[0]['resource_type'], 'Group')
         self.assertEqual(len(coverage['excluded_resource_types']), 3)
 
     @patch('inventory.collector.time.sleep')
-    def test_configuration_conflicts_still_warn_with_runtime_exclusions(self, sleep):
+    def test_configuration_conflicts_reject_search_with_runtime_exclusions(self, sleep):
         client = self.nsx_client([{'results': [
             {'path': '/infra/groups/g', 'expression': []},
             {'path': '/infra/groups/g', 'expression': [{'resource_type': 'PathExpression', 'paths': ['/x']}]},
         ], 'result_count': 1}] * 3)
-        search_configuration(client)
-        self.assertEqual(client.inventory_warnings[0]['conflicts'][0]['changed_fields'], ['expression'])
+        with self.assertRaisesRegex(AuditError, 'changed fields: expression'):
+            search_configuration(client)
+        self.assertEqual(client.get.call_count, 3)
 
     def test_vm_pages_use_external_id_sort_and_preserve_filters(self):
         calls = []
@@ -266,7 +267,7 @@ class WarningSnapshotTests(TestCase):
         self.assertTrue(finding.present)
         self.assertEqual(finding.snapshot_id, old.pk)
         self.assertEqual(approval_readiness(finding)['status'], 'blocked')
-        self.assertEqual(list(snapshots(env.pk).values_list('pk', flat=True)), [old.pk])
+        self.assertEqual(snapshots(env.pk).count(), 2)  # Replay now applies per-finding coverage scopes.
         self.assertTrue(needs_review(report))
         self.assertEqual(list(report_issues(report))[0]['area'], 'Inventory verification')
 

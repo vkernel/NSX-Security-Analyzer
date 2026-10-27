@@ -42,6 +42,18 @@
       button.addEventListener('click',()=>{order.value=sort.value===key&&order.value==='asc'?'desc':'asc';sort.value=key;page=0;lastParams=null;refresh();});
       header.append(button);headers.push({header,button,key});
     });
+    const inventory = ['all-groups','all-services','unused-groups','unused-services','empty-groups'].includes(panel);
+    const bulkId = 'bulk-inventory-' + panel;
+    if (inventory && document.getElementById('inventory-bulk-template')) {
+      const fragment = document.getElementById('inventory-bulk-template').content.cloneNode(true);
+      fragment.querySelector('[data-bulk-toolbar]').dataset.bulkToolbar = bulkId;
+      fragment.querySelector('form').id = bulkId;
+      widget.prepend(fragment);
+      // Append a selection column so existing filter/sort column indices stay stable.
+      const header = document.createElement('th'), all = document.createElement('input');
+      all.type='checkbox';all.dataset.bulkAll=bulkId;all.setAttribute('aria-label','Select objects on this page');header.append(all);
+      widget.querySelector('thead tr').append(header);
+    }
     async function refresh() {
       if(widget.closest('[data-panel]').hidden)return;
       mounted=true;
@@ -51,13 +63,21 @@
       pending?.abort();pending=new AbortController();const version=++sequence;
       widget.setAttribute('aria-busy','true');status.textContent='Loading…';error.textContent='';previous.disabled=next.disabled=true;empty.hidden=true;
       // Remove stale rows immediately so a failed request cannot look like new results.
-      tbody.replaceChildren();shown.forEach(id=>delete rowPool[id]);shown=[];
+      tbody.replaceChildren();document.dispatchEvent(new Event('bulk:updated'));shown.forEach(id=>delete rowPool[id]);shown=[];
       try {
         const result=await window.reportData(payload,query,pending.signal);
         if(version!==sequence || !mounted)return;
         countToken=result.count_token || '';page=result.page;lastParams=JSON.stringify(params());
         result.rows.forEach(row=>{rowPool[row.id]=row;shown.push(row.id);});
         tbody.innerHTML=shown.map(id=>renderRow(id)).join('');
+        if (inventory && document.getElementById(bulkId)) {
+          [...tbody.rows].forEach((tr,index)=>{
+            const row=result.rows[index], cell=document.createElement('td'), box=document.createElement('input');
+            box.type='checkbox';box.value=String(row.id);box.dataset.bulkChoice=bulkId;box.dataset.bulkAllowed='export compare reviews';
+            box.setAttribute('aria-label','Select '+(row.data.name || 'object'));cell.append(box);tr.append(cell);
+          });
+          document.dispatchEvent(new Event('bulk:updated'));
+        }
         status.textContent=result.count?`${page*Number(size.value)+1}–${Math.min((page+1)*Number(size.value),result.count)} of ${result.count}`:'0 results';
         previous.disabled=page===0;next.disabled=(page+1)*Number(size.value)>=result.count;empty.hidden=result.count!==0;
         headers.forEach(({header,button,key})=>{const active=sort.value===key;button.textContent=active?(order.value==='asc'?'▲':'▼'):'↕';if(active)header.setAttribute('aria-sort',order.value==='asc'?'ascending':'descending');else header.removeAttribute('aria-sort');});
@@ -75,7 +95,7 @@
     exportButton.addEventListener('click',()=>{const link=document.createElement('a');link.href=endpoint(payload,params('export'));link.download='snapshot.csv';link.click();});
     tools.append(exportButton);tools.hidden=false;
     window.workspaceTables?.(widget,{filters});
-    return {refresh,invalidate(){page=0;lastParams=null;refresh();},unmount(){mounted=false;pending?.abort();sequence++;delete widget.dataset.pendingQuery;clearTimeout(timer);lastParams=null;tbody.replaceChildren();shown.forEach(id=>delete rowPool[id]);shown=[];}};
+    return {refresh,invalidate(){page=0;lastParams=null;refresh();},unmount(){mounted=false;pending?.abort();sequence++;delete widget.dataset.pendingQuery;clearTimeout(timer);lastParams=null;tbody.replaceChildren();document.dispatchEvent(new Event('bulk:updated'));shown.forEach(id=>delete rowPool[id]);shown=[];}};
   };
 })();
 

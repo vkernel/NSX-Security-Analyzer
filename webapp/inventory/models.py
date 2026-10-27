@@ -38,6 +38,7 @@ class Environment(models.Model):
     ca_filename = models.CharField(max_length=255, blank=True, editable=False)
     insecure = models.BooleanField(default=False)
     workers = models.PositiveSmallIntegerField(default=4, validators=[MinValueValidator(1), MaxValueValidator(16)])
+    max_concurrent_requests = models.PositiveSmallIntegerField(default=8, validators=[MinValueValidator(1), MaxValueValidator(32)])
     timeout = models.PositiveIntegerField(default=30, validators=[MinValueValidator(1), MaxValueValidator(300)])
     retries = models.PositiveSmallIntegerField(default=2, validators=[MaxValueValidator(5)])
     enabled = models.BooleanField(default=True)
@@ -61,7 +62,7 @@ class Environment(models.Model):
     def collection_config(self):
         return {key: getattr(self, key) for key in (
             "manager", "username", "password_ciphertext", "ca_bundle", "ca_certificate", "insecure",
-            "workers", "timeout", "retries")}
+            "workers", "timeout", "retries", "max_concurrent_requests")}
 
 
 class AuditJob(models.Model):
@@ -171,6 +172,16 @@ class RetentionPolicy(models.Model):
 
 
 class WorkspacePolicy(models.Model):
+    execution_mode = models.CharField(max_length=16, default='requester', choices=[('requester', 'Requester only'), ('approvers', 'Either approver'), ('participants', 'Requester or either approver')])
+    groups_execution = models.CharField(max_length=16, blank=True, default='', choices=[('', 'Inherit default'), ('requester', 'Requester only'), ('approvers', 'Either approver'), ('participants', 'Requester or either approver')])
+    services_execution = models.CharField(max_length=16, blank=True, default='', choices=[('', 'Inherit default'), ('requester', 'Requester only'), ('approvers', 'Either approver'), ('participants', 'Requester or either approver')])
+    rules_execution = models.CharField(max_length=16, blank=True, default='', choices=[('', 'Inherit default'), ('requester', 'Requester only'), ('approvers', 'Either approver'), ('participants', 'Requester or either approver')])
+    policies_execution = models.CharField(max_length=16, blank=True, default='', choices=[('', 'Inherit default'), ('requester', 'Requester only'), ('approvers', 'Either approver'), ('participants', 'Requester or either approver')])
+
+    groups_approvals = models.PositiveSmallIntegerField(default=0, choices=[(0, 'Inherit default'), (1, 'Single approval'), (2, 'Four-eyes')])
+    services_approvals = models.PositiveSmallIntegerField(default=0, choices=[(0, 'Inherit default'), (1, 'Single approval'), (2, 'Four-eyes')])
+    rules_approvals = models.PositiveSmallIntegerField(default=0, choices=[(0, 'Inherit default'), (1, 'Single approval'), (2, 'Four-eyes')])
+    policies_approvals = models.PositiveSmallIntegerField(default=0, choices=[(0, 'Inherit default'), (1, 'Single approval'), (2, 'Four-eyes')])
     required_approvals = models.PositiveSmallIntegerField(default=2, choices=[(1, 'Single approval'), (2, 'Two-person approval (four-eyes principle)')])
     id = models.PositiveSmallIntegerField(primary_key=True, default=1, editable=False)
     stale_hours = models.PositiveIntegerField(default=24, validators=[MinValueValidator(1), MaxValueValidator(8760)])
@@ -186,10 +197,23 @@ class FindingPolicy(models.Model):
     zero_hits_days = models.PositiveIntegerField(default=90, validators=[MaxValueValidator(3650)])
     empty_group_days = models.PositiveIntegerField(default=30, validators=[MaxValueValidator(3650)])
     unused_days = models.PositiveIntegerField(default=30, validators=[MaxValueValidator(3650)])
+    unused_service_days = models.PositiveIntegerField(default=30, validators=[MaxValueValidator(3650)])
     empty_policy_days = models.PositiveIntegerField(default=30, validators=[MaxValueValidator(3650)])
     disabled_days = models.PositiveIntegerField(default=30, validators=[MaxValueValidator(3650)])
     minimum_observations = models.PositiveIntegerField(default=3, validators=[MinValueValidator(2), MaxValueValidator(10000)])
     maximum_gap_hours = models.PositiveIntegerField(default=0, validators=[MaxValueValidator(8760)])
+
+
+class TransientEmptinessPolicy(models.Model):
+    mode = models.CharField(max_length=16, default='suppress', choices=[('suppress', 'Always suppress'), ('monitor', 'Monitor prolonged emptiness')])
+    empty_days = models.PositiveIntegerField(default=14, validators=[MinValueValidator(1), MaxValueValidator(3650)])
+    minimum_observations = models.PositiveIntegerField(default=3, validators=[MinValueValidator(2), MaxValueValidator(10000)])
+    maximum_gap_hours = models.PositiveIntegerField(default=24, validators=[MinValueValidator(1), MaxValueValidator(8760)])
+    name = models.CharField(max_length=100)
+    enabled = models.BooleanField(default=True)
+    environment = models.ForeignKey(Environment, null=True, blank=True, on_delete=models.CASCADE)
+    tag_scope = models.CharField(max_length=128)
+    reason = models.CharField(max_length=150)
 
 
 class Finding(models.Model):
@@ -217,6 +241,7 @@ class Finding(models.Model):
     snapshot = models.ForeignKey(Snapshot, null=True, on_delete=models.SET_NULL)
     revision = models.PositiveIntegerField(default=0)
     qualification = models.CharField(max_length=24, default='insufficient', choices=[
+        ('suppressed', 'Suppressed — expected transient emptiness'),
         ('observing', 'Observing'), ('eligible', 'Eligible for review'),
         ('insufficient', 'Insufficient evidence'), ('cleared', 'Condition cleared'), ('disabled', 'Qualification disabled')])
     observation_started = models.DateTimeField(null=True, blank=True)
@@ -475,6 +500,7 @@ class FindingRecalculation(models.Model):
 
 
 class SnapshotFindingEvidence(models.Model):
+    membership_scope = models.CharField(max_length=255, blank=True)
     snapshot = models.ForeignKey(Snapshot, on_delete=models.CASCADE, related_name='finding_evidence')
     kind = models.CharField(max_length=40)
     path = models.TextField()
@@ -510,3 +536,57 @@ class ServiceHeartbeat(models.Model):
 
 class InitialPasswordChange(models.Model):
     user = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, primary_key=True)
+
+
+class DeletionBatch(models.Model):
+    confirmed_actor_id = models.CharField(max_length=32, blank=True, default='')
+    confirmed_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, on_delete=models.SET_NULL, related_name='confirmed_nsx_deletions')
+    source_request = models.ForeignKey('self', null=True, blank=True, on_delete=models.SET_NULL, related_name='execution_requests')
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    environment = models.ForeignKey(Environment, on_delete=models.PROTECT)
+    requested_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, on_delete=models.SET_NULL)
+    manager = models.CharField(max_length=500)
+    status = models.CharField(max_length=24, default='preview_queued')
+    ticket = models.CharField(max_length=255, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    checked_at = models.DateTimeField(null=True)
+    confirmed_at = models.DateTimeField(null=True)
+    finished_at = models.DateTimeField(null=True)
+
+    @property
+    def status_label(self):
+        return {
+            'cancelled': 'Cancelled',
+            'cancelling': 'Cancellation requested',
+            'preview_queued': 'Waiting for preview worker',
+            'checking': 'Checking live deletion preview',
+            'queued': 'Waiting for deletion worker',
+            'running': 'Executing confirmed deletion',
+        }.get(self.status, self.status.replace('_', ' ').capitalize())
+
+    class Meta:
+        permissions = [('execute_nsx_deletion', 'Execute approved NSX object deletions')]
+
+
+class DeletionItem(models.Model):
+    batch = models.ForeignKey(DeletionBatch, on_delete=models.CASCADE, related_name='items')
+    finding = models.ForeignKey(Finding, null=True, on_delete=models.SET_NULL)
+    path = models.TextField()
+    name = models.CharField(max_length=255)
+    revision = models.PositiveIntegerField()
+    status = models.CharField(max_length=24, default='pending')
+    message = models.TextField(blank=True)
+    verified_at = models.DateTimeField(null=True)
+    verification = models.JSONField(default=dict)
+    before = models.JSONField(default=dict)
+    approved_evidence = models.JSONField(default=dict)
+    approvals = models.JSONField(default=dict)
+    cleanup_plan = models.JSONField(default=list)
+    cleanup_approvals = models.JSONField(default=list)
+    cleanup_results = models.JSONField(default=list)
+    request_sent_at = models.DateTimeField(null=True)
+    finished_at = models.DateTimeField(null=True)
+    http_status = models.PositiveSmallIntegerField(null=True)
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=['batch', 'path'], name='unique_deletion_target')]

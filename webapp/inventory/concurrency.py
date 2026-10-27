@@ -8,6 +8,8 @@ import urllib3
 
 class AdaptiveRequests:
     def __init__(self, maximum=8, clock=time.monotonic):
+        if type(maximum) is not int or not 1 <= maximum <= 32:
+            raise ValueError("Concurrency must be between 1 and 32")
         self.maximum = maximum
         self.limit = min(2, maximum)
         self.initial = self.limit
@@ -20,14 +22,30 @@ class AdaptiveRequests:
         self.clock = clock
         self.condition = threading.Condition()
         self.latencies = {}
+        self.waiters = deque()
+        self.queue_seconds = Counter()
 
-    def acquire(self):
+    def acquire(self, deadline=None, endpoint='other'):
+        queued = self.clock()
+        ticket = object()
         with self.condition:
-            while self.active >= self.limit:
-                self.contended = True
-                self.condition.wait()
-            self.active += 1
-        return self.clock()
+            self.waiters.append(ticket)
+            try:
+                while True:
+                    if deadline is not None and self.clock() >= deadline:
+                        raise TimeoutError('Request phase budget exhausted while waiting for concurrency')
+                    if self.waiters[0] is ticket and self.active < self.limit:
+                        self.waiters.popleft()
+                        self.active += 1
+                        self.queue_seconds[endpoint] += max(0, self.clock() - queued)
+                        self.condition.notify_all()
+                        return self.clock()
+                    self.contended = True
+                    self.condition.wait(timeout=max(.001, deadline - self.clock()) if deadline is not None else None)
+            finally:
+                if ticket in self.waiters:
+                    self.waiters.remove(ticket)
+                    self.condition.notify_all()
 
     def release(self, started, error=None, endpoint="other"):
         elapsed = self.clock() - started
@@ -82,7 +100,7 @@ class AdaptiveRequests:
 
     def summary(self):
         with self.condition:
-            return {'mode': 'automatic', 'initial': self.initial, 'peak': self.peak,
+            return {'mode': 'automatic', 'scheduling': 'fifo', 'queue_wait_seconds': dict(self.queue_seconds), 'initial': self.initial, 'peak': self.peak,
                     'final': self.limit, 'maximum': self.maximum,
                     'increases': self.increases, 'decreases': self.decreases,
                     'endpoints': {key: {'successful_requests': value['samples'],
@@ -96,8 +114,8 @@ class AdaptiveRequests:
                                   for key, value in self.latencies.items()}}
 
 
-def adapt_requests(client):
-    controller = AdaptiveRequests()
+def adapt_requests(client, maximum=8):
+    controller = AdaptiveRequests(maximum=maximum)
     from .request_pacing import RequestPacer
     pacer = RequestPacer(deadline=getattr(client, "request_deadline", None))
     client.request_pacer = pacer
@@ -105,25 +123,27 @@ def adapt_requests(client):
     original = client._get
 
     def request(path, params=None):
+        endpoint = ("rule_statistics" if "/rules/" in path else "policy_statistics") if path.endswith("/statistics") else (
+            "membership/" + path.rsplit("/", 1)[-1] if "/members/" in path else "search" if path.startswith("/search/") else "inventory")
         queued_at = time.monotonic()
-        started = controller.acquire()
+        phase_deadline = getattr(client.request_context, 'phase_deadline', None)
+        started = controller.acquire(deadline=phase_deadline, endpoint=endpoint)
         error = None
         try:
             # Queue time is not time spent attempting a request. The whole
             # collection deadline still bounds pacing and server cooldowns.
-            pacer.acquire()
+            pacer.acquire(deadline=phase_deadline)
             waited = time.monotonic() - queued_at
             if hasattr(client.request_context, 'deadline'):
                 client.request_context.deadline = min(client.request_context.deadline + waited,
-                                                      getattr(client, 'request_deadline', float('inf')))
+                                                      getattr(client, 'request_deadline', float('inf')),
+                                                      phase_deadline if phase_deadline is not None else float('inf'))
             started = controller.clock()
             return original(path, params)
         except BaseException as exc:
             error = exc
             raise
         finally:
-            endpoint = ("rule_statistics" if "/rules/" in path else "policy_statistics") if path.endswith("/statistics") else (
-                "membership" if "/members/" in path else "search" if path.startswith("/search/") else "inventory")
             pacer.result(error)
             controller.release(started, error, endpoint)
 

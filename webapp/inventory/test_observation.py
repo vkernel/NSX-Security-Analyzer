@@ -224,7 +224,7 @@ class ObservationTests(TestCase):
         self.collect(3,data)
         f.refresh_from_db(); self.assertEqual(f.observation_count,1)
 
-    def test_all_five_eight_day_settings_require_time_and_minimum_checks(self):
+    def test_all_six_eight_day_settings_require_time_and_minimum_checks(self):
         from .observation import KINDS
         for kind in KINDS:
             setattr(self.policy, kind + '_days', 8)
@@ -233,6 +233,7 @@ class ObservationTests(TestCase):
 
         def collect_all(day):
             data = report()
+            data['objects'].append({'kind':'custom_service', 'path':'/infra/services/test', 'name':'Service', 'usage':'unused_candidate', 'membership':'not_applicable'})
             data['dfw']['rules'] = [
                 {'path': '/rules/zero', 'name': 'Zero', 'disabled': False,
                  'hit_status': 'zero_hits', 'hit_count': 0,

@@ -100,7 +100,8 @@ def update_progress(job_id, completed, stage):
 def fail_job(job_id, message, diagnostics=None):
     from .audit_events import record
     from .observability import safe_data
-    extra = {'diagnostics': safe_data(diagnostics)} if diagnostics is not None else {}
+    retained = AuditJob.objects.filter(pk=job_id).values_list('diagnostics', flat=True).first() or {}
+    extra = {'diagnostics': {**retained, **safe_data(diagnostics)}} if diagnostics is not None else {}
     changed = AuditJob.objects.filter(pk=job_id, status="running").update(
         status="failed", finished_at=timezone.now(), error=message[:1500], **extra)
     if changed:
@@ -204,6 +205,8 @@ def prepare_snapshot(environment, report, imported=False):
         summary = {"inventory_warnings": bool(report.get("inventory_warnings")), "groups": report["groups_scanned"], "services": report["custom_services_scanned"],
                    "policies": len(dfw.get("policies", [])), "rules": len(dfw.get("rules", [])),
                    "tags": len(report.get("tags", {}).get("objects", []))}
+        from .evidence_coverage import issues
+        summary['evidence_coverage'] = issues(report)
         from .usability import coverage_keys
         if not imported and not report.get('testing'):
             keys = coverage_keys(report)
@@ -270,6 +273,7 @@ def execute_job(job_id):
             previous = load(job.environment)
         client.statistics_backoff = audit.statistics_backoff(previous,
                                                              urlsplit(client.base_url).netloc)
+        client.vm_fast_disabled = bool((previous or {}).get('vm_fast_disabled', False))
         client.membership_hints = {}
         for row in (previous or {}).get("objects", []):
             if row.get("kind") == "group" and row.get("membership") == "nonempty":
@@ -278,19 +282,35 @@ def execute_job(job_id):
                     if note.startswith(prefix) and note[len(prefix):] in audit.MEMBERSHIP_ENDPOINTS:
                         client.membership_hints[row["path"]] = note[len(prefix):]
         client.request_deadline = time.monotonic() + max(0, settings.AUDIT_TIMEOUT - (timezone.now()-job.started_at).total_seconds() - 10) if job.started_at else time.monotonic() + settings.AUDIT_TIMEOUT - 10
-        concurrency = None if job.testing else adapt_requests(client)
+        maximum_requests = config.get("max_concurrent_requests", 8)
+        concurrency = None if job.testing else adapt_requests(client, maximum=maximum_requests)
         try:
             with phase(job.pk, "retrieve_nsx_inventory"):
                 report = audit.audit(client, workers=1 if job.testing else concurrency.maximum, testing=job.testing,
                                  progress=lambda completed, stage: update_progress(job.pk, completed, stage))
         finally:
+            from .nsx_access import save_collection_access
+            save_collection_access(client, job)
             if concurrency:
                 LOG.info("NSX request pacing summary: %s", client.request_pacer.summary())
             client.close()
+        if previous and previous.get('manager') == urlsplit(client.base_url).netloc:
+            before = {r['path'] for r in previous.get('objects', []) if r.get('kind') == 'group'}
+            after = {r['path'] for r in report.get('objects', []) if r.get('kind') == 'group'}
+            report.setdefault('performance', {}).setdefault('collection_scope', {})['comparison'] = {
+                'previous_at': previous.get('generated_at'), 'previous_groups':len(before),
+                'current_groups':len(after), 'added':len(after-before), 'removed':len(before-after),
+                'added_samples':sorted(after-before)[:10], 'removed_samples':sorted(before-after)[:10]}
         if concurrency:
             report.setdefault("performance", {})["concurrency"] = concurrency.summary()
             report["performance"]["workers"] = concurrency.peak
             report["performance"]["request_pacing"] = client.request_pacer.summary()
+        from .version import VERSION, BUILD
+        report.setdefault('performance', {})['collector_build'] = {
+            'version': VERSION, 'revision': BUILD['revision'], 'built_at': BUILD['built_at'],
+            'configured_maximum': maximum_requests,
+            'diagnostics_schema': 2,
+        }
         update_progress(job.pk, 5, "Preparing report and hit history")
         from urllib.parse import urlsplit
         report["manager"] = urlsplit(client.base_url).netloc
@@ -314,7 +334,7 @@ def execute_job(job_id):
                 build(snapshot, snapshot._rendered)
             from .findings import synchronize
             with phase(job.pk, "synchronize_findings"):
-                synchronize(job.environment_id)
+                synchronize(job.environment_id, collected_snapshot=snapshot, job_id=job.pk)
             if stop_requested(job.pk):
                 raise CollectionStopped()
             current.status = "succeeded"
@@ -331,7 +351,8 @@ def execute_job(job_id):
                details={'snapshot_id': str(snapshot.pk), 'elapsed_seconds': round(time.monotonic()-started, 3)}, best_effort=True)
         # Diagnostics are supplemental: a telemetry write failure cannot undo success.
         try:
-            AuditJob.objects.filter(pk=job.pk, status='succeeded').update(diagnostics={'timeline': diagnostic_log.TIMELINE})
+            retained = AuditJob.objects.filter(pk=job.pk).values_list('diagnostics', flat=True).first() or {}
+            AuditJob.objects.filter(pk=job.pk, status='succeeded').update(diagnostics={**retained, 'timeline': diagnostic_log.TIMELINE})
         except Exception as exc:
             log_failure(job.pk, exc)
     except CollectionStopped:

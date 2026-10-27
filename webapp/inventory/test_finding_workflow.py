@@ -26,6 +26,18 @@ class FindingWorkflowTests(TestCase):
         self.record = SnapshotRecord.objects.create(snapshot=self.snapshot, ordinal=1, view='inventory', name='A', sort_name='a', compact={'path':self.finding.path,'membership':'empty'}, data={}, columns=[], sort_values={}, search_basic='', search_evidence='')
         self.url=reverse('finding-detail',args=[self.env.pk,self.finding.pk])
 
+    def test_changed_impact_preview_requires_refresh_before_approval(self):
+        from unittest.mock import patch
+        self.client.force_login(self.owner)
+        session = self.client.session
+        session['impact_preview_' + str(self.finding.pk)] = 'older-snapshot'
+        session.save()
+        with patch('inventory.finding_workflow.decide') as decide_mock:
+            response = self.client.post(self.url, {'revision':self.finding.revision,
+                'action':'approve', 'note':'Reviewed dependencies'})
+        self.assertContains(response, 'snapshot changed since your impact preview')
+        decide_mock.assert_not_called()
+
     def assign(self, owner=None):
         decide(self.finding, self.admin, 'assign', 'Please check dependencies.', owner or self.owner)
 
@@ -128,6 +140,51 @@ class FindingWorkflowTests(TestCase):
         self.assertContains(response, 'aria-labelledby="release-title"')
         self.assertContains(response, 'form="bulk-release" name="selected"')
         self.assertContains(response, 'finding-release.js')
+
+    def test_bulk_assignment_assigns_unassigned_and_preserves_released_approvals(self):
+        self.approve_owner()
+        approvals = self.finding.approvals.copy()
+        decide(self.finding, self.owner, 'unassign', 'Unavailable')
+        other = Finding.objects.create(environment=self.env, kind='unused', path='/new', name='New',
+            first_seen=timezone.now(), last_seen=timezone.now(), evaluated_at=timezone.now(), qualification='eligible')
+        self.client.force_login(self.reviewer)
+        url = reverse('findings', args=[self.env.pk]) + '?owner=none'
+        page = self.client.get(url)
+        self.assertContains(page, 'id="assign-open"')
+        self.assertContains(page, 'id="finding-select-all"')
+        response = self.client.post(url, {'action': 'assign', 'owner': self.reviewer.pk,
+            'selected': [f'{self.finding.pk}:{self.finding.revision}', f'{other.pk}:{other.revision}']}, follow=True)
+        self.assertContains(response, 'Assigned 2 finding(s)')
+        self.finding.refresh_from_db(); other.refresh_from_db()
+        self.assertEqual(self.finding.owner_id, self.reviewer.pk)
+        self.assertEqual(self.finding.approvals, approvals)
+        self.assertEqual(self.finding.workflow_state, 'second_review')
+        self.assertEqual(other.workflow_state, 'owner_review')
+        self.assertTrue(other.events.filter(details__action='assign').exists())
+
+    def test_bulk_assignment_rejects_invalid_owner_and_skips_stale_owned_or_foreign(self):
+        self.client.force_login(self.owner)
+        url = reverse('findings', args=[self.env.pk])
+        payload = {'action': 'assign', 'owner': self.viewer.pk,
+            'selected': [f'{self.finding.pk}:{self.finding.revision}']}
+        self.client.post(url, payload)
+        self.finding.refresh_from_db()
+        self.assertIsNone(self.finding.owner_id)
+        response = self.client.post(url, {**payload, 'owner': self.owner.pk,
+            'selected': [f'{self.finding.pk}:{self.finding.revision + 1}']}, follow=True)
+        self.assertContains(response, 'skipped 1')
+        other_env = Environment.objects.create(name='Other', slug='assign-other', manager='https://other.test')
+        self.client.post(reverse('findings', args=[other_env.pk]), {**payload, 'owner': self.owner.pk})
+        self.finding.refresh_from_db()
+        self.assertIsNone(self.finding.owner_id)
+        self.assign()
+        response = self.client.post(url, {**payload, 'owner': self.reviewer.pk,
+            'selected': [f'{self.finding.pk}:{self.finding.revision}']}, follow=True)
+        self.assertContains(response, 'already assigned; existing owner retained')
+        self.finding.refresh_from_db()
+        self.assertEqual(self.finding.owner_id, self.owner.pk)
+        self.client.force_login(self.viewer)
+        self.assertEqual(self.client.post(url, payload).status_code, 403)
 
     def test_ready_release_and_reassignment_preserve_both_approvals(self):
         self.approve_owner()
@@ -329,6 +386,8 @@ class FindingWorkflowTests(TestCase):
             self.assertTrue(error('zero_hits',{**counters,**patch}))
 
     def test_approval_reads_only_compact_object(self):
+        self.snapshot.summary = {'evidence_coverage': []}
+        self.snapshot.save(update_fields=['summary'])
         from django.db import connection
         from django.test.utils import CaptureQueriesContext
         from .finding_workflow import evidence_error
@@ -399,7 +458,9 @@ class FindingWorkflowTests(TestCase):
         self.assign()
         self.client.force_login(self.owner)
         response = self.client.get(self.url)
-        self.assertContains(response, 'Manual verification required')
+        self.assertContains(response, 'Limited dependency-search coverage — additional checks required')
+        self.assertContains(response, '<strong>Searched object types:</strong> Group, Service', html=False)
+        self.assertContains(response, 'separate from the number of approvals required')
         self.assertContains(response, 'Approve review')
         self.assertNotContains(response, 'name="action" id="id_action"')
         response = self.client.post(self.url, {'revision':self.finding.revision, 'action':'approve', 'note':'Keep my reasoning', 'manual_checks':'Keep my dependency checks'})
@@ -588,6 +649,24 @@ class FindingWorkflowTests(TestCase):
                 if stage == 'second_review':
                     decide(self.finding, self.reviewer, 'approve', 'Independent checks complete')
 
+    def test_assign_owner_defaults_to_current_reviewer_without_assigning(self):
+        self.client.force_login(self.reviewer)
+        response = self.client.get(self.url)
+        form = response.context['form']
+        self.assertEqual(form['owner'].value(), self.reviewer.pk)
+        self.assertContains(response, f'value="{self.reviewer.pk}" selected')
+        self.finding.refresh_from_db()
+        self.assertIsNone(self.finding.owner_id)
+        self.assertFalse(self.finding.events.exists())
+        # Preserve another selection and an explicitly cleared field on errors.
+        for selected in (str(self.owner.pk), ''):
+            response = self.client.post(self.url, {'action': 'assign', 'owner': selected, 'revision': -1})
+            self.assertEqual(response.status_code, 200)
+            self.assertEqual(response.context['form']['owner'].value(), selected)
+        self.assign()
+        response = self.client.get(self.url)
+        self.assertEqual(response.context['form']['owner'].value(), self.owner.pk)
+
     def test_ownerless_assignment_needs_no_note_but_reassignment_does(self):
         self.client.force_login(self.admin)
         response = self.client.post(self.url, {'action': 'assign', 'owner': self.owner.pk, 'revision': self.finding.revision})
@@ -658,3 +737,85 @@ class FindingWorkflowTests(TestCase):
         response = self.client.get(self.url)
         self.assertFalse(response.context['can_decide'])
         self.assertContains(response, 'The current owner and the first approver cannot provide the second approval.')
+
+    def recovery_fixture(self):
+        from .models import SnapshotFindingAssessment, SnapshotFindingEvidence, FindingRecalculation
+        from .observation import condition_fingerprint
+        self.finding.evidence = {'membership': 'empty', 'unique_id': 'stable-object'}
+        self.finding.save()
+        self.approve_owner()
+        original = self.finding.approvals['owner'].copy()
+        stamp = self.snapshot.generated_at + timedelta(microseconds=1)
+        current = Snapshot.objects.create(environment=self.env, generated_at=stamp, report={})
+        SnapshotRecord.objects.create(snapshot=current, ordinal=1, view='inventory', name='A', sort_name='a',
+            compact={'path': self.finding.path, 'membership': 'empty'}, data={}, columns=[], sort_values={}, search_basic='', search_evidence='')
+        SnapshotFindingAssessment.objects.create(snapshot=current, path=self.finding.path, kind=self.finding.kind,
+            assessment={'status':'observing', 'reason':'Observation restarted after a gap exceeding 24.0 hours.'})
+        invalidate(self.finding, 'Current evidence no longer qualifies under the finding criteria.')
+        self.finding.snapshot = current
+        self.finding.observation_started = self.snapshot.generated_at
+        self.finding.save()
+        for snapshot in (self.snapshot, current):
+            SnapshotFindingEvidence.objects.create(snapshot=snapshot, path=self.finding.path, kind=self.finding.kind,
+                name='A', fingerprint=condition_fingerprint(self.finding.kind, self.finding.evidence))
+        FindingRecalculation.objects.create(environment=self.env, kinds=[self.finding.kind], status='completed', finished_at=timezone.now())
+        return original, current
+
+    def test_gap_recovery_preview_confirmation_and_independent_review(self):
+        original, current = self.recovery_fixture()
+        url = reverse('approval-recovery', args=[self.env.pk, self.finding.pk])
+        self.client.force_login(self.owner)
+        self.assertEqual(self.client.get(url).status_code, 403)
+        self.assertEqual(self.client.post(url, {'confirm':'yes'}).status_code, 403)
+        self.client.force_login(self.admin)
+        response = self.client.get(url)
+        result = response.context['recovery']
+        self.assertTrue(result['allowed'], result)
+        self.finding.refresh_from_db()
+        self.assertEqual(self.finding.approvals, {})
+        data = {'revision':self.finding.revision, 'event_id':result['event_id']}
+        self.assertEqual(self.client.post(url, data).status_code, 200)
+        data['confirm'] = 'yes'
+        self.assertEqual(self.client.post(url, dict(data, revision=-1)).status_code, 200)
+        self.assertEqual(self.client.post(url, data).status_code, 302)
+        self.finding.refresh_from_db()
+        self.assertEqual(self.finding.approvals, {'owner':original})
+        self.assertEqual(self.finding.workflow_state, 'second_review')
+        self.assertEqual(self.finding.events.first().details['action'], 'approval_recovered')
+        with self.assertRaises(ValidationError):
+            decide(self.finding, self.owner, 'approve', 'Cannot approve twice')
+        self.assertEqual(self.client.post(url, data).status_code, 200)
+
+    def test_gap_recovery_blocks_missing_proof_and_changed_evidence(self):
+        from .approval_recovery import preview
+        from .models import SnapshotFindingAssessment
+        original, current = self.recovery_fixture()
+        self.finding.evidence['unique_id'] = 'replacement'
+        self.assertFalse(preview(self.finding)['allowed'])
+        self.finding.evidence = original['evidence']
+        current.needs_review = True; current.save()
+        self.assertFalse(preview(self.finding)['allowed'])
+        current.needs_review = False; current.save()
+        SnapshotFindingAssessment.objects.filter(snapshot=current).delete()
+        self.assertFalse(preview(self.finding)['allowed'])
+
+    def test_gap_recovery_rechecks_workflow_and_recalculation(self):
+        from .approval_recovery import preview
+        from .models import FindingRecalculation
+        original, current = self.recovery_fixture()
+        invalidation = self.finding.events.filter(details__action='approval_invalidated').first()
+        details = invalidation.details.copy()
+        invalidation.details = dict(details, reason='Relevant evidence changed or the condition was observed again.')
+        invalidation.save()
+        self.assertFalse(preview(self.finding)['allowed'])
+        invalidation.details = details; invalidation.save()
+        self.finding.owner = self.reviewer
+        self.assertFalse(preview(self.finding)['allowed'])
+        self.finding.owner = self.owner
+        job = FindingRecalculation.objects.get(environment=self.env)
+        job.status = 'queued'; job.save()
+        self.assertFalse(preview(self.finding)['allowed'])
+        job.status = 'completed'; job.save()
+        self.assertTrue(preview(self.finding)['allowed'])
+        self.finding.events.create(message='Owner changed', details={'action':'assign'})
+        self.assertFalse(preview(self.finding)['allowed'])
