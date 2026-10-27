@@ -71,6 +71,8 @@ def coverage(request, pk):
 
 def filtered_findings(request, environment, params):
     rows = environment.findings.filter(Q(present=True, qualification='eligible') | Q(workflow_state__in=['owner_review','second_review','ready','rejected','decommissioned'])).select_related('owner__keycloakidentity', 'owner__ldapidentity').defer('evidence', 'approvals')
+    if not params.get('review'):
+        rows = rows.exclude(workflow_state__in=['rejected', 'decommissioned'])
     if params.get('review') == 'suppressed':
         rows = environment.findings.filter(qualification='suppressed').select_related('owner__keycloakidentity', 'owner__ldapidentity').defer('evidence', 'approvals')
     else:
@@ -340,7 +342,7 @@ def review_approvals(request):
                 form.save()
                 from .finding_workflow import apply_approval_policy
                 changed = apply_approval_policy(policy, request.user)
-                messages.success(request, f'Approval requirement saved. Updated {changed} open reviews; affected approvals must be repeated.')
+                messages.success(request, f'Approval and execution settings saved. {changed} open reviews require new approval because their approval count changed.')
                 return redirect('review-approvals')
     return render(request, 'inventory/review_approvals.html', {'form': form, 'mode_rows': preview(policy), 'previewed': previewed})
 

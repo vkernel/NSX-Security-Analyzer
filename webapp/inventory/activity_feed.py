@@ -124,7 +124,7 @@ def deletion_cards(request, options, selected, active_only=False):
     if active_only: rows = rows.filter(status__in=ACTIVE)
     if request.GET.get('status') == 'failed':
         rows = rows.filter(pk__in=DeletionItem.objects.filter(status__in=['failed','uncertain']).values('batch_id'))
-    if options['actor']: rows = rows.filter(requested_by_id__in=options['actor_ids'])
+    if options['actor']: rows = rows.filter(Q(requested_by_id__in=options['actor_ids']) | Q(confirmed_by_id__in=options['actor_ids']))
     matches = DeletionItem.objects.all()
     if options['q']:
         term = options['q']
@@ -139,6 +139,6 @@ def deletion_cards(request, options, selected, active_only=False):
         cards.append(dict(kind='NSX deletion' if batch.confirmed_at else 'Deletion preview', environment=batch.environment.name,
             status=batch.status_label, active=batch.status in ACTIVE, at=batch.created_at, started=batch.confirmed_at,
             finished=batch.finished_at, actor=user_label(batch.requested_by) if batch.requested_by else 'Deleted account',
-            ticket=batch.ticket, environment_id=batch.environment_id, detail=f'{len(items)} objects · {deleted} deleted', object_results=items,
+            ticket=batch.ticket, environment_id=batch.environment_id, detail=f'{len(items)} objects · {deleted} deleted' + (f' · Execution confirmed by {user_label(batch.confirmed_by)}' if batch.confirmed_by else ''), object_results=items,
             url=reverse('deletion-detail',args=[batch.pk]), link_label='View deletion request'))
     return cards

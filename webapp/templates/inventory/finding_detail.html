@@ -1,7 +1,7 @@
 {% extends 'base.html' %}{% load workspace_time review_identity static %}{% block content %}
 <a class="breadcrumb" href="{{ review_return }}">← {% if '/my-work/' in review_return %}My work{% else %}Finding reviews · {{ environment.name }}{% endif %}</a>
 <div class="page-heading"><div><p class="eyebrow">{{ label }}</p><h1>{{ finding.name }}</h1><p class="host">{{ finding.path }}</p></div></div>
-{% include 'inventory/history_navigation.html' %}
+{% include 'inventory/history_navigation.html' %}{% load workflow_status %}{% workflow_status %}
 <nav class="review-neighbours" aria-label="Findings in current results">{% if review_navigation.previous %}<a class="button" href="{{ review_navigation.previous }}">← Previous finding</a>{% endif %}{% if review_navigation.next %}<a class="button" href="{{ review_navigation.next }}">Next finding →</a>{% endif %}</nav>{% if review_navigation.changed %}<p class="muted">This finding is no longer in the current filtered results. Return to the list to continue.</p>{% endif %}
 <ol class="review-progress" aria-label="Review progress">{% for step in progress %}<li class="{% if step.current %}current{% elif step.done %}done{% endif %}" {% if step.current %}aria-current="step"{% endif %}><span>{{ forloop.counter }}</span>{{ step.label }}</li>{% endfor %}</ol>
 {% if finding.qualification == 'suppressed' %}<p class="notice">Expected empty — session-driven group. {{ finding.qualification_reason }}</p>{% endif %}

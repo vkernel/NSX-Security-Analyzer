@@ -174,9 +174,10 @@ def describe_error(exc):
 
 
 def guard(batch, finding, item):
-    if batch.requested_by_id:
-        batch.requested_by.refresh_from_db()
-    if not permitted(batch.requested_by): raise ValidationError('The requesting administrator is no longer authorized.')
+    from .execution_policy import executor
+    actor = executor(batch) if batch.confirmed_at else batch.requested_by
+    if actor: actor.refresh_from_db()
+    if not permitted(actor): raise ValidationError('The responsible administrator is no longer authorized.')
     if batch.environment.manager != batch.manager: raise ValidationError('The configured NSX Manager changed. Create a new preview.')
     if not finding or finding.environment_id != batch.environment_id or finding.path != item.path or finding.revision != item.revision:
         raise ValidationError('The finding changed. Create a new preview.')
@@ -185,6 +186,11 @@ def guard(batch, finding, item):
 
 def execution_authorized(batch, item):
     """Confirmation is timely; execution has its own bounded authorization."""
+    from .execution_policy import executor, can_execute
+    actor = executor(batch)
+    if actor: actor.refresh_from_db()
+    if not can_execute(actor, item):
+        raise ValidationError('The confirming administrator is no longer eligible under the execution policy or approval evidence.')
     if not batch.confirmed_at or not batch.ticket:
         raise ValidationError('Explicit confirmation and a change ticket are required.')
     if (not item.verified_at or batch.confirmed_at < item.verified_at
@@ -196,6 +202,8 @@ def execution_authorized(batch, item):
 
 def process_item(item, execute=False):
     batch = item.batch
+    from .execution_policy import executor
+    actor = executor(batch) if execute else batch.requested_by
     if not execute and (DeletionItem.objects.filter(pk=item.pk, status='cancelled').exists() or DeletionBatch.objects.filter(pk=batch.pk, status__in=['cancelling', 'cancelled']).exists()):
         return
     if execute and not DeletionItem.objects.filter(pk=item.pk, status='verified').update(status='validating'):
@@ -216,7 +224,8 @@ def process_item(item, execute=False):
             if obj is None:
                 item.status, item.message = 'already_absent', 'Already absent in NSX; no deletion sent and no review marked decommissioned.'
             elif not execute:
-                if rechecking and (obj != old_before or getattr(client, 'cleanup_plan', None) != old_plan):
+                from .reference_cleanup import plan_difference
+                if rechecking and (obj != old_before or plan_difference(old_plan, getattr(client, 'cleanup_plan', None))):
                     raise ValidationError('Cleanup plan or object changed. Create a new preview and obtain renewed cleanup approvals.')
                 if rechecking:
                     from .reference_cleanup import validate_approvals
@@ -249,6 +258,7 @@ def process_item(item, execute=False):
                     item.message = f'Reference cleanup required — {len(plan)} firewall rule(s). Review and approve the exact edits before confirming deletion.'
                     item.verification['Dependencies'] = 'References found; separate firewall-change approval required'
                     if rechecking:
+                        item.cleanup_plan = old_plan
                         item.cleanup_approvals = old_decisions
                         item.status = 'verified'
                         item.message = 'Cleanup approved and fresh live verification passed. Confirm execution within ten minutes.'
@@ -258,8 +268,11 @@ def process_item(item, execute=False):
                 from .reference_cleanup import validate_approvals, apply_plan
                 plan = getattr(client, 'cleanup_plan', None)
                 if item.cleanup_plan:
-                    if plan != item.cleanup_plan:
-                        raise ValidationError('References or rule configuration changed after preview. Create a new preview.')
+                    from .reference_cleanup import plan_difference
+                    differences = plan_difference(item.cleanup_plan, plan)
+                    if differences:
+                        item.verification['cleanup_change_diagnostics'] = {'changed_fields': differences}
+                        raise ValidationError('References or rule configuration changed after preview: ' + ', '.join(differences) + '. Create a new preview.')
                     validate_approvals(item)
                     def authorize_cleanup():
                         fresh = Finding.objects.get(pk=item.finding_id)
@@ -327,10 +340,10 @@ def process_item(item, execute=False):
                         finding.change_ticket = batch.ticket
                         finding.revision += 1
                         finding.save(update_fields=['workflow_state','change_ticket','revision','present'])
-                        event(finding, 'nsx_deleted', before, 'NSX DELETE accepted and object absence verified.', batch.requested_by,
+                        event(finding, 'nsx_deleted', before, 'NSX DELETE accepted and object absence verified.', actor,
                               {'deletion_batch':str(batch.pk), 'deletion_item':item.pk, 'change_ticket':batch.ticket, 'http_status':status})
                         from .related_decommission import close_related
-                        close_related(finding, batch.requested_by, deletion_item=item)
+                        close_related(finding, actor, deletion_item=item)
                         item.status, item.message = 'deleted', 'Deleted from NSX and absence verified.'
                         # Commit deletion evidence with review closure under the
                         # environment lock, before publication can proceed.
@@ -367,7 +380,7 @@ def process_item(item, execute=False):
         if not execute and (locked_batch.status in ('cancelling', 'cancelled') or locked_item.status == 'cancelled'):
             return
         item.save()
-    record('nsx.deletion_' + item.status, 'DeletionItem', item.pk, actor=batch.requested_by_id or '',
+    record('nsx.deletion_' + item.status, 'DeletionItem', item.pk, actor=actor.pk if actor else '',
            details={'batch':str(batch.pk), 'name':item.name, 'path':item.path, 'environment_id':batch.environment_id,
                     'ticket':batch.ticket, 'http_status':item.http_status, 'message':item.message})
 
@@ -393,7 +406,7 @@ def run(pk):
         if rechecking and item.status == 'verified' and item.cleanup_plan:
             item.status = 'cleanup_recheck'
         if DeletionBatch.objects.filter(pk=pk, status__in=['cancelling', 'cancelled']).exists(): break
-        if item.status == 'cancelled': continue
+        if item.status in ('cancelled', 'delegated'): continue
         item.batch = batch
         if execute and item.status != 'verified': continue
         process_item(item, execute)
@@ -481,6 +494,20 @@ def selection(request, pk):
     if not permitted(request.user): return HttpResponseForbidden('Administrator deletion permission is required.')
     env = get_object_or_404(Environment, pk=pk)
     error = ''
+    source = None
+    remaining_ids = None
+    if request.GET.get('remaining'):
+        try:
+            source = get_object_or_404(DeletionBatch, pk=request.GET['remaining'], environment=env)
+        except (ValueError, ValidationError):
+            from django.http import Http404
+            raise Http404('Invalid source request')
+        remaining_ids = set(source.items.exclude(status__in=['deleted', 'already_absent', 'delegated', 'cancelled'])
+            .filter(finding__isnull=False).exclude(path__in=source.items.filter(status__in=['deleted', 'already_absent']).values('path')).exclude(verification__has_key='Cleanup parent item').values_list('finding_id', flat=True))
+        if source.status not in ('completed', 'cancelled'):
+            error = 'The original request is still active. Wait for its outcome before preparing remaining work.'
+            remaining_ids = set()
+
     if request.method == 'POST':
         ids = request.POST.getlist('finding')
         revisions = {}
@@ -494,6 +521,8 @@ def selection(request, pk):
                 ids = [pk for pk, revision in pairs]
             except ValueError:
                 ids = []
+        if remaining_ids is not None and any(not value.isdecimal() or int(value) not in remaining_ids for value in ids):
+            ids = []
         if not ids or len(ids) > 100 or any(not v.isdecimal() for v in ids):
             error = 'Select between 1 and 100 findings.'
         else:
@@ -511,7 +540,7 @@ def selection(request, pk):
                         from django.contrib import messages
                         messages.info(request, 'An active request already includes a selected object. Continue or cancel that request before creating another preview; no new request was created.')
                         return redirect('deletion-detail', pk=existing.batch_id)
-                    batch = DeletionBatch.objects.create(environment=env, manager=env.manager, requested_by=request.user)
+                    batch = DeletionBatch.objects.create(environment=env, manager=env.manager, requested_by=request.user, source_request=source)
                     seen = set()
                     for row in rows:
                         if row.path in seen: continue
@@ -519,8 +548,11 @@ def selection(request, pk):
                         DeletionItem.objects.create(batch=batch, finding=row, revision=row.revision, path=row.path, name=row.name)
                     record('nsx.deletion_preview_requested','DeletionBatch',batch.pk, actor=request.user.pk, details={'environment_id':env.pk,'count':len(seen)})
                     return redirect('deletion-detail', pk=batch.pk)
-    rows = env.findings.filter(workflow_state='ready',kind__in=KINDS).order_by('name')[:100]
-    return render(request,'inventory/deletion_selection.html',{'environment':env,'rows':rows,'error':error,
+    rows = env.findings.filter(workflow_state='ready',kind__in=KINDS)
+    if remaining_ids is not None: rows = rows.filter(pk__in=remaining_ids)
+    rows = list(rows.order_by('name')[:100])
+    unavailable_count = len(remaining_ids - {row.pk for row in rows}) if remaining_ids is not None else 0
+    return render(request,'inventory/deletion_selection.html',{'environment':env,'rows':rows,'error':error,'remaining_source':source,'unavailable_count':unavailable_count,
         })
 
 
@@ -532,38 +564,61 @@ def detail(request, pk):
     with transaction.atomic():
         batch = get_object_or_404(DeletionBatch.objects.select_for_update(of=('self',)).select_related('environment','requested_by'), pk=pk)
         if request.method == 'POST':
+            from .execution_policy import can_execute
+            from .reference_cleanup import validate_approvals
             ticket = request.POST.get('ticket','').strip()
-            if (batch.requested_by_id != request.user.pk or batch.status != 'preview_ready' or not batch.checked_at
-                or timezone.now() - batch.checked_at > timedelta(minutes=10)):
-                error = 'Preview is unavailable, expired or belongs to another administrator. Create a new preview.'
-            elif batch.items.filter(status='verified', verified_at__isnull=True).exists() or batch.items.filter(status='verified', verified_at__lt=timezone.now()-timedelta(minutes=10)).exists():
-                error = 'One or more object previews expired. Create a new preview.'
-            elif not ticket or len(ticket)>255 or request.POST.get('confirm') != 'yes':
+            verified = list(batch.items.filter(status='verified').select_related('finding'))
+            eligible = [item for item in verified if can_execute(request.user, item)]
+            requested = request.POST.getlist('execution_item')
+            selected = [item for item in eligible if not requested or str(item.pk) in requested]
+            if batch.status != 'preview_ready' or not batch.checked_at:
+                error = 'Preview is unavailable or execution has already been queued.'
+            elif not selected or (requested and set(requested) != {str(item.pk) for item in selected}):
+                error = 'You are not eligible to confirm the selected objects under the current execution settings. Review the next steps below.'
+            elif any(not item.verified_at or timezone.now() - item.verified_at > timedelta(minutes=10) for item in selected):
+                error = 'One or more selected object previews expired. Revalidate the plan or create a fresh preview.'
+            elif not ticket or len(ticket) > 255 or request.POST.get('confirm') != 'yes':
                 error = 'Provide a change ticket and explicitly confirm permanent deletion.'
-            elif not batch.items.filter(status='verified').exists(): error = 'No objects passed the live checks.'
             else:
-                from .reference_cleanup import validate_approvals
-                cleanup_items = list(batch.items.filter(status='verified').exclude(cleanup_plan=[]).select_related('finding'))
+                cleanup_items = [item for item in selected if item.cleanup_plan]
                 try:
                     if cleanup_items and request.POST.get('confirm_cleanup') != 'yes':
                         raise ValidationError('Explicitly confirm the firewall rule changes as well as deletion.')
-                    for cleanup_item in cleanup_items:
-                        validate_approvals(cleanup_item)
+                    for item in cleanup_items: validate_approvals(item)
                 except ValidationError as exc:
                     error = '; '.join(exc.messages)
                 if not error:
-                    batch.ticket, batch.status, batch.confirmed_at = ticket, 'queued', timezone.now()
-                    batch.save(update_fields=['ticket','status','confirmed_at'])
-                    record('nsx.deletion_confirmed','DeletionBatch',batch.pk, actor=request.user.pk,
-                           details={'ticket':ticket,'environment_id':batch.environment_id,'count':batch.items.filter(status='verified').count()})
-                    return redirect('deletion-detail',pk=pk)
+                    target = batch
+                    if len(selected) != len(verified) or batch.items.filter(status__in=['cleanup_review', 'cleanup_recheck']).exists():
+                        target = DeletionBatch.objects.create(environment=batch.environment, manager=batch.manager,
+                            requested_by=batch.requested_by, checked_at=batch.checked_at, source_request=batch)
+                        for item in selected:
+                            copied = DeletionItem.objects.create(batch=target, **{field: getattr(item, field) for field in
+                                ('finding', 'revision', 'path', 'name', 'status', 'before', 'approved_evidence', 'approvals',
+                                 'verified_at', 'verification', 'cleanup_plan', 'cleanup_approvals')})
+                            item.status = 'delegated'
+                            item.message = 'Included in execution request ' + str(target.pk) + '. Other objects remain pending here.'
+                            item.verification = {**item.verification, 'execution_request': str(target.pk)}
+                            item.save(update_fields=['status', 'message', 'verification'])
+                    target.ticket, target.status, target.confirmed_at = ticket, 'queued', timezone.now()
+                    target.confirmed_by = request.user
+                    target.confirmed_actor_id = str(request.user.pk)
+                    target.save(update_fields=['ticket','status','confirmed_at','confirmed_by','confirmed_actor_id'])
+                    record('nsx.deletion_confirmed','DeletionBatch',target.pk, actor=request.user.pk,
+                           details={'ticket':ticket,'environment_id':batch.environment_id,'count':len(selected),
+                                    'requester_id': batch.requested_by_id, 'executor_id': request.user.pk, 'source_request': str(batch.pk)})
+                    return redirect('deletion-detail',pk=target.pk)
     latest = batch.environment.snapshots.filter(testing=False, imported=False).only('pk', 'generated_at', 'summary').first()
     warnings = []
     if latest and latest.summary.get('inventory_warnings'):
         warnings = batch.environment.snapshots.filter(pk=latest.pk).values_list('report__inventory_warnings', flat=True).first() or []
     items = list(batch.items.select_related('finding'))
     from .reference_cleanup import summary as cleanup_summary
+    from .execution_policy import can_execute, describe
     for item in items:
+        item.execution_allowed = item.status == 'verified' and can_execute(request.user, item)
+        item.execution_guidance = describe(request.user, item) if item.status == 'verified' else ''
+        item.partial_cleanup = any(row.get('status') in ('updated', 'deleted') for row in item.cleanup_results) and item.status != 'deleted'
         item.cleanup_summary = cleanup_summary(item.cleanup_plan) if item.cleanup_plan else ''
         item.has_configuration = bool(item.before)
         item.has_cleanup = bool(item.cleanup_plan)
@@ -582,9 +637,10 @@ def detail(request, pk):
             'cleanup_review': 'Awaiting cleanup approval', 'cleanup_recheck': 'Revalidating approved cleanup', 'cleanup_rejected': 'Cleanup rejected', 'validating': 'Rechecking live evidence', 'sending': 'Deleting and verifying absence',
             'cancelled': 'Cancelled', 'deleted': 'Deleted', 'blocked': 'Blocked', 'already_absent': 'Already absent',
             'failed': 'Deletion failed', 'uncertain': 'Outcome needs verification'}.get(item.status, item.status)
-    stamps = [item.verified_at for item in items if item.status == 'verified' and item.verified_at]
+    confirmation_items = [item for item in items if item.execution_allowed]
+    stamps = [item.verified_at for item in (confirmation_items or items) if item.status == 'verified' and item.verified_at]
     deadline = (batch.confirmed_at + timedelta(hours=1) if execution else
-                min(stamps + ([batch.checked_at] if batch.checked_at else [])) + timedelta(minutes=10) if stamps else None)
+                min(stamps) + timedelta(minutes=10) if stamps else None)
     if batch.status in ('cancelled', 'cancelling'): deadline = None
     expired = bool(deadline and timezone.now() >= deadline)
     review_expired = expired and not execution and batch.status == 'preview_ready' and not counts['cleanup_review']
@@ -603,21 +659,24 @@ def detail(request, pk):
         for key, label in [('already_absent', 'already absent'), ('failed', 'failed'), ('uncertain', 'uncertain')]:
             if counts[key]:
                 heading += f" · {counts[key]} {label}"
+    if any(item.partial_cleanup for item in items): heading = 'Partially completed — review remaining operations'
     elapsed = int(((batch.finished_at or (batch.checked_at if not active and not execution else None) or timezone.now()) - batch.created_at).total_seconds())
-    rule_deletes = sum(row.get('action') == 'delete_rule' for item in items if item.status == 'verified' for row in item.cleanup_plan)
+    confirmation_items = [item for item in items if item.execution_allowed]
+    confirmation_expired = any(not item.verified_at or timezone.now() - item.verified_at >= timedelta(minutes=10) for item in confirmation_items)
+    rule_deletes = sum(row.get('action') == 'delete_rule' for item in confirmation_items for row in item.cleanup_plan)
     context = {'batch':batch, 'environment':batch.environment, 'items':items, 'counts':counts,
         'status_label':heading, 'active':active, 'execution':execution, 'done_count':done, 'total_count':len(items),
         'review_expired': review_expired, 'poll_active': active or bool(batch.status == 'preview_ready' and ((deadline and not expired) or counts['cleanup_review'])),
         'deadline':deadline, 'expired':expired, 'updated_at':timezone.now(),
         'elapsed_label':f'{max(0, elapsed) // 60}m {max(0, elapsed) % 60}s',
         'latest_snapshot':latest, 'inventory_warnings':warnings, 'inventory_blocked':bool(latest and latest.summary.get('inventory_warnings')),
-        'error':error, 'verified_count':counts['verified'],
-        'cleanup_count':sum(len(item.cleanup_plan) for item in items if item.status == 'verified'),
+        'error':error, 'verified_count':counts['verified'], 'confirmation_items': confirmation_items, 'eligible_count': len(confirmation_items), 'ineligible_count': counts['verified'] - len(confirmation_items),
+        'cleanup_count':sum(len(item.cleanup_plan) for item in confirmation_items),
         'cleanup_rule_deletes':rule_deletes,
-        'confirmation_object_count':counts['verified'] + rule_deletes,
-        'cleanup_rule_updates':sum(row.get('action') != 'delete_rule' for item in items if item.status == 'verified' for row in item.cleanup_plan),
+        'confirmation_object_count':len(confirmation_items) + rule_deletes,
+        'cleanup_rule_updates':sum(row.get('action') != 'delete_rule' for item in confirmation_items for row in item.cleanup_plan),
         'can_cancel': batch.status in ('preview_queued', 'checking', 'preview_ready', 'queued'),
-        'can_confirm':batch.status=='preview_ready' and batch.requested_by_id==request.user.pk and not expired}
+        'can_confirm':batch.status=='preview_ready' and bool(confirmation_items) and not confirmation_expired}
     template = 'inventory/deletion_progress.html' if request.GET.get('fragment') == '1' and request.method == 'GET' else 'inventory/deletion_detail.html'
     response = render(request, template, context)
     response['Cache-Control'] = 'no-store'
@@ -660,6 +719,7 @@ def reference_cleanup(request, pk):
     if not permitted(request.user):
         return HttpResponseForbidden('Administrator deletion permission is required.')
     from . import reference_cleanup as cleanup
+    from .execution_policy import can_execute, describe
     from .user_labels import user_label
     error = ''
     # Lock batch before item, matching confirmation, to avoid approving a queued request.
@@ -676,8 +736,8 @@ def reference_cleanup(request, pk):
         if request.method == 'POST':
             try:
                 if request.POST.get('action') == 'revalidate':
-                    if batch.status != 'preview_ready' or batch.confirmed_at or item.status != 'verified' or batch.requested_by_id != request.user.pk:
-                        raise ValidationError('Only the requester can revalidate an approved, unconfirmed plan.')
+                    if batch.status != 'preview_ready' or batch.confirmed_at or item.status != 'verified' or not can_execute(request.user, item):
+                        raise ValidationError('Only an eligible executor can revalidate this approved, unconfirmed plan.')
                     guard(batch, item.finding, item)
                     cleanup.validate_approvals(item)
                     item.status = 'cleanup_recheck'
@@ -763,7 +823,7 @@ def reference_cleanup(request, pk):
     elif waiting and item.status == 'cleanup_review':
         phase_message = f'{max(0, required_count - len(item.cleanup_approvals))} more distinct administrator approval(s) required. Execution has not started.'
     elif waiting:
-        phase_message = 'Approvals recorded. The requesting administrator must confirm execution with a change ticket. Execution has not started.'
+        phase_message = describe(request.user, item) + ' Final confirmation and a change ticket are still required. Execution has not started.'
     approved_by_me = any(str(d.get('actor_id')) == str(request.user.pk) for d in item.cleanup_approvals)
     if waiting and item.status == 'cleanup_review' and approved_by_me:
         phase_message = 'Your approval is recorded. Waiting for a different eligible administrator; you cannot provide the second approval.'
@@ -772,14 +832,15 @@ def reference_cleanup(request, pk):
         phase_label = 'Approval action could not be completed'
         phase_message = error
     outcomes = {row['path']: row for row in item.cleanup_results}
-    plan_rows = [{**change, 'outcome': outcomes.get(change['path'])} for change in item.cleanup_plan]
+    plan_rows = [{**change, 'readable_changes': cleanup.readable_changes(change), 'outcome': outcomes.get(change['path'])} for change in item.cleanup_plan]
     template = ('inventory/reference_cleanup_progress.html' if request.method == 'GET' and request.GET.get('fragment') == '1'
                 else 'inventory/reference_cleanup.html')
     response = render(request, template, {'item': item, 'batch': batch,
         'active': active, 'executing': executing, 'waiting': waiting, 'phase_label': phase_label,
-        'approved_by_me': approved_by_me, 'is_requester': batch.requested_by_id == request.user.pk,
+        'approved_by_me': approved_by_me, 'is_requester': batch.requested_by_id == request.user.pk, 'eligible_executor': can_execute(request.user, item),
         'phase_message': phase_message, 'review_expired': review_expired, 'closed': closed or item.status in ('cleanup_rejected', 'cancelled'), 'deadline': deadline,
-        'can_revalidate': item.status == 'verified' and batch.status == 'preview_ready' and not batch.confirmed_at and batch.requested_by_id == request.user.pk,
+        'can_revalidate': item.status == 'verified' and batch.status == 'preview_ready' and not batch.confirmed_at and can_execute(request.user, item),
+        'partial_cleanup': item.status != 'deleted' and any(row.get('status') in ('updated', 'deleted') for row in item.cleanup_results),
         'show_operations': bool(batch.confirmed_at or item.cleanup_results),
         'operation_done': completed, 'operation_total': len(item.cleanup_plan) + 1,
         'approval_count': len(item.cleanup_approvals), 'plan_rows': plan_rows, 'updated_at': timezone.now(),

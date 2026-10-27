@@ -62,3 +62,30 @@ body.reduced-motion *,body.reduced-motion *::before,body.reduced-motion *::after
 
 .task-cancel-form {margin-top:1.5rem}
 .task-cancel-form textarea {display:block; width:100%; min-height:6rem; resize:vertical}
+
+/* Shared reading hierarchy: actions first, supporting evidence on demand. */
+.environment-fixed {display:flex;flex-direction:column;min-width:0;gap:.1rem}
+.environment-fixed a {font-weight:650;color:var(--ink);max-width:22rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.environment-fixed small,.scope-status {font-size:.75rem}
+.scope-status:empty {display:none}
+.application-topbar .topbar-actions {margin-left:auto}
+.workspace-main .decision-settings {border:0;padding:0;margin:0 0 1.75rem;min-width:0}
+.decision-settings legend {font-size:1.15rem;font-weight:650;padding:0}
+.workspace-main .technical-details,.workspace-main .evidence-disclosure,.configuration-comparison {margin:.75rem 0;color:var(--ink)}
+.technical-details summary,.evidence-disclosure summary,.configuration-comparison summary {font-size:.875rem;color:var(--muted);cursor:pointer;padding:.35rem 0}
+.evidence-disclosure[open] nav {display:flex;flex-direction:column;align-items:flex-start;gap:.65rem;padding:.7rem 0}
+.workspace-main summary:focus-visible,.workspace-main a:focus-visible,.workspace-main button:focus-visible,.workspace-switcher summary:focus-visible {outline:3px solid #2563eb;outline-offset:3px}
+.workspace-main .operation-state {border-left:4px solid #2563eb}
+.workspace-main .operation-state-warning {border-left-color:#b45309}
+.workspace-main .deletion-confirm-summary h2 {margin-top:0}
+.workspace-main .deletion-results td {vertical-align:top;padding-top:1.25rem;padding-bottom:1.25rem}
+.workspace-main .deletion-results td:first-child>a {font-weight:650}
+.workspace-main .deletion-results p {max-width:72ch;line-height:1.6}
+@media(max-width:600px){.environment-fixed {max-width:42vw}.environment-fixed small{display:none}.scope-status{max-width:40vw}}
+
+.workflow-status {padding:1rem 1.25rem;margin:1rem 0 1.5rem;border:1px solid var(--line);border-radius:12px;background:var(--app-surface)}
+.workflow-status h2 {font-size:1.05rem;margin:0 0 .5rem}.workflow-status p {max-width:78ch;margin:.5rem 0;line-height:1.6}
+.advanced-filter-fields {display:flex;flex-wrap:wrap;gap:1rem;padding:1rem 0}.scope-retry {margin-top:.4rem}.change-summary {padding-left:1.2rem;line-height:1.6;font-weight:550}
+
+.workspace-main .deletion-summary {grid-template-columns:repeat(auto-fit,minmax(155px,1fr));gap:.75rem}
+.workspace-main .deletion-summary>div {padding:.85rem 1rem}.workspace-main .deletion-summary strong {font-size:1.35rem}

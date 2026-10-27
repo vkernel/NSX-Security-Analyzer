@@ -172,6 +172,12 @@ class RetentionPolicy(models.Model):
 
 
 class WorkspacePolicy(models.Model):
+    execution_mode = models.CharField(max_length=16, default='requester', choices=[('requester', 'Requester only'), ('approvers', 'Either approver'), ('participants', 'Requester or either approver')])
+    groups_execution = models.CharField(max_length=16, blank=True, default='', choices=[('', 'Inherit default'), ('requester', 'Requester only'), ('approvers', 'Either approver'), ('participants', 'Requester or either approver')])
+    services_execution = models.CharField(max_length=16, blank=True, default='', choices=[('', 'Inherit default'), ('requester', 'Requester only'), ('approvers', 'Either approver'), ('participants', 'Requester or either approver')])
+    rules_execution = models.CharField(max_length=16, blank=True, default='', choices=[('', 'Inherit default'), ('requester', 'Requester only'), ('approvers', 'Either approver'), ('participants', 'Requester or either approver')])
+    policies_execution = models.CharField(max_length=16, blank=True, default='', choices=[('', 'Inherit default'), ('requester', 'Requester only'), ('approvers', 'Either approver'), ('participants', 'Requester or either approver')])
+
     groups_approvals = models.PositiveSmallIntegerField(default=0, choices=[(0, 'Inherit default'), (1, 'Single approval'), (2, 'Four-eyes')])
     services_approvals = models.PositiveSmallIntegerField(default=0, choices=[(0, 'Inherit default'), (1, 'Single approval'), (2, 'Four-eyes')])
     rules_approvals = models.PositiveSmallIntegerField(default=0, choices=[(0, 'Inherit default'), (1, 'Single approval'), (2, 'Four-eyes')])
@@ -533,6 +539,9 @@ class InitialPasswordChange(models.Model):
 
 
 class DeletionBatch(models.Model):
+    confirmed_actor_id = models.CharField(max_length=32, blank=True, default='')
+    confirmed_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, on_delete=models.SET_NULL, related_name='confirmed_nsx_deletions')
+    source_request = models.ForeignKey('self', null=True, blank=True, on_delete=models.SET_NULL, related_name='execution_requests')
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     environment = models.ForeignKey(Environment, on_delete=models.PROTECT)
     requested_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, on_delete=models.SET_NULL)

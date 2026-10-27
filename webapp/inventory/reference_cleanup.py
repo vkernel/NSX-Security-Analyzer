@@ -10,6 +10,7 @@ from django.utils import timezone
 from .approval_modes import required
 from .usability import policy
 from .audit_events import record
+from .execution_policy import executor
 
 
 def requirement(finding):
@@ -171,10 +172,10 @@ def finish_rule(child, item, outcome):
                 finding.revision += 1
                 finding.save(update_fields=['workflow_state', 'present', 'change_ticket', 'revision'])
                 event(finding, 'nsx_deleted', before, 'Rule deleted through an explicitly approved group cleanup plan; absence verified.',
-                      item.batch.requested_by, {'deletion_item': child.pk, 'deletion_batch': str(item.batch_id),
+                      executor(item.batch), {'deletion_item': child.pk, 'deletion_batch': str(item.batch_id),
                       'primary_finding': item.finding_id, 'cleanup_parent_item': item.pk, 'change_ticket': item.batch.ticket})
         child.save()
-        record('nsx.deletion_' + child.status, 'DeletionItem', child.pk, actor=item.batch.requested_by_id,
+        record('nsx.deletion_' + child.status, 'DeletionItem', child.pk, actor=item.batch.confirmed_actor_id or item.batch.requested_by_id,
                details={'environment_id': item.batch.environment_id, 'batch': str(item.batch_id),
                         'name': child.name, 'path': child.path, 'ticket': item.batch.ticket,
                         'http_status': child.http_status, 'cleanup_parent_item': item.pk, 'message': child.message})
@@ -197,6 +198,45 @@ def validate_approvals(item, *, require_complete=True):
         raise ValidationError(f'Reference cleanup needs {required_count} distinct administrator approval(s) for the exact rule changes.')
 
 
+# Explicitly known server-maintained fields; identity/protection and all unknown
+# fields remain part of the approval comparison.
+VOLATILE_FIELDS = {'_revision', '_last_modified_time', '_last_modified_user'}
+
+
+def configuration(obj, *, parent=False):
+    ignored = VOLATILE_FIELDS | ({'rules', 'children'} if parent else set())
+    return {key: value for key, value in (obj or {}).items() if key not in ignored}
+
+
+def changed_fields(before, after, prefix=''):
+    if not isinstance(before, dict) or not isinstance(after, dict):
+        return [prefix or 'object presence'] if before != after else []
+    result = []
+    for key in sorted(set(before) | set(after)):
+        name = prefix + key
+        if key not in before or key not in after: result.append(name)
+        elif isinstance(before[key], dict) and isinstance(after[key], dict):
+            result.extend(changed_fields(before[key], after[key], name + '.'))
+        elif before[key] != after[key]: result.append(name)
+    return result
+
+
+def normalized_plan(plan):
+    result = []
+    for change in plan or []:
+        row = dict(change)
+        for key in ('before', 'after', 'policy'):
+            row[key] = configuration(row[key], parent=key == 'policy') if row.get(key) is not None else None
+        result.append(row)
+    return result
+
+
+def plan_difference(before, after):
+    old = {row['path']: row for row in normalized_plan(before)}
+    new = {row['path']: row for row in normalized_plan(after)}
+    return changed_fields(old, new)
+
+
 def apply_plan(client, item, authorize):
     """Caller freshly checked all references/membership. Persist every mutation intent."""
     from .deletion import current_object, clean, delete_once, execution_authorized
@@ -209,20 +249,31 @@ def apply_plan(client, item, authorize):
         authorize()
         current = current_object(client, change['path'])
         parent = client.get(change['path'].rsplit('/rules/', 1)[0])
-        # Updating a sibling can increment policy revision; compare policy configuration without embedded rules.
-        policy_config = lambda p: {k: v for k, v in clean(p).items() if k not in ('rules', 'children')}
-        if current != change['before'] or policy_config(parent) != policy_config(change['policy']) or protected(parent):
-            raise ValidationError('Rule or parent policy changed after approval: ' + change['path'])
+        rule_changes = changed_fields(configuration(change['before']), configuration(current))
+        policy_changes = changed_fields(configuration(change['policy'], parent=True), configuration(parent, parent=True))
+        if rule_changes or policy_changes or protected(parent):
+            detail = {'path': change['path'], 'rule_fields': rule_changes, 'policy_fields': policy_changes}
+            item.verification = {**item.verification, 'cleanup_change_diagnostics': detail}
+            item.save(update_fields=['verification'])
+            reasons = []
+            if rule_changes: reasons.append('rule fields: ' + ', '.join(rule_changes))
+            if policy_changes: reasons.append('parent policy fields: ' + ', '.join(policy_changes))
+            if protected(parent): reasons.append('parent policy protection')
+            raise ValidationError('Rule or parent policy changed after approval: ' + change['path'] + ' (' + '; '.join(reasons) + '). New approval is required for configuration or identity changes.')
+        if type(current.get('_revision')) is not int:
+            raise ValidationError('Current rule revision is missing; cleanup cannot continue: ' + change['path'])
         execution_authorized(item.batch, item)
         validate_approvals(item)
         child = rule_intent(item, change) if removing else None
         outcome = {'path': change['path'], 'action': 'delete_rule' if removing else 'update_rule',
-                   'status': 'sending', 'started_at': timezone.now().isoformat()}
+                   'status': 'sending', 'started_at': timezone.now().isoformat(),
+                   'approved_revision': change['before'].get('_revision'), 'executed_revision': current['_revision'],
+                   'metadata_fields_changed': changed_fields(change['before'], current)}
         if child:
             outcome['deletion_item'] = child.pk
         item.cleanup_results.append(outcome)
         item.save(update_fields=['cleanup_results'])
-        record('nsx.deletion_cleanup_sending', 'DeletionItem', item.pk, actor=item.batch.requested_by_id,
+        record('nsx.deletion_cleanup_sending', 'DeletionItem', item.pk, actor=item.batch.confirmed_actor_id or item.batch.requested_by_id,
                details={'environment_id': item.batch.environment_id, 'batch': str(item.batch_id), 'path': change['path'], 'ticket': item.batch.ticket})
         try:
             if removing:
@@ -237,8 +288,9 @@ def apply_plan(client, item, authorize):
                     raise ValidationError('Rule DELETE accepted, but absence is not verified: ' + change['path'])
                 outcome['status'] = 'deleted'
             else:
-                # Preserve all configuration fields and send the exact approved revision. No PATCH/force.
+                # Configuration/identity still match approval. Use the fresh revision for optimistic concurrency.
                 payload = {k: v for k, v in change['after'].items() if not k.startswith('_') or k == '_revision'}
+                payload['_revision'] = current['_revision']
                 response = client.http.request('PUT', client.base_url + quote(change['path'], safe='/'),
                     body=json.dumps(payload).encode(), headers={**client.headers, 'Content-Type': 'application/json'},
                     retries=False, redirect=False, timeout=urllib3.Timeout(connect=client.timeout, read=client.timeout),
@@ -265,5 +317,24 @@ def apply_plan(client, item, authorize):
                 finish_rule(child, item, outcome)
             item.save(update_fields=['cleanup_results'])
             record('nsx.deletion_cleanup_' + outcome['status'], 'DeletionItem', item.pk,
-                   actor=item.batch.requested_by_id, details={'environment_id': item.batch.environment_id, 'batch': str(item.batch_id),
+                   actor=item.batch.confirmed_actor_id or item.batch.requested_by_id, details={'environment_id': item.batch.environment_id, 'batch': str(item.batch_id),
                    'path': change['path'], 'ticket': item.batch.ticket, 'http_status': outcome.get('http_status')})
+
+
+def readable_changes(change):
+    """Presentation only; never alters the immutable approved plan."""
+    from urllib.parse import unquote
+    summaries = []
+    deleting = change.get('action') == 'delete_rule'
+    for field in change.get('fields', []):
+        remaining = field.get('after', [])
+        side = field.get('label', field.get('field', 'membership')).lower()
+        if deleting:
+            if not remaining:
+                summaries.append('Delete rule: this group is its only ' + side + ' object.')
+        else:
+            names = [unquote(path.rstrip('/').rsplit('/', 1)[-1]) for path in remaining]
+            sample = ', '.join(names[:3])
+            if len(names) > 3: sample += ' and ' + str(len(names)-3) + ' more'
+            summaries.append('Remove group from ' + side + ': ' + str(len(names)) + ' object' + ('' if len(names)==1 else 's') + ' remain' + ('s' if len(names)==1 else '') + (': ' + sample if sample else '') + '.')
+    return summaries

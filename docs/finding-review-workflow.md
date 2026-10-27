@@ -884,7 +884,7 @@ Revalidating, Ready to confirm, Executing, and Completed / Needs attention. Reje
 plans retain the rejection reason and cannot be executed. These states are exposed
 through My work, finding reviews, Activity and deletion history. Notification review
 preferences are respected. Approval and revalidation requests are read-only with
-respect to NSX; writes require the requester's separate final confirmation.
+respect to NSX; writes require a separate final confirmation by an eligible executor.
 
 The execution progress bar appears only after confirmation. Waiting reviews show
 approval progress; verified plans show the confirmation deadline. Both cleanup and
@@ -938,3 +938,80 @@ snapshots/results remain available. Cancelled comparisons can be retried; save f
 criteria again to request a new recalculation. Collections retain their existing Stop
 collection flow, which preserves previous snapshots. **Pause updates** only pauses
 screen refresh and is independent of cancellation.
+
+
+### Who can confirm execution
+
+In **Administration → Review approvals**, configure **Who can confirm execution?**
+with a workspace default and overrides for groups, custom services, firewall rules
+and firewall policies. The default remains **Requester only**. **Either approver**
+allows a valid current reviewer to execute; **Requester or either approver** allows
+either participant. Every executor must be an active administrator with NSX deletion
+permission. A single-approval review has one eligible approver, not two.
+
+Reference cleanup uses the approvers of the exact cleanup plan, not the original
+finding reviewers. Both group and firewall-rule execution policies apply; conflicting
+policies can leave no eligible executor. The page explains who can continue. Eligible
+cleanup executors see ready tasks and can revalidate an expired plan. Changing execution
+settings does not reset approvals, but current eligibility is checked at confirmation
+and before mutations. Requester and actual executor are recorded separately.
+
+When a request contains objects requiring different executors, confirmation creates a
+linked execution request containing only eligible objects. Other objects remain pending
+in the original request. Repeated submission cannot queue the same selected items twice.
+
+### Partial firewall cleanup
+
+Cleanup compares rule and parent-policy configuration with the approved plan. Only
+`_revision`, `_last_modified_time` and `_last_modified_user` are ignored as server metadata;
+rule updates use the latest verified revision. Identity, protection, scope and other
+configuration changes still stop execution, with changed field names in diagnostics.
+Parent rule/child lists are checked through the individual rule and dependency checks.
+
+If a rule deletion succeeds but a later operation is blocked, the page shows **Partially
+completed** and retains each outcome. Review those results and create a fresh preview
+for remaining work. Successful changes are not rolled back and mutations are not retried
+automatically. The new preview and approvals must reflect the remaining configuration.
+
+
+### Reading and navigating workflow pages
+
+The top environment control changes only list scope. Overview, My work, Activity and
+Collections offer All environments or one environment. Review lists keep the selected
+review tab, search and sorting when switching; pagination and object selection reset.
+Inventory and Firewall browsing keep the current report panel and load the chosen
+environment's latest available snapshot. An individually opened historical snapshot,
+finding, deletion request or cleanup plan shows a fixed environment label. Global
+settings hide the control. Explicit URLs take precedence over remembered browsing scope.
+
+Approval settings separate Who must approve from Who can execute; expand object-type
+overrides only when needed. Effective settings remain visible in the summary table.
+Cleanup pages show approval counts while waiting and operation progress during execution.
+Paths, configuration comparisons and Evidence & history expand on demand; blocking errors
+remain visible. The highlighted review action leads to a separate destructive confirmation.
+Expanded sections and draft forms continue to be protected during automatic refresh.
+
+
+### Remaining work and clearer next steps
+
+Status panels consistently identify the current state and next step on review lists,
+finding details, deletion requests, reference cleanup, collection history/diagnostics
+and deletion history. Supporting navigation is grouped under More actions and Evidence
+& history. The default finding list excludes rejected and decommissioned reviews;
+their dedicated tabs retain those records. Activity keeps an explicit history view.
+
+Reference cleanup summarizes each changed source/destination list with the remaining
+object count and identifiers, while Compare configuration retains the exact paths.
+These summaries are presentation only and do not change the approved plan.
+
+**Preview remaining work** opens a selection scoped to unfinished findings from the
+original, finished request. Successful deletions, already-absent objects and delegated
+items are excluded. Findings that are no longer ready are reported instead of silently
+selected. Submitting creates a linked, read-only preview with fresh checks and a newly
+built cleanup plan; it does not retry the original writes or carry over execution approval.
+An active request must finish before preparing its remaining work.
+
+Environment switching checks destination availability first. On a failed check or
+timeout, the current page remains visible and Retry is offered. Unsaved-change protection
+still applies to the eventual navigation. A successful availability check cannot guarantee
+that a subsequent page request will succeed if connectivity changes between requests.

@@ -130,6 +130,7 @@ class DeletionTests(TestCase):
         self.assertContains(response, reverse('deletion-configuration', args=[self.item.pk]))
         self.assertNotContains(response, '>View finding</a>')
 
+    @patch.object(d, 'approvals_valid', new=lambda finding: {})
     def test_progress_fragment_is_read_only_and_tracks_review_deadline(self):
         self.batch.status='checking'; self.batch.confirmed_at=None; self.batch.save()
         self.item.status='pending'; self.item.save()
@@ -196,6 +197,7 @@ class DeletionTests(TestCase):
             self.finding.required_approvals=1; self.finding.evidence={'changed':True}
             with self.assertRaises(ValidationError): d.approvals_valid(self.finding)
 
+    @patch.object(d, 'approvals_valid', new=lambda finding: {})
     def test_preview_permission_dedup_and_confirmation(self):
         operator=get_user_model().objects.create_user('operator',is_staff=True)
         self.client.force_login(operator)
@@ -437,12 +439,13 @@ class DeletionTests(TestCase):
         response = self.client.get(reverse('findings', args=[self.env.pk]) + '?review=ready')
         self.assertNotContains(response, 'id="delete-selected-open"')
 
+    @patch.object(d, 'approvals_valid', new=lambda finding: {})
     def test_confirmation_rejects_expired_or_legacy_item_even_when_batch_is_fresh(self):
         url = reverse('deletion-detail',args=[self.batch.pk])
         for stamp in (None, timezone.now()-timedelta(minutes=11)):
             self.item.verified_at=stamp; self.item.save()
             response=self.client.post(url,{'ticket':'CHG-expiry','confirm':'yes'})
-            self.assertContains(response,'One or more object previews expired')
+            self.assertContains(response,'One or more selected object previews expired')
             self.batch.refresh_from_db()
             self.assertEqual(self.batch.status,'preview_ready')
 
@@ -464,6 +467,7 @@ class DeletionTests(TestCase):
         self.assertIn('Dependencies',self.item.verification)
         self.assertIn('Ready for confirmation',self.item.message)
 
+    @patch.object(d, 'approvals_valid', new=lambda finding: {})
     def test_expiry_during_live_verification_prevents_delete(self):
         @contextmanager
         def client(env): yield Mock()
@@ -498,3 +502,51 @@ class DeletionTests(TestCase):
             page['result_count']=0
             search.return_value=([obj],{'mode':'explicit_types'})
             with self.assertRaises(ValidationError): d.validate_live(client,self.finding)
+
+@override_settings(STORAGES={'staticfiles': {'BACKEND': 'django.contrib.staticfiles.storage.StaticFilesStorage'}})
+class RemainingWorkTests(TestCase):
+    def setUp(self):
+        DeletionTests.setUp(self)
+        self.batch.status = 'completed'; self.batch.save()
+        self.item.status = 'blocked'; self.item.save()
+        self.url = reverse('deletion-selection', args=[self.env.pk]) + '?remaining=' + str(self.batch.pk)
+
+    def test_remaining_selection_excludes_successes_and_rebuilds_preview(self):
+        other = deepcopy(self.finding); other.pk = None; other.path = '/infra/services/deleted'; other.save()
+        DeletionItem.objects.create(batch=self.batch, finding=other, path=other.path, revision=other.revision, status='deleted')
+        response = self.client.get(self.url)
+        self.assertEqual([r.pk for r in response.context['rows']], [self.finding.pk])
+        self.assertContains(response, 'checked')
+        response = self.client.post(self.url, {'finding': [str(self.finding.pk)]})
+        self.assertEqual(response.status_code, 302)
+        child = DeletionBatch.objects.get(source_request=self.batch)
+        self.assertEqual(child.status, 'preview_queued')
+        copied = child.items.get()
+        self.assertEqual(copied.status, 'pending')
+        self.assertEqual(copied.cleanup_plan, [])
+        self.assertIsNone(child.confirmed_at)
+
+    def test_forged_completed_selection_and_active_source_are_rejected(self):
+        self.item.status = 'deleted'; self.item.save()
+        self.client.post(self.url, {'finding': [str(self.finding.pk)]})
+        self.assertFalse(DeletionBatch.objects.filter(source_request=self.batch).exists())
+        self.item.status = 'blocked'; self.item.save()
+        self.batch.status = 'running'; self.batch.save()
+        response = self.client.get(self.url)
+        self.assertContains(response, 'original request is still active')
+        self.assertEqual(response.context['rows'], [])
+
+    def test_remaining_source_cannot_cross_environment(self):
+        other = Environment.objects.create(name='Other', slug='other', manager='https://other.example')
+        response = self.client.get(reverse('deletion-selection', args=[other.pk]), {'remaining': str(self.batch.pk)})
+        self.assertEqual(response.status_code, 404)
+
+    def test_rejected_reviews_leave_active_list_but_remain_in_history_tab(self):
+        from .history_views import filtered_findings
+        from django.test import RequestFactory
+        self.finding.workflow_state = 'rejected'; self.finding.save()
+        request = RequestFactory().get('/'); request.user = self.user
+        active, _, _ = filtered_findings(request, self.env, {})
+        self.assertNotIn(self.finding.pk, active.values_list('pk', flat=True))
+        history, _, _ = filtered_findings(request, self.env, {'review':'rejected'})
+        self.assertIn(self.finding.pk, history.values_list('pk', flat=True))

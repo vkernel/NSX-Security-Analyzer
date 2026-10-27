@@ -29,9 +29,9 @@ class RedesignTests(TestCase):
         snapshot=prepare_snapshot(self.env,sample_report());snapshot.save()
         url=reverse('workspace-section',args=['rules'])
         response=self.client.get(url,{'environment':self.env.pk,'panel':'zero-hit-rules'})
-        self.assertEqual(response.url,reverse('snapshot',args=[snapshot.pk])+'#zero-hit-rules')
+        self.assertEqual(response.url,reverse('snapshot',args=[snapshot.pk])+'?browse=1#zero-hit-rules')
         response=self.client.get(url,{'environment':self.env.pk,'panel':'https://untrusted.example'})
-        self.assertEqual(response.url,reverse('snapshot',args=[snapshot.pk])+'#dfw-rules')
+        self.assertEqual(response.url,reverse('snapshot',args=[snapshot.pk])+'?browse=1#dfw-rules')
         self.assertEqual(self.client.session['selected_environment'],self.env.pk)
 
     def test_directory_search_and_permissions(self):

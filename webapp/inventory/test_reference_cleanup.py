@@ -150,6 +150,7 @@ class ReferenceCleanupTests(TestCase):
         self.assertEqual(self.client.get(url).status_code, 403)
         self.assertEqual(self.client.post(url, {'approve': 'yes'}).status_code, 403)
 
+    @patch.object(d, 'approvals_valid', new=lambda finding: {})
     def test_group_approval_does_not_authorize_cleanup_and_confirmation_is_explicit(self):
         self.preview()
         with self.assertRaises(ValidationError): cleanup.validate_approvals(self.item)
@@ -190,7 +191,7 @@ class ReferenceCleanupTests(TestCase):
 
     def test_changed_rule_and_new_reference_prevent_all_mutations(self):
         self.preview(); self.approve(); self.confirm()
-        self.state[self.rule['path']]['_revision'] += 1
+        self.state[self.rule['path']]['action'] = 'DROP'
         with self.live(), patch.object(d, 'delete_once') as delete:
             d.process_item(self.item, execute=True)
         self.item.refresh_from_db()
@@ -333,6 +334,7 @@ class ReferenceCleanupTests(TestCase):
         self.state.pop(path)
         return Mock(status=200)
 
+    @patch.object(d, 'approvals_valid', new=lambda finding: {})
     def test_last_destination_explicitly_proposes_rule_deletion(self):
         self.state[self.rule['path']]['source_groups'] = [self.other]
         self.state[self.rule['path']]['destination_groups'] = [self.group['path']]
@@ -460,7 +462,7 @@ class ReferenceCleanupTests(TestCase):
         def search(*args):
             nonlocal calls
             calls += 1
-            if calls == 2: self.state[self.rule['path']]['_revision'] += 1
+            if calls == 2: self.state[self.rule['path']]['action'] = 'DROP'
             return deepcopy(list(self.state.values())), {'mode': 'all_types'}
         with self.live(), patch.object(d.collector, 'verified_configuration_search', side_effect=search):
             d.process_item(self.item, execute=True)
@@ -580,7 +582,7 @@ class ReferenceCleanupTests(TestCase):
 
     def test_changed_plan_during_revalidation_requires_new_review(self):
         self.preview(); self.approve(revalidate=False)
-        self.state[self.rule['path']]['_revision'] += 1
+        self.state[self.rule['path']]['action'] = 'DROP'
         self.batch.refresh_from_db(); self.batch.status = 'checking'; self.batch.save()
         with self.live(): d.run(self.batch.pk)
         self.item.refresh_from_db()
@@ -600,6 +602,7 @@ class ReferenceCleanupTests(TestCase):
         self.assertEqual(self.approve().status_code, 200)
         self.nsx.http.request.assert_not_called()
 
+    @patch.object(d, 'approvals_valid', new=lambda finding: {})
     def test_expired_confirmation_can_revalidate_without_new_approval(self):
         self.preview(); self.approve()
         decisions = deepcopy(self.item.cleanup_approvals)
@@ -755,3 +758,69 @@ class ReferenceCleanupTests(TestCase):
         response = self.client.get(reverse('notifications'))
         self.assertIn('approval no longer required', response.content.decode())
         self.assertNotContains(self.client.get(reverse('my-work'), {'queue':'second'}), 'Firewall reference cleanup')
+
+    def test_metadata_only_changes_use_fresh_revision_without_new_approval(self):
+        self.preview(); self.approve(); self.confirm()
+        self.state[self.rule['path']].update(_revision=19, _last_modified_time=999, _last_modified_user='nsx')
+        self.state[self.parent['path']].update(_revision=20, _last_modified_time=999)
+        def delete(client, path):
+            self.state.pop(path)
+            return 200
+        with self.live(), patch.object(d, 'delete_once', side_effect=delete):
+            d.process_item(self.item, execute=True)
+        self.item.refresh_from_db()
+        self.assertEqual(self.item.status, 'deleted', self.item.message)
+        self.assertEqual(self.item.cleanup_results[0]['executed_revision'], 19)
+
+    def test_parent_scope_identity_and_protection_remain_significant(self):
+        for field, value in [('scope', ['/infra/domains/default/groups/new']), ('id', 'replacement'), ('_protection', 'PROTECTED')]:
+            with self.subTest(field=field):
+                changed = dict(self.parent, **{field: value})
+                self.assertIn(field, cleanup.changed_fields(cleanup.configuration(self.parent, parent=True), cleanup.configuration(changed, parent=True)))
+
+    def test_prior_rule_delete_metadata_does_not_block_next_rule_update(self):
+        doomed = dict(self.rule, id='a', path=self.parent['path'] + '/rules/a', unique_id='doomed', source_groups=[self.group['path']])
+        self.state[doomed['path']] = doomed
+        self.preview(); self.approve(); self.confirm()
+        original_put = self.nsx.http.request.side_effect
+        def transport(method, url, **kwargs):
+            if method == 'PUT': return original_put(method, url, **kwargs)
+            path = url.removeprefix(self.nsx.base_url).split('?', 1)[0]
+            self.state.pop(path)
+            self.state[self.parent['path']]['_revision'] += 1
+            self.state[self.parent['path']]['_last_modified_time'] = 999
+            return Mock(status=200)
+        self.nsx.http.request.side_effect = transport
+        with self.live(): d.process_item(self.item, execute=True)
+        self.item.refresh_from_db()
+        self.assertEqual(self.item.status, 'deleted', self.item.message)
+        self.assertEqual([r['status'] for r in self.item.cleanup_results], ['deleted', 'updated'])
+
+    def test_prior_rule_delete_then_real_policy_change_reports_partial_result(self):
+        doomed = dict(self.rule, id='a', path=self.parent['path'] + '/rules/a', unique_id='doomed', source_groups=[self.group['path']])
+        self.state[doomed['path']] = doomed
+        self.preview(); self.approve(); self.confirm()
+        def transport(method, url, **kwargs):
+            self.assertEqual(method, 'DELETE')
+            self.state.pop(doomed['path'])
+            self.state[self.parent['path']]['scope'] = [self.other]
+            return Mock(status=200)
+        self.nsx.http.request.side_effect = transport
+        with self.live(): d.process_item(self.item, execute=True)
+        self.item.refresh_from_db()
+        self.assertEqual(self.item.status, 'blocked', self.item.message)
+        self.assertIn('parent policy fields: scope', self.item.message)
+        self.assertEqual(self.item.cleanup_results[0]['status'], 'deleted')
+        self.assertEqual(self.nsx.http.request.call_count, 1)
+        self.assertIn(self.group['path'], self.state)
+        self.assertContains(self.client.get(reverse('deletion-detail', args=[self.batch.pk])), 'Partially completed')
+
+
+    def test_readable_change_summary_keeps_exact_plan_unchanged(self):
+        self.preview()
+        plan = deepcopy(self.item.cleanup_plan[0])
+        text = ' '.join(cleanup.readable_changes(plan))
+        self.assertIn('1 object remains: remaining', text)
+        self.assertEqual(plan, self.item.cleanup_plan[0])
+        plan['action'] = 'delete_rule'; plan['fields'][0]['after'] = []
+        self.assertIn('only source object', ' '.join(cleanup.readable_changes(plan)))

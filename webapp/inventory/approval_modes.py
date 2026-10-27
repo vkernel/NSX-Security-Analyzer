@@ -21,9 +21,10 @@ def source(kind, policy):
 
 def preview(policy):
     from .models import Finding
+    from .execution_policy import mode, MODES
     result = []
     for key, (label, kinds) in CATEGORIES.items():
         effective = required(kinds[0], policy)
         count = Finding.objects.filter(kind__in=kinds).exclude(workflow_state__in=['rejected', 'decommissioned']).exclude(required_approvals=effective).count()
-        result.append({'label': label, 'effective': 'Single approval' if effective == 1 else 'Four-eyes', 'source': source(kinds[0], policy), 'count': count})
+        result.append({'label': label, 'effective': 'Single approval' if effective == 1 else 'Four-eyes', 'source': source(kinds[0], policy), 'count': count, 'execution': dict(MODES)[mode(kinds[0], policy)]})
     return result

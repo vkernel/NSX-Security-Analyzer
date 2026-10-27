@@ -260,8 +260,8 @@ class ReviewApprovalsForm(forms.ModelForm):
     class Meta:
         from .models import WorkspacePolicy
         model = WorkspacePolicy
-        fields = ['required_approvals', 'groups_approvals', 'services_approvals', 'rules_approvals', 'policies_approvals']
-        labels = {'required_approvals': 'Default approval mode', 'groups_approvals': 'Groups (including VDI)', 'services_approvals': 'Custom services', 'rules_approvals': 'Firewall rules', 'policies_approvals': 'Firewall policies'}
+        fields = ['required_approvals', 'groups_approvals', 'services_approvals', 'rules_approvals', 'policies_approvals', 'execution_mode', 'groups_execution', 'services_execution', 'rules_execution', 'policies_execution']
+        labels = {'required_approvals': 'Default approval mode', 'execution_mode': 'Who can confirm execution? Default', 'groups_execution': 'Groups: execution confirmation', 'services_execution': 'Custom services: execution confirmation', 'rules_execution': 'Firewall rules: execution confirmation', 'policies_execution': 'Firewall policies: execution confirmation', 'groups_approvals': 'Groups (including VDI)', 'services_approvals': 'Custom services', 'rules_approvals': 'Firewall rules', 'policies_approvals': 'Firewall policies'}
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -271,5 +271,7 @@ class ReviewApprovalsForm(forms.ModelForm):
     def clean(self):
         data = super().clean()
         for name in self.Meta.fields[1:]:
-            if data.get(name) is None: data[name] = 0
+            if data.get(name) is None:
+                data[name] = (self.instance.execution_mode or 'requester') if name == 'execution_mode' else '' if name.endswith('_execution') else 0
+        data['execution_mode'] = data.get('execution_mode') or self.instance.execution_mode or 'requester'
         return data
