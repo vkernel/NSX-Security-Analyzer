@@ -29,6 +29,7 @@ class RelatedDecommissionTests(DeletionTests):
         self.assertEqual(sibling.events.first().details['deletion_batch'], str(self.batch.pk))
         self.assertEqual(recreated.workflow_state,'unassigned')
 
+    @patch('inventory.deletion.approvals_valid', new=lambda finding: {})
     def test_uncertain_delete_does_not_close_sibling(self):
         from . import deletion as d
         sibling=self.sibling()
@@ -38,6 +39,7 @@ class RelatedDecommissionTests(DeletionTests):
         self.assertEqual(sibling.workflow_state,'unassigned')
         self.assertEqual(self.item.status,'uncertain')
 
+    @patch('inventory.deletion.approvals_valid', new=lambda finding: {})
     def test_successful_delete_closes_sibling(self):
         from . import deletion as d
         sibling=self.sibling()
@@ -61,6 +63,7 @@ class RelatedDecommissionTests(DeletionTests):
                 delete.assert_not_called()
                 sibling.delete()
 
+    @patch('inventory.deletion.approvals_valid', new=lambda finding: {})
     def test_preview_lists_related_findings(self):
         from . import deletion as d
         from django.urls import reverse
