@@ -781,3 +781,59 @@ The shared status indicator only reports an update when the region was refreshed
 Refresh DOM regression tests can be run with `node --test
 webapp/tests-js/refresh-region.test.cjs` with `jsdom` installed in a temporary directory
 and its `node_modules` directory supplied through `NODE_PATH`.
+
+### Link labels and saved evidence
+
+Object names in review queues, My work and deletion lists open the finding when it
+still exists. Deletion evidence links appear together: **View finding**, **View saved
+configuration**, and (on request details) **View saved impact preview**. Missing findings,
+configurations or source snapshots are explained instead of offering unavailable links.
+Activity links name their destination, such as **View deletion request**, **View
+collection results**, or **View snapshot comparison**. Impact preview uses **Back to
+finding details** and **View object in saved snapshot**. These labels do not change the
+existing return destinations or queue context. Saved impact evidence is not a new live
+check or deletion approval.
+
+## Empty groups with firewall references
+
+A referenced empty group can now enter **Reference cleanup required**, rather than
+being offered a direct deletion. This applies only to approved empty-group findings
+whose live dependencies are ordinary local DFW rule source/destination lists. Each
+changed list must retain another local group. The read-only preview captures every
+rule's original configuration, revision, policy context and proposed lists.
+
+Choose **Review reference cleanup** to inspect policy/rule names, enabled status and
+current/proposed values. The plan needs separate administrator approval using the
+strictest of the finding's existing requirement and current group/firewall-rule
+settings under **Administration → Review approvals**. Four-eyes requires two distinct,
+currently authorized administrators. Share the cleanup page URL with the second
+administrator. Existing finding decisions do not approve the firewall edits.
+
+The requesting administrator returns to the deletion request and explicitly confirms
+both the rule changes and deletion with a change ticket. All approvals and confirmation
+must fit the existing ten-minute preview window. Confirmation does not extend the
+one-hour execution authorization. Expired plans require a fresh preview and approvals.
+
+Execution repeats object, membership, dependency and approval checks. Each rule update
+uses the approved `_revision`, with redirects, force and automatic retries disabled,
+following the [NSX DFW rule update API](https://developer.broadcom.com/xapis/nsx-t-data-center-rest-api/latest/method_UpdateSecurityRule.html).
+Update intent is persisted before each PUT. The result is read back and compared with
+the proposed configuration. Full dependency and membership checks run again before
+DELETE. A changed rule, group, policy configuration, approval requirement or incomplete
+verification stops execution. The group is marked decommissioned only after verified
+absence, as with ordinary deletion.
+
+Last-group references, Applied To, negated groups, IP literals/ANY in the changed list,
+protected/global objects, child configuration and non-DFW dependencies remain blocked
+with resolution guidance. No ANY replacement, automatic rule deletion or rule disabling
+is offered. Resolve these separately in NSX or through a separate rule review.
+
+Rule updates and deletion are **not atomic**. Completed rule updates remain when a
+later update, search or deletion fails. No automatic rollback/retry is performed.
+Deletion history and Activity link to **View rule cleanup and outcomes**, with per-rule
+outcomes and retained original/proposed JSON for manual reconstruction. If two selected
+groups share a rule, the first change can invalidate the later group's plan; create a
+fresh preview for the remaining group instead of silently merging changes.
+
+Deployment includes migration `0048_reference_cleanup`; migrate the database before
+starting the matching web and worker version. No live NSX changes are made by migration.

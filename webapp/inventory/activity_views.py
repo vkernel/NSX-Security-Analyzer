@@ -35,7 +35,7 @@ def activity(request):
         for job in limited(rows, 'created_at'):
             url = reverse('snapshot', args=[job.snapshot.pk]) if hasattr(job, 'snapshot') else reverse('environment', args=[job.environment_id])
             tasks.append(dict(kind='Collection', environment=job.environment.name, status=job.status,
-                at=job.created_at, started=job.started_at, finished=job.finished_at, detail=job.progress_stage, url=url))
+                at=job.created_at, started=job.started_at, finished=job.finished_at, detail=job.progress_stage, url=url, link_label='View collection results' if hasattr(job, 'snapshot') else 'View environment collections'))
     if kind in ('', 'review'):
         rows = FindingRecalculation.objects.select_related('environment').only('environment__id', 'environment__name', 'status', 'requested_at', 'started_at', 'finished_at', 'processed', 'total', 'error')
         if selected: rows = rows.filter(environment_id=selected) if selected.isdecimal() and len(selected)<19 else rows.none()
@@ -43,14 +43,14 @@ def activity(request):
             tasks.append(dict(kind='Finding review indexing', environment=job.environment.name, status=job.status,
                 at=job.requested_at, started=job.started_at, finished=job.finished_at,
                 detail=f'{job.processed} of {job.total} processed' if job.status == 'running' else job.error,
-                url=reverse('findings', args=[job.environment_id])))
+                url=reverse('findings', args=[job.environment_id]), link_label='View finding reviews'))
     if kind in ('', 'comparison'):
         rows = SnapshotComparison.objects.select_related('after__environment').only('id', 'before_id', 'after__id', 'after__environment__id', 'after__environment__name', 'status', 'ready', 'error', 'created_at')
         if selected: rows = rows.filter(after__environment_id=selected) if selected.isdecimal() and len(selected)<19 else rows.none()
         for job in limited(rows, 'created_at'):
             tasks.append(dict(kind='Snapshot comparison', environment=job.after.environment.name,
                 status='completed' if job.ready else job.status, at=job.created_at,
-                detail=job.error, url=reverse('snapshot-comparison', args=[job.after.environment_id])+f'?before={job.before_id}&after={job.after_id}'))
+                detail=job.error, link_label='View snapshot comparison', url=reverse('snapshot-comparison', args=[job.after.environment_id])+f'?before={job.before_id}&after={job.after_id}'))
     if options['q']:
         tasks = [task for task in tasks if options['q'].casefold() in (task['environment'] + ' ' + task['detail']).casefold()]
     if kind in ('', 'deletion') and tab != 'audit':

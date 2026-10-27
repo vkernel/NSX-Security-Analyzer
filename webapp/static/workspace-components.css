@@ -282,3 +282,6 @@ body dialog#saved-configuration-dialog{width:min(880px,calc(100vw - 32px))}
 .deletion-object-details li + li {border-top:1px solid var(--line); padding-top:1rem}
 .deletion-history-table td {overflow-wrap:anywhere}
 .deletion-history-table th:nth-child(3) {width:40%}
+
+.object-evidence-links {display:flex; flex-wrap:wrap; gap:.5rem 1rem; margin:.75rem 0; font-size:.875rem}
+.object-evidence-links .muted {font-size:.85rem}

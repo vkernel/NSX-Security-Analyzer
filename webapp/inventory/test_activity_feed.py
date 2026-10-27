@@ -25,7 +25,12 @@ class ActivityFeedTests(TestCase):
         self.assertContains(response,'Ada Admin')
         self.assertContains(response,'Deleted service')
         self.assertContains(response,'CHG-ACTIVITY')
-        self.assertContains(response,reverse('deletion-configuration',args=[self.item.pk]))
+        self.assertContains(response,'No configuration saved for this attempt')
+        self.assertNotContains(response,reverse('deletion-configuration',args=[self.item.pk]))
+        self.item.before={'resource_type':'Service','path':self.item.path}; self.item.save()
+        self.assertContains(self.client.get(self.url),reverse('deletion-configuration',args=[self.item.pk]))
+        self.assertContains(response,'View deletion request')
+        self.assertNotContains(response,'>View details</a>')
         self.assertEqual(response.headers['Cache-Control'],'private, no-store')
 
     def test_audit_filters_and_pagination_preserve_retained_evidence(self):

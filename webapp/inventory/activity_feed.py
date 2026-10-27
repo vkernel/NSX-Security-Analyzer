@@ -2,7 +2,7 @@
 from uuid import UUID
 from django.contrib.auth import get_user_model
 from django.core.paginator import Paginator
-from django.db.models import Q, Prefetch
+from django.db.models import Q, Prefetch, Case, When, Value, BooleanField
 from django.urls import reverse
 from django.utils.dateparse import parse_date
 from .models import AuditEvent, DeletionBatch, DeletionItem, Environment, Finding
@@ -85,11 +85,15 @@ def audit_cards(rows):
         action = entry.action.split('.', 1)[-1]
         outcome = action.removeprefix('deletion_') if is_deletion else data.get('to', entry.outcome)
         url = ''
+        finding_url = ''
+        link_label = 'View deletion request' if is_deletion else 'View finding'
         if entry.target_type == 'Finding' and entry.target_id.isdecimal() and int(entry.target_id) in findings:
             url = reverse('finding-detail', args=[findings[int(entry.target_id)], entry.target_id])
+            finding_url = url
         batch = data.get('batch') or (entry.target_id if entry.target_type == 'DeletionBatch' else '')
         if str(batch) in batch_ids:
             url = reverse('deletion-detail', args=[batch])
+            link_label = 'View deletion request'
         label = action.replace('_',' ').capitalize()
         if action == 'approve':
             label = 'Second approval' if data.get('from') == 'second_review' else 'First approval' if data.get('to') == 'second_review' else 'Approval (single approver)'
@@ -98,7 +102,7 @@ def audit_cards(rows):
             actor=data.get('actor_label') or actors.get(entry.actor_id_text, 'Deleted account #' + entry.actor_id_text if entry.actor_id_text else 'System / background worker'),
             at=entry.created_at, detail=data.get('reason') or data.get('message') or '',
             name=data.get('name') or data.get('path') or '', path=data.get('path',''),
-            ticket=data.get('ticket') or data.get('change_ticket',''), url=url))
+            ticket=data.get('ticket') or data.get('change_ticket',''), url=url, finding_url=finding_url, link_label=link_label, unavailable='Deletion request no longer available' if is_deletion else 'Finding no longer available'))
     return cards
 
 
@@ -117,7 +121,7 @@ def deletion_cards(request, options, selected, active_only=False):
         matches = matches.filter(Q(name__icontains=term) | Q(path__icontains=term) | Q(batch__ticket__icontains=term))
     if options['outcome']: matches = matches.filter(status=options['outcome'])
     if options['q'] or options['outcome']: rows = rows.filter(pk__in=matches.values('batch_id'))
-    rows = dated(rows, options).prefetch_related(Prefetch('items', queryset=DeletionItem.objects.only('pk','batch_id','finding_id','name','path','status','message'))).order_by('-created_at')[:60]
+    rows = dated(rows, options).prefetch_related(Prefetch('items', queryset=DeletionItem.objects.annotate(has_configuration=Case(When(before={}, then=Value(False)), default=Value(True), output_field=BooleanField()), has_cleanup=Case(When(cleanup_plan=[], then=Value(False)), default=Value(True), output_field=BooleanField())).only('pk','batch_id','finding_id','name','path','status','message'))).order_by('-created_at')[:60]
     cards=[]
     for batch in rows:
         items=list(batch.items.all())
@@ -126,5 +130,5 @@ def deletion_cards(request, options, selected, active_only=False):
             status=batch.status_label, active=batch.status in ACTIVE, at=batch.created_at, started=batch.confirmed_at,
             finished=batch.finished_at, actor=user_label(batch.requested_by) if batch.requested_by else 'Deleted account',
             ticket=batch.ticket, environment_id=batch.environment_id, detail=f'{len(items)} objects · {deleted} deleted', object_results=items,
-            url=reverse('deletion-detail',args=[batch.pk])))
+            url=reverse('deletion-detail',args=[batch.pk]), link_label='View deletion request'))
     return cards

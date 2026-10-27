@@ -1,0 +1,145 @@
+"""Explicitly approved, revision-checked DFW reference cleanup. No mutation retries."""
+from copy import deepcopy
+import hashlib
+import json
+from urllib.parse import quote
+import urllib3
+from django.contrib.auth import get_user_model
+from django.core.exceptions import ValidationError
+from django.utils import timezone
+from .approval_modes import required
+from .usability import policy
+from .audit_events import record
+
+
+def requirement(finding):
+    settings = policy()
+    return max(finding.required_approvals, required('empty_group', settings), required('disabled', settings))
+
+
+def fingerprint(item):
+    return hashlib.sha256(json.dumps({'plan': item.cleanup_plan, 'group': item.before,
+        'finding': item.finding_id, 'revision': item.revision}, sort_keys=True).encode()).hexdigest()
+
+
+def protected(obj):
+    return (obj.get('_system_owned') or obj.get('is_default') or obj.get('marked_for_delete')
+            or obj.get('_protection') not in (None, 'NOT_PROTECTED') or obj.get('remote_path'))
+
+
+def build_plan(client, group, refs):
+    from .deletion import target_type
+    from . import collector
+    if len(refs) > 100:
+        raise ValidationError('More than 100 dependent objects. Resolve references separately.')
+    if protected(group):
+        raise ValidationError('Only unprotected local groups support reference cleanup.')
+    changes = []
+    for path in sorted(refs):
+        try:
+            supported = target_type(path) == 'Rule'
+        except ValidationError:
+            supported = False
+        if not supported:
+            raise ValidationError(f'Reference cleanup requires manual resolution: {path} is not a supported local DFW rule.')
+        rule = client.get(path)
+        parent_path = path.rsplit('/rules/', 1)[0]
+        parent = client.get(parent_path)
+        if (rule.get('path') != path or rule.get('resource_type') != 'Rule'
+                or parent.get('path') != parent_path or parent.get('resource_type') != 'SecurityPolicy'
+                or protected(rule) or protected(parent) or rule.get('children')):
+            raise ValidationError(f'Reference cleanup is unavailable for protected or unsupported rule/policy: {path}.')
+        if (type(rule.get('_revision')) is not int or not rule.get('unique_id')
+                or rule.get('_create_time') is None or type(parent.get('_revision')) is not int):
+            raise ValidationError(f'Rule or policy identity/revision is incomplete: {path}.')
+        if rule.get('sources_excluded') not in (None, False) or rule.get('destinations_excluded') not in (None, False):
+            raise ValidationError(f'Negated groups require a separate firewall review: {path}.')
+        proposed = deepcopy(rule)
+        fields = []
+        for key, label in [('source_groups', 'Source'), ('destination_groups', 'Destination')]:
+            values = rule.get(key, [])
+            if not isinstance(values, list) or any(not isinstance(v, str) for v in values):
+                raise ValidationError(f'Unsupported {label.lower()} definition: {path}.')
+            if group['path'] not in values:
+                continue
+            remaining = [v for v in values if v != group['path']]
+            if not remaining:
+                raise ValidationError(f'Last group in {label.lower()} of {path}. Select a replacement in NSX or review the rule for decommissioning; ANY is never inserted automatically.')
+            # Initial scope deliberately limited to ordinary local Group paths.
+            try:
+                ordinary = all(target_type(v) == 'Group' for v in remaining)
+            except ValidationError:
+                ordinary = False
+            if not ordinary:
+                raise ValidationError(f'{label} of {path} includes ANY, IP literals or unsupported group paths. Resolve separately.')
+            proposed[key] = remaining
+            fields.append({'field': key, 'label': label, 'before': values, 'after': remaining})
+        if not fields or collector.collect_references([proposed], [group])[group['path']]:
+            raise ValidationError(f'Applied To or another unsupported reference remains in {path}. Resolve it separately.')
+        changes.append({'path': path, 'name': rule.get('display_name') or rule.get('id') or path,
+            'policy_name': parent.get('display_name') or parent.get('id') or parent_path,
+            'enabled': not rule.get('disabled', False), 'fields': fields, 'before': rule,
+            'after': proposed, 'policy': {k: v for k, v in parent.items() if k not in ('rules', 'children')}})
+    return changes
+
+
+def validate_approvals(item):
+    from .deletion import permitted
+    required_count = requirement(item.finding)
+    digest = fingerprint(item)
+    decisions = item.cleanup_approvals
+    actors = set()
+    for decision in decisions:
+        if decision.get('fingerprint') != digest:
+            raise ValidationError('Reference cleanup plan changed; new approval is required.')
+        actor = get_user_model().objects.filter(pk=decision.get('actor_id')).first()
+        if not permitted(actor):
+            raise ValidationError('A reference cleanup reviewer is no longer authorized.')
+        actors.add(str(actor.pk))
+    if required_count not in (1, 2) or len(actors) < required_count:
+        raise ValidationError(f'Reference cleanup needs {required_count} distinct administrator approval(s) for the exact rule changes.')
+
+
+def apply_plan(client, item, authorize):
+    """Caller freshly checked all references/membership. Persist every PUT intent."""
+    from .deletion import current_object, clean
+    if item.cleanup_results:
+        raise ValidationError('Reference cleanup was already attempted. Review recorded outcomes; create a fresh preview.')
+    for change in item.cleanup_plan:
+        authorize()
+        current = current_object(client, change['path'])
+        parent = client.get(change['path'].rsplit('/rules/', 1)[0])
+        # Updating a sibling can increment policy revision; compare policy configuration without embedded rules.
+        policy_config = lambda p: {k: v for k, v in clean(p).items() if k not in ('rules', 'children')}
+        if current != change['before'] or policy_config(parent) != policy_config(change['policy']) or protected(parent):
+            raise ValidationError('Rule or parent policy changed after approval: ' + change['path'])
+        outcome = {'path': change['path'], 'status': 'sending', 'started_at': timezone.now().isoformat()}
+        item.cleanup_results.append(outcome)
+        item.save(update_fields=['cleanup_results'])
+        record('nsx.deletion_cleanup_sending', 'DeletionItem', item.pk, actor=item.batch.requested_by_id,
+               details={'environment_id': item.batch.environment_id, 'batch': str(item.batch_id), 'path': change['path'], 'ticket': item.batch.ticket})
+        try:
+            # Preserve all configuration fields and send the exact approved revision. No PATCH/force.
+            payload = {k: v for k, v in change['after'].items() if not k.startswith('_') or k == '_revision'}
+            response = client.http.request('PUT', client.base_url + quote(change['path'], safe='/'),
+                body=json.dumps(payload).encode(), headers={**client.headers, 'Content-Type': 'application/json'},
+                retries=False, redirect=False, timeout=urllib3.Timeout(connect=client.timeout, read=client.timeout),
+                pool_timeout=client.timeout)
+            outcome['http_status'] = response.status
+            if response.status != 200:
+                outcome['status'] = 'failed' if response.status in (400, 401, 403, 405, 409, 412, 429) else 'uncertain'
+                raise ValidationError(f'Rule update returned HTTP {response.status}: {change["path"]}. No retry performed.')
+            result = current_object(client, change['path'])
+            if result is None or clean(result) != clean(change['after']) or result.get('_create_time') != change['before'].get('_create_time'):
+                outcome['status'] = 'uncertain'
+                raise ValidationError('Rule update could not be verified: ' + change['path'])
+            outcome['status'] = 'updated'
+        except Exception:
+            if outcome['status'] == 'sending': outcome['status'] = 'uncertain'
+            raise
+        finally:
+            outcome['finished_at'] = timezone.now().isoformat()
+            item.save(update_fields=['cleanup_results'])
+            record('nsx.deletion_cleanup_' + outcome['status'], 'DeletionItem', item.pk,
+                   actor=item.batch.requested_by_id, details={'environment_id': item.batch.environment_id, 'batch': str(item.batch_id),
+                   'path': change['path'], 'ticket': item.batch.ticket, 'http_status': outcome.get('http_status')})
