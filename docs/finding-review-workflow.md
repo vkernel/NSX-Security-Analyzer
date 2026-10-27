@@ -296,7 +296,7 @@ mobile, retaining progress updates and stop controls for active collections.
 
 *Enter the shared reason, then submit. Cancel keeps the rows selected without changing assignments.*
 
-![Unassigned review queue without a Select column](images/unassigned-reviews.png)
+*The Unassigned queue now includes row selection and bulk assignment controls.*
 
 *The Unassigned queue has no release checkboxes. Open a finding to assign an owner.*
 
@@ -318,8 +318,8 @@ On the Finding reviews page, select eligible rows to reveal a compact selection
 bar showing the selected count. Choose **Return to unassigned**, enter a shared
 required reason in the dialog, then submit. **Clear selection** deselects all rows.
 Only the displayed page is selected, with a maximum of 100 per submission.
-The Unassigned view hides the Select column and bulk-return controls. In mixed
-views, only eligible findings have checkboxes; other selection cells stay empty. Cancel or Escape
+In **Unassigned**, select rows (or use the header checkbox for up to 100 on the current page), then choose **Actions → Assign owner**. Search by name or email, choose an active operator or administrator, and confirm the assignment. No reason is required for new assignments. Existing review progress is preserved for released findings; each assignment is audited. Findings changed or assigned by another reviewer since selection are skipped with an explanation.
+In mixed views, assignment requires all selected rows to be unassigned; release and deletion retain their own eligibility checks. Only eligible findings have checkboxes; other selection cells stay empty. Cancel or Escape
 closes the dialog without submitting; the selection remains. On a finding detail
 page, use **Actions → Return to unassigned**. Without JavaScript, use the detail
 page’s original action form; bulk release requires JavaScript. The server checks each finding's revision and permission;
@@ -1015,3 +1015,31 @@ Environment switching checks destination availability first. On a failed check o
 timeout, the current page remains visible and Retry is offered. Unsaved-change protection
 still applies to the eventual navigation. A successful availability check cannot guarantee
 that a subsequent page request will succeed if connectivity changes between requests.
+
+
+## Bulk actions across the workspace
+
+Select rows to reveal **Actions**. The header checkbox selects up to 100 eligible
+rows on the current page; it does not select other pages or hidden search results.
+Clear selection removes the selection. Actions that cannot apply to the entire
+selection are disabled with an explanation. Filters and the current page are kept
+in the return link. Changes require a review screen and explicit confirmation;
+exports download JSON without changing NSX.
+
+| Page | Available actions |
+| --- | --- |
+| My work | Assign unassigned findings to yourself; reassign or release owned work; export evidence; administrators can preview deletion of ready findings from one environment. |
+| Finding reviews | Assign unassigned findings; reassign owned findings with a reason; release findings; export evidence; preview approved deletion. |
+| Firewall reference cleanup tasks | Cancel pending plans with a reason or export their plans and outcomes. Each plan still requires its own approval review. |
+| Deletion history | Select requests to export all their object outcomes or download saved configurations and cleanup plans. Missing configurations are explicitly marked. |
+| Inventory groups and services | Export selected saved objects, compare their details side by side, or view links to their related finding reviews. No deletion is offered here. |
+| Collections and environment collection history | Export selected diagnostics or cancel queued collections with a reason. Running collections must be stopped individually. |
+
+Bulk reassignment is available to the current owner or an administrator. It resets
+approvals and starts owner review again; the confirmation screen explains this.
+Releasing work preserves valid approvals. Assigning released work resumes its
+review stage. The server checks revisions and permissions again when applying the
+change. Results show succeeded, skipped and failed items, with individual reasons.
+Cancellation preserves history and cannot cancel cleanup execution already started.
+A deletion preview remains read-only and uses the existing live checks and separate
+execution confirmation.

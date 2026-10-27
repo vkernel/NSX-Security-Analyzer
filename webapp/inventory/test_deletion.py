@@ -50,9 +50,9 @@ class DeletionTests(TestCase):
 
     def test_my_work_ready_selection_uses_existing_preview_flow(self):
         response=self.client.get(reverse('my-work'), {'queue':'ready'})
-        self.assertContains(response, 'id="work-deletion-selection" hidden')
+        self.assertContains(response, 'data-bulk-toolbar="bulk-work" hidden')
         self.assertContains(response, f'value="{self.finding.pk}:{self.finding.revision}"')
-        self.assertContains(response, reverse('deletion-selection', args=[self.env.pk]))
+        self.assertContains(response, reverse('bulk-actions', args=['findings']))
         self.assertContains(response, 'Preview deletion from NSX')
         self.assertNotContains(self.client.get(reverse('my-work'), {'queue':'assigned'}), 'id="work-delete-preview"')
         with patch.object(d,'delete_once') as delete:

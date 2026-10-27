@@ -57,6 +57,7 @@
       target.focus({preventScroll:true});
     }
     window.scrollTo(x,y);
+    document.dispatchEvent(new Event('bulk:updated'));
     return '';
   }
   window.RefreshRegion={blocked,replace};

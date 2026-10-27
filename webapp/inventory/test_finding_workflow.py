@@ -141,6 +141,51 @@ class FindingWorkflowTests(TestCase):
         self.assertContains(response, 'form="bulk-release" name="selected"')
         self.assertContains(response, 'finding-release.js')
 
+    def test_bulk_assignment_assigns_unassigned_and_preserves_released_approvals(self):
+        self.approve_owner()
+        approvals = self.finding.approvals.copy()
+        decide(self.finding, self.owner, 'unassign', 'Unavailable')
+        other = Finding.objects.create(environment=self.env, kind='unused', path='/new', name='New',
+            first_seen=timezone.now(), last_seen=timezone.now(), evaluated_at=timezone.now(), qualification='eligible')
+        self.client.force_login(self.reviewer)
+        url = reverse('findings', args=[self.env.pk]) + '?owner=none'
+        page = self.client.get(url)
+        self.assertContains(page, 'id="assign-open"')
+        self.assertContains(page, 'id="finding-select-all"')
+        response = self.client.post(url, {'action': 'assign', 'owner': self.reviewer.pk,
+            'selected': [f'{self.finding.pk}:{self.finding.revision}', f'{other.pk}:{other.revision}']}, follow=True)
+        self.assertContains(response, 'Assigned 2 finding(s)')
+        self.finding.refresh_from_db(); other.refresh_from_db()
+        self.assertEqual(self.finding.owner_id, self.reviewer.pk)
+        self.assertEqual(self.finding.approvals, approvals)
+        self.assertEqual(self.finding.workflow_state, 'second_review')
+        self.assertEqual(other.workflow_state, 'owner_review')
+        self.assertTrue(other.events.filter(details__action='assign').exists())
+
+    def test_bulk_assignment_rejects_invalid_owner_and_skips_stale_owned_or_foreign(self):
+        self.client.force_login(self.owner)
+        url = reverse('findings', args=[self.env.pk])
+        payload = {'action': 'assign', 'owner': self.viewer.pk,
+            'selected': [f'{self.finding.pk}:{self.finding.revision}']}
+        self.client.post(url, payload)
+        self.finding.refresh_from_db()
+        self.assertIsNone(self.finding.owner_id)
+        response = self.client.post(url, {**payload, 'owner': self.owner.pk,
+            'selected': [f'{self.finding.pk}:{self.finding.revision + 1}']}, follow=True)
+        self.assertContains(response, 'skipped 1')
+        other_env = Environment.objects.create(name='Other', slug='assign-other', manager='https://other.test')
+        self.client.post(reverse('findings', args=[other_env.pk]), {**payload, 'owner': self.owner.pk})
+        self.finding.refresh_from_db()
+        self.assertIsNone(self.finding.owner_id)
+        self.assign()
+        response = self.client.post(url, {**payload, 'owner': self.reviewer.pk,
+            'selected': [f'{self.finding.pk}:{self.finding.revision}']}, follow=True)
+        self.assertContains(response, 'already assigned; existing owner retained')
+        self.finding.refresh_from_db()
+        self.assertEqual(self.finding.owner_id, self.owner.pk)
+        self.client.force_login(self.viewer)
+        self.assertEqual(self.client.post(url, payload).status_code, 403)
+
     def test_ready_release_and_reassignment_preserve_both_approvals(self):
         self.approve_owner()
         decide(self.finding, self.reviewer, 'approve', 'Independent check')

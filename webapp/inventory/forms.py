@@ -221,6 +221,23 @@ class FindingReviewForm(forms.Form):
         self.fields['change_ticket'].help_text = 'Required when recording decommissioning. To delete through NSX, use the separate administrator deletion preview and confirmation.'
 
 
+class BulkAssignmentForm(forms.Form):
+    owner = ReviewerChoiceField(queryset=None, label='Assign to')
+
+    def __init__(self, *args, **kwargs):
+        kwargs.setdefault('auto_id', 'bulk_%s')
+        super().__init__(*args, **kwargs)
+        # Reuse the reviewer search and active-account validation from single assignment.
+        review = FindingReviewForm(self.data if self.is_bound else None, initial=self.initial)
+        self.fields['owner'].queryset = review.fields['owner'].queryset
+        self.fields['owner'].widget.attrs.update(review.fields['owner'].widget.attrs)
+        self.fields['owner'].widget.attrs['id'] = 'bulk-assignment-owner'
+        # The enhanced combobox validates its hidden select on submit.
+        self.fields['owner'].widget.attrs['required'] = False
+        self.use_required_attribute = False
+        self.fields['owner'].help_text = review.fields['owner'].help_text
+
+
 class FindingPolicyForm(forms.ModelForm):
     class Meta:
         from .models import FindingPolicy

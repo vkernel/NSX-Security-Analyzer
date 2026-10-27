@@ -311,3 +311,5 @@ body dialog#saved-configuration-dialog{width:min(880px,calc(100vw - 32px))}
 .cleanup-task-actions details {margin:0}
 .cleanup-task-actions nav {display:grid; gap:.65rem; padding:.75rem; border:1px solid var(--line); border-radius:6px; margin-top:.4rem; background:var(--app-surface)}
 .cleanup-task-actions .button {text-align:center}
+
+[data-bulk-toolbar] [hidden]{display:none!important}

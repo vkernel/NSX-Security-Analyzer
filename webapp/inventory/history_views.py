@@ -12,7 +12,7 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 from django.views.decorators.http import require_GET, require_http_methods
 from .models import Environment, Finding, FindingEvent, DeletionItem
-from .forms import SnapshotComparisonForm, FindingReviewForm
+from .forms import SnapshotComparisonForm, FindingReviewForm, BulkAssignmentForm
 from .findings import LABELS
 from .preferences import preferences
 
@@ -112,8 +112,16 @@ def findings(request, pk):
         from .finding_workflow import decide
         selections = request.POST.getlist('selected')
         reason = request.POST.get('reason', '').strip()
-        if request.POST.get('action') != 'unassign' or not reason or len(reason) > 5000 or not 1 <= len(selections) <= 100:
-            messages.error(request, 'Select 1–100 findings and provide a reason of at most 5000 characters.')
+        action = request.POST.get('action')
+        owner = None
+        if action == 'assign':
+            assignment = BulkAssignmentForm(request.POST)
+            if not assignment.is_valid():
+                messages.error(request, 'Choose an active operator or administrator as owner; no findings were assigned.')
+                return redirect(request.get_full_path())
+            owner = assignment.cleaned_data['owner']
+        if action not in ('assign', 'unassign') or (action == 'unassign' and not reason) or len(reason) > 5000 or not 1 <= len(selections) <= 100:
+            messages.error(request, 'Select 1–100 findings. Returning findings to unassigned also requires a reason of at most 5000 characters.')
             return redirect(request.get_full_path())
         released, skipped = 0, []
         with transaction.atomic():
@@ -128,16 +136,22 @@ def findings(request, pk):
                 finding = Finding.objects.select_for_update().filter(pk=finding_id, environment=environment).first()
                 if finding is None:
                     skipped.append('Finding no longer available in this environment.')
+                elif action == 'assign' and finding.owner_id:
+                    skipped.append(f'{finding.name}: already assigned; existing owner retained.')
                 elif finding.revision != revision:
                     skipped.append(f'{finding.name}: changed since selection; reload before retrying.')
                 else:
                     try:
-                        decide(finding, request.user, 'unassign', reason)
+                        decide(finding, request.user, action, reason, owner=owner)
                     except ValidationError as exc:
                         skipped.append(f'{finding.name}: {"; ".join(exc.messages)}')
                     else:
                         released += 1
-        messages.success(request, f'Returned {released} finding(s) to unassigned; skipped {len(skipped)}.')
+        if action == 'assign':
+            from .user_labels import user_label
+            messages.success(request, f'Assigned {released} finding(s) to {user_label(owner)}; skipped {len(skipped)}.')
+        else:
+            messages.success(request, f'Returned {released} finding(s) to unassigned; skipped {len(skipped)}.')
         for detail in skipped:
             messages.warning(request, detail)
         return redirect(request.get_full_path())
@@ -153,6 +167,7 @@ def findings(request, pk):
     release_eligible = 0
     for row in page:
         row.label = 'Prolonged empty VDI group' if row.qualification_reason.startswith('Prolonged empty VDI group') else LABELS.get(row.kind, row.kind)
+        row.can_assign = bool(request.user.is_staff and not row.owner_id and row.workflow_state != 'decommissioned')
         row.can_release = bool(request.user.is_staff and row.owner_id and row.workflow_state != 'decommissioned'
                                and (row.owner_id == request.user.pk or request.user.is_superuser))
         row.verification_paused = bool(relevant(coverage, row.kind, row.path))
@@ -165,7 +180,8 @@ def findings(request, pk):
     return render(request, 'inventory/findings.html', {'environment': environment, 'page': page,
         'cleanup_tasks': cleanup_tasks(request.user, environment=environment.pk, query=query, queue=cleanup_queue),
         'release_eligible': release_eligible, 'review_return': request.get_full_path(),
-        'show_release_controls': request.user.is_staff and request.GET.get('owner') != 'none',
+        'show_release_controls': request.user.is_staff,
+        'assignment_form': BulkAssignmentForm(initial={'owner': request.user.pk}),
         'filters_active': any(request.GET.get(key, '').strip() for key in ('q', 'kind', 'review', 'owner')),
         'qualification_counts': qualification_counts, 'query': query, 'filter_form': form, 'query_string': params.urlencode(),
         'recalculation': environment.finding_recalculation if hasattr(environment, 'finding_recalculation') else None})
@@ -381,9 +397,10 @@ def my_work(request):
     if not request.user.is_staff:
         return HttpResponseForbidden('Operator access required.')
     queue = request.GET.get('queue', 'assigned')
-    if queue not in ('assigned', 'second', 'ready'): queue = 'assigned'
+    if queue not in ('assigned', 'second', 'ready', 'unassigned'): queue = 'assigned'
     rows = Finding.objects.exclude(qualification='suppressed').select_related('environment', 'owner__keycloakidentity', 'owner__ldapidentity').defer('evidence', 'approvals')
-    if queue == 'assigned': rows = rows.filter(owner=request.user, workflow_state='owner_review')
+    if queue == 'unassigned': rows = rows.filter(owner__isnull=True, present=True, qualification='eligible').exclude(workflow_state='decommissioned')
+    elif queue == 'assigned': rows = rows.filter(owner=request.user, workflow_state='owner_review')
     elif queue == 'second':
         rows = rows.filter(workflow_state='second_review', required_approvals=2, owner__isnull=False).exclude(owner=request.user).exclude(approvals__owner__actor_id=str(request.user.pk))
     else: rows = rows.filter(workflow_state='ready', owner__isnull=False)
@@ -402,6 +419,8 @@ def my_work(request):
     from .deletion import permitted, KINDS
     show_deletion_controls = queue == 'ready' and permitted(request.user)
     for finding in page:
+        finding.can_release = bool(finding.owner_id and finding.workflow_state != 'decommissioned' and (finding.owner_id == request.user.pk or request.user.is_superuser))
+        finding.can_assign = not finding.owner_id and finding.workflow_state != 'decommissioned'
         finding.can_delete = bool(show_deletion_controls and finding.owner_id and finding.kind in KINDS)
         finding.readiness = approval_readiness(finding)
         finding.approval_count = len([key for key in ('owner', 'second') if key in finding.approvals])

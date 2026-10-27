@@ -1,7 +1,8 @@
 from django.urls import path
-from . import activity_views, authentication_settings, keycloak_settings, system_health, views, history_views, diagnostic_views, report_views, impact, transient, deletion, task_cancellation
+from . import activity_views, authentication_settings, keycloak_settings, system_health, views, history_views, diagnostic_views, report_views, impact, transient, deletion, task_cancellation, bulk_actions
 
 urlpatterns = [
+    path("bulk/<str:kind>/", bulk_actions.bulk, name="bulk-actions"),
     path('tasks/<str:kind>/<str:pk>/cancel/', task_cancellation.cancel, name='task-cancel'),
     path('deletion-items/<int:pk>/reference-cleanup/', deletion.reference_cleanup, name='deletion-reference-cleanup'),
     path('environments/<int:pk>/deletions/history/', deletion.history, name='deletion-history'),

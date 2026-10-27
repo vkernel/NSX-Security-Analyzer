@@ -21,7 +21,10 @@ document.addEventListener('DOMContentLoaded', () => {
           if (!response.ok || new URL(response.url || target.href).origin !== location.origin || /\/login\//.test(response.url)) throw new Error('unavailable');
           if (attempt !== generation) return;
           status.textContent = 'Opening selected environment…';
-          location.assign(target.href);
+          const navigation = window.WorkspaceNavigation?.start(response.url || target.href);
+          try { location.assign(target.href); }
+          catch (error) { window.WorkspaceNavigation?.cancel(navigation); throw error; }
+          // Keep the destination marker while a slow page loads; it cannot affect another URL.
           setTimeout(() => { reset(); status.textContent = ''; }, 500);
         } catch (error) {
           if (attempt !== generation) return;

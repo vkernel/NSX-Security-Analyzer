@@ -165,3 +165,40 @@ test('ordinary returns still restore list position and modified sidebar clicks d
   assert.ok(w.sessionStorage.getItem('workspace-sidebar-navigation'));
   dom.window.close();
 });
+
+test('environment navigation clears saved positions even on a snapshot hash destination', () => {
+  const dom=setup('<main id="main"></main>'),w=dom.window;
+  w.history.replaceState({},'', '/snapshots/example/?browse=1#all-services');
+  const suffix=w.location.pathname+w.location.search;
+  w.sessionStorage.setItem('review-position:'+suffix,JSON.stringify({y:700,at:Date.now()}));
+  w.sessionStorage.setItem('ui-list-position:'+suffix,JSON.stringify({y:900,at:Date.now()}));
+  const scrolls=[];w.scrollTo=(...args)=>scrolls.push(args);w.requestAnimationFrame=fn=>fn();
+  w.eval(source('navigation-scroll.js'));w.eval(source('review-navigation.js'));w.eval(source('interface-patterns.js'));
+  w.WorkspaceNavigation.start(w.location.href);
+  w.dispatchEvent(new w.PageTransitionEvent('pageshow'));
+  assert.equal(scrolls.length,1);assert.equal(scrolls[0][0].top,0);
+  assert.equal(w.location.hash,'#all-services');
+  assert.equal(w.sessionStorage.getItem('ui-list-position:'+suffix),null);
+  dom.window.close();
+});
+
+test('cancelled environment navigation does not reset ordinary back navigation', () => {
+  const dom=setup('<main id="main"></main>'),w=dom.window;
+  const scrolls=[];w.scrollTo=(...args)=>scrolls.push(args);w.requestAnimationFrame=fn=>fn();
+  w.eval(source('navigation-scroll.js'));w.eval(source('review-navigation.js'));
+  const stamp=w.WorkspaceNavigation.start();w.WorkspaceNavigation.cancel(stamp);
+  w.sessionStorage.setItem('review-position:'+w.location.pathname+w.location.search,JSON.stringify({y:500,at:Date.now()}));
+  w.dispatchEvent(new w.PageTransitionEvent('pageshow',{persisted:true}));
+  assert.equal(scrolls[0][1],500);
+  dom.window.close();
+});
+
+test('an environment destination marker cannot reset a different page', () => {
+ const dom=setup('<main id="main"></main>'),w=dom.window;
+ const scrolls=[];w.scrollTo=(...args)=>scrolls.push(args);w.requestAnimationFrame=fn=>fn();
+ w.eval(source('navigation-scroll.js'));w.eval(source('review-navigation.js'));
+ w.WorkspaceNavigation.start('https://example.test/another-environment/');
+ w.sessionStorage.setItem('review-position:'+w.location.pathname+w.location.search,JSON.stringify({y:600,at:Date.now()}));
+ w.dispatchEvent(new w.PageTransitionEvent('pageshow',{persisted:true}));
+ assert.equal(scrolls[0][1],600);dom.window.close();
+});
