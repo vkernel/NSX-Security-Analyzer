@@ -166,3 +166,20 @@ class AuditTests(TestCase):
         self.assertTrue(any(step['outcome'] == 'interrupted' for step in job.diagnostics['timeline']))
         self.assertNotIn('synthetic-private-value', json.dumps(job.diagnostics))
         self.assertNotIn('synthetic-private-value', job.error)
+
+
+class AccessPersistenceTests(TestCase):
+    def test_denied_collection_diagnostics_survive_failure(self):
+        from unittest.mock import Mock
+        from .nsx_access import save_collection_access
+        from .services import fail_job
+        env = Environment.objects.create(name='Access', slug='access', manager='https://nsx.example')
+        job = AuditJob.objects.create(environment=env, status='running')
+        rows = [{'method': 'GET', 'path': '/infra/services', 'http_status': 403,
+                 'message': 'Permission denied', 'count': 1}]
+        save_collection_access(Mock(access_failures=rows), job)
+        fail_job(job.pk, 'Collection failed', {'timeline': [], 'error': {}})
+        job.refresh_from_db()
+        self.assertEqual(job.diagnostics['access_failures'], rows)
+        self.assertEqual(job.status, 'failed')
+        self.assertTrue(AuditEvent.objects.filter(action='nsx.access_denied', target_id=str(job.pk)).exists())

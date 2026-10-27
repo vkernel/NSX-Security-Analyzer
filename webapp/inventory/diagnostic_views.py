@@ -66,6 +66,7 @@ def collection_diagnostics(request, pk):
     response = render(request, 'inventory/collection_diagnostics.html', {
         'job': job, 'timeline': job.diagnostics.get('timeline', []),
         'performance': performance, 'retrieval_phases': retrieval_phases,
+        'access_failures': job.diagnostics.get('access_failures', []) or performance.get('access_failures', []),
         'endpoint_rows': [{'label': key.replace('_', ' '), **value} for key, value in endpoints.items()],
         'queue_waits': (performance.get('concurrency') or {}).get('queue_wait_seconds', {}),
         'counter_retries': (diagnostics or {}).get('report__dfw__collection_diagnostics') or {},

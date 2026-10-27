@@ -153,7 +153,7 @@ def finish_rule(child, item, outcome):
         child.http_status = outcome.get('http_status')
         child.finished_at = timezone.now()
         child.message = ('Deleted from NSX through group reference cleanup; absence verified.' if child.status == 'deleted'
-                         else 'Rule deletion ' + child.status + '; verify NSX before another attempt. No automatic retry.')
+                         else outcome.get('message') or 'Rule deletion ' + child.status + '; verify NSX before another attempt. No automatic retry.')
         if child.status == 'deleted':
             rows = Finding.objects.select_for_update().filter(environment_id=item.batch.environment_id,
                 path=child.path, evidence__unique_id=child.approved_evidence['unique_id'],
@@ -230,7 +230,8 @@ def apply_plan(client, item, authorize):
                 outcome['http_status'] = status
                 if status not in (200, 202, 204):
                     outcome['status'] = 'failed' if status in (400, 401, 403, 405, 409, 412, 429) else 'uncertain'
-                    raise ValidationError(f'Rule DELETE returned HTTP {status}: {change["path"]}. No retry performed.')
+                    from .collector import access_message
+                    raise ValidationError((access_message('DELETE', change['path'], status) if status in (401, 403) else f'Rule DELETE returned HTTP {status}: {change["path"]}.') + ' No retry performed.')
                 if current_object(client, change['path']) is not None:
                     outcome['status'] = 'uncertain'
                     raise ValidationError('Rule DELETE accepted, but absence is not verified: ' + change['path'])
@@ -242,16 +243,20 @@ def apply_plan(client, item, authorize):
                     body=json.dumps(payload).encode(), headers={**client.headers, 'Content-Type': 'application/json'},
                     retries=False, redirect=False, timeout=urllib3.Timeout(connect=client.timeout, read=client.timeout),
                     pool_timeout=client.timeout)
+                from .collector import record_access_failure, access_message
+                record_access_failure(client, 'PUT', change['path'], response.status)
                 outcome['http_status'] = response.status
                 if response.status != 200:
                     outcome['status'] = 'failed' if response.status in (400, 401, 403, 405, 409, 412, 429) else 'uncertain'
-                    raise ValidationError(f'Rule update returned HTTP {response.status}: {change["path"]}. No retry performed.')
+                    raise ValidationError((access_message('PUT', change['path'], response.status) if response.status in (401, 403) else f'Rule update returned HTTP {response.status}: {change["path"]}.') + ' No retry performed.')
                 result = current_object(client, change['path'])
                 if result is None or clean(result) != clean(change['after']) or result.get('_create_time') != change['before'].get('_create_time'):
                     outcome['status'] = 'uncertain'
                     raise ValidationError('Rule update could not be verified: ' + change['path'])
                 outcome['status'] = 'updated'
-        except Exception:
+        except Exception as exc:
+            from .deletion import describe_error
+            outcome['message'] = describe_error(exc)
             if outcome['status'] == 'sending': outcome['status'] = 'uncertain'
             raise
         finally:

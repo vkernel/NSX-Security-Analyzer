@@ -159,6 +159,7 @@ def delete_once(client, path):
     if kind == 'Group': url += '?fail_if_subtree_exists=true'
     response = client.http.request('DELETE', url, headers=client.headers, retries=False, redirect=False,
         timeout=urllib3.Timeout(connect=client.timeout, read=client.timeout), pool_timeout=client.timeout)
+    collector.record_access_failure(client, 'DELETE', path, response.status)
     return response.status
 
 
@@ -166,6 +167,8 @@ def describe_error(exc):
     if isinstance(exc, ValidationError): return '; '.join(exc.messages)
     if isinstance(exc, collector.InventoryChanged):
         return 'Live inventory verification failed: ' + str(exc)[:2000] + '. Review live dependency-search diagnostics. No DELETE retry was performed.'
+    if isinstance(exc, collector.AuditError) and exc.status_code in (401, 403):
+        return collector.access_message(getattr(exc, 'method', None), getattr(exc, 'path', None), exc.status_code)
     if isinstance(exc, collector.AuditError): return 'NSX verification failed (HTTP {}). No DELETE retry was performed.'.format(exc.status_code or 'unavailable')
     return 'Operation interrupted or failed. Check NSX and the audit record before starting another deletion.'
 
@@ -299,7 +302,8 @@ def process_item(item, execute=False):
                     item.http_status = status
                     if status not in (200, 202, 204):
                         item.status = 'failed' if status in (400, 401, 403, 405, 409, 412, 429) else 'uncertain'
-                        item.message = f'DELETE returned HTTP {status}; verify NSX before a new request. No retry performed.'
+                        item.message = (collector.access_message('DELETE', item.path, status) if status in (401, 403)
+                                        else f'DELETE returned HTTP {status}; verify NSX before a new request.') + ' No retry performed.'
                     elif current_object(client, item.path) is not None:
                         item.status, item.message = 'uncertain', 'DELETE accepted, but absence is not verified. Check NSX; do not blindly retry.'
                     else:
@@ -327,6 +331,10 @@ def process_item(item, execute=False):
             if any(row.get('status') in ('sending', 'uncertain') for row in item.cleanup_results):
                 item.status = 'uncertain'
             item.message += f' Reference cleanup: {updated} rule update(s) verified; {deleted} rule deletion(s) verified. Review each recorded outcome; no automatic rollback or retry.'
+    from .nsx_access import audit_failures
+    access_failures = audit_failures(client, batch.environment_id, item=item)
+    if access_failures:
+        item.verification = {**item.verification, 'access_failures': access_failures}
     diagnostics = getattr(client, 'search_diagnostics', None)
     if isinstance(diagnostics, dict):
         # Persist only search metadata, never result objects, headers or credentials.
@@ -632,7 +640,24 @@ def reference_cleanup(request, pk):
                 return redirect('deletion-reference-cleanup', pk=pk)
             except ValidationError as exc:
                 error = '; '.join(exc.messages)
-    response = render(request, 'inventory/reference_cleanup.html', {'item': item, 'batch': batch,
+    executing = batch.status in ('queued', 'running')
+    waiting = bool(available and not batch.confirmed_at)
+    active = executing or waiting
+    terminal = item.status in ('deleted', 'blocked', 'failed', 'uncertain', 'already_absent')
+    completed = sum(row.get('status') in ('updated', 'deleted', 'failed', 'uncertain') for row in item.cleanup_results) + int(terminal)
+    phase_label = ('Waiting for deletion worker' if batch.status == 'queued' else
+                   'Executing cleanup and group deletion' if batch.status == 'running' else
+                   'Awaiting cleanup approvals' if waiting and item.status == 'cleanup_review' else
+                   'Awaiting execution confirmation' if waiting and item.status == 'verified' else
+                   'Cleanup finished — review outcomes' if terminal else 'Preview expired or closed')
+    outcomes = {row['path']: row for row in item.cleanup_results}
+    plan_rows = [{**change, 'outcome': outcomes.get(change['path'])} for change in item.cleanup_plan]
+    template = ('inventory/reference_cleanup_progress.html' if request.method == 'GET' and request.GET.get('fragment') == '1'
+                else 'inventory/reference_cleanup.html')
+    response = render(request, template, {'item': item, 'batch': batch,
+        'active': active, 'executing': executing, 'waiting': waiting, 'phase_label': phase_label,
+        'operation_done': completed, 'operation_total': len(item.cleanup_plan) + 1,
+        'approval_count': len(item.cleanup_approvals), 'plan_rows': plan_rows, 'updated_at': timezone.now(),
         'environment': batch.environment, 'fingerprint': digest, 'required_count': required_count,
         'cleanup_summary': cleanup.summary(item.cleanup_plan),
         'can_approve': available and item.status == 'cleanup_review' and not any(str(d.get('actor_id')) == str(request.user.pk) for d in item.cleanup_approvals),

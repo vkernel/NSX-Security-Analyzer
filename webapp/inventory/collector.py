@@ -59,10 +59,38 @@ def configure_logging(debug=False):
 class AuditError(Exception):
     """A request or inventory completeness check failed."""
 
-    def __init__(self, message, status_code=None, retry_after=None):
+    def __init__(self, message, status_code=None, retry_after=None, method=None, path=None):
         super().__init__(message)
         self.status_code = status_code
         self.retry_after = retry_after
+        self.method, self.path = method, path
+
+
+def access_message(method, path, status):
+    operation = str(method or 'API').upper()
+    endpoint = str(path or 'NSX API').split('?', 1)[0].replace('\r', '').replace('\n', '')[:1000]
+    reason = ('NSX rejected the service account credentials. Check the configured username/password and account status.'
+              if status == 401 else 'NSX denied this operation. Check the environment service account permissions for this object and operation.')
+    return f'{operation} {endpoint}: HTTP {status}. {reason}'
+
+
+def record_access_failure(client, method, path, status):
+    if status not in (401, 403):
+        return None
+    message = access_message(method, path, status)
+    LOG.warning('%s', message)
+    if not isinstance(getattr(client, 'access_failures', None), list):
+        client.access_failures = []
+        client.access_failure_lock = threading.Lock()
+    row = {'method': method, 'path': str(path).split('?', 1)[0].replace('\r', '').replace('\n', '')[:1000], 'http_status': status,
+           'message': message, 'at': datetime.now(timezone.utc).isoformat(), 'count': 1}
+    with client.access_failure_lock:
+        existing = next((r for r in client.access_failures if (r['method'], r['path'], r['http_status']) == (method, row['path'], status)), None)
+        if existing:
+            existing['count'] += 1
+        elif len(client.access_failures) < 100:
+            client.access_failures.append(row)
+    return row
 
 
 def parse_retry_after(value):
@@ -118,6 +146,8 @@ class NSXClient:
         self.retries = retries
         self.testing = False
         self.inventory_warnings = []
+        self.access_failures = []
+        self.access_failure_lock = threading.Lock()
         self.context = context
         self.metrics_lock = threading.Lock()
         self.metrics = {"requests": 0, "retries": 0}
@@ -181,6 +211,9 @@ class NSXClient:
         try:
             response = self.http.request("GET", url, headers=self.headers, redirect=False,
                 retries=False, timeout=urllib3.Timeout(total=timeout if phase_deadline != float("inf") else None, connect=timeout, read=timeout), pool_timeout=timeout)
+            if response.status in (401, 403):
+                failure = record_access_failure(self, 'GET', path, response.status)
+                raise AuditError(failure['message'], status_code=response.status, method='GET', path=path)
             if not 200 <= response.status < 300:
                 detail = ""
                 try:
@@ -1904,6 +1937,7 @@ def audit(client, workers=4, testing=False, progress=None):
             "inventory": inventory, "tags": tags, "testing": testing, "generated_at": datetime.now(timezone.utc).isoformat(),
             "performance": {"workers": workers, "elapsed_seconds": round(time.perf_counter() - started, 2),
                             "phases_seconds": phases, "membership": membership_diagnostics, "collection_scope": scope_diagnostics,
+                            "access_failures": client.access_failures if isinstance(getattr(client, "access_failures", None), list) else [],
                             "http": dict(client.metrics) if isinstance(getattr(client, "metrics", None), dict) else {}},
             "scope": ("TESTING SAMPLE: first record per list, first domain only" if testing else "Local Manager /infra; references in visible Policy search index"),
             "usage_definition": "No configuration reference found; not a traffic analysis or deletion approval",
@@ -2124,7 +2158,7 @@ def feature_guide():
 <p><strong>How to proceed:</strong> open a ready finding → Delete from NSX — preview, or select ready findings on the deletion page. Preview and execution have independent lanes in the existing worker container; each processes one batch at a time. Use Refresh results to see progress. Review saved-snapshot impact and every live-check result, then open Review permanent deletion, enter the ticket and confirm the exact targets. The requesting administrator must confirm within ten minutes of verification; execution rechecks expiry and evidence. Closing the dialog cancels submission, but queued execution has no cancellation or automatic rollback.</p>
 <p><strong>Reading results:</strong> verified means ready for confirmation, not deleted. Deleted means DELETE was accepted and a subsequent read confirmed absence. Already_absent does not mark the review decommissioned. Blocked means checks did not permit deletion; failed means the request was rejected. Uncertain or interrupted outcomes require checking NSX before another attempt. A completed batch can include unsuccessful rows. Normal snapshot retention does not remove deletion records; environments with these records are protected from deletion.</p>
 <p><strong>Supported targets:</strong> local-manager groups, custom services and their service entries, DFW rules and empty DFW policies. Empty policies require a fresh snapshot containing identity and configuration. Global/project objects and VM/tag operations are excluded. The environment account needs appropriate NSX CRUD permissions; ordinary collection remains read-only. Limited dependency-search coverage cannot be overridden by manual verification for this operation.</p>
-<h3>Removing an empty group referenced by firewall rules</h3><p>A verified empty group referenced only in ordinary local DFW source/destination lists can show Reference cleanup required. Choose Review reference cleanup to see each policy, rule, enabled status and current/proposed lists. When other local groups remain, the plan proposes removing only the selected reference. When the verified empty group is the sole source or destination, the plan explicitly proposes deleting that firewall rule before the group. Review every rule marked Delete; it needs separate cleanup approval and final execution confirmation. No ANY replacement or parent-policy deletion is performed. Exclusions, Applied To, protected objects, unsupported dependencies and rules with their own incoming references remain blocked.</p><p>The exact rule edits need separate administrator approval using the stricter group/firewall-rule approval mode; four-eyes requires distinct administrators. Existing finding approvals do not authorize firewall edits. Share the cleanup page with the second administrator when required. Return to the deletion request and explicitly confirm the rule changes plus deletion with a ticket, within the original ten-minute verification window.</p><p>Execution repeats live checks, uses revision-checked rule updates or explicitly approved rule deletions, verifies each result, then repeats full dependency and membership verification before deleting the group. No updates or deletion are automatically retried. Changes are not atomic: if a later step fails, earlier verified rule edits and deletions remain. Deleted rules have their own deletion-history entries, original configuration and identity evidence; related rule findings close only after verified absence. View rule cleanup and outcomes from deletion history for per-rule results and saved original/proposed configurations for manual reconstruction. If selected groups share a rule, a later item can require a fresh preview because an earlier item changed that rule.</p>
+<h3>Access failures and cleanup progress</h3><p>Review reference cleanup shows approval and operation progress, refreshing every five seconds while active. Expanded details stay open; Pause updates and Refresh now are available. Approval records a decision; final execution confirmation is still required. Read-only previews and credential tests do not prove write permission. HTTP 401 and 403 responses identify the method and object path in diagnostics, operation results, worker logs and administrator Activity. A denied firewall change stops that group cleanup. Earlier successful changes remain recorded. Correct account permissions and create a fresh preview; writes are not retried automatically.</p><h3>Removing an empty group referenced by firewall rules</h3><p>A verified empty group referenced only in ordinary local DFW source/destination lists can show Reference cleanup required. Choose Review reference cleanup to see each policy, rule, enabled status and current/proposed lists. When other local groups remain, the plan proposes removing only the selected reference. When the verified empty group is the sole source or destination, the plan explicitly proposes deleting that firewall rule before the group. Review every rule marked Delete; it needs separate cleanup approval and final execution confirmation. No ANY replacement or parent-policy deletion is performed. Exclusions, Applied To, protected objects, unsupported dependencies and rules with their own incoming references remain blocked.</p><p>The exact rule edits need separate administrator approval using the stricter group/firewall-rule approval mode; four-eyes requires distinct administrators. Existing finding approvals do not authorize firewall edits. Share the cleanup page with the second administrator when required. Return to the deletion request and explicitly confirm the rule changes plus deletion with a ticket, within the original ten-minute verification window.</p><p>Execution repeats live checks, uses revision-checked rule updates or explicitly approved rule deletions, verifies each result, then repeats full dependency and membership verification before deleting the group. No updates or deletion are automatically retried. Changes are not atomic: if a later step fails, earlier verified rule edits and deletions remain. Deleted rules have their own deletion-history entries, original configuration and identity evidence; related rule findings close only after verified absence. View rule cleanup and outcomes from deletion history for per-rule results and saved original/proposed configurations for manual reconstruction. If selected groups share a rule, a later item can require a fresh preview because an earlier item changed that rule.</p>
 <h3>Direct empty-group execution verification</h3><p>For already-approved local groups with one or more positive VM Name or Tag equality conditions joined only by AND, a deletion preview may use fresh retained qualified history when intervening snapshots contain only the recognized global VM pagination warning. Each snapshot must still show unchanged identity/configuration and empty membership. Normal approvals stay paused. Mixed/nested/extended definitions, missing or unknown evidence, other warnings, changed criteria, stale history and exceeded observation gaps remain blocked.</p><p>Both preview and execution require explicit zero VM, IP-address and logical-port membership results, without errors or continuation cursors. No VM-only shortcut is used and no historical observations are added. Unrestricted live dependency verification and the administrator's separate execution confirmation remain mandatory.</p>
 <h3>Saved deletion configuration</h3><p>Administrators can use View deleted configuration from deletion results or the related finding. The dialog shows original object identity/path, recorded Manager, ticket, timestamps and outcome; groups also show tags and membership expressions. Copy JSON and Download JSON provide the saved raw configuration. The link opens a standalone page when JavaScript is unavailable.</p><p>Saved before deletion means historical preview data, not a live read. These records survive normal snapshot retention. No recovery API or automatic recreation is performed. Raw JSON includes server-generated fields that may need removal before API reuse. Check NSX before manually recreating an object, particularly for uncertain outcomes. Dynamic membership uses current inventory, VDI automation may change it, and separately removed references are not restored.</p>
 <h3>Approval modes by category</h3><p>Administration → Review approvals provides a workspace default plus overrides for Groups (including VDI), Custom services, Firewall rules and Firewall policies. Choose Inherit default, Single approval or Four-eyes. Preview changes shows effective modes and affected open review counts without saving. Saving resets approvals only for open reviews whose effective mode changes; owners and audit history remain. Rejected and completed reviews stay unchanged. Finding details show the setting source. Evidence and observation safeguards still apply.</p>

@@ -848,3 +848,23 @@ fresh preview for the remaining group instead of silently merging changes.
 
 Deployment includes migration `0048_reference_cleanup`; migrate the database before
 starting the matching web and worker version. No live NSX changes are made by migration.
+
+
+### Access failures and cleanup progress
+
+Review reference cleanup shows separate approval and operation progress bars, with
+five-second automatic updates while active. Expanded details remain open. You can
+pause updates or refresh manually. Approval records a decision; the requesting
+administrator must still confirm execution with a change ticket.
+
+HTTP 401 (authentication rejected) and 403 (permission denied) responses show the
+request method, object path and corrective guidance in collection diagnostics or
+deletion/cleanup results. They are also recorded in worker logs and administrator
+Activity/audit history. Diagnostics retain up to 100 distinct denied endpoints per
+client, with repeat counts, without credentials or response bodies. A successful
+read-only preview or credential test does not prove firewall write permissions.
+
+If a firewall modification/deletion is denied, execution for that group stops and
+the group is not deleted. Earlier successful changes remain recorded; remaining
+rules show Not attempted. Fix the environment service account permissions, review
+the recorded outcomes, and create a fresh preview. Writes are not retried automatically.

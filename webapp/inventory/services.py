@@ -100,7 +100,8 @@ def update_progress(job_id, completed, stage):
 def fail_job(job_id, message, diagnostics=None):
     from .audit_events import record
     from .observability import safe_data
-    extra = {'diagnostics': safe_data(diagnostics)} if diagnostics is not None else {}
+    retained = AuditJob.objects.filter(pk=job_id).values_list('diagnostics', flat=True).first() or {}
+    extra = {'diagnostics': {**retained, **safe_data(diagnostics)}} if diagnostics is not None else {}
     changed = AuditJob.objects.filter(pk=job_id, status="running").update(
         status="failed", finished_at=timezone.now(), error=message[:1500], **extra)
     if changed:
@@ -288,6 +289,8 @@ def execute_job(job_id):
                 report = audit.audit(client, workers=1 if job.testing else concurrency.maximum, testing=job.testing,
                                  progress=lambda completed, stage: update_progress(job.pk, completed, stage))
         finally:
+            from .nsx_access import save_collection_access
+            save_collection_access(client, job)
             if concurrency:
                 LOG.info("NSX request pacing summary: %s", client.request_pacer.summary())
             client.close()
@@ -348,7 +351,8 @@ def execute_job(job_id):
                details={'snapshot_id': str(snapshot.pk), 'elapsed_seconds': round(time.monotonic()-started, 3)}, best_effort=True)
         # Diagnostics are supplemental: a telemetry write failure cannot undo success.
         try:
-            AuditJob.objects.filter(pk=job.pk, status='succeeded').update(diagnostics={'timeline': diagnostic_log.TIMELINE})
+            retained = AuditJob.objects.filter(pk=job.pk).values_list('diagnostics', flat=True).first() or {}
+            AuditJob.objects.filter(pk=job.pk, status='succeeded').update(diagnostics={**retained, 'timeline': diagnostic_log.TIMELINE})
         except Exception as exc:
             log_failure(job.pk, exc)
     except CollectionStopped:

@@ -18,6 +18,24 @@ def rendered_document(report):
     return nsx._render_report(report, fragments=False)
 
 
+class AccessDiagnosticsTests(unittest.TestCase):
+    def test_denied_get_records_safe_details_without_retry(self):
+        for status in (401, 403):
+            client = nsx.NSXClient('https://nsx.example', 'test', 'secret-password')
+            client.http = Mock()
+            client.http.request.return_value = Mock(status=status, data=b'sensitive response body', headers={})
+            with self.assertRaises(nsx.AuditError) as raised:
+                client.get('/infra/services')
+            self.assertEqual(client.http.request.call_count, 1)
+            self.assertEqual(raised.exception.status_code, status)
+            self.assertIn('GET /infra/services', str(raised.exception))
+            self.assertNotIn('sensitive', str(raised.exception))
+            self.assertEqual(client.access_failures[0]['http_status'], status)
+            nsx.record_access_failure(client, 'GET', '/infra/services', status)
+            self.assertEqual(len(client.access_failures), 1)
+            self.assertEqual(client.access_failures[0]['count'], 2)
+
+
 class TypedMembershipTests(unittest.TestCase):
     def group(self, member_type):
         return {'path': '/g', 'expression': [{'resource_type': 'Condition',

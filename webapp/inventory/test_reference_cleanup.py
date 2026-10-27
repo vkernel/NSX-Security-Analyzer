@@ -478,3 +478,51 @@ class ReferenceCleanupTests(TestCase):
         self.item.refresh_from_db()
         self.assertEqual(self.item.status, 'blocked'); self.assertIn('also selected', self.item.message)
         self.nsx.http.request.assert_not_called()
+
+    def test_permission_denial_put_is_visible_audited_and_stops_group(self):
+        from .models import AuditEvent
+        self.preview(); self.approve(); self.confirm()
+        self.nsx.http.request.side_effect = None
+        self.nsx.http.request.return_value.status = 403
+        with self.live(), patch.object(d, 'delete_once') as delete:
+            d.process_item(self.item, execute=True)
+        self.item.refresh_from_db()
+        delete.assert_not_called()
+        self.assertEqual(self.nsx.http.request.call_count, 1)
+        self.assertIn('HTTP 403', self.item.cleanup_results[0]['message'])
+        self.assertIn('permissions', self.item.message)
+        self.assertEqual(self.item.verification['access_failures'][0]['method'], 'PUT')
+        self.assertTrue(AuditEvent.objects.filter(action='nsx.access_denied').exists())
+        response = self.client.get(reverse('deletion-reference-cleanup', args=[self.item.pk]))
+        self.assertContains(response, 'HTTP 403')
+        self.assertContains(response, 'NSX authentication or permission failures')
+
+    def test_permission_denial_rule_delete_retains_history_and_group(self):
+        self.prepare_rule_deletion()
+        self.nsx.http.request.side_effect = None
+        self.nsx.http.request.return_value.status = 403
+        with self.live(): d.process_item(self.item, execute=True)
+        self.item.refresh_from_db()
+        self.assertEqual(self.nsx.http.request.call_count, 1)
+        self.assertIn(self.group['path'], self.state)
+        self.assertIn('HTTP 403', self.item.cleanup_results[0]['message'])
+        child = DeletionItem.objects.get(batch=self.batch, path=self.rule['path'])
+        self.assertIn('HTTP 403', child.message)
+
+    def test_cleanup_progress_fragment_and_execution_states(self):
+        self.preview()
+        url = reverse('deletion-reference-cleanup', args=[self.item.pk])
+        response = self.client.get(url, {'fragment': '1'})
+        self.assertContains(response, 'Awaiting cleanup approvals')
+        self.assertContains(response, 'aria-label="Cleanup operations"')
+        self.assertContains(response, 'data-active="true"')
+        self.assertNotContains(response, '<html')
+        self.assertIn('no-store', response['Cache-Control'])
+        self.approve()
+        self.assertContains(self.client.get(url), 'Awaiting execution confirmation')
+        self.batch.status = 'running'; self.batch.save()
+        self.assertContains(self.client.get(url), 'Executing cleanup and group deletion')
+        self.batch.status = 'completed'; self.batch.save()
+        self.item.status = 'blocked'; self.item.save()
+        self.assertContains(self.client.get(url), 'data-active="false"')
+        self.nsx.http.request.assert_not_called()
