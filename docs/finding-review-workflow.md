@@ -767,3 +767,17 @@ worker. New deletion lifecycle records distinguish worker activity from the conf
 administrator. A finished batch is not proof of deletion: inspect each object's result.
 Deletion details and configuration links require deletion permission. Old events can
 lack names or actor labels; missing records cannot be reconstructed by this view.
+
+### Reading details during automatic refresh
+
+Expanded verification, diagnostics and task details no longer pause automatic updates.
+Refresh preserves open sections, keyboard focus and scroll position. NSX deletion and
+the shared Activity, comparison and recalculation regions use the same preservation
+logic. Opening a dialog or editing a field within the refreshed region pauses updates
+with an explicit message; background work continues. Closing the dialog or leaving the
+field allows the next poll to resume. Deletion's Pause updates control still works.
+The shared status indicator only reports an update when the region was refreshed.
+
+Refresh DOM regression tests can be run with `node --test
+webapp/tests-js/refresh-region.test.cjs` with `jsdom` installed in a temporary directory
+and its `node_modules` directory supplied through `NODE_PATH`.

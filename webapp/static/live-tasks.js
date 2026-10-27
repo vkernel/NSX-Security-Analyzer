@@ -9,15 +9,17 @@
         const response = await fetch(location.href, {credentials:'same-origin', cache:'no-store', headers:{'X-Requested-With':'task-status'}});
         if (!response.ok || response.redirected) throw new Error('Status unavailable. Your session may have expired.');
         const doc = new DOMParser().parseFromString(await response.text(), 'text/html');
+        const pauses = [];
+        let updated = 0;
         for (const region of regions()) {
           const next = doc.getElementById(region.id);
-          // Never disturb a keyboard user or an expanded result they are reading.
           if (!next) throw new Error('Unable to read the updated task status.');
-          if (region.contains(document.activeElement) || region.querySelector('details[open]')) continue;
-          if (region.innerHTML !== next.innerHTML) region.replaceChildren(...next.childNodes);
-          region.dataset.poll = next.dataset.poll;
+          const reason = window.RefreshRegion.replace(region, next);
+          if (reason) pauses.push(reason);
+          else updated++;
         }
-        document.querySelectorAll('[data-live-status]').forEach(node => { if (node.textContent !== 'Status updated.') node.textContent = 'Status updated.'; });
+        const message = pauses.length ? `${updated ? 'Some statuses updated. ' : ''}${pauses[0]}` : 'Status updated.';
+        document.querySelectorAll('[data-live-status]').forEach(node => { node.textContent = message; });
       } catch (error) {
         document.querySelectorAll('[data-live-status]').forEach(node => node.textContent = error.message + ' Retrying shortly.');
       }

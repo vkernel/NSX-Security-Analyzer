@@ -7,8 +7,9 @@
     if (node) node.textContent = text;
   };
   async function refresh(manual = false) {
-    if (busy || document.hidden || document.querySelector('dialog[open]')) return;
-    if (!manual && region()?.contains(document.activeElement)) return;
+    if (busy || document.hidden || !region()) return;
+    const reason = window.RefreshRegion.blocked(region());
+    if (reason) { status(reason); return; }
     busy = true;
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 15000);
@@ -19,11 +20,10 @@
       if (!response.ok || response.redirected) throw new Error('Refresh unavailable');
       const page = new DOMParser().parseFromString(await response.text(), 'text/html');
       const next = page.getElementById('deletion-progress');
-      if (!next || document.querySelector('dialog[open]')) return;
-      const current = region();
-      const openDetails = [...current.querySelectorAll('details')].map((node, i) => node.open ? i : -1);
-      next.querySelectorAll('details').forEach((node, i) => { node.open = openDetails.includes(i); });
-      current.replaceWith(next);
+      if (!next) throw new Error('Missing status region');
+      if (paused && !manual) return;
+      const reason = window.RefreshRegion.replace(region(), next);
+      if (reason) { status(reason); return; }
       if (paused) {
         const toggle = next.querySelector('[data-toggle-refresh]');
         if (toggle) toggle.textContent = 'Resume updates';

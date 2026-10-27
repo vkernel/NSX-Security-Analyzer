@@ -89,6 +89,7 @@ def environment_detail(request, pk):
 @never_cache
 def environment_edit(request, pk=None):
     environment = get_object_or_404(page_queries.environments(), pk=pk) if pk else None
+    saved_credentials = {'manager':environment.manager, 'username':environment.username, 'password':environment.password_ciphertext} if environment else None
     import time
     from .certificates import retrieve_manager
     from .certificates import origin, DiscoveryError
@@ -129,6 +130,19 @@ def environment_edit(request, pk=None):
                 raise DiscoveryError('To trust the retrieved certificate, keep TLS verification enabled and do not select certificate removal or upload a replacement.')
         except DiscoveryError as exc:
             form.add_error(None, str(exc))
+    if request.method == 'POST' and request.POST.get('action') == 'test_credentials':
+        from django.http import JsonResponse
+        from .connection_test import test_credentials
+        if form.is_valid():
+            ok, result = test_credentials(form, saved_credentials,
+                ca_preview['pem'] if request.POST.get('trust_retrieved') == 'on' else None)
+        else:
+            ok, result = False, 'Check the environment fields before testing.'
+        record('environment.credentials_tested', 'Environment', pk or 'new', outcome='success' if ok else 'failed')
+        if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+            return JsonResponse({'ok':ok, 'message':result, 'errors':form.errors.get_json_data()})
+        return render(request, 'inventory/environment_form.html', {'form':form, 'environment':environment,
+            'ca_preview':ca_preview, 'credential_test_result':result + ' Re-enter any new password before saving.'})
     if request.method == "POST" and form.is_valid():
         # Prevent origin changes from mixing manager inventories under one history.
         with transaction.atomic():
