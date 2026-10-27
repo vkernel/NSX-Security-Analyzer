@@ -6,10 +6,10 @@ from .reference_cleanup import requirement, summary
 
 
 def tasks(user, *, environment=None, query='', queue=None):
-    if not permitted(user): return []
+    if not permitted(user) or queue in ('unassigned', 'rejected', 'decommissioned', 'suppressed'): return []
     rows = DeletionItem.objects.filter(cleanup_results=[]).exclude(cleanup_plan=[]).filter(
-        status__in=['cleanup_review', 'cleanup_recheck', 'verified', 'cleanup_rejected', 'blocked', 'failed', 'uncertain']
-    ).select_related('batch__environment', 'batch__requested_by', 'finding').order_by('-pk')
+        status__in=['cleanup_review', 'cleanup_recheck', 'verified'],
+        batch__status__in=['preview_ready', 'preview_queued', 'checking']).select_related('batch__environment', 'batch__requested_by', 'finding').order_by('-pk')
     if queue == 'second':
         rows = rows.filter(status='cleanup_review', batch__status='preview_ready', batch__confirmed_at__isnull=True).exclude(cleanup_approvals=[])
     elif queue in ('assigned', 'ready'):
@@ -22,6 +22,7 @@ def tasks(user, *, environment=None, query='', queue=None):
         from django.db.models import Q
         rows = rows.filter(Q(name__icontains=query) | Q(batch__environment__name__icontains=query))
     result = []
+    seen = set()
     for item in rows[:500]:
         actors = {str(d.get('actor_id')) for d in item.cleanup_approvals}
         mine = item.batch.requested_by_id == user.pk
@@ -32,6 +33,9 @@ def tasks(user, *, environment=None, query='', queue=None):
         if queue == 'ready' and not (mine and item.status == 'verified' and not item.batch.confirmed_at): continue
         if queue is None and not (mine or second): continue
         if item.batch.confirmed_at: continue
+        identity = (item.batch.environment_id, item.path)
+        if identity in seen: continue
+        seen.add(identity)
         label = {'cleanup_review': 'Awaiting second approval' if actors else 'Awaiting cleanup approval',
                  'cleanup_recheck': 'Revalidating', 'verified': 'Ready to confirm',
                  'cleanup_rejected': 'Rejected', 'blocked': 'Needs attention', 'failed': 'Needs attention', 'uncertain': 'Needs attention'}[item.status]
@@ -42,6 +46,7 @@ def tasks(user, *, environment=None, query='', queue=None):
                 label = 'Confirmation expired — revalidate'
         result.append({'item': item, 'label': label, 'second': second, 'summary': summary(item.cleanup_plan),
                        'approvals': len(actors), 'required': requirement(item.finding) if item.finding else 2,
+                       'action_label': 'Revalidate plan' if label == 'Confirmation expired — revalidate' else 'Review second approval' if second else 'View progress' if item.status == 'cleanup_recheck' or str(user.pk) in actors and review else 'Confirm execution' if item.status == 'verified' and mine else 'Review plan',
                        'url': reverse('deletion-reference-cleanup', args=[item.pk]),
                        'first_approver': item.cleanup_approvals[0].get('actor_name', '') if actors else '',
                        'at': item.finished_at or item.verified_at or item.batch.created_at})

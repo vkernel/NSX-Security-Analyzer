@@ -2,6 +2,7 @@
 from django import template
 register = template.Library()
 STATUSES = {
+    'cancelled': ('Cancelled', 'neutral'), 'cancelling': ('Cancellation requested', 'info'),
     'queued': ('Waiting for worker', 'info'), 'pending': ('Pending', 'neutral'),
     'running': ('Running', 'info'), 'checking': ('Verifying', 'info'),
     'succeeded': ('Completed', 'success'), 'completed': ('Completed', 'neutral'),

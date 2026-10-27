@@ -24,11 +24,11 @@ def activity(request):
         if tab == 'audit' or options['actor'] or options['outcome']:
             return []
         if state == 'active':
-            return query.filter(status__in=['queued', 'running']).order_by(time_field)[:60]
+            return query.filter(status__in=['queued', 'running', 'cancelling']).order_by(time_field)[:60]
         if state == 'failed':
             return query.filter(status='failed').order_by('-' + time_field)[:60]
         # Keep active work visible even when there are many recent completions.
-        return list(query.filter(status__in=['queued', 'running']).order_by(time_field)[:30]) + list(query.exclude(status__in=['queued', 'running']).order_by('-' + time_field)[:30])
+        return list(query.filter(status__in=['queued', 'running', 'cancelling']).order_by(time_field)[:30]) + list(query.exclude(status__in=['queued', 'running', 'cancelling']).order_by('-' + time_field)[:30])
     if kind in ('', 'collection'):
         rows = AuditJob.objects.select_related('environment', 'snapshot').only('id', 'environment__id', 'environment__name', 'snapshot__id', 'status', 'created_at', 'started_at', 'finished_at', 'progress_stage')
         if selected: rows = rows.filter(environment_id=selected) if selected.isdecimal() and len(selected)<19 else rows.none()

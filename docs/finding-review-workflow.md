@@ -907,3 +907,34 @@ second approval, the task moves to read-only revalidation. Only the requester se
 
 Cleanup task rows use one primary review action. **More** contains links to the
 original finding and deletion request; affected rules expand within the row.
+
+## Active cleanup tasks and cancellation
+
+Firewall reference cleanup appears only when an active plan requires review,
+revalidation or execution confirmation. Rejected and cancelled plans disappear from
+active queues and notifications; their reasons, decisions and configurations remain
+in deletion history and Activity. Queues respect the selected review stage. A new
+preview reuses an active request containing the object rather than creating another
+concurrent plan. If a multi-object selection overlaps an active request, the existing
+request is opened and no new preview is created for the remaining selection.
+
+Use **More → Cancel cleanup plan** to withdraw one object's plan. The confirmation
+explains that other objects in the deletion request remain unaffected. Cancellation
+retains original finding approvals, so the finding stays ready for decommissioning;
+a later attempt needs a fresh preview and fresh cleanup approvals. Reject remains a
+review decision and requires a reason; cancel is an administrative withdrawal with
+an optional reason. Both retain history.
+
+Deletion request pages offer cancellation for queued/running read-only previews and
+confirmed deletions waiting for a worker. Cancellation and worker claim use the same
+database lock. Once execution starts, cancellation is unavailable: inspect individual
+outcomes instead. A cancelled preview cannot publish late verification results or
+be confirmed. No cancellation performs rollback or sends an NSX DELETE.
+
+Comparison and finding-recalculation pages also offer cancellation to administrators.
+Running work shows **Cancellation requested** until the worker acknowledges it. Work
+stops at a safe checkpoint and cannot publish cancelled results. Previously completed
+snapshots/results remain available. Cancelled comparisons can be retried; save finding
+criteria again to request a new recalculation. Collections retain their existing Stop
+collection flow, which preserves previous snapshots. **Pause updates** only pauses
+screen refresh and is independent of cancellation.

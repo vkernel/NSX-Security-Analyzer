@@ -45,15 +45,23 @@ def configuration(snapshot):
 
 def comparison_rows(before, after):
     saved, _ = SnapshotComparison.objects.get_or_create(before=before, after=after)
-    if not saved.ready:
+    if not saved.ready and saved.status not in ('cancelled', 'cancelling'):
+        # Expensive reads/comparison run outside the publication lock, so a cancel
+        # request can be recorded without waiting for the complete calculation.
+        started = perf_counter()
+        left = configuration(before)
+        if SnapshotComparison.objects.filter(pk=saved.pk, status__in=['cancelled', 'cancelling']).exists():
+            SnapshotComparison.objects.filter(pk=saved.pk, status='cancelling').update(status='cancelled')
+            return saved.rows.none().values_list('data', flat=True)
+        right = configuration(after)
+        loaded = perf_counter()
+        rows = compare(left, right)
+        compared = perf_counter()
         with transaction.atomic():
             saved = SnapshotComparison.objects.select_for_update().get(pk=saved.pk)
-            if not saved.ready:
-                started = perf_counter()
-                left, right = configuration(before), configuration(after)
-                loaded = perf_counter()
-                rows = compare(left, right)
-                compared = perf_counter()
+            if saved.status in ('cancelled', 'cancelling'):
+                saved.status = 'cancelled'; saved.save(update_fields=['status'])
+            elif not saved.ready:
                 for offset in range(0, len(rows), 100):
                     SnapshotComparisonRow.objects.bulk_create([
                         SnapshotComparisonRow(comparison=saved, ordinal=offset+i, data=row)

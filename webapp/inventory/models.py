@@ -547,6 +547,8 @@ class DeletionBatch(models.Model):
     @property
     def status_label(self):
         return {
+            'cancelled': 'Cancelled',
+            'cancelling': 'Cancellation requested',
             'preview_queued': 'Waiting for preview worker',
             'checking': 'Checking live deletion preview',
             'queued': 'Waiting for deletion worker',

@@ -107,7 +107,8 @@ def policy_values(policy):
 
 
 def run(pk, token):
-    job = FindingRecalculation.objects.get(pk=pk, token=token, status='running')
+    job = FindingRecalculation.objects.filter(pk=pk, token=token, status='running').first()
+    if not job: return
     env = Environment.objects.only('pk', 'sync_interval_minutes').get(pk=job.environment_id)
     policy = observation.policy_for(env)
     signature = policy_values(policy)

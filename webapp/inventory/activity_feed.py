@@ -9,7 +9,7 @@ from .models import AuditEvent, DeletionBatch, DeletionItem, Environment, Findin
 from .deletion import permitted
 from .user_labels import user_label
 
-ACTIVE = ('preview_queued', 'checking', 'queued', 'running')
+ACTIVE = ('preview_queued', 'checking', 'queued', 'running', 'cancelling')
 
 
 def filters(request):
@@ -44,12 +44,14 @@ def dated(rows, options, field='created_at'):
 def audit_rows(request, options, selected, kind):
     allowed = Q(action__startswith='finding.')
     if permitted(request.user):
-        allowed |= Q(action__startswith='nsx.deletion_') | Q(action='nsx.access_denied')
+        allowed |= Q(action__startswith='nsx.deletion_') | Q(action='nsx.access_denied') | Q(action__in=['comparison.cancel_requested', 'recalculation.cancel_requested'])
     rows = AuditEvent.objects.filter(allowed)
     if not permitted(request.user):
         rows = rows.exclude(action__startswith='finding.nsx_')
     if kind == 'approval': rows = rows.filter(Q(action__startswith='finding.') | Q(action__in=['nsx.deletion_cleanup_approved', 'nsx.deletion_cleanup_rejected']))
     elif kind == 'deletion': rows = rows.filter(Q(action__startswith='nsx.deletion_') | Q(action='nsx.access_denied', target_type='DeletionItem'))
+    elif kind in ('comparison', 'review'):
+        rows = rows.filter(action=('comparison' if kind == 'comparison' else 'recalculation') + '.cancel_requested')
     elif kind: rows = rows.none()
     if selected:
         rows = rows.filter(details__environment_id=int(selected)) if selected.isdecimal() and len(selected)<19 else rows.none()
@@ -83,7 +85,7 @@ def audit_cards(rows):
         data = entry.details
         is_deletion = entry.action.startswith('nsx.')
         action = entry.action.split('.', 1)[-1]
-        outcome = action.removeprefix('deletion_') if is_deletion else data.get('to', entry.outcome)
+        outcome = data.get('status') or (action.removeprefix('deletion_') if is_deletion else data.get('to', entry.outcome))
         url = ''
         finding_url = ''
         link_label = 'View deletion request' if is_deletion else 'View finding'
@@ -100,7 +102,7 @@ def audit_cards(rows):
         if entry.target_type == 'DeletionItem' and action.startswith('deletion_cleanup_') and entry.target_id.isdecimal():
             url = reverse('deletion-reference-cleanup', args=[entry.target_id])
             link_label = 'Review cleanup plan'
-        label = action.replace('_',' ').capitalize()
+        label = (entry.action.split('.')[0] + ' cancellation requested').capitalize() if action == 'cancel_requested' else action.replace('_',' ').capitalize()
         label = {'deletion_cleanup_approved': 'Cleanup approval recorded', 'deletion_cleanup_rejected': 'Cleanup rejected',
                  'deletion_cleanup_recheck': 'Cleanup revalidating'}.get(action, label)
         if action == 'approve':

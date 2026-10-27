@@ -587,6 +587,19 @@ def notifications(request):
             items.append({'id': 'cleanup-' + str(item.pk), 'label': 'Firewall reference cleanup · ' + task['label'],
                           'environment': item.batch.environment.name, 'at': stamp.isoformat(), 'unread': is_unread,
                           'url': task['url']})
+    if personal.notification_reviews:
+        from .deletion import permitted
+        if permitted(request.user):
+            from .models import AuditEvent
+            cancelled = AuditEvent.objects.filter(action='nsx.deletion_cleanup_cancelled', details__notify_reviewers=True,
+                created_at__gte=timezone.now()-timedelta(days=days)).exclude(actor_id_text=str(request.user.pk)).order_by('-created_at')[:50]
+            for decision in cancelled:
+                if not decision.target_id.isdecimal(): continue
+                is_unread = not seen or decision.created_at > seen
+                unread += int(is_unread)
+                items.append({'id': 'cleanup-cancelled-' + str(decision.pk), 'label': 'Cleanup plan cancelled — approval no longer required',
+                    'environment': '', 'at': decision.created_at.isoformat(), 'unread': is_unread,
+                    'url': reverse('deletion-reference-cleanup', args=[decision.target_id])})
     items.sort(key=lambda item: item['at'], reverse=True)
     return JsonResponse({'items': items[:50], 'unread': unread})
 

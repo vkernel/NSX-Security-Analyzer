@@ -59,3 +59,6 @@ body.reduced-motion *,body.reduced-motion *::before,body.reduced-motion *::after
   .workspace-main .pagination {justify-content:center}
 }
 @media(forced-colors:active) {.status-badge,progress,.button {border:1px solid CanvasText}}
+
+.task-cancel-form {margin-top:1.5rem}
+.task-cancel-form textarea {display:block; width:100%; min-height:6rem; resize:vertical}

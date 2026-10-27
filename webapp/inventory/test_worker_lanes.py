@@ -60,6 +60,11 @@ class LaneClaimsTests(TestCase):
 
 
 class SupervisorTests(SimpleTestCase):
+    def setUp(self):
+        reconcile = patch('inventory.task_cancellation.reconcile')
+        self.reconcile = reconcile.start()
+        self.addCleanup(reconcile.stop)
+
     def test_supervisor_starts_and_stops_all_five_lanes(self):
         processes=[MagicMock() for _ in LANES]
         for process in processes: process.poll.return_value=None

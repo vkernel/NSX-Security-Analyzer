@@ -134,3 +134,34 @@ test('collection-only pages share pause and manual refresh controls', async () =
   assert.equal(w.document.querySelector('.collection-details a').getAttribute('href'),'/result');
   dom.window.close();
 });
+
+test('sidebar navigation clears stale list positions and opens the page at the top', () => {
+  const dom=setup('<aside id="primary-sidebar"><a href="/">Overview</a></aside><main id="main"></main>'),w=dom.window;
+  const suffix=w.location.pathname+w.location.search;
+  w.sessionStorage.setItem('review-position:'+suffix,JSON.stringify({y:700,at:Date.now()}));
+  w.sessionStorage.setItem('ui-list-position:'+suffix,JSON.stringify({y:900,at:Date.now()}));
+  w.sessionStorage.setItem('workspace-sidebar-navigation',String(Date.now()));
+  const scrolls=[];w.scrollTo=(...args)=>scrolls.push(args);w.requestAnimationFrame=fn=>fn();
+  w.eval(source('navigation-scroll.js'));w.eval(source('review-navigation.js'));w.eval(source('interface-patterns.js'));
+  w.dispatchEvent(new w.PageTransitionEvent('pageshow'));
+  assert.equal(scrolls.length,1);assert.equal(scrolls[0][0].top,0);
+  assert.equal(w.sessionStorage.getItem('review-position:'+suffix),null);
+  assert.equal(w.sessionStorage.getItem('ui-list-position:'+suffix),null);
+  dom.window.close();
+});
+
+test('ordinary returns still restore list position and modified sidebar clicks do not reset it', () => {
+  const dom=setup('<aside id="primary-sidebar"><a href="/">Overview</a></aside><main id="main"></main>'),w=dom.window;
+  const suffix=w.location.pathname+w.location.search;
+  const scrolls=[];w.scrollTo=(...args)=>scrolls.push(args);w.requestAnimationFrame=fn=>fn();
+  w.eval(source('navigation-scroll.js'));w.eval(source('review-navigation.js'));
+  w.document.querySelector('a').addEventListener('click',e=>e.preventDefault());
+  w.document.querySelector('a').dispatchEvent(new w.MouseEvent('click',{bubbles:true,ctrlKey:true,button:0,cancelable:true}));
+  assert.equal(w.sessionStorage.getItem('workspace-sidebar-navigation'),null);
+  w.sessionStorage.setItem('review-position:'+suffix,JSON.stringify({y:700,at:Date.now()}));
+  w.dispatchEvent(new w.PageTransitionEvent('pageshow'));
+  assert.equal(scrolls[0][1],700);
+  w.document.querySelector('a').dispatchEvent(new w.MouseEvent('click',{bubbles:true,button:0,cancelable:true}));
+  assert.ok(w.sessionStorage.getItem('workspace-sidebar-navigation'));
+  dom.window.close();
+});

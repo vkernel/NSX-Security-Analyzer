@@ -13,7 +13,7 @@
         region.removeAttribute('tabindex'); region.removeAttribute('role'); region.removeAttribute('aria-label');
       }
     }
-    for (const menu of main.querySelectorAll('.cleanup-task-actions details,.selection-action-menu')) menu.dataset.actionMenu = 'true';
+    for (const menu of main.querySelectorAll('.cleanup-task-actions details,.selection-action-menu,details.task-actions')) menu.dataset.actionMenu = 'true';
   }
   enhance();
   let pending = false;
@@ -35,6 +35,7 @@
     try { sessionStorage.setItem(storageKey, JSON.stringify({y:scrollY,at:Date.now()})); } catch (_) {}
   });
   window.addEventListener('pageshow', () => {
+    if (window.SidebarNavigation) return;
     try {
       const saved = JSON.parse(sessionStorage.getItem(storageKey));
       if (saved && Date.now() - saved.at < 3600000) requestAnimationFrame(() => scrollTo(0,saved.y));

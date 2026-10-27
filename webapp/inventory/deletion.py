@@ -196,6 +196,8 @@ def execution_authorized(batch, item):
 
 def process_item(item, execute=False):
     batch = item.batch
+    if not execute and (DeletionItem.objects.filter(pk=item.pk, status='cancelled').exists() or DeletionBatch.objects.filter(pk=batch.pk, status__in=['cancelling', 'cancelled']).exists()):
+        return
     if execute and not DeletionItem.objects.filter(pk=item.pk, status='verified').update(status='validating'):
         return
     rechecking = not execute and item.status == 'cleanup_recheck'
@@ -358,7 +360,13 @@ def process_item(item, execute=False):
         item.verification = {**item.verification,
             'search_diagnostics': {key: diagnostics[key] for key in allowed if key in diagnostics}}
     item.finished_at = timezone.now()
-    item.save()
+    with transaction.atomic():
+        # Serialize with cancellation; stale read-only results must never revive a plan.
+        locked_batch = DeletionBatch.objects.select_for_update().get(pk=batch.pk)
+        locked_item = DeletionItem.objects.select_for_update().get(pk=item.pk)
+        if not execute and (locked_batch.status in ('cancelling', 'cancelled') or locked_item.status == 'cancelled'):
+            return
+        item.save()
     record('nsx.deletion_' + item.status, 'DeletionItem', item.pk, actor=batch.requested_by_id or '',
            details={'batch':str(batch.pk), 'name':item.name, 'path':item.path, 'environment_id':batch.environment_id,
                     'ticket':batch.ticket, 'http_status':item.http_status, 'message':item.message})
@@ -384,19 +392,29 @@ def run(pk):
         if rechecking and item.status not in ('cleanup_recheck', 'verified'): continue
         if rechecking and item.status == 'verified' and item.cleanup_plan:
             item.status = 'cleanup_recheck'
+        if DeletionBatch.objects.filter(pk=pk, status__in=['cancelling', 'cancelled']).exists(): break
+        if item.status == 'cancelled': continue
         item.batch = batch
         if execute and item.status != 'verified': continue
         process_item(item, execute)
-    batch.status = 'completed' if execute else 'preview_ready'
-    if execute: batch.finished_at = timezone.now()
-    else: batch.checked_at = timezone.now()
-    batch.save()
+    with transaction.atomic():
+        locked = DeletionBatch.objects.select_for_update().get(pk=pk)
+        if locked.status in ('cancelling', 'cancelled'):
+            locked.status = 'cancelled'; locked.finished_at = timezone.now()
+            locked.save(update_fields=['status', 'finished_at'])
+            record('nsx.deletion_cancelled', 'DeletionBatch', pk, details={'environment_id': locked.environment_id})
+            return
+        batch.status = 'completed' if execute else 'preview_ready'
+        if execute: batch.finished_at = timezone.now()
+        else: batch.checked_at = timezone.now()
+        batch.save()
     record('nsx.deletion_execution_finished' if execute else 'nsx.deletion_preview_finished',
            'DeletionBatch', batch.pk, actor='', details={'environment_id':batch.environment_id, 'ticket':batch.ticket,
            'message':'Processing finished; individual object outcomes determine whether deletion succeeded.'})
 
 
 def interrupted(pk):
+    if DeletionBatch.objects.filter(pk=pk, status='cancelling').update(status='cancelled', finished_at=timezone.now()): return
     batch = DeletionBatch.objects.filter(pk=pk, status__in=['checking','running']).first()
     if not batch: return
     batch.items.filter(status='sending').update(status='uncertain', message='Worker stopped after deletion intent was recorded. Verify NSX before retrying.')
@@ -414,7 +432,7 @@ def history(request, pk):
     query = request.GET.get('q', '').strip()[:255]
     outcome = request.GET.get('outcome', '')
     object_type = request.GET.get('type', '')
-    outcomes = {'deleted': 'Deleted', 'blocked': 'Blocked', 'already_absent': 'Already absent',
+    outcomes = {'cancelled': 'Cancelled', 'deleted': 'Deleted', 'blocked': 'Blocked', 'already_absent': 'Already absent',
                 'failed': 'Failed', 'uncertain': 'Uncertain', 'verified': 'Verified',
                 'pending': 'Pending', 'cleanup_review': 'Awaiting cleanup approval', 'cleanup_recheck': 'Revalidating approved cleanup', 'cleanup_rejected': 'Cleanup rejected', 'validating': 'Rechecking live evidence', 'sending': 'Deleting'}
     types = {'Group': 'Group', 'Service': 'Custom service', 'Rule': 'Firewall rule', 'SecurityPolicy': 'Security policy'}
@@ -486,6 +504,13 @@ def selection(request, pk):
                 elif any(row.pk in revisions and row.revision != revisions[row.pk] for row in rows):
                     error = 'Some selected findings changed. Refresh the finding reviews page and select again.'
                 else:
+                    existing = DeletionItem.objects.filter(batch__environment=env, path__in=[row.path for row in rows],
+                        batch__status__in=['preview_queued', 'checking', 'preview_ready', 'queued', 'running'],
+                        status__in=['pending', 'verified', 'cleanup_review', 'cleanup_recheck', 'validating', 'sending']).filter(Q(batch__confirmed_at__isnull=True) | Q(batch__status__in=['queued', 'running'])).order_by('-pk').first()
+                    if existing:
+                        from django.contrib import messages
+                        messages.info(request, 'An active request already includes a selected object. Continue or cancel that request before creating another preview; no new request was created.')
+                        return redirect('deletion-detail', pk=existing.batch_id)
                     batch = DeletionBatch.objects.create(environment=env, manager=env.manager, requested_by=request.user)
                     seen = set()
                     for row in rows:
@@ -546,8 +571,8 @@ def detail(request, pk):
         item.related_findings = item.verification.get('Related findings', [])
         item.search_diagnostics_json = json.dumps(item.verification.get('search_diagnostics', {}), indent=2)
     counts = {status: sum(item.status == status for item in items) for status in
-              ('pending', 'verified', 'validating', 'sending', 'deleted', 'blocked', 'already_absent', 'failed', 'uncertain', 'cleanup_review', 'cleanup_recheck', 'cleanup_rejected')}
-    active = batch.status in ('preview_queued', 'checking', 'queued', 'running')
+              ('pending', 'verified', 'validating', 'sending', 'deleted', 'blocked', 'already_absent', 'failed', 'uncertain', 'cleanup_review', 'cleanup_recheck', 'cleanup_rejected', 'cancelled')}
+    active = batch.status in ('preview_queued', 'checking', 'queued', 'running', 'cancelling')
     execution = bool(batch.confirmed_at)
     done = sum(counts[status] for status in ('deleted', 'blocked', 'already_absent', 'failed', 'uncertain'))
     if not execution:
@@ -555,11 +580,12 @@ def detail(request, pk):
     for item in items:
         item.display_status = {'pending': 'Waiting for verification', 'verified': 'Ready to confirm' if not execution else 'Waiting for live checks',
             'cleanup_review': 'Awaiting cleanup approval', 'cleanup_recheck': 'Revalidating approved cleanup', 'cleanup_rejected': 'Cleanup rejected', 'validating': 'Rechecking live evidence', 'sending': 'Deleting and verifying absence',
-            'deleted': 'Deleted', 'blocked': 'Blocked', 'already_absent': 'Already absent',
+            'cancelled': 'Cancelled', 'deleted': 'Deleted', 'blocked': 'Blocked', 'already_absent': 'Already absent',
             'failed': 'Deletion failed', 'uncertain': 'Outcome needs verification'}.get(item.status, item.status)
     stamps = [item.verified_at for item in items if item.status == 'verified' and item.verified_at]
     deadline = (batch.confirmed_at + timedelta(hours=1) if execution else
                 min(stamps + ([batch.checked_at] if batch.checked_at else [])) + timedelta(minutes=10) if stamps else None)
+    if batch.status in ('cancelled', 'cancelling'): deadline = None
     expired = bool(deadline and timezone.now() >= deadline)
     review_expired = expired and not execution and batch.status == 'preview_ready' and not counts['cleanup_review']
     if review_expired:
@@ -590,6 +616,7 @@ def detail(request, pk):
         'cleanup_rule_deletes':rule_deletes,
         'confirmation_object_count':counts['verified'] + rule_deletes,
         'cleanup_rule_updates':sum(row.get('action') != 'delete_rule' for item in items if item.status == 'verified' for row in item.cleanup_plan),
+        'can_cancel': batch.status in ('preview_queued', 'checking', 'preview_ready', 'queued'),
         'can_confirm':batch.status=='preview_ready' and batch.requested_by_id==request.user.pk and not expired}
     template = 'inventory/deletion_progress.html' if request.GET.get('fragment') == '1' and request.method == 'GET' else 'inventory/deletion_detail.html'
     response = render(request, template, context)
@@ -705,12 +732,12 @@ def reference_cleanup(request, pk):
             except ValidationError as exc:
                 error = '; '.join(exc.messages)
     revalidating = item.status == 'cleanup_recheck' and batch.status in ('preview_queued', 'checking')
-    executing = batch.status in ('queued', 'running')
+    executing = batch.status in ('queued', 'running') and item.status not in ('cancelled', 'cleanup_rejected')
     confirmation_ready = (batch.status == 'preview_ready' and item.status == 'verified' and item.verified_at
                           and timezone.now() - item.verified_at < timedelta(minutes=10) and not batch.confirmed_at)
     waiting = bool(available or confirmation_ready)
     active = executing or waiting or revalidating
-    terminal = item.status in ('deleted', 'blocked', 'failed', 'uncertain', 'already_absent', 'cleanup_rejected')
+    terminal = item.status in ('deleted', 'blocked', 'failed', 'uncertain', 'already_absent', 'cleanup_rejected', 'cancelled')
     completed = sum(row.get('status') in ('updated', 'deleted', 'failed', 'uncertain') for row in item.cleanup_results) + int(terminal)
     phase_label = ('Waiting for deletion worker' if batch.status == 'queued' else
                    'Executing cleanup and group deletion' if batch.status == 'running' else
@@ -728,8 +755,8 @@ def reference_cleanup(request, pk):
     elif revalidating:
         phase_label = 'Revalidating approved cleanup'
         phase_message = 'Fresh live checks are queued or running. No NSX changes are made during verification.'
-    elif item.status == 'cleanup_rejected':
-        phase_label = 'Cleanup rejected'
+    elif item.status in ('cleanup_rejected', 'cancelled'):
+        phase_label = 'Cleanup cancelled' if item.status == 'cancelled' else 'Cleanup rejected'
     elif closed:
         phase_label = 'Cleanup not scheduled'
         phase_message = 'This plan is no longer available for execution. Create a new preview to continue.'
@@ -751,13 +778,14 @@ def reference_cleanup(request, pk):
     response = render(request, template, {'item': item, 'batch': batch,
         'active': active, 'executing': executing, 'waiting': waiting, 'phase_label': phase_label,
         'approved_by_me': approved_by_me, 'is_requester': batch.requested_by_id == request.user.pk,
-        'phase_message': phase_message, 'review_expired': review_expired, 'closed': closed or item.status == 'cleanup_rejected', 'deadline': deadline,
+        'phase_message': phase_message, 'review_expired': review_expired, 'closed': closed or item.status in ('cleanup_rejected', 'cancelled'), 'deadline': deadline,
         'can_revalidate': item.status == 'verified' and batch.status == 'preview_ready' and not batch.confirmed_at and batch.requested_by_id == request.user.pk,
         'show_operations': bool(batch.confirmed_at or item.cleanup_results),
         'operation_done': completed, 'operation_total': len(item.cleanup_plan) + 1,
         'approval_count': len(item.cleanup_approvals), 'plan_rows': plan_rows, 'updated_at': timezone.now(),
         'environment': batch.environment, 'fingerprint': digest, 'required_count': required_count,
         'cleanup_summary': cleanup.summary(item.cleanup_plan),
+        'can_cancel': batch.status in ('preview_queued', 'checking', 'preview_ready', 'queued') and item.status in ('cleanup_review', 'cleanup_recheck', 'verified') and not item.cleanup_results,
         'can_approve': available and item.status == 'cleanup_review' and not any(str(d.get('actor_id')) == str(request.user.pk) for d in item.cleanup_approvals),
         'error': error, 'expired': not available, 'configuration_json': json.dumps(item.cleanup_plan, indent=2)})
     response['Cache-Control'] = 'private, no-store'

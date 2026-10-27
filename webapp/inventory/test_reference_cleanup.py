@@ -674,3 +674,84 @@ class ReferenceCleanupTests(TestCase):
         response = self.client.get(reverse('my-work'))
         self.assertContains(response, 'cleanup-task-actions')
         self.assertContains(response, '<summary class="button">More</summary>', html=True)
+
+    def test_rejected_cleanup_hidden_but_history_retained(self):
+        from .cleanup_tasks import tasks
+        self.preview()
+        self.assertTrue(tasks(self.user))
+        self.client.post(reverse('deletion-reference-cleanup', args=[self.item.pk]), {'action':'reject', 'reason':'Not needed'})
+        self.assertFalse(tasks(self.user))
+        self.item.refresh_from_db()
+        self.assertEqual(self.item.status, 'cleanup_rejected')
+        self.assertTrue(self.item.cleanup_plan)
+
+    def test_cancel_cleanup_only_withdraws_selected_object(self):
+        from .cleanup_tasks import tasks
+        self.preview()
+        other = DeletionItem.objects.create(batch=self.batch, path='/infra/services/other', revision=1, status='verified')
+        original = self.finding.approvals
+        url = reverse('task-cancel', args=['cleanup', self.item.pk])
+        self.assertContains(self.client.get(url), 'Only this object')
+        response = self.client.post(url, {'confirm':'yes', 'reason':'Duplicate task'})
+        self.assertEqual(response.status_code, 302)
+        self.item.refresh_from_db(); other.refresh_from_db(); self.finding.refresh_from_db()
+        self.assertEqual(self.item.status, 'cancelled')
+        self.assertEqual(other.status, 'verified')
+        self.assertEqual(self.finding.approvals, original)
+        self.assertFalse(tasks(self.user))
+        self.nsx.http.request.assert_not_called()
+
+    def test_cancel_cleanup_rejected_after_execution_claim(self):
+        self.preview()
+        self.batch.status = 'running'; self.batch.save()
+        self.client.post(reverse('task-cancel', args=['cleanup', self.item.pk]), {'confirm':'yes'})
+        self.item.refresh_from_db()
+        self.assertEqual(self.item.status, 'cleanup_review')
+
+    def test_cancel_during_live_preview_discards_late_results(self):
+        from .task_cancellation import cancel
+        self.batch.status = 'checking'; self.batch.save()
+        def validate(*args):
+            self.client.post(reverse('task-cancel', args=['deletion', self.batch.pk]), {'confirm':'yes'})
+            return self.group
+        with self.live(), patch.object(d, 'validate_live', side_effect=validate):
+            d.run(self.batch.pk)
+        self.batch.refresh_from_db(); self.item.refresh_from_db()
+        self.assertEqual(self.batch.status, 'cancelled')
+        self.assertEqual(self.item.status, 'cancelled')
+        self.nsx.http.request.assert_not_called()
+
+    def test_queued_deletion_cancel_prevents_worker_claim(self):
+        self.batch.status = 'queued'; self.batch.save()
+        self.client.post(reverse('task-cancel', args=['deletion', self.batch.pk]), {'confirm':'yes'})
+        self.assertIsNone(d.claim())
+        self.batch.refresh_from_db()
+        self.assertEqual(self.batch.status, 'cancelled')
+
+    def test_cancellation_requires_permission_and_confirmation(self):
+        self.preview()
+        url = reverse('task-cancel', args=['cleanup', self.item.pk])
+        self.client.post(url, {})
+        self.item.refresh_from_db(); self.assertEqual(self.item.status, 'cleanup_review')
+        other = get_user_model().objects.create_user('cancel-viewer', is_staff=True)
+        self.client.force_login(other)
+        self.assertEqual(self.client.post(url, {'confirm':'yes'}).status_code, 403)
+
+    def test_active_cleanup_is_reused_for_new_preview(self):
+        from .models import DeletionBatch
+        self.preview()
+        count = DeletionBatch.objects.count()
+        response = self.client.post(reverse('deletion-selection', args=[self.env.pk]), {'finding':[str(self.finding.pk)]})
+        self.assertEqual(response.url, reverse('deletion-detail', args=[self.batch.pk]))
+        self.assertEqual(DeletionBatch.objects.count(), count)
+
+    def test_second_reviewer_sees_cancellation_notification(self):
+        self.preview()
+        WorkspacePolicy.objects.update_or_create(pk=1, defaults={'required_approvals':2})
+        self.approve()
+        self.client.post(reverse('task-cancel', args=['cleanup', self.item.pk]), {'confirm':'yes'})
+        other = get_user_model().objects.create_superuser('cancel-second', password='test-only')
+        self.client.force_login(other)
+        response = self.client.get(reverse('notifications'))
+        self.assertIn('approval no longer required', response.content.decode())
+        self.assertNotContains(self.client.get(reverse('my-work'), {'queue':'second'}), 'Firewall reference cleanup')

@@ -1,6 +1,6 @@
 <div id="deletion-progress" data-active="{{ active|yesno:'true,false' }}" data-status="{{ batch.status }}">
 <a class="breadcrumb" href="{% url 'deletion-detail' batch.pk %}">← Back to deletion request</a>
-<header class="page-heading"><div><p class="operation-eyebrow">NSX change review · {{ batch.environment.name }}</p><h1>Review reference cleanup</h1><p class="lead">{{ item.name }}</p><code class="review-wrap">{{ item.path }}</code></div></header>
+<header class="page-heading"><div><p class="operation-eyebrow">NSX change review · {{ batch.environment.name }}</p><h1>Review reference cleanup</h1><p class="lead">{{ item.name }}</p><code class="review-wrap">{{ item.path }}</code></div></header>{% if can_cancel %}<details class="task-actions"><summary>More actions</summary><a class="button" href="{% url 'task-cancel' 'cleanup' item.pk %}">Cancel cleanup plan</a></details>{% endif %}
 <section class="deletion-progress-card operation-state {% if review_expired or closed or error %}operation-state-warning{% endif %}" aria-label="Reference cleanup progress">
 <div class="operation-state-heading"><h2>{{ phase_label }}</h2><span class="deletion-badge">{{ approval_count }} / {{ required_count }} approvals</span></div>
 <p role="{% if error %}alert{% else %}status{% endif %}">{{ phase_message }}</p>

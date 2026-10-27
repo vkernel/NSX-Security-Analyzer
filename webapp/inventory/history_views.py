@@ -159,7 +159,7 @@ def findings(request, pk):
     params = request.GET.copy()
     params.pop('page', None)
     from .cleanup_tasks import tasks as cleanup_tasks
-    cleanup_queue = 'second' if request.GET.get('review') == 'second_review' else None
+    cleanup_queue = {'second_review': 'second', 'ready': 'ready', 'owner_review': 'assigned'}.get(request.GET.get('review'), request.GET.get('review') or None)
     return render(request, 'inventory/findings.html', {'environment': environment, 'page': page,
         'cleanup_tasks': cleanup_tasks(request.user, environment=environment.pk, query=query, queue=cleanup_queue),
         'release_eligible': release_eligible, 'review_return': request.get_full_path(),
@@ -351,7 +351,7 @@ def comparison_retry(request, comparison_id):
     from .models import SnapshotComparison
     from django.urls import reverse
     pair = get_object_or_404(SnapshotComparison, pk=comparison_id)
-    SnapshotComparison.objects.filter(pk=pair.pk, status='failed', ready=False).update(status='queued', error='')
+    SnapshotComparison.objects.filter(pk=pair.pk, status__in=['failed', 'cancelled'], ready=False).update(status='queued', error='')
     return redirect(reverse('snapshot-comparison', args=[pair.after.environment_id]) + f'?before={pair.before_id}&after={pair.after_id}')
 
 

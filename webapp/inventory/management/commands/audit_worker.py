@@ -5,6 +5,7 @@ import sys
 import time
 from django.core.management.base import CommandError
 from django.conf import settings
+from django.utils import timezone
 from django.core.management.base import BaseCommand
 from django.db import close_old_connections, DatabaseError
 from inventory.diagnostics import LOG, log_failure, phase
@@ -100,6 +101,7 @@ class Command(BaseCommand):
 
     def run_recalculation(self, job):
         from inventory.finding_recalculation import fail
+        from inventory.models import FindingRecalculation
         try:
             with subprocess.Popen([sys.executable, str(settings.BASE_DIR / 'manage.py'),
                                    'recalculate_findings', str(job.pk), str(job.token)]) as process:
@@ -122,12 +124,14 @@ class Command(BaseCommand):
             fail(job.pk, job.token)  # Only marks still-running work, e.g. an OOM exit.
         except (OSError, subprocess.TimeoutExpired):
             fail(job.pk, job.token)
+        finally:
+            FindingRecalculation.objects.filter(pk=job.pk, token=job.token, status='cancelling').update(status='cancelled', finished_at=timezone.now())
 
     def run_comparison(self):
         from inventory.models import SnapshotComparison
         pair = SnapshotComparison.objects.filter(ready=False, status__in=['queued', 'running']).order_by('created_at').first()
         if pair is None: return False
-        SnapshotComparison.objects.filter(pk=pair.pk).update(status='running')
+        if not SnapshotComparison.objects.filter(pk=pair.pk, status__in=['queued', 'running']).update(status='running'): return False
         try:
             with subprocess.Popen([sys.executable, str(settings.BASE_DIR / 'manage.py'), 'prepare_comparison', str(pair.pk)]) as process:
                 try:
@@ -143,7 +147,8 @@ class Command(BaseCommand):
         except (OSError, subprocess.TimeoutExpired) as exc:
             log_failure('comparison', exc)
         finally:
-            SnapshotComparison.objects.filter(pk=pair.pk, ready=False).update(status='failed', error='Comparison worker interrupted or failed. Retry after checking diagnostics.')
+            SnapshotComparison.objects.filter(pk=pair.pk, ready=False, status='running').update(status='failed', error='Comparison worker interrupted or failed. Retry after checking diagnostics.')
+            SnapshotComparison.objects.filter(pk=pair.pk, status='cancelling').update(status='cancelled')
         return True
 
     def run_deletion(self, *, preview=False):
@@ -177,6 +182,8 @@ class Command(BaseCommand):
         while True:
             self.check_lease()
             close_old_connections()
+            from inventory.task_cancellation import reconcile
+            reconcile(lane)
             from inventory.finding_recalculation import claim as claim_recalculation
             recalculation = claim_recalculation() if lane in ("all", "both", "recalculation") else None
             if recalculation:
