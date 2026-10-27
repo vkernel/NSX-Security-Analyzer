@@ -798,8 +798,9 @@ check or deletion approval.
 
 A referenced empty group can now enter **Reference cleanup required**, rather than
 being offered a direct deletion. This applies only to approved empty-group findings
-whose live dependencies are ordinary local DFW rule source/destination lists. Each
-changed list must retain another local group. The read-only preview captures every
+whose live dependencies are ordinary local DFW rule source/destination lists. When another local group remains, the plan proposes a reference update. If the empty
+group is the sole source or destination, the plan explicitly proposes deleting that
+rule before the group. The read-only preview captures every
 rule's original configuration, revision, policy context and proposed lists.
 
 Choose **Review reference cleanup** to inspect policy/rule names, enabled status and
@@ -823,12 +824,22 @@ DELETE. A changed rule, group, policy configuration, approval requirement or inc
 verification stops execution. The group is marked decommissioned only after verified
 absence, as with ordinary deletion.
 
-Last-group references, Applied To, negated groups, IP literals/ANY in the changed list,
+Applied To, negated groups, IP literals/ANY in the changed list,
 protected/global objects, child configuration and non-DFW dependencies remain blocked
-with resolution guidance. No ANY replacement, automatic rule deletion or rule disabling
-is offered. Resolve these separately in NSX or through a separate rule review.
+with resolution guidance. No ANY replacement, implicit rule deletion or rule disabling
+is offered. A last-source/destination rule deletion must be listed in the approved plan
+and explicit final confirmation. Its parent policy is retained. Rules with incoming
+references or child configuration cannot be deleted through this flow. Resolve these separately in NSX or through a separate rule review.
 
-Rule updates and deletion are **not atomic**. Completed rule updates remain when a
+For a planned rule deletion, live dependency checks and an exact identity/configuration
+read are repeated before a single [DFW rule DELETE](https://developer.broadcom.com/xapis/nsx-t-data-center-rest-api/latest/method_DeleteSecurityRule.html).
+Deletion intent is retained as a separate object history entry. Absence must be verified
+before proceeding to the group. This rule entry preserves its original configuration,
+links back to the originating cleanup plan, closes identity-matching rule findings and
+prevents older collections from reopening those findings. If deletion fails or its
+outcome is uncertain, group deletion stops. No rule DELETE is automatically retried.
+
+Rule updates and deletion are **not atomic**. Completed rule updates and deletions remain when a
 later update, search or deletion fails. No automatic rollback/retry is performed.
 Deletion history and Activity link to **View rule cleanup and outcomes**, with per-rule
 outcomes and retained original/proposed JSON for manual reconstruction. If two selected

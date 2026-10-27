@@ -94,8 +94,7 @@ class ReferenceCleanupTests(TestCase):
         self.assertContains(self.client.get(reverse('deletion-detail', args=[self.batch.pk])), 'Reference cleanup required')
 
     def test_last_group_exclusions_scope_and_non_rule_references_are_blocked(self):
-        variants = [({'source_groups': [self.group['path']]}, 'Last group'),
-                    ({'sources_excluded': True}, 'Negated'),
+        variants = [({'sources_excluded': True}, 'Negated'),
                     ({'destinations_excluded': True}, 'Negated'),
                     ({'scope': [self.group['path']]}, 'Applied To'),
                     ({'source_groups': [self.group['path'], 'ANY']}, 'ANY'),
@@ -313,3 +312,169 @@ class ReferenceCleanupTests(TestCase):
         self.item.refresh_from_db()
         self.assertEqual(self.item.status, 'blocked')
         self.nsx.http.request.assert_not_called(); delete.assert_not_called()
+
+    def prepare_rule_deletion(self):
+        self.state[self.rule['path']]['source_groups'] = [self.other]
+        self.state[self.rule['path']]['destination_groups'] = [self.group['path']]
+        self.preview()
+        self.assertEqual(self.item.cleanup_plan[0]['action'], 'delete_rule')
+        self.assertIsNone(self.item.cleanup_plan[0]['after'])
+        self.approve(); self.confirm()
+
+    def deletion_transport(self, method, url, **kwargs):
+        self.assertEqual(method, 'DELETE')
+        self.assertFalse(kwargs['retries']); self.assertFalse(kwargs['redirect'])
+        path = url.removeprefix(self.nsx.base_url).split('?', 1)[0]
+        self.state.pop(path)
+        return Mock(status=200)
+
+    def test_last_destination_explicitly_proposes_rule_deletion(self):
+        self.state[self.rule['path']]['source_groups'] = [self.other]
+        self.state[self.rule['path']]['destination_groups'] = [self.group['path']]
+        self.preview()
+        self.assertEqual(self.item.cleanup_plan[0]['action'], 'delete_rule')
+        self.assertIsNone(self.item.cleanup_plan[0]['after'])
+        response = self.client.get(reverse('deletion-reference-cleanup', args=[self.item.pk]))
+        self.assertContains(response, 'Delete 1 firewall rule(s), then delete 1 group')
+        self.assertContains(response, 'Delete this firewall rule permanently')
+        self.assertContains(response, 'Rule will be deleted')
+        self.assertContains(response, 'destination')
+        self.nsx.http.request.assert_not_called()
+        self.approve()
+        response = self.client.get(reverse('deletion-detail', args=[self.batch.pk]))
+        self.assertContains(response, 'Delete rule')
+        self.assertContains(response, self.rule['path'])
+        self.assertContains(response, 'permanent rule deletions')
+
+    def test_last_source_also_proposes_rule_deletion(self):
+        self.state[self.rule['path']]['source_groups'] = [self.group['path']]
+        self.preview()
+        self.assertEqual(self.item.cleanup_plan[0]['action'], 'delete_rule')
+        self.assertIn('source', self.item.cleanup_plan[0]['reason'])
+
+    def test_rule_and_group_deleted_with_independent_history_and_finding_closure(self):
+        from .models import Finding
+        from .deleted_objects import identities
+        rule_finding = Finding.objects.create(environment=self.env, kind='zero_hits', path=self.rule['path'], name='Rule',
+            first_seen=timezone.now(), last_seen=timezone.now(), evaluated_at=timezone.now(), workflow_state='unassigned',
+            evidence={'unique_id': self.rule['unique_id'], 'created_at': self.rule['_create_time']})
+        self.prepare_rule_deletion()
+        self.nsx.http.request.side_effect = self.deletion_transport
+        with self.live(): d.process_item(self.item, execute=True)
+        self.item.refresh_from_db(); rule_finding.refresh_from_db()
+        self.assertEqual(self.item.status, 'deleted', self.item.message)
+        self.assertEqual(self.item.cleanup_results[0]['status'], 'deleted')
+        child = self.batch.items.get(path=self.rule['path'])
+        self.assertEqual(child.status, 'deleted'); self.assertEqual(child.finding_id, rule_finding.pk)
+        self.assertEqual(child.before['destination_groups'], [self.group['path']])
+        self.assertEqual(rule_finding.workflow_state, 'decommissioned')
+        self.assertEqual(rule_finding.change_ticket, 'CHG-cleanup')
+        self.assertIn(self.rule['path'], identities(self.env.pk))
+        self.assertIn(self.parent['path'], self.state)
+        self.assertEqual(self.nsx.http.request.call_count, 2)
+        self.assertEqual(self.nsx.http.request.call_args_list[0].args[1], self.nsx.base_url + self.rule['path'])
+        response = self.client.get(reverse('deletion-configuration', args=[child.pk]))
+        self.assertContains(response, self.rule['unique_id'])
+        response = self.client.get(reverse('deletion-history', args=[self.env.pk]))
+        self.assertContains(response, self.rule['path'])
+
+    def test_rule_delete_rejected_keeps_group_and_does_not_retry(self):
+        self.prepare_rule_deletion()
+        self.nsx.http.request.side_effect = None; self.nsx.http.request.return_value.status = 409
+        with self.live(): d.process_item(self.item, execute=True)
+        self.item.refresh_from_db()
+        self.assertEqual(self.item.status, 'blocked', self.item.message)
+        child = self.batch.items.get(path=self.rule['path'])
+        self.assertEqual(child.status, 'failed'); self.assertEqual(child.http_status, 409)
+        self.assertIn(self.group['path'], self.state)
+        self.assertEqual(self.nsx.http.request.call_count, 1)
+
+    def test_rule_delete_timeout_is_uncertain_and_never_deletes_group(self):
+        self.prepare_rule_deletion()
+        self.nsx.http.request.side_effect = TimeoutError()
+        with self.live(): d.process_item(self.item, execute=True)
+        self.item.refresh_from_db()
+        self.assertEqual(self.item.status, 'uncertain')
+        self.assertEqual(self.batch.items.get(path=self.rule['path']).status, 'uncertain')
+        self.assertIn(self.group['path'], self.state)
+        self.assertEqual(self.nsx.http.request.call_count, 1)
+
+    def test_accepted_rule_delete_without_verified_absence_stops_group(self):
+        self.prepare_rule_deletion()
+        self.nsx.http.request.side_effect = None; self.nsx.http.request.return_value.status = 200
+        with self.live(): d.process_item(self.item, execute=True)
+        self.item.refresh_from_db()
+        self.assertEqual(self.item.status, 'uncertain')
+        self.assertEqual(self.batch.items.get(path=self.rule['path']).status, 'uncertain')
+        self.assertIn(self.group['path'], self.state)
+        self.assertEqual(self.nsx.http.request.call_count, 1)
+
+    def test_rule_deleted_but_group_membership_changed_retains_partial_outcome(self):
+        from .deleted_objects import identities
+        self.prepare_rule_deletion()
+        self.nsx.http.request.side_effect = self.deletion_transport
+        with self.live(), patch.object(d.collector, 'membership', side_effect=[('empty', {}), ('empty', {}), ('nonempty', {})]):
+            d.process_item(self.item, execute=True)
+        self.item.refresh_from_db()
+        self.assertEqual(self.item.status, 'blocked')
+        self.assertEqual(self.batch.items.get(path=self.rule['path']).status, 'deleted')
+        self.assertIn('1 rule deletion(s) verified', self.item.message)
+        self.assertIn(self.group['path'], self.state)
+        self.assertIn(self.rule['path'], identities(self.env.pk))
+        self.assertEqual(self.nsx.http.request.call_count, 1)
+
+    def test_rule_own_dependencies_block_deletion_plan(self):
+        self.state[self.rule['path']]['source_groups'] = [self.group['path']]
+        self.state['/infra/consumer'] = {'path': '/infra/consumer', 'rule_reference': self.rule['path']}
+        with self.live(): d.process_item(self.item)
+        self.item.refresh_from_db()
+        self.assertEqual(self.item.status, 'blocked'); self.assertIn('itself referenced', self.item.message)
+        self.nsx.http.request.assert_not_called()
+
+    def test_new_rule_dependency_during_execution_blocks_before_delete(self):
+        self.prepare_rule_deletion()
+        calls = 0
+        def search(*args):
+            nonlocal calls
+            calls += 1
+            resources = deepcopy(list(self.state.values()))
+            if calls == 2:
+                resources.append({'path': '/infra/consumer', 'rule_reference': self.rule['path']})
+            return resources, {'mode': 'all_types', 'status': 'verified'}
+        with self.live(), patch.object(d.collector, 'verified_configuration_search', side_effect=search):
+            d.process_item(self.item, execute=True)
+        self.item.refresh_from_db()
+        self.assertEqual(self.item.status, 'blocked')
+        self.assertIn('itself referenced', self.item.message)
+        self.nsx.http.request.assert_not_called()
+        self.assertFalse(self.batch.items.filter(path=self.rule['path']).exists())
+
+    def test_rule_changed_during_final_dependency_search_is_not_deleted(self):
+        self.prepare_rule_deletion()
+        calls = 0
+        def search(*args):
+            nonlocal calls
+            calls += 1
+            if calls == 2: self.state[self.rule['path']]['_revision'] += 1
+            return deepcopy(list(self.state.values())), {'mode': 'all_types'}
+        with self.live(), patch.object(d.collector, 'verified_configuration_search', side_effect=search):
+            d.process_item(self.item, execute=True)
+        self.item.refresh_from_db()
+        self.assertEqual(self.item.status, 'blocked'); self.nsx.http.request.assert_not_called()
+
+    def test_no_implicit_rule_delete_without_cleanup_approval(self):
+        self.state[self.rule['path']]['source_groups'] = [self.group['path']]
+        self.preview()
+        self.item.status = 'verified'; self.item.save(); self.confirm()
+        with self.live(): d.process_item(self.item, execute=True)
+        self.item.refresh_from_db()
+        self.assertEqual(self.item.status, 'blocked')
+        self.nsx.http.request.assert_not_called()
+
+    def test_rule_selected_separately_cannot_be_deleted_twice(self):
+        self.state[self.rule['path']]['source_groups'] = [self.group['path']]
+        DeletionItem.objects.create(batch=self.batch, path=self.rule['path'], name='Rule', revision=0)
+        with self.live(): d.process_item(self.item)
+        self.item.refresh_from_db()
+        self.assertEqual(self.item.status, 'blocked'); self.assertIn('also selected', self.item.message)
+        self.nsx.http.request.assert_not_called()

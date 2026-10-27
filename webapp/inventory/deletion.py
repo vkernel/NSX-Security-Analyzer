@@ -149,7 +149,7 @@ def validate_live(client, finding):
         raise ValidationError('Live inventory changed during verification; deletion is blocked.')
     if refs:
         from .reference_cleanup import build_plan
-        client.cleanup_plan = build_plan(client, obj, refs)
+        client.cleanup_plan = build_plan(client, obj, refs, resources + groups + services)
     return obj
 
 
@@ -228,6 +228,9 @@ def process_item(item, execute=False):
                 item.status, item.message = 'verified', 'Ready for confirmation. Required live checks passed; explicit execution authorization is still required.'
                 plan = getattr(client, 'cleanup_plan', None)
                 if isinstance(plan, list) and plan:
+                    deleted_paths = [row['path'] for row in plan if row.get('action') == 'delete_rule']
+                    if batch.items.filter(path__in=deleted_paths).exists():
+                        raise ValidationError('A dependent rule is also selected in this batch. Preview the group separately to review the combined deletion.')
                     item.cleanup_plan, item.cleanup_approvals = plan, []
                     item.status = 'cleanup_review'
                     item.message = f'Reference cleanup required — {len(plan)} firewall rule(s). Review and approve the exact edits before confirming deletion.'
@@ -320,9 +323,10 @@ def process_item(item, execute=False):
         item.message = describe_error(exc)
         if item.cleanup_results:
             updated = sum(row.get('status') == 'updated' for row in item.cleanup_results)
+            deleted = sum(row.get('status') == 'deleted' for row in item.cleanup_results)
             if any(row.get('status') in ('sending', 'uncertain') for row in item.cleanup_results):
                 item.status = 'uncertain'
-            item.message += f' Reference cleanup: {updated} rule update(s) verified. Review each recorded outcome; no automatic rollback or retry.'
+            item.message += f' Reference cleanup: {updated} rule update(s) verified; {deleted} rule deletion(s) verified. Review each recorded outcome; no automatic rollback or retry.'
     diagnostics = getattr(client, 'search_diagnostics', None)
     if isinstance(diagnostics, dict):
         # Persist only search metadata, never result objects, headers or credentials.
@@ -503,9 +507,12 @@ def detail(request, pk):
     if latest and latest.summary.get('inventory_warnings'):
         warnings = batch.environment.snapshots.filter(pk=latest.pk).values_list('report__inventory_warnings', flat=True).first() or []
     items = list(batch.items.select_related('finding'))
+    from .reference_cleanup import summary as cleanup_summary
     for item in items:
+        item.cleanup_summary = cleanup_summary(item.cleanup_plan) if item.cleanup_plan else ''
         item.has_configuration = bool(item.before)
         item.has_cleanup = bool(item.cleanup_plan)
+        item.cleanup_parent = item.verification.get('Cleanup parent item')
         item.related_findings = item.verification.get('Related findings', [])
         item.search_diagnostics_json = json.dumps(item.verification.get('search_diagnostics', {}), indent=2)
     counts = {status: sum(item.status == status for item in items) for status in
@@ -531,6 +538,7 @@ def detail(request, pk):
             if counts[key]:
                 heading += f" · {counts[key]} {label}"
     elapsed = int(((batch.finished_at or (batch.checked_at if not active and not execution else None) or timezone.now()) - batch.created_at).total_seconds())
+    rule_deletes = sum(row.get('action') == 'delete_rule' for item in items if item.status == 'verified' for row in item.cleanup_plan)
     context = {'batch':batch, 'environment':batch.environment, 'items':items, 'counts':counts,
         'status_label':heading, 'active':active, 'execution':execution, 'done_count':done, 'total_count':len(items),
         'deadline':deadline, 'expired':expired, 'updated_at':timezone.now(),
@@ -538,6 +546,9 @@ def detail(request, pk):
         'latest_snapshot':latest, 'inventory_warnings':warnings, 'inventory_blocked':bool(latest and latest.summary.get('inventory_warnings')),
         'error':error, 'verified_count':counts['verified'],
         'cleanup_count':sum(len(item.cleanup_plan) for item in items if item.status == 'verified'),
+        'cleanup_rule_deletes':rule_deletes,
+        'confirmation_object_count':counts['verified'] + rule_deletes,
+        'cleanup_rule_updates':sum(row.get('action') != 'delete_rule' for item in items if item.status == 'verified' for row in item.cleanup_plan),
         'can_confirm':batch.status=='preview_ready' and batch.requested_by_id==request.user.pk and not expired}
     template = 'inventory/deletion_progress.html' if request.GET.get('fragment') == '1' and request.method == 'GET' else 'inventory/deletion_detail.html'
     response = render(request, template, context)
@@ -611,7 +622,7 @@ def reference_cleanup(request, pk):
                 try:
                     cleanup.validate_approvals(item)
                     item.status = 'verified'
-                    item.message = f'Rule cleanup approved: modify {len(item.cleanup_plan)} rule(s), then delete this group. Explicit execution confirmation is still required.'
+                    item.message = cleanup.summary(item.cleanup_plan) + '. Explicit execution confirmation is still required.'
                 except ValidationError:
                     item.message = 'Reference cleanup awaits the remaining required administrator approval.'
                 item.save(update_fields=['cleanup_approvals', 'status', 'message'])
@@ -623,6 +634,7 @@ def reference_cleanup(request, pk):
                 error = '; '.join(exc.messages)
     response = render(request, 'inventory/reference_cleanup.html', {'item': item, 'batch': batch,
         'environment': batch.environment, 'fingerprint': digest, 'required_count': required_count,
+        'cleanup_summary': cleanup.summary(item.cleanup_plan),
         'can_approve': available and item.status == 'cleanup_review' and not any(str(d.get('actor_id')) == str(request.user.pk) for d in item.cleanup_approvals),
         'error': error, 'expired': not available, 'configuration_json': json.dumps(item.cleanup_plan, indent=2)})
     response['Cache-Control'] = 'private, no-store'
