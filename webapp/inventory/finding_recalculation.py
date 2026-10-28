@@ -30,7 +30,7 @@ def queue(environment_ids, kinds):
             row.token = uuid.uuid4()
             row.status = 'queued'
             row.started_at = row.finished_at = None
-            row.processed = row.total = row.eligible = 0
+            row.processed = row.total = row.eligible = row.paused = row.recalculated = 0
             row.error = ''
             row.save()
 
@@ -125,6 +125,8 @@ def run(pk, token):
     for number, (snapshot_id, stamp) in enumerate(history, 1):
         if not current.exists(): return
         latest_coverage = snapshot_issues(Snapshot.objects.only('pk', 'summary').get(pk=snapshot_id))
+        # Unverified observations cannot establish continuity across a coverage gap.
+        states = {key: state for key, state in states.items() if not relevant(latest_coverage, *key)}
         index(snapshot_id)
         seen = set()
         rows = SnapshotFindingEvidence.objects.filter(snapshot_id=snapshot_id, kind__in=job.kinds).order_by('pk')
@@ -209,8 +211,27 @@ def run(pk, token):
                 state.fingerprint = hashlib.sha256(json.dumps(state.evidence, sort_keys=True, separators=(',', ':')).encode()).hexdigest()
                 state.required_approvals = required(state.kind, approval_settings)
                 creates.append(state)
+        paused = 0
         for target in existing.values():
             if relevant(latest_coverage, target.kind, target.path):
+                paused += 1
+                from .transient import apply
+                rules = getattr(policy, 'transient_rules', [])
+                evidence = target.evidence
+                if not apply(target, evidence, rules):
+                    _, monitor, days, _, signature = observation.criteria(target.kind, policy, env, evidence)
+                    if target.policy_fingerprint == signature and target.required_days == (days or 0):
+                        # A coverage warning alone must not discard unchanged review decisions.
+                        continue
+                    target.required_days = days or 0
+                    target.qualification = 'insufficient'
+                    prefix = 'Prolonged empty VDI group — ' + monitor.name + ': ' if monitor else ''
+                    target.qualification_reason = (prefix + 'Criteria changed; verification paused. Current requirement: ' + str(days or 0) + ' days. Relevant collection evidence is incomplete.')[:255]
+                    target.observation_started = target.qualified_at = None
+                    target.observation_count = target.observation_days = 0
+                    target.policy_fingerprint = signature
+                target.revision += 1
+                updates.append(target)
                 continue
             target.qualification = 'insufficient'
             target.qualification_reason = 'No confirmed condition in the latest retained full collection.'
@@ -237,5 +258,5 @@ def run(pk, token):
             Finding.objects.bulk_update(restored_updates[offset:offset+100], ['present', 'name', 'last_seen', 'evaluated_at', 'snapshot', 'evidence', 'fingerprint'], batch_size=100)
         if creates: Finding.objects.bulk_create(creates, batch_size=100)
         eligible = Finding.objects.filter(environment=env, present=True, qualification='eligible').count()
-        current.update(status='completed', finished_at=timezone.now(), eligible=eligible)
+        current.update(status='completed', finished_at=timezone.now(), eligible=eligible, paused=paused, recalculated=len(states))
         LOG.info('finding_recalculation job=%s completed eligible=%s', pk, eligible)

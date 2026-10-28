@@ -114,11 +114,16 @@ Inventory verification warnings pause findings that require the affected evidenc
 Dedicated VM inventory warnings pause empty-group and tag-dependent checks; unrelated
 service and firewall findings can continue only with complete required evidence.
 Unknown endpoint scopes and configuration inventory/search inconsistencies remain
-blocking. Temporary inventory uncertainty preserves decisions and observations;
+blocking. Temporary inventory uncertainty preserves decisions when criteria are unchanged;
 verified relevant configuration changes still invalidate approvals. The queue shows
 **Verification paused — decisions retained** or **Approved — execution verification required**.
-Historical recalculation also skips affected observations without counting them as
-successful checks. Observation thresholds, freshness and maximum-gap rules still apply.
+Historical recalculation does not count affected observations or bridge observation continuity
+across them. Changed criteria still apply during a coverage pause: the current threshold
+replaces the old one, qualification becomes insufficient, and approvals based on the old
+qualification are invalidated. Ownership and audit history remain. The completion message
+reports recalculated and paused findings separately. After upgrading from a version that
+retained stale criteria, save the policy again to queue a fresh recalculation.
+Observation thresholds, freshness and maximum-gap rules still apply.
 
 Each approval retains the actor identity, timestamp, reason, source snapshot UUID,
 relevant evidence fingerprint, evidence, reference-search scope and any manual

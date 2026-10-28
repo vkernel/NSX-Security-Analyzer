@@ -496,6 +496,8 @@ class FindingRecalculation(models.Model):
     processed = models.PositiveIntegerField(default=0)
     total = models.PositiveIntegerField(default=0)
     eligible = models.PositiveIntegerField(default=0)
+    paused = models.PositiveIntegerField(default=0)
+    recalculated = models.PositiveIntegerField(default=0)
     error = models.CharField(max_length=255, blank=True)
 
 
