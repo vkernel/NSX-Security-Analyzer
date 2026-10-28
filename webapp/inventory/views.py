@@ -261,6 +261,8 @@ def snapshot_detail(request, pk):
                    .only("id", "generated_at", "testing")[:50])
     if not any(item.pk == snapshot.pk for item in history):
         history.append(snapshot)
+    if snapshot.browsing_status != 'ready':
+        return render(request, 'inventory/snapshot_archived.html', {'snapshot': snapshot, 'environment': snapshot.environment})
     metadata_seconds = perf_counter() - started
     # JSONField maps to PostgreSQL JSONB; render from the immutable database snapshot.
     from .report_cache import presentation
@@ -446,7 +448,7 @@ def retention_settings(request):
                 for field, value in form.cleaned_data.items():
                     setattr(current, field, value)
                 current.save(update_fields=list(form.cleaned_data))
-            messages.success(request, 'Retention policy saved. Cleanup runs hourly when enabled.')
+            messages.success(request, 'Storage policy saved. Cleanup uses bounded batches when enabled.')
             return redirect('retention-settings')
     rows = preview(policy) if request.method != 'POST' or form.is_valid() else []
     return render(request, 'inventory/retention_settings.html', {'form': form, 'policy': policy,
@@ -605,6 +607,17 @@ def notifications(request):
                 items.append({'id': 'cleanup-cancelled-' + str(decision.pk), 'label': 'Cleanup plan cancelled — approval no longer required',
                     'environment': '', 'at': decision.created_at.isoformat(), 'unread': is_unread,
                     'url': reverse('deletion-reference-cleanup', args=[decision.target_id])})
+    if request.user.is_superuser:
+        from .storage import storage_trend
+        from datetime import datetime, time
+        trend = storage_trend()
+        if trend.get('alert'):
+            stamp = timezone.make_aware(datetime.combine(trend['day'], time.min))
+            is_unread = not seen or stamp > seen
+            unread += int(is_unread)
+            items.append({'id': 'database-storage-' + str(trend['day']), 'label': trend['alert'],
+                          'environment': 'Database storage', 'at': stamp.isoformat(), 'unread': is_unread,
+                          'url': reverse('system-health')})
     items.sort(key=lambda item: item['at'], reverse=True)
     return JsonResponse({'items': items[:50], 'unread': unread})
 

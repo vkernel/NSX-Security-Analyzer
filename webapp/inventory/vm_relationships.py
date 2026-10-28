@@ -1,5 +1,6 @@
 """Bounded VM evidence projections, including previously prepared snapshots."""
 from django.db import connection
+from django.db.models.functions import Coalesce
 from django.http import Http404
 from .models import SnapshotRecord
 
@@ -36,7 +37,7 @@ def read(snapshot_id, ordinal, section='summary', page=0, path=''):
             detail = json.loads(found[0]) if isinstance(found[0], str) else found[0]
             # Shared definitions are looked up only after verifying the VM edge.
             from .models import SnapshotVMRule
-            shared = SnapshotVMRule.objects.filter(snapshot_id=snapshot_id, path=path).values_list('data', flat=True).first()
+            shared = SnapshotVMRule.objects.filter(snapshot_id=snapshot_id, path=path).annotate(resolved=Coalesce('payload__data', 'data')).values_list('resolved', flat=True).first()
             if shared is not None:
                 detail = dict(shared, **detail)
             detail.pop('via_groups', None)
@@ -75,9 +76,27 @@ class ExpandedVMData(Func):
         assert not data_params and not snapshot_params
         sql = f'''CASE WHEN {data}->>'_shared_vm_rules' = 'true' THEN
             jsonb_set({data} - '_shared_vm_rules', '{{related_rules}}',
-                COALESCE((SELECT jsonb_agg(COALESCE(r.data, '{{}}'::jsonb) || e.item ORDER BY e.position)
+                COALESCE((SELECT jsonb_agg(COALESCE(j.data, r.data, '{{}}'::jsonb) || e.item ORDER BY e.position)
                     FROM jsonb_array_elements({data}->'related_rules') WITH ORDINALITY AS e(item, position)
                     LEFT JOIN inventory_snapshotvmrule r ON r.snapshot_id = {snapshot}
-                        AND r.path = e.item->>'path'), '[]'::jsonb))
+                        AND r.path = e.item->>'path'
+                    LEFT JOIN inventory_sharedsnapshotjson j ON j.id = r.payload_id), '[]'::jsonb))
+            WHEN {data}->>'_shared_tag_evidence' = 'true' THEN
+              ({data} - '_shared_tag_evidence') || jsonb_build_object('resolved_tag_evidence',
+                (SELECT jsonb_build_object(
+                  'firewall_reference_note', COALESCE(p.tag_evidence->'firewall_reference_note', '""'::jsonb),
+                  'condition_sets', COALESCE((SELECT jsonb_object_agg(s.id, p.tag_evidence->'condition_sets'->s.id::int)
+                    FROM (SELECT DISTINCT value AS id FROM jsonb_array_elements_text(
+                      jsonb_build_array({data}->'condition_evidence_set', {data}->'review_condition_set'))
+                      WHERE value IS NOT NULL) s), '{{}}'::jsonb),
+                  'conditions', COALESCE((SELECT jsonb_object_agg(c.id::text, p.tag_evidence->'conditions'->c.id)
+                    FROM (SELECT DISTINCT value::text::int AS id FROM jsonb_array_elements(
+                      COALESCE(p.tag_evidence->'condition_sets'->({data}->>'condition_evidence_set')::int, {data}->'condition_evidence', '[]'::jsonb)
+                      || COALESCE(p.tag_evidence->'condition_sets'->({data}->>'review_condition_set')::int, {data}->'review_conditions', '[]'::jsonb))
+                      WHERE jsonb_typeof(value) = 'number') c), '{{}}'::jsonb),
+                  'firewall_rules', COALESCE((SELECT jsonb_object_agg(r.id::text, p.tag_evidence->'firewall_rules'->r.id)
+                    FROM (SELECT DISTINCT (value->>'rule')::int AS id
+                      FROM jsonb_array_elements(COALESCE({data}->'firewall_references', '[]'::jsonb))) r), '{{}}'::jsonb))
+                 FROM inventory_snapshotpresentation p WHERE p.snapshot_id = {snapshot}))
             ELSE {data} END'''
         return sql, []

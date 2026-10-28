@@ -83,7 +83,7 @@ class SupervisorTests(SimpleTestCase):
         for lane in LANES:
             with self.subTest(lane=lane):
                 command = Command()
-                with patch.object(command, 'run_deletion', return_value=False) as deletion, patch.object(command, 'check_lease'), \
+                with patch.object(command, 'run_browsing_restore', return_value=False), patch.object(command, 'run_deletion', return_value=False) as deletion, patch.object(command, 'check_lease'), \
                      patch('inventory.management.commands.audit_worker.expire_jobs'), \
                      patch('inventory.management.commands.audit_worker.claim_job', return_value=None) as collection, \
                      patch('inventory.finding_recalculation.claim', return_value=None) as recalculation, \
@@ -99,7 +99,7 @@ class SupervisorTests(SimpleTestCase):
 
     def test_comparison_runs_while_other_queues_are_busy(self):
         command = Command()
-        with patch.object(command, 'run_deletion', return_value=False), patch.object(command, 'check_lease'), \
+        with patch.object(command, 'run_browsing_restore', return_value=False), patch.object(command, 'run_deletion', return_value=False), patch.object(command, 'check_lease'), \
              patch('inventory.management.commands.audit_worker.claim_job') as collection, \
              patch('inventory.finding_recalculation.claim') as recalculation, \
              patch.object(command, 'run_comparison', return_value=True) as comparison:

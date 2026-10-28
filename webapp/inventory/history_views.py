@@ -33,7 +33,13 @@ def comparison(request, pk):
     if form.is_bound and form.is_valid():
         from .models import SnapshotComparison
         selected = form.cleaned_data
-        comparison_job, _ = SnapshotComparison.objects.get_or_create(before=selected['before'], after=selected['after'])
+        with transaction.atomic():
+            comparison_job, _ = SnapshotComparison.objects.get_or_create(before=selected['before'], after=selected['after'])
+            comparison_job = SnapshotComparison.objects.select_for_update().get(pk=comparison_job.pk)
+            comparison_job.cache_accessed_at = timezone.now()
+            if comparison_job.status == 'expired':
+                comparison_job.status = 'queued'
+            comparison_job.save(update_fields=['cache_accessed_at', 'status'])
         if comparison_job.ready:
             from django.db.models import Count
             rows = comparison_job.rows.all()
@@ -157,7 +163,8 @@ def findings(request, pk):
         return redirect(request.get_full_path())
     # Only findings that met the administration policy enter the review queue.
     from django.db.models import Count
-    qualification_counts = list(environment.findings.values('qualification').annotate(total=Count('pk')).order_by('qualification'))
+    qualification_counts = list(environment.findings.filter(present=True).values('qualification').annotate(total=Count('pk')).order_by('qualification'))
+    historical_finding_count = environment.findings.filter(present=False).count()
     rows, form, query = filtered_findings(request, environment, request.GET)
     page = Paginator(rows, preferences(request).page_size).get_page(request.GET.get('page'))
     from .deletion import KINDS
@@ -183,7 +190,8 @@ def findings(request, pk):
         'show_release_controls': request.user.is_staff,
         'assignment_form': BulkAssignmentForm(initial={'owner': request.user.pk}),
         'filters_active': any(request.GET.get(key, '').strip() for key in ('q', 'kind', 'review', 'owner')),
-        'qualification_counts': qualification_counts, 'query': query, 'filter_form': form, 'query_string': params.urlencode(),
+        'qualification_counts': qualification_counts, 'historical_finding_count': historical_finding_count,
+        'query': query, 'filter_form': form, 'query_string': params.urlencode(),
         'recalculation': environment.finding_recalculation if hasattr(environment, 'finding_recalculation') else None})
 
 

@@ -121,13 +121,25 @@ class PreferencesForm(forms.ModelForm):
 
 
 class RetentionForm(forms.ModelForm):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        for name in ('browsing_days', 'cache_days', 'database_budget_gib', 'storage_warning_percent', 'storage_forecast_days'):
+            self.fields[name].required = False
+
+    def clean(self):
+        data = super().clean()
+        for name in ('browsing_days', 'cache_days', 'database_budget_gib', 'storage_warning_percent', 'storage_forecast_days'):
+            if data.get(name) is None and name not in self.errors:
+                data[name] = getattr(self.instance, name)
+        return data
+
     class Meta:
         from .models import RetentionPolicy
         model = RetentionPolicy
-        fields = ['enabled', 'snapshot_days', 'testing_days', 'collection_days']
+        fields = ['enabled', 'snapshot_days', 'testing_days', 'collection_days', 'browsing_days', 'cache_days', 'clear_legacy_html', 'database_budget_gib', 'storage_warning_percent', 'storage_forecast_days']
         labels = {'enabled': 'Enable automatic cleanup', 'snapshot_days': 'Full snapshot retention',
-                  'testing_days': 'Testing snapshot retention', 'collection_days': 'Collection history retention'}
-        help_texts = {'enabled': 'When enabled, eligible records are permanently deleted by the hourly cleanup.',
+                  'testing_days': 'Testing snapshot retention', 'collection_days': 'Collection history retention', 'browsing_days': 'Detailed browsing retention (days)', 'cache_days': 'Disposable cache retention (days)', 'clear_legacy_html': 'Remove unused legacy snapshot HTML', 'database_budget_gib': 'Application database budget (GiB)', 'storage_warning_percent': 'Storage warning threshold (%)', 'storage_forecast_days': 'Forecast warning horizon (days)'}
+        help_texts = {'browsing_days': '0 keeps browsing indexes until snapshot expiry. Older detail can be rebuilt from retained source reports. Current finding snapshots are protected.', 'cache_days': '0 keeps caches. Expired comparison results rebuild on request; review and deletion history are unaffected.', 'database_budget_gib': '0 disables budget alerts. Budget only the application database; leave separate capacity for WAL, backups and maintenance.', 'clear_legacy_html': 'Removes only the unused Snapshot.html field. Source reports and current presentation HTML remain.', 'enabled': 'Enable bounded scheduled cleanup.',
                       'snapshot_days': 'At least 91 days to preserve the 90-day activity window and its baseline.',
                       'collection_days': 'At least 91 days so failed collections remain visible to historical analysis.'}
 

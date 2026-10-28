@@ -1,0 +1,9 @@
+{% extends 'base.html' %}{% block content %}
+<a href="{% url 'environment' snapshot.environment_id %}">← {{ environment.name }}</a>
+<h1>Historical snapshot detail</h1>
+<div class="form-card"><h2>{{ snapshot.browsing_status|capfirst }}</h2>
+<p>Snapshot collected {{ snapshot.generated_at }}. Source reports, observation evidence and review history are retained. Detailed browsing indexes have been archived to reduce storage.</p>
+{% if snapshot.browsing_status == 'queued' or snapshot.browsing_status == 'running' %}<p role="status">Rebuilding in the background. No NSX collection is needed.</p><a class="button" href="">Refresh status</a>
+{% elif user.is_superuser %}<p>Rebuilding needs database space and may take several minutes. {% if snapshot.browsing_status == 'failed' %}The last attempt failed or was interrupted. Check worker diagnostics before retrying.{% endif %}</p><form method="post" action="{% url 'restore-browsing' snapshot.pk %}">{% csrf_token %}<button class="button primary">Rebuild detailed view</button></form>
+{% else %}<p>Ask an administrator to rebuild the detailed view if needed.</p>{% endif %}</div>
+{% endblock %}

@@ -1,6 +1,7 @@
 """Bounded tag/scope evidence for existing indexes; never expand all references in Python."""
 import json
 from django.db import connection
+from django.db.models.functions import Coalesce
 from django.http import Http404
 from .models import SnapshotRecord
 
@@ -23,7 +24,7 @@ def read(snapshot_id, ordinal, section='summary', page=0):
     if row['relationships_ready']:
         from .models import SnapshotRelationship
         start = page * PAGE_SIZE
-        items = list(SnapshotRelationship.objects.filter(record_id=row['pk'], section=section, position__gte=start, position__lt=start + PAGE_SIZE + 1).order_by('position').values_list('data', flat=True))
+        items = list(SnapshotRelationship.objects.filter(record_id=row['pk'], section=section, position__gte=start, position__lt=start + PAGE_SIZE + 1).order_by('position').annotate(resolved=Coalesce('payload__data', 'data')).values_list('resolved', flat=True))
         return {'items': items[:PAGE_SIZE], 'page': page, 'has_next': len(items) > PAGE_SIZE}
     base = 'FROM inventory_snapshotrecord r WHERE r.snapshot_id = %s AND r.ordinal = %s'
     args = [snapshot_id, ordinal]
@@ -58,6 +59,8 @@ def index_record(record, metadata, batch=None):
     def add(section, position, data):
         batch.append(SnapshotRelationship(record=record, section=section, position=position, data=data))
         if len(batch) >= 250:
+            from .storage import share_json
+            share_json(batch)
             SnapshotRelationship.objects.bulk_create(batch, batch_size=250)
             batch.clear()
     data = record.data
@@ -77,4 +80,7 @@ def index_record(record, metadata, batch=None):
             rule = metadata['firewall_rules'][edge['rule']]
             add('firewall_references', i, {**{k: rule.get(k) for k in ('name', 'path', 'rule_id', 'disabled')},
                                           **{k: edge.get(k) for k in ('via_group', 'tag_use')}})
-    if own_batch and batch: SnapshotRelationship.objects.bulk_create(batch, batch_size=250)
+    if own_batch and batch:
+        from .storage import share_json
+        share_json(batch)
+        SnapshotRelationship.objects.bulk_create(batch, batch_size=250)

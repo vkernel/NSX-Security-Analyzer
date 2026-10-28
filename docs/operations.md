@@ -123,9 +123,22 @@ one after 2 and then 4 seconds. Attempts are not merged. After three unsuccessfu
 attempts, the final deduplicated inventory may be saved with coverage warnings;
 it is available to browse, but finding evaluation and approval are paused for the
 environment. Existing finding presence and observation progress are not advanced.
-Historical recalculation skips these unverified snapshots. A later verified full
+Historical recalculation skips these unverified snapshots without erasing earlier
+verified observations. The next successful observation is compared with the last
+successful observation using the applicable maximum gap; skipped snapshots do not
+increase the observation count or refresh that timestamp. VDI monitoring uses its
+own configured maximum gap. Confirmed opposite evidence and meaningful object
+changes still restart the period. A later verified full
 collection is required to resume normal evaluation; rebuilding an index does not
 verify missing NSX evidence.
+
+After upgrading from a version that reset periods on every historical coverage
+warning, save **Administration → Finding review criteria** with the existing
+values to queue a replay of retained history. Unchanged criteria replay all finding
+types. Save each environment override separately if used. Recovery depends on
+retained evidence; it does not reconstruct deleted snapshots or restore invalidated
+approvals. Historical snapshot assessments remain unchanged; Finding reviews show
+the recalculated current eligibility.
 
 For example, `1237/1238 unique objects; 1 duplicate rows` on
 `/infra/realized-state/virtual-machines` means the response contains 1,237 distinct
@@ -246,11 +259,15 @@ Testing data has a shorter lifetime because it is not a full audit. These are st
 values, not a guarantee of database capacity: collection frequency, snapshot size and
 environment count still determine storage requirements.
 
-The scheduler performs cleanup at most once per hour. Keep the scheduler running.
+The scheduler tracks cleanup per environment. Cleared environments are checked hourly;
+busy environments and remaining backlogs retry after one minute. Keep the scheduler running.
 The latest full snapshot and latest testing snapshot in each environment are always
 preserved, even after their retention period. Retained snapshots protect their source
 collection records. Environments with queued or running collections are skipped.
-Deletion occurs in batches, so a backlog can take multiple cleanup cycles.
+Deletion commits separately per environment, with at most two snapshots and 100 finished
+collection records per transaction. Cleanup is attempted before queuing the next automatic
+collection. The retention page shows expired counts even when an environment is busy,
+along with its last successful check. A backlog can take multiple cleanup cycles.
 
 Migration `0028` enables existing disabled policies once on upgrade. Existing retention
 periods, including “Keep forever”, are preserved. New policies use **180 / 7 / 180
@@ -424,3 +441,16 @@ from an overlapping snapshot. A new identity at the same path can be reviewed.
 Preserve deletion records as durable evidence; incomplete identity cannot prove recreation.
 Historical snapshots remain unchanged and display a reminder that deletion history
 and finding reviews carry current decommissioning outcomes.
+
+### Bounded container logs
+
+The local and Docker Hub Compose installations now set `json-file` logging with
+`max-size: "10m"` and `max-file: "3"` for every service, including PostgreSQL and
+maintenance containers. Recreate containers to apply these settings; existing containers
+do not adopt new log options automatically. External log forwarding and application
+audit retention remain separate. See [Docker logging configuration](https://docs.docker.com/engine/logging/configure/).
+Kubernetes deployments must configure rotation through the cluster/container runtime;
+Docker Compose logging settings are not a Kubernetes volume-retention policy.
+
+Storage lifecycle settings, archival/rebuild behavior, compaction commands and budget
+alerts are described in [resource sizing](resource-sizing.md#detailed-browsing-retention-cache-expiry-and-capacity-alerts).

@@ -333,3 +333,109 @@ with `python manage.py audit_worker --lane collection` and a separate worker wit
 `python manage.py audit_worker --lane recalculation`, plus a third worker with
 `python manage.py audit_worker --lane comparison`, instead of the default combined
 supervisor. All three need the same database/application configuration.
+
+### Snapshot storage efficiency and controlled compaction
+
+New indexed snapshots share **exact** evidence-search strings by SHA-256, verifying
+text equality before replacing a copy. This preserves phrase, exclusion and regex
+searches; it does not tokenize or discard searchable evidence. Tag records also refer
+to definitions already stored in the snapshot presentation instead of embedding a
+second resolved copy. Detail, evidence-column filtering and CSV export reconstruct
+those definitions. Original reports, observation records and approval/deletion evidence
+are not removed. Shared search documents are garbage-collected only after their last
+record is gone, coordinated with concurrent publication.
+
+Apply migrations before starting updated web, worker and scheduler processes. Migration
+0051 adds a nullable reference and its index to the large record table: schedule this
+schema operation with the DBA, allow index-building space and a maintenance window.
+It does not rewrite every historical payload. Do not run old workers concurrently with
+the updated maintenance process.
+
+In **Administration → System health**, table totals are split into data/TOAST and
+indexes, with estimated live/dead rows and last autovacuum. **Sample stored fields**
+performs an explicit page sample of at most 100 records, limited to five seconds.
+It is not a census or a reclaimable-space estimate. Daily scheduler measurements retain
+90 days of database size and per-environment snapshot counts. Net allocated-size growth
+can understate incoming writes when PostgreSQL reuses free space; use it together with
+volume monitoring and collection frequency. Volume free space and WAL are still monitored
+by the database platform, not inferred from web-container disk usage.
+
+Historical conversion is opt-in and resumable. Run in a maintenance container using the
+application image and database configuration, starting with a small sample:
+
+```sh
+python manage.py compact_snapshot_storage --batch-size 1 --max-batches 10
+python manage.py compact_snapshot_storage --apply --batch-size 1 --max-batches 10
+```
+
+Without `--apply`, no rows are changed. Output reports logical search-text bytes, unique
+text within each batch, embedded tag bytes and the last record ID. These numbers do not
+include compression, indexes or cross-batch sharing and **are not projected filesystem
+savings**. With `--apply`, each batch commits separately; Ctrl-C rolls back the active
+batch, while completed batches remain converted. Re-run the command to resume, or use
+its printed `--after-id` checkpoint. Run without a checkpoint once at the end to catch
+any remaining eligible rows. Converted rows are skipped. Each batch has a 30-second
+statement timeout and a one-second lock timeout; retry a busy batch later.
+
+Tag conversion verifies the existing embedded evidence against shared definitions before
+removing it. A mismatch rolls back the batch rather than silently changing history.
+Take a database backup first and provide WAL/free-space headroom: updates produce dead
+versions, and ordinary vacuum makes that space reusable rather than immediately returning
+it to the filesystem. Do not trigger a full historical index rebuild or `VACUUM FULL`
+on a nearly full volume. Start with new collections and a small conversion, measure the
+result, then plan the remaining conversion with the DBA. Further JSON/relationship
+normalization should be driven by these field samples; no fixed savings percentage is
+promised.
+
+### Detailed browsing retention, cache expiry and capacity alerts
+
+Administration → Retention policies now separates **Detailed browsing retention**
+from full snapshot/observation retention. Its default is **0 (keep until the source
+snapshot expires)**. For example, 14 days of browsing detail with 180 days of source
+snapshots preserves the retained observations while removing older, rebuildable report
+records, relationships and presentation panels. The latest full/testing snapshots, last
+verified full baseline, and snapshots used by present findings remain protected.
+Rebuilt detail is kept for another configured browsing period from its rebuild time.
+
+Archiving does not remove source report JSON, finding assessments, finding evidence,
+rule-history projections, coverage, approvals or deletion configurations. The archived
+snapshot page explains the state. An administrator can request **Rebuild detailed view**;
+the comparison worker lane rebuilds it in a supervised subprocess without contacting NSX.
+Failures and timeouts become visible and can be retried. Other collection/deletion lanes
+continue independently. Browsing requests do not silently render an entire archived report
+inside a web worker. Source snapshot retention still ultimately expires the source and
+its dependent history; detailed retention does not extend that lifetime.
+
+Disposable caches default to **30 days**, configurable independently (0 keeps them).
+Expired history assessments are deleted in small batches. Completed comparison row data
+expires after inactivity; the pair/task identity remains, and opening the pair queues
+reconstruction. Queued/running comparisons are not expired. **Remove unused legacy
+snapshot HTML** is an opt-in switch which clears only `Snapshot.html`, two rows per
+maintenance pass, without changing source reports or current presentation panels.
+These maintenance operations run only when automatic cleanup is enabled.
+
+Large relationship JSON and VM-rule definitions now share exact immutable payloads
+across snapshots. Small JSON objects stay inline to avoid extra row/index overhead.
+Historical conversion uses a separate bounded command and validates exact payload
+identity before replacing each copy:
+
+```sh
+python manage.py compact_relationship_storage --kind relationships --batch-size 10
+python manage.py compact_relationship_storage --kind relationships --apply --batch-size 10 --max-batches 10
+python manage.py compact_relationship_storage --kind vm-rules --apply --batch-size 10 --max-batches 10
+```
+
+Use the printed `--after-id` checkpoint to continue each kind separately. Stopping rolls
+back only the active batch. Orphan shared payloads are removed after the last reference
+is gone. Apply migrations 0051–0053 before updating all application processes; the new
+nullable references require indexes on large tables, so plan schema deployment with the
+DBA and do not run maintenance against a mixed old/new worker deployment.
+
+Set **Application database budget (GiB)** to enable administrator warnings in System
+health and the notification menu. Set a percentage threshold and forecast horizon
+(30 days by default). Forecasts extrapolate the most recent eight daily samples using
+actual elapsed days; they are estimates, not guarantees. At least two samples are
+required for growth forecasts. Samples older than two days are labeled stale and their
+forecasts are disabled. A zero budget disables budget warnings. This budget covers the
+application database only: allocate separate room for WAL, backups, PostgreSQL overhead
+and maintenance. It is not the volume capacity, and does not replace platform alerts.

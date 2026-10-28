@@ -5,9 +5,9 @@ from django.db.models import Q
 from django.utils import timezone
 from .audit_events import record
 from .diagnostics import phase, LOG
-from .models import Environment, RetentionPolicy
+from .models import Environment, RetentionPolicy, RetentionState
 
-BATCH_SIZE = 1000
+BATCH_SIZE = 2
 
 
 def eligible(environment, policy, now):
@@ -40,42 +40,52 @@ def preview(policy, now=None):
     for environment in Environment.objects.all():
         busy = environment.jobs.filter(status__in=['queued', 'running']).exists()
         snapshots, jobs = eligible(environment, policy, now)
-        rows.append({'environment': environment, 'busy': busy,
-                     'snapshots': 0 if busy else snapshots.count(), 'collections': 0 if busy else jobs.count()})
+        from .storage_maintenance import browsing_candidates
+        rows.append({'browsing': browsing_candidates(environment, policy, now).count(), 'environment': environment, 'busy': busy,
+                     'snapshots': snapshots.count(), 'collections': jobs.count(),
+                     'state': RetentionState.objects.filter(environment=environment).first()})
     return rows
 
 
 def cleanup_retention(now=None):
     now = now or timezone.now()
-    RetentionPolicy.objects.get_or_create(pk=1)
-    with transaction.atomic():
-        policy = RetentionPolicy.objects.select_for_update().get(pk=1)
-        if not policy.enabled or (policy.last_run and now-policy.last_run < timedelta(hours=1)):
-            return (0, 0)
-        # Defend against invalid direct database changes as well as form input.
-        if any(days and days < 91 for days in (policy.snapshot_days, policy.collection_days)):
-            return (0, 0)
-        if policy.testing_days and policy.testing_days < 1:
-            return (0, 0)
-        LOG.info("retention cleanup started")
-        removed_snapshots = removed_jobs = 0
-        for pk in Environment.objects.values_list('pk', flat=True):
+    policy, _ = RetentionPolicy.objects.get_or_create(pk=1)
+    if not policy.enabled or any(days and days < 91 for days in (policy.snapshot_days, policy.collection_days)) or (policy.testing_days and policy.testing_days < 1):
+        return (0, 0)
+    removed_snapshots = removed_jobs = 0
+    attempted = False
+    # Commit each environment independently; a large backlog cannot hold every
+    # environment lock for the duration of the entire workspace cleanup.
+    for pk in Environment.objects.values_list('pk', flat=True):
+        with transaction.atomic():
             environment = Environment.objects.select_for_update().get(pk=pk)
-            if environment.jobs.filter(status__in=['queued', 'running']).exists():
-                LOG.info("retention skipped environment_id=%s reason=active_collection", pk)
+            state, _ = RetentionState.objects.get_or_create(environment=environment)
+            if state.retry_at and state.retry_at > now:
                 continue
-            expired, _ = eligible(environment, policy, now)
-            ids = list(expired.values_list('pk', flat=True)[:BATCH_SIZE])
-            if ids:
-                removed_snapshots += environment.snapshots.filter(pk__in=ids).delete()[0]
-            _, jobs = eligible(environment, policy, now)
-            # Retained snapshots protect their source jobs, even during a backlog.
-            ids = list(jobs.filter(snapshot__isnull=True).values_list('pk', flat=True)[:BATCH_SIZE])
-            if ids:
-                removed_jobs += environment.jobs.filter(pk__in=ids).delete()[0]
-        policy.last_run = now
-        policy.deleted_snapshots = removed_snapshots
-        policy.deleted_collections = removed_jobs
-        policy.save(update_fields=['last_run', 'deleted_snapshots', 'deleted_collections'])
-        record('retention.completed', details={'deleted_rows_with_snapshots': removed_snapshots, 'deleted_rows_with_jobs': removed_jobs})
-        return removed_snapshots, removed_jobs
+            attempted = True
+            state.checked_at = now
+            if environment.jobs.filter(status__in=['queued', 'running']).exists():
+                state.status = 'waiting_for_collection'
+                state.retry_at = now + timedelta(minutes=1)
+            else:
+                expired, _ = eligible(environment, policy, now)
+                ids = list(expired.order_by('generated_at').values_list('pk', flat=True)[:BATCH_SIZE])
+                if ids:
+                    environment.snapshots.filter(pk__in=ids).delete()
+                    removed_snapshots += len(ids)
+                _, jobs = eligible(environment, policy, now)
+                ids = list(jobs.filter(snapshot__isnull=True).values_list('pk', flat=True)[:100])
+                if ids:
+                    environment.jobs.filter(pk__in=ids).delete()
+                    removed_jobs += len(ids)
+                expired, jobs = eligible(environment, policy, now)
+                backlog = expired.exists() or jobs.filter(snapshot__isnull=True).exists()
+                state.status = 'backlog' if backlog else 'completed'
+                state.retry_at = now + timedelta(minutes=1 if backlog else 60)
+                state.completed_at = now
+            state.save()
+    if attempted:
+        RetentionPolicy.objects.filter(pk=1).update(last_run=now, deleted_snapshots=removed_snapshots, deleted_collections=removed_jobs)
+    if removed_snapshots or removed_jobs:
+        record('retention.completed', details={'deleted_snapshots': removed_snapshots, 'deleted_collections': removed_jobs})
+    return removed_snapshots, removed_jobs

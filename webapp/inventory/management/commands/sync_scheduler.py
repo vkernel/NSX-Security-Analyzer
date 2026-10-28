@@ -18,12 +18,18 @@ class Command(BaseCommand):
         while True:
             close_old_connections()
             try:
+                # Give retention a chance before queuing another collection.
+                with phase('scheduler', 'retention_cleanup', quiet=True):
+                    cleanup_retention()
                 with phase('scheduler', 'schedule_due', quiet=True):
                     count = schedule_due()
                 from inventory.heartbeats import beat
                 beat('scheduler')
-                with phase('scheduler', 'retention_cleanup', quiet=True):
-                    cleanup_retention()
+                from inventory.storage import clean_search_documents, measure_storage
+                clean_search_documents()
+                measure_storage()
+                from inventory.storage_maintenance import cleanup_storage
+                cleanup_storage()
                 with phase('scheduler', 'audit_retention', quiet=True):
                     cleanup()
                 if count:

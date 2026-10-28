@@ -136,3 +136,26 @@ class RetentionTests(TestCase):
         self.assertEqual(cleanup_retention(self.now), (0, 0))
         self.policy.refresh_from_db()
         self.assertFalse(self.policy.enabled)
+
+    def test_busy_environment_retries_without_waiting_one_hour(self):
+        old = self.snapshot(400)
+        self.snapshot(0)
+        job = AuditJob.objects.create(environment=self.environment, status='running')
+        cleanup_retention(self.now)
+        self.assertEqual(preview(self.policy, self.now)[0]['snapshots'], 1)
+        job.status = 'succeeded'
+        job.finished_at = self.now
+        job.save()
+        cleanup_retention(self.now + timedelta(minutes=1))
+        self.assertFalse(Snapshot.objects.filter(pk=old.pk).exists())
+
+    def test_backlog_is_bounded_and_retried(self):
+        from .models import RetentionState
+        for _ in range(5):
+            self.snapshot(400)
+        self.snapshot(0)
+        cleanup_retention(self.now)
+        self.assertEqual(Snapshot.objects.count(), 4)
+        self.assertEqual(RetentionState.objects.get(environment=self.environment).status, 'backlog')
+        cleanup_retention(self.now + timedelta(minutes=1))
+        self.assertEqual(Snapshot.objects.count(), 2)

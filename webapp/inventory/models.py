@@ -5,6 +5,7 @@ from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.core.validators import MaxValueValidator, MinValueValidator, RegexValidator
 from django.db import models
+from django.utils import timezone
 from django.core.serializers.json import DjangoJSONEncoder
 
 env_name = RegexValidator(r"^[A-Za-z_][A-Za-z0-9_]*$", "Use an environment variable name.")
@@ -114,6 +115,9 @@ class CollectionStopRequest(models.Model):
 
 
 class Snapshot(models.Model):
+    browsing_status = models.CharField(max_length=16, default='ready')
+    browsing_refreshed_at = models.DateTimeField(null=True)
+
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     environment = models.ForeignKey(Environment, on_delete=models.PROTECT, related_name="snapshots")
     job = models.OneToOneField(AuditJob, null=True, blank=True, on_delete=models.PROTECT, related_name="snapshot")
@@ -161,6 +165,13 @@ class UserPreferences(models.Model):
 
 
 class RetentionPolicy(models.Model):
+    browsing_days = models.PositiveIntegerField(default=0, validators=[MaxValueValidator(3650)])
+    cache_days = models.PositiveIntegerField(default=30, validators=[MaxValueValidator(3650)])
+    clear_legacy_html = models.BooleanField(default=False)
+    database_budget_gib = models.PositiveIntegerField(default=0, validators=[MaxValueValidator(1000000)])
+    storage_warning_percent = models.PositiveSmallIntegerField(default=80, validators=[MinValueValidator(1), MaxValueValidator(100)])
+    storage_forecast_days = models.PositiveSmallIntegerField(default=30, validators=[MinValueValidator(1), MaxValueValidator(365)])
+
     id = models.PositiveSmallIntegerField(primary_key=True, default=1, editable=False)
     enabled = models.BooleanField(default=True)
     snapshot_days = models.PositiveIntegerField(default=180, choices=[(0, 'Keep forever'), (91, '91 days'), (180, '180 days'), (365, '1 year'), (730, '2 years')])
@@ -313,7 +324,22 @@ class SnapshotPanel(models.Model):
         constraints = [models.UniqueConstraint(fields=['snapshot', 'slug'], name='snapshot_panel_unique')]
 
 
+class SnapshotSearchDocument(models.Model):
+    """Exact shared search text; immutable and independent of observation evidence."""
+    digest = models.CharField(max_length=64, unique=True)
+    text = models.TextField()
+
+
+class RetentionState(models.Model):
+    environment = models.OneToOneField(Environment, on_delete=models.CASCADE)
+    checked_at = models.DateTimeField(null=True)
+    completed_at = models.DateTimeField(null=True)
+    retry_at = models.DateTimeField(null=True)
+    status = models.CharField(max_length=32, default="pending")
+
+
 class SnapshotRecord(models.Model):
+    search_document = models.ForeignKey(SnapshotSearchDocument, null=True, on_delete=models.PROTECT)
     relationships_ready = models.BooleanField(default=False)
     snapshot = models.ForeignKey(Snapshot, on_delete=models.CASCADE)
     ordinal = models.PositiveIntegerField()
@@ -377,6 +403,7 @@ class SnapshotHistoryData(models.Model):
 
 
 class SnapshotComparison(models.Model):
+    cache_accessed_at = models.DateTimeField(default=timezone.now)
     status = models.CharField(max_length=16, default='queued', db_index=True)
     error = models.CharField(max_length=255, blank=True)
     before = models.ForeignKey(Snapshot, on_delete=models.CASCADE, related_name='comparisons_before')
@@ -424,7 +451,14 @@ class KeycloakIdentity(models.Model):
         constraints = [models.UniqueConstraint(fields=["issuer", "subject"], name="unique_keycloak_identity")]
 
 
+class SharedSnapshotJSON(models.Model):
+    digest = models.CharField(max_length=64, unique=True)
+    data = models.JSONField()
+
+
 class SnapshotVMRule(models.Model):
+    payload = models.ForeignKey(SharedSnapshotJSON, null=True, on_delete=models.PROTECT)
+
     """Shared VM relationship definition; provenance stays on each VM edge."""
     snapshot = models.ForeignKey(Snapshot, on_delete=models.CASCADE)
     path = models.TextField()
@@ -521,6 +555,8 @@ class SnapshotFindingEvidenceIndex(models.Model):
 
 
 class SnapshotRelationship(models.Model):
+    payload = models.ForeignKey(SharedSnapshotJSON, null=True, on_delete=models.PROTECT)
+
     record = models.ForeignKey(SnapshotRecord, on_delete=models.CASCADE, related_name='relationships')
     section = models.CharField(max_length=32)
     position = models.PositiveIntegerField()
@@ -592,3 +628,9 @@ class DeletionItem(models.Model):
 
     class Meta:
         constraints = [models.UniqueConstraint(fields=['batch', 'path'], name='unique_deletion_target')]
+
+
+class StorageMeasurement(models.Model):
+    day = models.DateField(unique=True)
+    database_bytes = models.PositiveBigIntegerField()
+    environments = models.JSONField(default=list)

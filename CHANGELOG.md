@@ -1,5 +1,11 @@
 # Changelog
 
+## Development — 2026-10-28
+
+- Preserve verified finding observations across skipped coverage warnings during history replay, subject to the effective maximum gap. Separate historical findings from current eligibility totals. Save unchanged review criteria after deployment to recover periods from retained evidence.
+- Deduplicate large snapshot search and relationship payloads, add bounded compaction commands and reliable per-environment retention scheduling, and expose storage growth and configurable budget alerts.
+- Add optional browsing-index archival with background restoration, bounded cache cleanup, optional legacy HTML removal, and Docker log rotation. Apply migrations 0051–0053 before starting the updated application components; historical compaction and browsing archival are opt-in.
+
 ## Development — 2026-10-26
 
 - Add an independent confirmed-deletion lane. Commit verified deletion evidence with finding closure and prevent overlapping snapshots/history replay from restoring deleted identities. Preserve review for newly recreated identities.

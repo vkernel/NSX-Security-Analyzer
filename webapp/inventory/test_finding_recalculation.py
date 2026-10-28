@@ -92,15 +92,62 @@ class FindingRecalculationTests(TestCase):
         self.assertEqual(finding.workflow_state, 'ready')
         self.assertTrue(finding.approvals)
 
-    def test_replay_does_not_bridge_unverified_observations(self):
+    def test_replay_skips_warning_without_resetting_verified_period(self):
         self.policy.empty_group_days=3; self.policy.maximum_gap_hours=96; self.policy.save()
-        self.snapshot(0); self.snapshot(1)
+        self.snapshot(0); synchronize(self.env.pk)
+        self.snapshot(1); synchronize(self.env.pk)
         data=report(); data['inventory_warnings']=[{'endpoint':'/infra/realized-state/virtual-machines'}]
-        self.snapshot(2,data=data); self.snapshot(3)
+        self.snapshot(2,data=data); synchronize(self.env.pk)
+        self.snapshot(3); synchronize(self.env.pk)
+        collected = Finding.objects.get(environment=self.env, kind='empty_group')
+        finding=self.recalc()
+        self.assertEqual(finding.qualification, 'eligible')
+        self.assertEqual(finding.observation_count, 3)
+        self.assertEqual(finding.observation_days, 3)
+        for field in ('observation_started', 'observation_count', 'observation_days', 'qualification'):
+            self.assertEqual(getattr(finding, field), getattr(collected, field))
+
+    def test_warning_does_not_extend_maximum_successful_observation_gap(self):
+        self.policy.maximum_gap_hours=48; self.policy.save()
+        self.snapshot(0)
+        data=report(); data['inventory_warnings']=[{'endpoint':'/infra/realized-state/virtual-machines'}]
+        self.snapshot(1,data=data); self.snapshot(2,data=data); self.snapshot(3)
         finding=self.recalc()
         self.assertEqual(finding.qualification,'observing')
         self.assertEqual(finding.observation_count,1)
         self.assertEqual(finding.observation_days,0)
+
+    def test_empty_queue_counts_separate_historical_findings(self):
+        self.snapshot(0); synchronize(self.env.pk)
+        finding = Finding.objects.get(environment=self.env, kind='empty_group')
+        finding.present = False
+        finding.qualification = 'insufficient'
+        finding.save(update_fields=['present', 'qualification'])
+        response = self.client.get(reverse('findings', args=[self.env.pk]), {'owner': 'none'})
+        self.assertEqual(response.context['historical_finding_count'], 1)
+        self.assertNotIn('insufficient', [row['qualification'] for row in response.context['qualification_counts']])
+        self.assertContains(response, 'historical findings are no longer currently observed')
+
+    def test_vdi_warning_uses_own_gap_and_returning_members_restart(self):
+        from .models import TransientEmptinessPolicy
+        from .test_transient import config
+        rule = TransientEmptinessPolicy.objects.create(name='VDI', tag_scope='VDI_Gebruiker',
+            mode='monitor', empty_days=3, minimum_observations=2, maximum_gap_hours=48)
+        self.policy.maximum_gap_hours=96; self.policy.save()
+        data=report(); data['objects'][0]['configuration']=config()
+        warning=dict(data, inventory_warnings=[{'endpoint':'/infra/realized-state/virtual-machines'}])
+        self.snapshot(0,data=data); self.snapshot(1,data=warning); self.snapshot(2,data=data)
+        finding=self.recalc()
+        self.assertEqual((finding.observation_days, finding.observation_count), (2,2))
+        rule.maximum_gap_hours=24; rule.save()
+        finding=self.recalc()
+        self.assertEqual((finding.observation_days, finding.observation_count), (0,1))
+        rule.maximum_gap_hours=96; rule.save()
+        import copy
+        nonempty=copy.deepcopy(data); nonempty['objects'][0]['membership']='nonempty'
+        self.snapshot(3,state='nonempty',data=nonempty); self.snapshot(4,data=data)
+        finding=self.recalc()
+        self.assertEqual((finding.observation_days, finding.observation_count), (0,1))
 
     def test_publication_skips_unchanged_evidence_but_advances_observation(self):
         self.snapshot(0)

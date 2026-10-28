@@ -125,8 +125,10 @@ def run(pk, token):
     for number, (snapshot_id, stamp) in enumerate(history, 1):
         if not current.exists(): return
         latest_coverage = snapshot_issues(Snapshot.objects.only('pk', 'summary').get(pk=snapshot_id))
-        # Unverified observations cannot establish continuity across a coverage gap.
-        states = {key: state for key, state in states.items() if not relevant(latest_coverage, *key)}
+        # Match collection synchronization: uncertain snapshots neither count nor
+        # erase previously verified observations. Keep last_seen unchanged so
+        # advance() checks the full gap between successful observations against
+        # the effective policy (including a VDI policy's own maximum gap).
         index(snapshot_id)
         seen = set()
         rows = SnapshotFindingEvidence.objects.filter(snapshot_id=snapshot_id, kind__in=job.kinds).order_by('pk')

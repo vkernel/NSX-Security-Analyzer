@@ -2,8 +2,15 @@
 # Complete Docker Hub installation; no source checkout or build required.
 name: nsx-security-analyzer
 
+x-bounded-logging: &bounded-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
 services:
   db:
+    logging: *bounded-logging
     image: postgres:17-alpine
     restart: unless-stopped
     environment:
@@ -18,6 +25,7 @@ services:
       timeout: 5s
       retries: 20
   migrate:
+    logging: *bounded-logging
     image: vkernel/nsx-security-analyzer:${NSX_IMAGE_TAG:-0.5.3}
     init: true
     environment:
@@ -42,6 +50,7 @@ services:
       db:
         condition: service_healthy
   web:
+    logging: *bounded-logging
     image: vkernel/nsx-security-analyzer:${NSX_IMAGE_TAG:-0.5.3}
     init: true
     environment:
@@ -78,6 +87,7 @@ services:
       timeout: 5s
       retries: 3
   worker:
+    logging: *bounded-logging
     image: vkernel/nsx-security-analyzer:${NSX_IMAGE_TAG:-0.5.3}
     init: true
     environment:
@@ -110,6 +120,7 @@ services:
         condition: service_completed_successfully
 
   scheduler:
+    logging: *bounded-logging
     image: vkernel/nsx-security-analyzer:${NSX_IMAGE_TAG:-0.5.3}
     init: true
     environment:
@@ -143,6 +154,7 @@ services:
 
   # Optional one-off container; never started by a normal compose up.
   snapshot-refresh:
+    logging: *bounded-logging
     image: vkernel/nsx-security-analyzer:${NSX_IMAGE_TAG:-0.5.3}
     profiles: [maintenance]
     mem_limit: 16g

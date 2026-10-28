@@ -127,6 +127,30 @@ class Command(BaseCommand):
         finally:
             FindingRecalculation.objects.filter(pk=job.pk, token=job.token, status='cancelling').update(status='cancelled', finished_at=timezone.now())
 
+    def run_browsing_restore(self):
+        from inventory.models import Snapshot
+        snapshot = Snapshot.objects.filter(browsing_status__in=['queued', 'running']).order_by('created_at').first()
+        if snapshot is None: return False
+        Snapshot.objects.filter(pk=snapshot.pk).update(browsing_status='running')
+        try:
+            with subprocess.Popen([sys.executable, str(settings.BASE_DIR / 'manage.py'), 'index_snapshots', '--snapshot', str(snapshot.pk)]) as process:
+                try:
+                    deadline = time.monotonic() + settings.AUDIT_TIMEOUT
+                    while process.poll() is None:
+                        self.check_lease()
+                        if time.monotonic() >= deadline:
+                            raise subprocess.TimeoutExpired('index_snapshots', settings.AUDIT_TIMEOUT)
+                        time.sleep(2)
+                finally:
+                    if process.poll() is None:
+                        process.kill()
+                        process.wait()
+        except (OSError, subprocess.TimeoutExpired) as exc:
+            log_failure('browsing_restore', exc)
+        finally:
+            Snapshot.objects.filter(pk=snapshot.pk, browsing_status='running').update(browsing_status='failed')
+        return True
+
     def run_comparison(self):
         from inventory.models import SnapshotComparison
         pair = SnapshotComparison.objects.filter(ready=False, status__in=['queued', 'running']).order_by('created_at').first()
@@ -188,6 +212,9 @@ class Command(BaseCommand):
             recalculation = claim_recalculation() if lane in ("all", "both", "recalculation") else None
             if recalculation:
                 self.run_recalculation(recalculation)
+                if options['once']: return
+                continue
+            if lane in ('all', 'both', 'comparison') and self.run_browsing_restore():
                 if options['once']: return
                 continue
             if lane in ('all', 'both', 'comparison') and self.run_comparison():

@@ -61,7 +61,8 @@ def filtered(request, pk):
     term = request.GET.get('q', '').strip()
     if len(term) > 1000: raise ValueError('Search is limited to 1,000 characters.')
     if term:
-        condition = search_condition(term, 'search_evidence' if request.GET.get('evidence') == '1' else 'search_basic', request.GET.get('syntax') == 'regex')
+        rows = rows.annotate(_search_text=Coalesce('search_document__text', 'search_evidence'))
+        condition = search_condition(term, '_search_text' if request.GET.get('evidence') == '1' else 'search_basic', request.GET.get('syntax') == 'regex')
         rows = rows.filter(~condition if request.GET.get('mode') == 'excludes' else condition)
     filters = json.loads(request.GET.get('filters', '[]'))
     if not isinstance(filters, list) or len(filters) > 6: raise ValueError('Invalid column filters.')
@@ -122,7 +123,9 @@ def csv_stream(rows, headers):
 @login_required
 @require_GET
 def snapshot_data(request, pk):
-    get_object_or_404(Snapshot.objects.only('pk'), pk=pk)
+    snapshot = get_object_or_404(Snapshot.objects.only('pk', 'browsing_status'), pk=pk)
+    if snapshot.browsing_status != 'ready':
+        return JsonResponse({'error': 'Detailed browsing data is archived or rebuilding. Open the snapshot page to request or follow its rebuild.'}, status=409)
     try:
         with transaction.atomic():
             limit_query()
@@ -159,7 +162,7 @@ def snapshot_data(request, pk):
                 if op == 'detail':
                     row = get_object_or_404(SnapshotRecord.objects.only('data','view','ordinal'), snapshot_id=pk, ordinal=int(request.GET.get('id', '-1')))
                     data = row.data
-                    if row.view == 'vms' and data.get('_shared_vm_rules'):
+                    if data.get('_shared_vm_rules') or data.get('_shared_tag_evidence'):
                         data = SnapshotRecord.objects.filter(pk=row.pk).annotate(_expanded=ExpandedVMData()).values_list('_expanded', flat=True).get()
                     data['finding_assessments'] = list(SnapshotFindingAssessment.objects.filter(snapshot_id=pk, path=data.get('path', '')).values_list('assessment', flat=True))
                     result = {'id':row.ordinal,'data':data,'view':row.view}
