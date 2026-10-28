@@ -1,4 +1,5 @@
 from django.urls import path
+from . import approval_evidence
 from . import storage_views, activity_views, authentication_settings, keycloak_settings, system_health, views, history_views, diagnostic_views, report_views, impact, transient, deletion, task_cancellation, bulk_actions
 
 urlpatterns = [
@@ -31,6 +32,7 @@ urlpatterns = [
     path('environments/<int:pk>/findings/', history_views.findings, name='findings'),
     path('environments/<int:pk>/findings/<int:finding_id>/recover-approval/', history_views.approval_recovery, name='approval-recovery'),
     path('environments/<int:pk>/findings/<int:finding_id>/history.json', history_views.finding_history_export, name='finding-history-export'),
+    path('environments/<int:pk>/findings/<int:finding_id>/verification/', approval_evidence.live, name='finding-verification'),
     path('environments/<int:pk>/findings/<int:finding_id>/', history_views.finding_detail, name='finding-detail'),
     path('workspace/<slug:section>/', views.workspace_section, name='workspace-section'),
     path('environments/', views.environment_directory, name='environment-directory'),

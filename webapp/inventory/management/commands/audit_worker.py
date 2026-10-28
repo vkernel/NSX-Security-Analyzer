@@ -199,6 +199,28 @@ class Command(BaseCommand):
             interrupted(batch.pk)
         return True
 
+    def run_finding_check(self):
+        from inventory.approval_live import claim, interrupted
+        from inventory.models import FindingLiveCheck
+        for pk in FindingLiveCheck.objects.filter(status='running').values_list('pk', flat=True):
+            interrupted(pk)
+        check = claim()
+        if not check: return False
+        try:
+            with subprocess.Popen([sys.executable, str(settings.BASE_DIR / 'manage.py'), 'run_finding_check', str(check.pk)]) as process:
+                try:
+                    deadline = time.monotonic() + min(settings.AUDIT_TIMEOUT, 600)
+                    while process.poll() is None:
+                        self.check_lease()
+                        if time.monotonic() >= deadline: break
+                        time.sleep(1)
+                finally:
+                    if process.poll() is None:
+                        process.kill(); process.wait()
+        finally:
+            interrupted(check.pk)
+        return True
+
     def run_worker(self, options):
         lane = options.get("lane", "all")
         self.heartbeat_lanes = tuple(LANES) if lane in ('all', 'both') else (lane,)
@@ -221,6 +243,9 @@ class Command(BaseCommand):
                 if options['once']: return
                 continue
             if lane in ('all', 'both', 'deletion_preview') and self.run_deletion(preview=True):
+                if options['once']: return
+                continue
+            if lane in ('all', 'both', 'deletion_preview') and self.run_finding_check():
                 if options['once']: return
                 continue
             if lane in ('all', 'both', 'deletion_execution') and self.run_deletion():

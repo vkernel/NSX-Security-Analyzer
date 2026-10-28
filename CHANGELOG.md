@@ -2,6 +2,8 @@
 
 ## Development — 2026-10-28
 
+- Add Evidence for approval for groups, services, firewall rules and policies: searchable saved details, approval comparisons, and read-only current-state checks with progress, member lists, explicit failures and renewed-review safeguards. Apply migration 0054 and deploy matching web/worker images.
+
 - Fix evidence-button column sizing in group and service inventory tables with bulk selection, including mobile checkbox spacing.
 - Preserve verified finding observations across skipped coverage warnings during history replay, subject to the effective maximum gap. Separate historical findings from current eligibility totals. Save unchanged review criteria after deployment to recover periods from retained evidence.
 - Deduplicate large snapshot search and relationship payloads, add bounded compaction commands and reliable per-environment retention scheduling, and expose storage growth and configurable budget alerts.

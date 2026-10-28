@@ -634,3 +634,17 @@ class StorageMeasurement(models.Model):
     day = models.DateField(unique=True)
     database_bytes = models.PositiveBigIntegerField()
     environments = models.JSONField(default=list)
+
+
+class FindingLiveCheck(models.Model):
+    """Latest bounded read-only evidence check; never an execution authorization."""
+    finding = models.OneToOneField(Finding, on_delete=models.CASCADE, related_name='live_check')
+    requested_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, on_delete=models.SET_NULL)
+    status = models.CharField(max_length=20, default='queued')
+    requested_at = models.DateTimeField(default=timezone.now)
+    finished_at = models.DateTimeField(null=True)
+    snapshot_id_text = models.CharField(max_length=40, blank=True)
+    revision = models.PositiveIntegerField(default=0)
+    progress = models.PositiveIntegerField(default=0)
+    message = models.CharField(max_length=500, blank=True)
+    result = models.JSONField(default=dict)

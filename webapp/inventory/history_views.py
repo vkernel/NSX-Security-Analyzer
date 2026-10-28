@@ -267,7 +267,10 @@ def finding_detail(request, pk, finding_id):
     owner_label = user_label(finding.owner)
     owner_name, _, owner_detail = owner_label.partition(' · ')
     page = Paginator(finding.events.select_related('actor__keycloakidentity', 'actor__ldapidentity').defer('details'), 20).get_page(request.GET.get('page'))
+    from .approval_evidence import saved, SUPPORTED
+    approval_evidence = saved(finding) if finding.kind in SUPPORTED else None
     return render(request, 'inventory/finding_detail.html', {'environment': environment, 'finding': finding,
+        'approval_evidence': approval_evidence,
         'deletion_records': DeletionItem.objects.filter(finding=finding).exclude(before={}).select_related('batch').order_by('-pk') if request.user.is_superuser else [],
         'impact_supported': '/groups/' in finding.path or '/security-policies/' in finding.path,
         'review_return': review_return, 'review_navigation': navigation(request, environment, finding, review_return),

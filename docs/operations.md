@@ -454,3 +454,40 @@ Docker Compose logging settings are not a Kubernetes volume-retention policy.
 
 Storage lifecycle settings, archival/rebuild behavior, compaction commands and budget
 alerts are described in [resource sizing](resource-sizing.md#detailed-browsing-retention-cache-expiry-and-capacity-alerts).
+
+## Evidence for approval
+
+Finding review details show saved group membership status and definition, custom
+service entries, firewall rule settings/statistics, policy rules and incoming
+references. Lists are searchable and paginated. Missing saved member lists and
+counters are labelled unavailable; tag relationships are never presented as
+resolved membership. Saved evidence includes its collection time and remains
+separate from the current-state check.
+
+Operators can choose **Verify current state** for a read-only check using the
+existing environment account. It runs in the deletion-preview worker lane after
+pending deletion previews, independently of collection. It reads current object
+configuration, group VM/IP/port/switch members where supported, policy rules,
+rule counters where applicable and broad configuration reference search. No
+configuration write or DELETE is sent. Reference search remains eventually
+consistent. Unsupported or denied endpoints remain incomplete; a read-only
+success does not demonstrate write permissions.
+
+Progress updates every three seconds without replacing the approval form or
+expanded evidence lists. Checks have a ten-minute execution deadline (or the
+shorter configured audit timeout); interrupted checks end with an explicit error.
+The latest check replaces the prior browsing result, retaining at most 2,000
+entries per list; pagination and searches apply to those retained entries. Counts
+refer to the complete response when pagination verification succeeds. Approvals
+record compact member identity fingerprints when a successful check is available,
+so subsequent checks can detect membership changes without duplicating full lists.
+
+A pending, incomplete or changed check blocks approval for the same saved snapshot.
+Detected changes invalidate existing approvals; a new collection and renewed review
+are required. A concurrently changed finding makes the check stale. Run a new
+check or collect fresh evidence; successful checks never extend observation periods
+or replace final deletion verification. Use **Reload finding** after completion to
+refresh server-evaluated decision controls. The page compares saved evidence with
+the latest owner approval, including an invalidated approval where retained.
+
+Apply migration **0054** before deploying matching web and worker images.

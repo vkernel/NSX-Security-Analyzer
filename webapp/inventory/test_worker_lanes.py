@@ -83,7 +83,7 @@ class SupervisorTests(SimpleTestCase):
         for lane in LANES:
             with self.subTest(lane=lane):
                 command = Command()
-                with patch.object(command, 'run_browsing_restore', return_value=False), patch.object(command, 'run_deletion', return_value=False) as deletion, patch.object(command, 'check_lease'), \
+                with patch.object(command, 'run_finding_check', return_value=False) as finding_check, patch.object(command, 'run_browsing_restore', return_value=False), patch.object(command, 'run_deletion', return_value=False) as deletion, patch.object(command, 'check_lease'), \
                      patch('inventory.management.commands.audit_worker.expire_jobs'), \
                      patch('inventory.management.commands.audit_worker.claim_job', return_value=None) as collection, \
                      patch('inventory.finding_recalculation.claim', return_value=None) as recalculation, \
@@ -93,6 +93,7 @@ class SupervisorTests(SimpleTestCase):
                 self.assertEqual(recalculation.call_count, int(lane == 'recalculation'))
                 self.assertEqual(comparison.call_count, int(lane == 'comparison'))
                 self.assertEqual(command.heartbeat_lanes, (lane,))
+                self.assertEqual(finding_check.call_count, int(lane == 'deletion_preview'))
                 if lane == 'deletion_preview': deletion.assert_called_once_with(preview=True)
                 elif lane == 'deletion_execution': deletion.assert_called_once_with()
                 else: deletion.assert_not_called()

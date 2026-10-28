@@ -1,0 +1,25 @@
+{% load workspace_time %}
+<section class="approval-evidence" aria-labelledby="approval-evidence-title">
+<h2 id="approval-evidence-title">Evidence for approval</h2>
+<p class="muted">Saved evidence · {% user_time approval_evidence.collected_at %}{% if not approval_evidence.snapshot_retained %} · Source snapshot removed; retained review evidence shown{% endif %}</p>
+<p>{{ approval_evidence.note }}</p>
+<dl class="review-facts">{% for label,value in approval_evidence.facts %}<div><dt>{{ label }}</dt><dd>{{ value }}</dd></div>{% endfor %}</dl>
+<p class="muted">References are limited to collected coverage. No references found is not proof that deletion is safe. Coverage and approval blockers are shown below.</p>
+<div id="saved-approval-sections"></div>
+{{ approval_evidence.sections|json_script:'approval-saved-sections' }}
+<noscript><p>Enable JavaScript to search evidence lists, or open the saved technical evidence below.</p></noscript>
+<details class="review-disclosure"><summary>Changes since the first approval</summary>
+{% if approval_evidence.changes %}<p>Saved evidence differs from the most recent owner approval. Relevant changes require a new review.</p><div class="table-scroll"><table><thead><tr><th>Field</th><th>At approval</th><th>Current saved evidence</th></tr></thead><tbody>{% for change in approval_evidence.changes %}<tr><td>{{ change.field }}</td><td>{{ change.before }}</td><td>{{ change.after }}</td></tr>{% endfor %}</tbody></table></div>
+{% elif approval_evidence.has_baseline %}<p>No differences found in the saved review evidence. Resolved member changes are unavailable unless member lists were retained.</p>{% else %}<p>No previous owner approval is available for comparison.</p>{% endif %}</details>
+{% if user.is_staff %}
+<div class="approval-live" data-live-evidence="{% url 'finding-verification' environment.pk finding.pk %}">
+<h3>Current state in NSX</h3><p>Read-only check of configuration, membership and references. Results are separate from saved observations; final deletion repeats its checks. Up to 2,000 entries per list are retained for browsing.</p>
+<form data-live-request>{% csrf_token %}<button type="submit" class="button">Verify current state</button></form>
+<p data-live-status role="status" aria-live="polite">Loading verification status…</p>
+<progress data-live-progress max="100" value="0" hidden aria-label="Read-only verification progress"></progress>
+<button type="button" class="button" data-live-refresh>Refresh status</button>
+<p data-live-time class="muted"></p><div data-live-results></div>
+<p><a href="" data-live-reload hidden>Reload finding to see current approval controls</a></p>
+</div>
+{% endif %}
+</section>
