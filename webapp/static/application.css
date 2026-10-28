@@ -27,3 +27,11 @@ body.text-large :is(.workspace-sidebar nav.workspace-navigation a,td,input,selec
 @media(max-width:800px){.snapshot-page .workspace-sidebar,.workspace-admin .workspace-sidebar{position:fixed;inset:0 auto 0 0;width:260px;height:100dvh;max-height:none;z-index:100;padding:26px 18px}.workspace-sidebar{height:100dvh}.navigation-open .workspace-sidebar{transform:translateX(0)}}
 
 #notification-count:not(:empty){display:inline-grid;place-items:center;min-width:17px;height:17px;border-radius:9px;background:var(--app-accent);color:white;font-size:10px;padding:0 4px}.freshness p{margin:6px 0 0;font-size:12px}.snapshot-information[open]{padding-bottom:8px}
+
+/* Bulk selection must not inherit the legacy last-column evidence width. */
+.table-widget .inventory-bulk-table th:first-child{width:auto}
+.table-widget .inventory-bulk-table th.inventory-evidence-column{width:16rem}
+.table-widget .inventory-bulk-table .inventory-selection-column{width:3.5rem;box-sizing:border-box;text-align:center;padding-left:8px;padding-right:8px}
+.table-widget .inventory-bulk-table .inventory-evidence-column .detail-button{white-space:nowrap;overflow-wrap:normal;word-break:normal}
+@media(max-width:600px){body[data-theme] .table-widget .inventory-bulk-table :is(th,td)[data-column-index="0"]{width:auto!important}}
+@media(max-width:600px){body[data-theme] .table-widget .inventory-bulk-table .inventory-selection-column{width:3.5rem!important}}

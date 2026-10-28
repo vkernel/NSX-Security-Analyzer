@@ -50,7 +50,10 @@
       fragment.querySelector('form').id = bulkId;
       widget.prepend(fragment);
       // Append a selection column so existing filter/sort column indices stay stable.
+      widget.querySelector('table').classList.add('inventory-bulk-table');
+      widget.querySelector('thead th:last-child').classList.add('inventory-evidence-column');
       const header = document.createElement('th'), all = document.createElement('input');
+      header.className='inventory-selection-column';
       all.type='checkbox';all.dataset.bulkAll=bulkId;all.setAttribute('aria-label','Select objects on this page');header.append(all);
       widget.querySelector('thead tr').append(header);
     }
@@ -73,6 +76,8 @@
         if (inventory && document.getElementById(bulkId)) {
           [...tbody.rows].forEach((tr,index)=>{
             const row=result.rows[index], cell=document.createElement('td'), box=document.createElement('input');
+            tr.cells[4]?.classList.add('inventory-evidence-column');
+            cell.className='inventory-selection-column';
             box.type='checkbox';box.value=String(row.id);box.dataset.bulkChoice=bulkId;box.dataset.bulkAllowed='export compare reviews';
             box.setAttribute('aria-label','Select '+(row.data.name || 'object'));cell.append(box);tr.append(cell);
           });
