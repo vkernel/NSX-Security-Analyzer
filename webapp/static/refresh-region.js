@@ -8,6 +8,7 @@
       return `anchor:${identity}/${node === anchor ? '' : key(node, anchor)}`;
     }
     if (node.matches('summary')) return `summary:${key(node.parentElement, root)}`;
+    if(node.matches('input[type=checkbox],input[type=radio]')) return `${node.tagName}:${node.name}:${node.value}`;
     const identity = node.getAttribute('name') || node.getAttribute('href') ||
       (node.matches('details') ? node.querySelector(':scope > summary')?.textContent.trim() : '');
     if (identity) return `${node.tagName}:${identity}`;
@@ -20,17 +21,18 @@
   }
   function blocked(root, {allowError=false}={}) {
     if (!allowError && root.querySelector('[data-preserve-error]')) return 'Updates paused to keep the error visible. Review it, then use Refresh now.';
-    if (document.querySelector('dialog[open]')) return 'Updates paused while a dialog is open. Background work continues.';
+    if (root.querySelector('dialog[open]')) return 'Status checks continue; close the confirmation dialog to display updated controls.';
     if ([...root.querySelectorAll('input[type="file"]')].some(node=>node.files?.length))
       return 'Updates paused to preserve your selected file. Background work continues.';
-    if (root.contains(document.activeElement) && document.activeElement.matches('input, textarea, select, [contenteditable="true"]'))
-      return 'Updates paused while you edit a field. Background work continues.';
+
     return '';
   }
   function replace(root, next, options={}) {
     const reason=blocked(root, options);
     if (reason) return reason;
-    const active=root.contains(document.activeElement) ? key(document.activeElement, root) : null;
+    const focused=document.activeElement;
+    const caret=typeof focused.selectionStart==='number' ? [focused.selectionStart,focused.selectionEnd] : null;
+    const active=root.contains(focused) ? key(focused, root) : null;
     const details=new Map([...root.querySelectorAll('details')].map(node=>[key(node,root),node.open]));
     const fields=new Map([...root.querySelectorAll('input:not([type="hidden"]),textarea,select')].map(node=>[key(node,root),
       {value:node.value,checked:node.checked}]));
@@ -55,9 +57,11 @@
     if(active){
       if(!target){root.tabIndex=-1;target=root;}
       target.focus({preventScroll:true});
+      if(caret&&target.setSelectionRange){try{target.setSelectionRange(...caret);}catch{}}
     }
     window.scrollTo(x,y);
     document.dispatchEvent(new Event('bulk:updated'));
+    document.dispatchEvent(new Event('region:updated'));
     return '';
   }
   window.RefreshRegion={blocked,replace};

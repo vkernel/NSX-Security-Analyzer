@@ -14,9 +14,9 @@
   const active = Array.from(document.querySelectorAll('[data-job]'));
   if (!active.length) return;
   const status = document.querySelector('.poll-status') || document.querySelector('[data-task-refresh-controls] [data-live-status]');
-  let busy = false;
+  let busy = false, failures=0;
   async function poll(manual=false) {
-    if (busy || document.hidden || (window.TaskRefreshPaused && !manual)) { if(!manual) setTimeout(poll, refreshSeconds * 1000); return; }
+    if (busy || document.hidden || (window.TaskRefreshPaused && !manual)) { if(!manual) setTimeout(poll, Math.min(60000,refreshSeconds * 1000 * 2**Math.min(failures,4))); return; }
     busy = true;
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 15000);
@@ -24,7 +24,8 @@
       const query = new URLSearchParams([...new Set(active.map(row => row.dataset.job))].map(id => ['id', id]));
       const response = await fetch('/api/jobs/?' + query, {headers: {Accept: 'application/json'}, cache: 'no-store', signal:controller.signal});
       if (!response.ok || response.redirected) throw new Error('Session unavailable');
-      const data = await response.json();
+      const data = await response.json();failures=0;
+      document.querySelector('[data-task-refresh]')?.setAttribute('hidden','');
       const states = new Map(data.jobs.map(job => [job.id, job]));
       active.forEach(row => {
         const job = states.get(row.dataset.job);
@@ -56,13 +57,14 @@
       });
       if (status) status.textContent = 'Collection status updated at ' + new Date().toLocaleTimeString() + '.';
     } catch (_) {
+      failures++;const retry=document.querySelector('[data-task-refresh]');if(retry){retry.hidden=false;retry.textContent='Retry connection';}
       if (status) status.textContent = 'Unable to refresh collection status. Retrying shortly; reload if your session has expired.';
     } finally { clearTimeout(timeout); busy=false; document.dispatchEvent(new Event('task-refresh-state')); }
-    if (!manual && active.some(row => ['queued','running'].includes(row.dataset.status))) setTimeout(poll, refreshSeconds * 1000);
+    if (!manual && active.some(row => ['queued','running'].includes(row.dataset.status))) setTimeout(poll, Math.min(60000,refreshSeconds * 1000 * 2**Math.min(failures,4)));
   }
   document.addEventListener('click', event => {
     if(event.target.closest('[data-task-refresh]')) poll(true);
     if(event.target.closest('[data-task-pause]')) queueMicrotask(() => {if(!window.TaskRefreshPaused) poll(true);});
   });
-  setTimeout(poll, refreshSeconds * 1000);
+  setTimeout(poll, Math.min(60000,refreshSeconds * 1000 * 2**Math.min(failures,4)));
 })();

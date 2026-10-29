@@ -29,15 +29,15 @@ test('expanded focused details update, retain focus and follow object identity a
   dom.window.close();
 });
 
-test('protect focused form fields and open dialogs, preserve draft values on resume', () => {
+test('updates retain focused draft fields despite unrelated open dialogs', () => {
   const dom=setup('<div id="results"><input id="ticket" value="draft"><input name="confirm" type="checkbox" checked><span>old</span></div><dialog open></dialog>'),w=dom.window;
   const root=w.document.getElementById('results');
   const html='<div id="results"><input id="ticket"><input name="confirm" type="checkbox"><span>new</span></div>';
-  assert.match(w.RefreshRegion.replace(root,next(w,html)),/dialog/);
+  assert.equal(w.RefreshRegion.replace(root,next(w,html)),'');
   w.document.querySelector('dialog').removeAttribute('open');
   w.document.querySelector('input').focus();
-  assert.match(w.RefreshRegion.replace(root,next(w,html)),/edit a field/);
-  assert.equal(root.querySelector('span').textContent,'old');
+  assert.equal(w.RefreshRegion.replace(root,next(w,html)),'');
+  assert.equal(root.querySelector('span').textContent,'new');
   w.document.activeElement.blur();
   assert.equal(w.RefreshRegion.replace(root,next(w,html)),'');
   assert.equal(root.querySelector('#ticket').value,'draft');
@@ -45,7 +45,7 @@ test('protect focused form fields and open dialogs, preserve draft values on res
   dom.window.close();
 });
 
-test('shared poll updates expanded rows and reports genuine dialog pause', async () => {
+test('shared poll updates expanded rows despite unrelated open dialogs', async () => {
   const dom=setup(`<p data-live-status></p><div id="results" data-live-region data-poll="true">${row('a','old')}</div>`),w=dom.window;
   let poll;
   w.setTimeout=fn=>{poll=fn;};
@@ -57,8 +57,7 @@ test('shared poll updates expanded rows and reports genuine dialog pause', async
   assert.equal(w.document.querySelector('details').open,true);
   const dialog=w.document.createElement('dialog');dialog.open=true;w.document.body.append(dialog);
   await poll();
-  assert.match(w.document.querySelector('[data-live-status]').textContent,/paused while a dialog/);
-  assert.doesNotMatch(w.document.querySelector('[data-live-status]').textContent,/Status updated/);
+  assert.match(w.document.querySelector('[data-live-status]').textContent,/Status updated/);
   dom.window.close();
 });
 
@@ -201,4 +200,29 @@ test('an environment destination marker cannot reset a different page', () => {
  w.sessionStorage.setItem('review-position:'+w.location.pathname+w.location.search,JSON.stringify({y:600,at:Date.now()}));
  w.dispatchEvent(new w.PageTransitionEvent('pageshow',{persisted:true}));
  assert.equal(scrolls[0][1],600);dom.window.close();
+});
+
+for(const scenario of ['ready','blocked','changed'])test('verification synchronizes server approval: '+scenario,async()=>{
+ const form=revision=>`<form data-finding-review><input name="revision" value="${revision}"><textarea name="note">My draft</textarea><div class="review-buttons"><button name="action" value="approve" ${scenario==='blocked'?'disabled':''}>Approve</button></div></form>`;
+ const dom=setup(form(1)+`<div data-live-evidence="/verify"><form><button>Verify</button></form><p data-live-status></p><progress></progress><p data-live-time></p><div data-live-results></div><button data-live-refresh></button></div>`),w=dom.window;
+ w.setTimeout=()=>1;w.AbortSignal.timeout=()=>undefined;
+ w.document.querySelector('[value=approve]').disabled=true;
+ w.fetch=async url=>String(url)==='/verify'?{ok:true,json:async()=>({status:'succeeded',message:'Completed',result:{}})}:{ok:true,text:async()=>form(scenario==='changed'?2:1)};
+ w.eval(source('approval-evidence.js'));await new Promise(resolve=>setImmediate(resolve));
+ assert.equal(w.document.querySelector('[value=approve]').disabled,scenario!=='ready');
+ assert.equal(w.document.querySelector('[name=note]').value,'My draft');
+ assert.equal(w.document.querySelector('[name=revision]').value,'1');
+ if(scenario==='changed')assert.match(w.document.querySelector('[data-review-change]').textContent,/finding changed/);
+ w.close();
+});
+
+test('new list identities are offered without moving selected rows',async()=>{
+ const dom=setup('<div id="list" data-live-region data-poll="true"><table><tbody><tr data-refresh-key="a"><td><input type="checkbox" checked>Original</td></tr></tbody></table></div>'),w=dom.window;
+ let tick;w.setTimeout=fn=>{tick=fn;};
+ w.fetch=async()=>({ok:true,text:async()=>'<div id="list"><table><tbody><tr data-refresh-key="b"><td>New</td></tr></tbody></table></div>'});
+ w.eval(source('live-tasks.js'));await tick();
+ assert.equal(w.document.querySelector('input').checked,true);
+ assert.equal(w.document.querySelector('tr').dataset.refreshKey,'a');
+ w.document.querySelector('[data-show-results]').click();
+ assert.equal(w.document.querySelector('tr').dataset.refreshKey,'b');w.close();
 });

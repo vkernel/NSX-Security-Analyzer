@@ -4,14 +4,14 @@
   const dialog = document.getElementById('finding-release-dialog');
   const form = document.getElementById('bulk-release');
   const open = document.getElementById('release-open');
-  const checkboxes = [...document.querySelectorAll('input[form="bulk-release"][name="selected"]')];
+  let checkboxes = [...document.querySelectorAll('input[form="bulk-release"][name="selected"]')];
   const selected = () => checkboxes.filter(box => box.checked && !box.disabled);
   const deletion = document.getElementById('delete-selected-open');
   const deleteForm = document.getElementById('bulk-delete-preview');
   const assign = document.getElementById('assign-open');
   const assignmentDialog = document.getElementById('finding-assignment-dialog');
   const assignmentForm = document.getElementById('bulk-assignment');
-  const all = document.getElementById('finding-select-all');
+  let all = document.getElementById('finding-select-all');
   const menu = bar.querySelector('.selection-action-menu');
   const update = () => {
     const count = selected().length;
@@ -35,10 +35,13 @@
     document.getElementById('release-title').textContent =
       `Return ${count} finding${count === 1 ? '' : 's'} to unassigned`;
   };
-  checkboxes.forEach(box => box.addEventListener('change', update));
-  all?.addEventListener('change', () => {
-    checkboxes.forEach((box, index) => { box.checked = all.checked && index < 100; });
-    update();
+  document.addEventListener('region:updated',()=>{
+    checkboxes=[...document.querySelectorAll('input[form="bulk-release"][name="selected"]')];
+    all=document.getElementById('finding-select-all');update();
+  });
+  document.addEventListener('change',event=>{
+    if(event.target===all){checkboxes.forEach((box,index)=>{box.checked=all.checked&&index<100;});update();}
+    else if(checkboxes.includes(event.target))update();
   });
   assign?.addEventListener('click', () => {
     update();

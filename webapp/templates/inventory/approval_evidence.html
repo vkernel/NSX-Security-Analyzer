@@ -17,9 +17,9 @@
 <form data-live-request>{% csrf_token %}<button type="submit" class="button">Verify current state</button></form>
 <p data-live-status role="status" aria-live="polite">Loading verification status…</p>
 <progress data-live-progress max="100" value="0" hidden aria-label="Read-only verification progress"></progress>
-<button type="button" class="button" data-live-refresh>Refresh status</button>
+<button type="button" class="button" data-live-refresh hidden>Retry connection</button>
 <p data-live-time class="muted"></p><div data-live-results></div>
-<p><a href="" data-live-reload hidden>Reload finding to see current approval controls</a></p>
+
 </div>
 {% endif %}
 </section>

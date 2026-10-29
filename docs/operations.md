@@ -377,7 +377,7 @@ Action dialogs, including diagnostic collection and table column filters, use a 
 
 Open **Activity** in the top bar to follow collections, finding review indexing and snapshot comparisons together. Filter by environment, task type or active/failed status. Each type has its own worker queue. The view is bounded to 30 active and 30 recent tasks per type (60 when filtering by status); finding indexing shows the latest task per environment. Comparison age is time since its original request, not measured processing duration.
 
-Activity, comparison preparation and finding recalculation status refresh while their page is visible, using your refresh interval. Updates pause inside a focused task region or an expanded detail to avoid interrupting reading. Collection state changes update in place instead of reloading the page, preserving snapshot selections. Follow **View collection result** when finished. Refresh the finding list after recalculation to load its new membership.
+Activity, comparison preparation and finding recalculation status refresh while their page is visible, using your refresh interval. Expanded details and focused fields retain their state while statuses update. Open confirmation dialogs keep their controls stable while background checks continue. Connection failures retry automatically with bounded backoff. Collection state changes update in place instead of reloading the page, preserving snapshot selections. Follow **View collection result** when finished. Finding and Activity lists offer **Show new results** when membership changes, preserving the current list and selection until accepted.
 
 ## Upgrading approval settings and confirmed deletion
 
@@ -486,8 +486,8 @@ A pending, incomplete or changed check blocks approval for the same saved snapsh
 Detected changes invalidate existing approvals; a new collection and renewed review
 are required. A concurrently changed finding makes the check stale. Run a new
 check or collect fresh evidence; successful checks never extend observation periods
-or replace final deletion verification. Use **Reload finding** after completion to
-refresh server-evaluated decision controls. The page compares saved evidence with
+or replace final deletion verification. After completion, the page automatically
+synchronizes server-evaluated decision controls. Draft reasons remain intact; a changed review revision requires reviewing the updated finding before approval. The page compares saved evidence with
 the latest owner approval, including an invalidated approval where retained.
 
 Apply migration **0054** before deploying matching web and worker images.

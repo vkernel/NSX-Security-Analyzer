@@ -1,5 +1,11 @@
 # Changelog
 
+## Development — 2026-10-29
+
+- Synchronize approval controls with server readiness after live verification, retaining draft reasons and blocking stale revisions.
+- Keep task status updates automatic with reconnect backoff, retry-only controls, stable list updates, and preserved reading/editing state.
+- Render review Actions in a viewport-positioned popover and remove the sticky decision card scrollbar.
+
 ## Development — 2026-10-28
 
 - Add Evidence for approval for groups, services, firewall rules and policies: searchable saved details, approval comparisons, and read-only current-state checks with progress, member lists, explicit failures and renewed-review safeguards. Apply migration 0054 and deploy matching web/worker images.

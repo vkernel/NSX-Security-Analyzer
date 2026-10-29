@@ -123,24 +123,32 @@
       });
     }
     const center=document.querySelector('.notification-center'), list=document.getElementById('notification-list'), status=document.getElementById('notification-status');
+    let notificationSignature='',notificationBusy=false;
     async function refresh() {
+      if(notificationBusy)return;
       if(document.hidden) return;
       try {
-        const response=await fetch('/api/notifications/',{cache:'no-store'});
+        notificationBusy=true;
+        const response=await fetch('/api/notifications/',{cache:'no-store',signal:AbortSignal.timeout(15000)});
         if(!response.ok || response.redirected) throw new Error();
         const data=await response.json();document.getElementById('notification-count').textContent=data.unread ? String(data.unread) : '';
         center.querySelector('summary').setAttribute('aria-label',data.unread ? `Notifications, ${data.unread} unread` : 'Notifications');
-        list.replaceChildren();
+        const signature=JSON.stringify(data.items);
+        if(signature===notificationSignature)return;
+        if(center.open && list.contains(document.activeElement)){status.textContent='New notifications available; updates will appear when you finish using this list.';return;}
+        notificationSignature=signature;list.replaceChildren();
         data.items.forEach(item=> {
           const li=document.createElement('li'),link=document.createElement('a'),time=document.createElement('small');
           link.href=item.url;link.textContent=item.environment+' · '+item.label;time.textContent=formatTime(item.at);time.title=new Date(item.at).toISOString();
           if(item.unread) li.className='unread';li.append(link,time);list.append(li);
         });
         status.textContent=data.items.length?'Last 30 days · Up to 50 results':'No recent notifications.';
-      } catch(_) {status.textContent='Notifications unavailable. Retrying shortly.';}
+      } catch(_) {status.textContent='Notifications unavailable. Reconnecting automatically.';}finally{notificationBusy=false;}
     }
     center.addEventListener('toggle',()=>{if(center.open)refresh();});
     document.getElementById('notifications-read').addEventListener('click',async()=>{try{await post('/api/notifications/read/',{});await refresh();}catch(error){status.textContent=error.message;}});
-    refresh();setInterval(refresh,60000);
+    window.addEventListener('online',refresh);
+    document.addEventListener('visibilitychange',()=>{if(!document.hidden)refresh();});
+    refresh();setInterval(refresh,30000);
   });
 })();
