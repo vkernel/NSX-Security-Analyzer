@@ -17,7 +17,7 @@ from .audit_events import record
 from .models import Environment, NamingPolicy, NamingPolicyVersion, NamingScopeBinding, NamingProposal, Snapshot, SnapshotRecord
 from .naming_forms import PolicyForm, ComponentSet, BindingForm, ProposalForm, configuration
 
-DEFAULT = {'separator': '-', 'max_length': 63, 'match_field': '', 'match_value': '', 'components': [
+DEFAULT = {'target': 'group', 'group_type': 'all', 'separator': '-', 'max_length': 63, 'match_field': '', 'match_value': '', 'components': [
     {'field': field, 'source': 'tag', 'scope': field, 'literal': '', 'required': True, 'case': 'upper', 'format': 'alphanumeric', 'max_length': 32, 'mapping': {}}
     for field in ['Environment', 'Location', 'Application', 'Role', 'Instance']]}
 
@@ -44,7 +44,7 @@ def impact(policy):
         transitions = Counter()
         for row in after:
             old = previous.get(row['identity'], {})
-            transitions[(old.get('status', 'New VM'), row['status'])] += 1
+            transitions[(old.get('status', 'New group'), row['status'])] += 1
             if len(examples) < 40 and (old.get('proposed') != row['proposed'] or old.get('status') != row['status'] or row['status'] != 'Compliant'):
                 examples.append({'environment': env.name, 'name': row['name'], 'before': old.get('proposed', ''), 'after': row['proposed'], 'status': row['status'], 'reasons': row['reasons']})
         summaries.append({'environment': env, 'counts': naming.counts(after), 'total': len(after), 'warning': warning,
@@ -113,6 +113,8 @@ def policies(request, pk=None):
                         snapshot_version(policy, request.user, 'mapping_saved')
                         messages.success(request, 'Draft scope mapping saved. Preview and activate to use it.')
                         return redirect('naming-policy-edit', pk=policy.pk)
+        elif policy and action in ('preview', 'activate') and policy.draft.get('target') != 'group':
+            error = 'This is a legacy VM policy. Review the group type and components, then save a group policy draft before previewing.'
         elif policy and action in ('preview', 'activate'):
             with transaction.atomic():
                 policy = NamingPolicy.objects.select_for_update().get(pk=policy.pk)
@@ -133,7 +135,7 @@ def policies(request, pk=None):
                         binding.save(update_fields=['scopes'])
                     snapshot_version(policy, request.user, 'activated')
                     request.session.pop(key, None)
-                    messages.success(request, 'Naming policy activated for read-only assessment. No NSX or VM configuration was changed.')
+                    messages.success(request, 'Naming policy activated for read-only assessment. No NSX or group configuration was changed.')
                     return redirect('naming-policy-edit', pk=policy.pk)
         elif policy and action == 'disable':
             with transaction.atomic():
@@ -143,7 +145,7 @@ def policies(request, pk=None):
                 else:
                     policy.enabled = False
                     snapshot_version(policy, request.user, 'disabled')
-                    messages.success(request, 'Naming assessment policy disabled. Observed tags and VM names are unchanged.')
+                    messages.success(request, 'Naming assessment policy disabled. Observed tags and group names are unchanged.')
                     return redirect('naming-policy-edit', pk=policy.pk)
     latest_ids = Environment.objects.annotate(latest=Subquery(Snapshot.objects.filter(environment=OuterRef('pk'), testing=False, imported=False).values('pk')[:1])).values_list('latest', flat=True)
     scopes = list(SnapshotRecord.objects.filter(snapshot_id__in=latest_ids, view='scopes').order_by('name').values_list('name', flat=True).distinct()[:1000])
@@ -159,9 +161,9 @@ def csv_response(rows):
     response = HttpResponse(content_type='text/csv; charset=utf-8')
     response['Content-Disposition'] = 'attachment; filename="naming-assessment.csv"'
     writer = csv.writer(response)
-    writer.writerow(['vm_identity', 'current_name', 'proposed_name', 'policy', 'status', 'issues'])
+    writer.writerow(['group_path', 'group_type', 'current_name', 'proposed_name', 'policy', 'status', 'issues'])
     for row in rows:
-        values = [row['identity'], row['name'], row['proposed'], row['policy'].name if row['policy'] else '', row['status'], '; '.join(row['reasons'])]
+        values = [row['identity'], row['group_type'], row['name'], row['proposed'], row['policy'].name if row['policy'] else '', row['status'], '; '.join(row['reasons'])]
         writer.writerow(["'" + value if value.lstrip().startswith(('=', '+', '-', '@', '\t', '\r')) else value for value in values])
     return response
 
@@ -202,17 +204,17 @@ def compliance(request, pk):
                 upload = proposal_form.cleaned_data.get('csv_file')
                 if not upload or upload.size > 1024*1024: raise ValidationError('Choose a UTF-8 CSV file up to 1 MB.')
                 reader = csv.DictReader(io.StringIO(upload.read().decode('utf-8-sig')))
-                if not {'vm_identity', 'scope', 'value'}.issubset(reader.fieldnames or []): raise ValidationError('CSV needs vm_identity,scope,value columns.')
+                if not {'group_path', 'scope', 'value'}.issubset(reader.fieldnames or []): raise ValidationError('CSV needs group_path,scope,value columns.')
                 identities = {r['identity']: r for r in rows}
                 selected_by_id = {}
                 for n, item in enumerate(reader):
                     if n >= 1000: raise ValidationError('Import at most 1,000 CSV rows at a time.')
-                    identity, scope, value = ((item.get(k) or '').strip() for k in ['vm_identity', 'scope', 'value'])
-                    if identity not in identities or not scope or len(scope)>128 or not value or len(value)>256: raise ValidationError(f'CSV row {n+2} has an unknown VM or invalid scope/value.')
+                    identity, scope, value = ((item.get(k) or '').strip() for k in ['group_path', 'scope', 'value'])
+                    if identity not in identities or not scope or len(scope)>128 or not value or len(value)>256: raise ValidationError(f'CSV row {n+2} has an unknown group or invalid scope/value.')
                     row = identities[identity]
                     selected_by_id[row['id']] = row
                     mapping = changes.setdefault(row['identity'], {})
-                    if scope in mapping: raise ValidationError(f'CSV row {n+2} repeats a scope for the same VM.')
+                    if scope in mapping: raise ValidationError(f'CSV row {n+2} repeats a scope for the same group.')
                     mapping[scope] = value
                 selected = list(selected_by_id.values())
             elif action == 'propose':
@@ -220,54 +222,70 @@ def compliance(request, pk):
                     raise ValidationError('Enter a scope and proposed value.')
                 changes = {r['identity']: {proposal_form.cleaned_data['scope']: proposal_form.cleaned_data['value']} for r in selected}
             if not selected or (action != 'import' and (len(selected) != len(set(ids)) or len(selected)>100)):
-                raise ValidationError('Select 1–100 current VMs, or import a CSV for current VM identities.')
-            if action not in ('propose', 'import', 'assign', 'review', 'reject'): raise ValidationError('Choose a supported proposal action.')
+                raise ValidationError('Select 1–100 current groups, or import a CSV for current group paths.')
+            if action not in ('propose', 'import', 'assign', 'review', 'reject', 'exception'): raise ValidationError('Choose a supported proposal action.')
+            if action == 'exception' and (not request.user.is_superuser or not proposal_form.is_valid() or not proposal_form.cleaned_data.get('note')):
+                raise ValidationError('An administrator must record a reason for a naming exception.')
             if action == 'assign' and not owner: raise ValidationError('Select an owner.')
             with transaction.atomic():
                 Environment.objects.select_for_update().get(pk=environment.pk)
                 if environment.snapshots.filter(testing=False, imported=False).values_list('pk', flat=True).first() != snapshot.pk:
                     raise ValidationError('A new collection arrived. Reload before saving proposals.')
                 for row in selected:
-                    proposal = NamingProposal.objects.select_for_update().filter(environment=environment, vm_identity=row['identity']).first()
+                    proposal = NamingProposal.objects.select_for_update().filter(environment=environment, object_type='group', group_path=row['identity']).first()
+                    if action in ('review', 'exception', 'reject'):
+                        stamp = naming.digest([row['baseline'], row['policy_stamp'], [proposal.state, proposal.tags, proposal.note, str(proposal.updated_at)] if proposal else None])
+                        if request.POST.get('decision_stamp_' + str(row['id'])) != stamp:
+                            raise ValidationError('The proposal or naming policy changed. Reload and review the current evidence before recording a decision.')
                     if action in ('propose', 'import'):
-                        proposal = proposal or NamingProposal(environment=environment, vm_identity=row['identity'])
+                        proposal = proposal or NamingProposal(environment=environment, group_path=row['identity'])
                         # Do not silently carry stale proposed fields into a fresh review.
                         if proposal.baseline and proposal.baseline != row['baseline']:
-                            raise ValidationError('An existing proposal is stale. Reject it first, then prepare fresh tags.')
+                            raise ValidationError('An existing proposal is stale. Reject it first, then prepare fresh component values.')
                         proposal.tags = {**proposal.tags, **changes[row['identity']]}
+                        proposal.reviewed_by = None
                         proposal.baseline, proposal.state, proposal.author = row['baseline'], 'draft', request.user
                         proposal.note = proposal_form.cleaned_data.get('note', '')
                         if owner: proposal.owner = owner
+                    elif action == 'exception':
+                        proposal = proposal or NamingProposal(environment=environment, group_path=row['identity'])
+                        proposal.state, proposal.baseline = 'exception', row['baseline']
+                        proposal.exception_policy_stamp = row['policy_stamp']
+                        proposal.note = proposal_form.cleaned_data['note']
+                        proposal.reviewed_by = request.user
                     elif action == 'assign':
-                        proposal = proposal or NamingProposal(environment=environment, vm_identity=row['identity'], baseline=row['baseline'], author=request.user)
+                        proposal = proposal or NamingProposal(environment=environment, group_path=row['identity'], baseline=row['baseline'], author=request.user)
                         proposal.owner = owner
                     else:
                         if not proposal: raise ValidationError('Prepare a proposal before reviewing it.')
                         if action == 'review' and (proposal.baseline != row['baseline'] or not proposal.tags): raise ValidationError('Stale or empty proposals cannot be marked reviewed.')
                         proposal.state = 'reviewed' if action == 'review' else 'rejected'
+                        proposal.reviewed_by = request.user if action == 'review' else None
                         if action == 'reject':
                             proposal.tags = {}
                             proposal.baseline = row['baseline']
-                    if len(proposal.vm_identity)>512 or len(proposal.tags)>128:
-                        raise ValidationError('A VM identity must fit 512 characters and proposals may contain at most 128 scopes.')
+                    if len(proposal.group_path)>512 or len(proposal.tags)>128:
+                        raise ValidationError('A group path must fit 512 characters and proposals may contain at most 128 scopes.')
                     proposal.save()
                     record('naming.proposal_' + action, 'NamingProposal', proposal.pk, actor=request.user.pk,
-                           details={'environment_id': environment.pk, 'vm_identity': row['identity'], 'state': proposal.state, 'tags': proposal.tags, 'owner_id': proposal.owner_id})
-            messages.success(request, f'{len(selected)} proposal(s) updated. No tags or VM names were changed in NSX or vCenter.')
+                           details={'environment_id': environment.pk, 'group_path': row['identity'], 'state': proposal.state, 'tags': proposal.tags, 'owner_id': proposal.owner_id, 'note': proposal.note, 'reviewed_by_id': proposal.reviewed_by_id, 'baseline': proposal.baseline, 'exception_policy_stamp': proposal.exception_policy_stamp})
+            messages.success(request, f'{len(selected)} proposal(s) updated. No tags or group names were changed in NSX or vCenter.')
             return redirect('naming-compliance', pk=environment.pk)
         except (ValidationError, UnicodeError, csv.Error) as exc:
             error = '; '.join(exc.messages) if isinstance(exc, ValidationError) else 'Cannot read this UTF-8 CSV file.'
     totals = naming.counts(rows)
+    group_type = request.GET.get('group_type', '')
     query, status, policy_id = request.GET.get('q', '').strip(), request.GET.get('status', ''), request.GET.get('policy', '')
     owner_filter = request.GET.get('owner', '')
     filtered = [r for r in rows if (not query or query.casefold() in (r['name']+' '+r['identity']+' '+str(r['observed_tags'])).casefold())
+                and (not group_type or r['group_type'] == group_type)
                 and (not status or r['status'] == status) and (not policy_id or r['policy'] and str(r['policy'].pk) == policy_id)
                 and (not owner_filter or r['proposal'] and str(r['proposal'].owner_id) == owner_filter)]
     if request.GET.get('export') == 'csv': return csv_response(filtered)
     page = Paginator(filtered, 50).get_page(request.GET.get('page'))
     params = request.GET.copy();params.pop('page', None);params.pop('export', None)
     return render(request, 'inventory/naming_compliance.html', {'environment': environment, 'snapshot': snapshot, 'page': page,
-        'warning': warning, 'totals': totals, 'error': error, 'query': query, 'status': status, 'policy_id': policy_id,
+        'group_type': group_type, 'warning': warning, 'totals': totals, 'error': error, 'query': query, 'status': status, 'policy_id': policy_id,
         'proposal_form': proposal_form, 'simulation': simulation, 'owner_filter': owner_filter,
         'owners': get_user_model().objects.filter(is_active=True, is_staff=True).order_by('username'),
         'policies': NamingPolicy.objects.filter(enabled=True), 'query_string': params.urlencode()})

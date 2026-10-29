@@ -688,7 +688,10 @@ class NamingScopeBinding(models.Model):
 
 class NamingProposal(models.Model):
     environment = models.ForeignKey(Environment, on_delete=models.CASCADE)
-    vm_identity = models.CharField(max_length=512)
+    group_path = models.CharField(max_length=512)
+    object_type = models.CharField(max_length=12, default="group")
+    exception_policy_stamp = models.CharField(max_length=64, blank=True)
+    reviewed_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, on_delete=models.SET_NULL, related_name="+")
     tags = models.JSONField(default=dict)
     baseline = models.CharField(max_length=64)
     state = models.CharField(max_length=20, default='draft')
@@ -698,4 +701,4 @@ class NamingProposal(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
-        constraints = [models.UniqueConstraint(fields=['environment', 'vm_identity'], name='naming_proposal_unique')]
+        constraints = [models.UniqueConstraint(fields=['environment', 'object_type', 'group_path'], name='naming_proposal_unique')]

@@ -154,4 +154,4 @@ Finding approval and manual decommissioning: [two-person review workflow](docs/f
 
 ## Naming standards
 
-Use [VM naming policies and tagging proposals](docs/naming-policies.md) to compose names from ordered scopes, preview environment-specific rules, and review read-only tagging proposals.
+Use [Group naming policies and component proposals](docs/naming-policies.md) to compose names from ordered definition scopes and reviewed values, distinguish dynamic/static/mixed groups, and preview environment-specific rules.

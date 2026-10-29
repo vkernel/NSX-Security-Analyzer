@@ -502,4 +502,6 @@ On older builds that redirect back to an expired preview, open **More actions & 
 
 ### Naming policies
 
-Apply migration **0055** for naming policies, version history, scope mappings and proposal ownership. See [VM naming policies](naming-policies.md) for activation, onboarding, evidence limitations and read-only guarantees. No automatic NSX/vCenter tag or name changes are introduced.
+Apply migrations **0055–0056** for group naming policies, version history, scope mappings and proposal ownership. See [Group naming policies](naming-policies.md) for activation, onboarding, evidence limitations and read-only guarantees. No automatic NSX/vCenter tag or name changes are introduced.
+
+Migration 0056 preserves earlier VM proposals as legacy records excluded from group assessment. Existing VM policies require review, saving as a group draft, preview and activation. Apply migrations before starting matching web and worker versions.

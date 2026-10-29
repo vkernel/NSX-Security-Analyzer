@@ -2,6 +2,8 @@
 
 ## Development — 2026-10-29
 
+- Correct naming compliance to assess NSX groups: dynamic/static/mixed templates, definition evidence, reviewed static components, nested/member suggestions, and audited naming exceptions. Migration 0056 isolates legacy VM proposals and requires group policy reactivation.
+
 - Add read-only VM naming policies with ordered components, environment scope mappings, category rules, draft impact previews, activation/version history, compliance and collision checks, bulk proposal ownership, CSV onboarding, stale-proposal safeguards and audit events. Apply migration 0055.
 
 - Fix new deletion previews looping back to expired requests: retire expired, unconfirmed verification entries under lock and require fresh checks. Expired entries no longer claim they are ready to confirm.

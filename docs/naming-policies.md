@@ -1,62 +1,60 @@
-# VM naming policies and tagging proposals
+# Group naming policies and component proposals
 
-Naming assessment is read-only. It never renames a VM, changes an NSX object, or writes a tag to NSX/vCenter. Naming issues are separate from finding reviews and deletion approvals.
+Naming compliance assesses **NSX group display names**, not VM names. VM tags/scopes are evidence for building a group name. This workflow never renames objects or changes tags, membership expressions, rules or references in NSX/vCenter. Naming decisions are separate from deletion approvals.
 
-## Configure a policy
+## Group types and evidence
 
-Open **Administration → Naming & tagging → Naming policies**. Create a global policy or an environment-specific policy. A policy's environment is fixed after creation; create another policy to change its scope.
+| Type | Definition | Naming source |
+|---|---|---|
+| Dynamic | Membership conditions | Positive VM Tag EQUALS conditions with scope and value; simple AND combinations can supply components directly, even for empty groups. |
+| Static | Explicit IP/MAC addresses, object paths or external IDs; also an empty expression list | Reviewed component values. Explicit member VM tags appear as suggestions, never automatic naming inputs. |
+| Mixed / nested | Conditions plus explicit members, or references to other groups | Reviewed component values. Nested definition evidence is shown with cycle/missing-definition warnings. |
+| Unknown | Missing or unsupported definition | Explicit review; never assumed to be an empty static group. |
 
-Add ordered components, using Move up / Move down or order numbers. Each component has a logical field, source, default scope, required/optional flag, output case, allowed character format and maximum length. Sources are VM tags, fixed text or a VM identity suffix. No automatic sequence numbers are invented. Separators may be hyphens, underscores, dots or empty. Missing optional values do not leave extra separators.
+Classification uses the saved configuration, not current resolved membership. An empty dynamic group remains dynamic. OR, nested condition logic, extended expressions, unsupported conditions and mixed definitions require review before a name is generated. Conflicting values never select an arbitrary tag.
 
-Example:
+## Configure policies
 
-| Logical field | Scope | Observed value | Mapping / output |
-|---|---|---|---|
-| Environment | Environment | Production | Production=PRD |
-| Location | Location | Rotterdam | Rotterdam=RTM |
-| Application | Application | Citrix | Citrix=CTX |
-| Role | Role | Desktop | Desktop=VDI |
-| Instance | Instance | 0042 | 0042 |
+Open **Administration → Naming policies**. Choose a global default or environment, then choose **Dynamic**, **Static**, **Mixed / nested** or **All group types**.
 
-With uppercase and a hyphen separator, the proposed name is `PRD-RTM-CTX-VDI-0042`.
+Add ordered components and move them up/down. Sources are definition tag/reviewed scope values, fixed text, group path suffix, and group type. Each component supports required/optional values, case, allowed characters, maximum length and exact value mappings. Separators may be hyphens, underscores, dots or empty. Missing optional values do not add spare separators.
 
-Mappings are one `observed=output` per line. If mappings exist, unmapped values are invalid instead of silently passing through. Tags/scopes and mapping keys match exactly, including case. Case conversion affects output only. Duplicate identical tag assignments are deduplicated; distinct values for a single scope are ambiguous.
+For a type prefix, use the Group type source with mappings such as `dynamic=DGR`, `static=SGR`, `mixed=MGR`. These are examples; prefixes are entirely configurable. A template might produce `DGR-RTM-CTX-PRD` from type, location, application and environment. It does not need to reproduce every membership condition in the name.
 
-## Environments and categories
+Tag/scope names and mapping keys match case-sensitively. With mappings configured, unmapped values are invalid. Environment scope mappings let a logical field such as Application use `Application` in Rotterdam and `AppCode` in Amsterdam. Suggestions come from saved scopes; free-text entry supports new environments before tagging exists.
 
-A logical field such as Application can use `Application` by default and `AppCode` in another environment. Save these changes under **Environment scope mappings**. Restore a default by mapping the field to its default scope again. Suggestions come from retained scope inventory; free-text entry supports environments not yet tagged.
+Matching environment policies precede global policies. Within that scope, a matching group-type policy precedes an all-type default; category rules then precede generic rules. A category is an exact scope value before mapping. Multiple remaining matches are ambiguous. A nonmatching local policy does not hide a matching global default.
 
-To target a VM category, specify a logical tag field and an exact observed category value. Environment-specific matching policies take precedence over matching global policies. Within that scope, category-specific policies take precedence over a general default. Multiple remaining matches are reported as ambiguous; no arbitrary first policy is chosen. A nonmatching environment category falls back to global rules.
+## Preview and activate
 
-## Draft, preview, activate
+Saving creates a draft/version. Active rules and mappings remain unchanged until **Preview affected groups**, impact acknowledgement and activation. The preview compares old/new names and outcomes, with up to 40 examples. Inventory, mapping or policy changes invalidate the preview. Configuration/version changes and proposal actions are audited.
 
-Saving components or environment mappings creates a draft/version; the active configuration remains unchanged. **Preview affected VMs** compares the active configuration with the draft using each affected environment's latest retained full collection. It shows outcome counts, before/after transitions, and up to 40 examples with missing scopes, invalid values and collisions.
+Previous versions can be opened as drafts, saved, previewed and activated; review their environment mappings separately. Disabling a policy may expose a global default or leave groups without a policy.
 
-Acknowledge the impact and activate. If policy revisions, mappings, or evaluated inventory change after preview, activation requires another preview. Every change is versioned and audited. Previous versions can be opened as drafts, saved, previewed and activated; their environment scope mappings must be reviewed separately. Disabling assessment is explicit and may expose global defaults or leave VMs without an applicable policy.
+## Group naming compliance
 
-## Compliance and onboarding
+Use **Naming compliance** in the left menu. Filter by group type, outcome, policy, owner or search. Each row shows current name, group path/type, proposed name and the evidence behind every component. Expand evidence for definition tags, explicit addresses/members, nested definitions and member VM tag suggestions. Group metadata tags are not treated as membership conditions.
 
-Open **Naming compliance** in navigation and choose an environment. The page shows VM identity, observed name, proposed name, policy, outcome and an explanation of every component. Filter by issue, policy, owner or search across names/identities/observed tags. Application-tag values are searchable. Export the filtered results to CSV.
+Duplicate proposals are checked case-insensitively against other groups' current and proposed names in the same environment. Names occupied by another group remain collisions even when that group might later be renamed.
 
-Outcomes include compliant, name differs, missing required tags, ambiguous tags, invalid value, duplicate proposed name, no applicable policy, ambiguous policy, and incomplete evidence. Proposed names are compared case-insensitively against other current and proposed VM names in the same environment. This is deliberately conservative: it can flag a name still occupied by a VM that might itself be renamed later.
+## Reviewed values and exceptions
 
-For untagged environments:
+For static, mixed, untagged or otherwise ambiguous groups:
 
-1. Collect inventory and define a default policy.
-2. Export the assessment to obtain stable VM identities.
-3. Select VMs and prepare scope/value proposals, or import a UTF-8 CSV with `vm_identity,scope,value` columns. Import is limited to 1 MB and 1,000 rows; unknown identities, duplicate scopes and invalid rows reject the entire import.
-4. Assign responsibility in bulk. Review evidence and mark proposals reviewed, or reject/clear them.
-5. Enable **Simulate proposed tags** to inspect proposed names. Simulation is explicitly labeled and never changes observed compliance.
-6. Apply changes outside this application through your organization's approved process, then collect again to verify observed state.
+1. Select groups and enter scope/value proposals explicitly. Member suggestions never become accepted values automatically.
+2. Optionally assign an operator and import drafts using UTF-8 CSV columns `group_path,scope,value`.
+3. Inspect **Simulate draft component values**. Complex definitions continue to require review.
+4. Mark selected proposals reviewed. Reviewed values now supply naming components in normal assessment; every component identifies whether its source is a definition tag, reviewed value or draft simulation.
+5. Apply any eventual changes externally using your approved process. This application performs no rename or tagging operation.
 
-Operators/administrators can manage proposals; viewers can inspect assessment; only administrators configure policies. Every proposal action is audited. A proposal stores only proposed fields, ownership, state and an observed-evidence fingerprint. If the VM name or observed tags change, the proposal becomes stale and is excluded from simulation. Reject it and prepare a fresh draft. Reviewed proposals also become drafts when their values change. No review here authorizes a deletion or an external write.
+CSV imports require known current group paths, are limited to 1 MB / 1,000 rows, and reject invalid imports atomically. Bulk page selection is limited to 100 groups. Value changes reset review. A changed group name, identity or definition makes proposals stale; reject/clear them before preparing fresh values. Changing a static member's VM tags does not automatically change its reviewed naming values.
 
-## Evidence, storage and limits
+Administrators can select **Accept naming exception with reason** for intentional names or groups outside the convention. The reason and reviewer appear in the row; an exception is distinct from compliance and never grants deletion approval. Group or naming-policy/mapping changes invalidate the exception. Reject/clear removes it from current assessment while preserving audit history.
 
-Assessment uses indexed VMs from the latest non-testing, non-imported full snapshot. It does not contact NSX. Archived browsing data must be restored before evaluation. Inventory warnings make results provisional and prevent claiming compliance. Snapshot observations are not real-time state.
+## Deployment and storage
 
-Results are calculated on request from projected identity/name/tag fields; the feature does not duplicate per-VM results on every collection. Persisted data consists of policies/versions, scope mappings and at most one current proposal per environment/VM. Proposal changes are retained in the existing audit trail. UI lists have 50 rows per page; bulk selections are limited to 100 VMs. Large-environment assessments/activation previews scan all applicable VM identities so collision checks remain complete; this can take longer than opening an individual finding.
+Apply migrations **0055 and 0056** before starting matching web/worker versions. Earlier VM proposals are preserved as legacy records and excluded from group assessment. Existing VM policies are not automatically repurposed: review group type/components, save a group draft, preview and activate.
 
-This release supports VM naming assessment. Groups, services, firewall rules and policies remain separate object types; names are not inferred from arbitrary member VMs.
+Assessment uses the latest retained full, non-test, non-imported snapshot. Archived browsing data must be restored. Missing/warning coverage is explicit; saved evidence is not a live NSX check. Nested supporting evidence is bounded to 100 unique definitions and 30 levels, with an explicit limit message.
 
-Deploy migration **0055** before starting the updated web/worker components.
+Results are calculated on request rather than duplicated per collection. Persisted data is policies/version history, scope mappings, and one proposal/exception per environment/group. List pages contain 50 rows; collision checks include all groups in the environment.

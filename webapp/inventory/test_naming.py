@@ -25,9 +25,13 @@ class NamingTests(TestCase):
         self.vm = self.add_vm('vm-1', 'old-name', self.tags)
         self.client.force_login(self.user)
 
+    @staticmethod
+    def definition(tags):
+        return {'expression': [{'resource_type': 'Condition', 'member_type': 'VirtualMachine', 'key': 'Tag', 'operator': 'EQUALS', 'value': t['scope']+'|'+t['tag']} for t in tags]}
+
     def add_vm(self, identity, name, tags):
-        return SnapshotRecord.objects.create(snapshot=self.snapshot, ordinal=SnapshotRecord.objects.count(), view='vms', name=name, sort_name=name.lower(),
-            compact={}, data={'path': identity, 'tags': tags}, columns=[], sort_values={}, search_basic='', search_evidence='')
+        return SnapshotRecord.objects.create(snapshot=self.snapshot, ordinal=SnapshotRecord.objects.count(), view='inventory', name=name, sort_name=name.lower(),
+            compact={}, data={'path': identity, 'kind': 'group', 'configuration': self.definition(tags)}, columns=[], sort_values={}, search_basic='', search_evidence='')
 
     def rows(self, **kwargs):
         return naming.assess(self.env, **kwargs)[1]
@@ -35,10 +39,10 @@ class NamingTests(TestCase):
     def url(self): return reverse('naming-compliance', args=[self.env.pk])
 
     def post(self, **kwargs):
-        return self.client.post(self.url(), {'snapshot': str(self.snapshot.pk), 'selected': [self.vm.pk], **kwargs})
+        return self.client.post(self.url(), {'snapshot': str(self.snapshot.pk), 'selected': [self.vm.pk], **{'decision_stamp_'+str(r['id']):r['decision_stamp'] for r in self.rows()}, **kwargs})
 
     def payload(self):
-        data = {'action': 'save', 'name': self.policy.name, 'separator': '-', 'max_length': 63, 'revision': self.policy.revision,
+        data = {'action': 'save', 'group_type': 'all', 'name': self.policy.name, 'separator': '-', 'max_length': 63, 'revision': self.policy.revision,
                 'components-TOTAL_FORMS': 2, 'components-INITIAL_FORMS': 2, 'components-MIN_NUM_FORMS': 1, 'components-MAX_NUM_FORMS': 16}
         for index, component in enumerate(self.config['components']):
             for key, value in component.items():
@@ -59,13 +63,13 @@ class NamingTests(TestCase):
         for tags, expected in [([], 'Missing required tags'), (self.tags+[{'scope':'Environment','tag':'Test'}], 'Ambiguous tags'),
                                ([{'scope':'Environment','tag':'Unknown'},self.tags[1]], 'Invalid value')]:
             with self.subTest(expected=expected):
-                self.vm.data['tags']=tags;self.vm.save()
+                self.vm.data['configuration']=self.definition(tags);self.vm.save()
                 self.assertEqual(self.rows()[0]['status'], expected)
                 self.assertEqual(self.rows()[0]['proposed'], '')
 
     def test_optional_missing_component_omits_separator(self):
         self.policy.configuration['components'][1]['required']=False;self.policy.save()
-        self.vm.data['tags']=self.tags[:1];self.vm.save()
+        self.vm.data['configuration']=self.definition(self.tags[:1]);self.vm.save()
         self.assertEqual(self.rows()[0]['proposed'], 'PRD')
 
     def test_fixed_component_and_identity_suffix(self):
@@ -163,7 +167,7 @@ class NamingTests(TestCase):
         self.assertEqual(response.status_code,302)
         self.assertEqual(self.rows()[0]['status'],'Name differs')
         self.assertEqual(self.rows(simulation=True)[0]['status'],'Invalid value')
-        self.vm.refresh_from_db();self.assertEqual(self.vm.data['tags'],self.tags)
+        self.vm.refresh_from_db();self.assertEqual(self.vm.data['configuration'],self.definition(self.tags))
         self.assertEqual(self.post(action='review').status_code,302)
         self.assertEqual(NamingProposal.objects.get().state,'reviewed')
 
@@ -179,13 +183,13 @@ class NamingTests(TestCase):
     def test_bulk_assignment_and_csv_import(self):
         self.assertEqual(self.post(action='assign',owner=self.user.pk).status_code,302)
         self.assertEqual(NamingProposal.objects.get().owner_id,self.user.pk)
-        upload=SimpleUploadedFile('tags.csv',b'vm_identity,scope,value\nvm-1,Role,VDI\nvm-1,Instance,0042\n')
+        upload=SimpleUploadedFile('tags.csv',b'group_path,scope,value\nvm-1,Role,VDI\nvm-1,Instance,0042\n')
         self.assertEqual(self.post(action='import',csv_file=upload).status_code,302)
         self.assertEqual(NamingProposal.objects.get().tags,{'Role':'VDI','Instance':'0042'})
 
     def test_invalid_csv_has_no_partial_writes(self):
-        upload=SimpleUploadedFile('tags.csv',b'vm_identity,scope,value\nvm-1,Role,VDI\nmissing,Role,VDI\n')
-        self.assertContains(self.post(action='import',csv_file=upload),'unknown VM')
+        upload=SimpleUploadedFile('tags.csv',b'group_path,scope,value\nvm-1,Role,VDI\nmissing,Role,VDI\n')
+        self.assertContains(self.post(action='import',csv_file=upload),'unknown group')
         self.assertEqual(NamingProposal.objects.count(),0)
 
     def test_changed_snapshot_and_foreign_vm_selection_rejected(self):
@@ -204,3 +208,89 @@ class NamingTests(TestCase):
         self.assertEqual(self.client.get(self.url()).status_code,200)
         self.assertEqual(self.post(action='assign',owner=self.user.pk).status_code,403)
         self.assertEqual(self.client.get(reverse('naming-policies')).status_code,403)
+
+    def test_classification_uses_definitions_including_empty_static_and_dynamic(self):
+        for expression, expected in [([], 'static'),
+            ([{'resource_type':'IPAddressExpression','ip_addresses':[]}], 'static'),
+            (self.definition(self.tags)['expression'], 'dynamic'),
+            (self.definition(self.tags)['expression']+[{'resource_type':'IPAddressExpression','ip_addresses':['10.0.0.1']}], 'mixed'),
+            ([{'resource_type':'PathExpression','paths':['/infra/domains/default/groups/child']}], 'mixed')]:
+            self.assertEqual(naming.group_evidence({'expression':expression})['group_type'],expected)
+        self.assertEqual(naming.group_evidence(None)['group_type'],'unknown')
+
+    def test_type_policy_and_prefix_mapping(self):
+        config=copy.deepcopy(self.config);config['group_type']='dynamic'
+        config['components'].insert(0,dict(config['components'][0],field='Type',source='type',mapping={'dynamic':'DGR'}))
+        policy=NamingPolicy.objects.create(name='Dynamic',configuration=config,draft=config,enabled=True)
+        self.assertEqual(self.rows()[0]['policy'],policy)
+        self.assertEqual(self.rows()[0]['proposed'],'DGR-PRD-RTM')
+        self.vm.data['configuration']={'expression':[]};self.vm.save()
+        self.assertEqual(self.rows()[0]['policy'],self.policy)
+
+    def test_static_member_tags_are_suggestions_not_automatic_components(self):
+        self.vm.data['configuration']={'expression':[{'resource_type':'ExternalIDExpression','member_type':'VirtualMachine','external_ids':['external-1']}]};self.vm.save()
+        SnapshotRecord.objects.create(snapshot=self.snapshot,ordinal=99,view='vms',name='member',sort_name='member',compact={},data={'path':'external-1','tags':self.tags},columns=[],sort_values={},search_basic='',search_evidence='')
+        row=self.rows()[0]
+        self.assertEqual(row['group_type'],'static');self.assertEqual(row['proposed'],'')
+        self.assertEqual(row['supporting'][0]['tags'],self.tags)
+        self.post(action='propose',scope='Environment',value='Production')
+        self.post(action='propose',scope='Location',value='Rotterdam')
+        self.assertEqual(self.rows()[0]['proposed'],'')
+        self.post(action='review')
+        self.assertEqual(self.rows()[0]['proposed'],'PRD-RTM')
+        self.assertEqual(len(self.rows()),1)
+
+    def test_complex_logic_needs_review_and_never_chooses_arbitrary_tags(self):
+        self.vm.data['configuration']['expression'].insert(1,{'resource_type':'ConjunctionOperator','conjunction_operator':'OR'});self.vm.save()
+        self.assertEqual(self.rows()[0]['status'],'Definition review required')
+        self.post(action='propose',scope='Environment',value='Production')
+        self.post(action='propose',scope='Location',value='Rotterdam')
+        self.assertEqual(self.rows(simulation=True)[0]['proposed'],'')
+        self.post(action='review')
+        self.assertEqual(self.rows()[0]['proposed'],'PRD-RTM')
+        self.vm.data['configuration']['expression'][0]['value']='Environment|Testing';self.vm.save()
+        self.assertEqual(self.rows()[0]['status'],'Definition review required')
+        self.assertTrue(self.rows()[0]['stale'])
+
+    def test_nested_cycle_and_missing_definition_are_visible(self):
+        self.vm.data['path']='/infra/domains/default/groups/a'
+        self.vm.data['configuration']={'expression':[{'resource_type':'PathExpression','paths':['/infra/domains/default/groups/a','/infra/domains/default/groups/missing']}]};self.vm.save()
+        details=str(self.rows()[0]['supporting'])
+        self.assertIn('Cycle detected',details);self.assertIn('unavailable',details)
+        self.assertEqual(self.rows()[0]['status'],'Definition review required')
+
+    def test_exception_requires_admin_reason_and_invalidates_on_policy_change(self):
+        self.assertContains(self.post(action='exception'),'record a reason')
+        self.assertEqual(self.post(action='exception',note='Intentional integration name').status_code,302)
+        self.assertEqual(self.rows()[0]['status'],'Reviewed exception')
+        self.policy.revision+=1;self.policy.save()
+        self.assertTrue(self.rows()[0]['exception_stale'])
+        self.assertNotEqual(self.rows()[0]['status'],'Reviewed exception')
+        self.post(action='reject')
+        self.assertEqual(NamingProposal.objects.get().state,'rejected')
+        self.user.is_superuser=False;self.user.save()
+        self.assertContains(self.post(action='exception',note='reason'),'administrator')
+
+    def test_legacy_vm_policy_and_proposals_never_apply_to_groups(self):
+        self.policy.configuration.pop('target');self.policy.save()
+        NamingProposal.objects.create(environment=self.env,object_type='vm',group_path='vm-1',tags={'Environment':'Testing'},baseline=self.rows()[0]['baseline'],state='reviewed')
+        self.assertEqual(self.rows()[0]['status'],'No applicable policy')
+        self.assertIsNone(self.rows()[0]['proposal'])
+
+    def test_type_filter_and_csv_show_groups(self):
+        self.assertContains(self.client.get(self.url()),'Group naming compliance')
+        self.assertContains(self.client.get(self.url(),{'group_type':'static'}),'No matching groups')
+        self.assertIn('group_path,group_type',self.client.get(self.url(),{'export':'csv'}).content.decode())
+
+    def test_changed_proposal_cannot_be_reviewed_from_stale_page(self):
+        self.post(action='propose',scope='Role',value='VDI')
+        stamp=self.rows()[0]['decision_stamp']
+        self.post(action='propose',scope='Role',value='Server')
+        response=self.post(action='review',**{'decision_stamp_'+str(self.vm.pk):stamp})
+        self.assertContains(response,'changed. Reload and review')
+        self.assertEqual(NamingProposal.objects.get().state,'draft')
+
+    def test_legacy_policy_requires_group_draft_before_activation(self):
+        self.policy.draft.pop('target');self.policy.save()
+        response=self.client.post(reverse('naming-policy-edit',args=[self.policy.pk]),{'action':'preview'})
+        self.assertContains(response,'save a group policy draft')
