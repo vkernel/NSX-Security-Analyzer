@@ -1,8 +1,12 @@
 from django.urls import path
-from . import approval_evidence
+from . import approval_evidence, naming_views
 from . import storage_views, activity_views, authentication_settings, keycloak_settings, system_health, views, history_views, diagnostic_views, report_views, impact, transient, deletion, task_cancellation, bulk_actions
 
 urlpatterns = [
+    path('administration/naming/', naming_views.policies, name='naming-policies'),
+    path('administration/naming/<int:pk>/', naming_views.policies, name='naming-policy-edit'),
+    path('naming/', naming_views.index, name='naming-index'),
+    path('environments/<int:pk>/naming/', naming_views.compliance, name='naming-compliance'),
     path("snapshots/<uuid:pk>/restore/", storage_views.restore_browsing, name="restore-browsing"),
     path("bulk/<str:kind>/", bulk_actions.bulk, name="bulk-actions"),
     path('tasks/<str:kind>/<str:pk>/cancel/', task_cancellation.cancel, name='task-cancel'),

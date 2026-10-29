@@ -498,3 +498,8 @@ Apply migration **0054** before deploying matching web and worker images.
 A preview expires ten minutes after verification unless confirmed in time. Starting a new preview retires overlapping expired verification entries under a database lock, records the expiry in audit history, and queues fresh verification. It does not reuse the expired authorization or send NSX writes. Fresh previews, cleanup reviews, and queued/running executions still prevent duplicate requests.
 
 On older builds that redirect back to an expired preview, open **More actions & history → Cancel deletion request**, confirm cancellation, then create a fresh preview. Use this workaround only for the unconfirmed request showing **execution never started**; review outcomes before taking action on a request that has begun execution.
+
+
+### Naming policies
+
+Apply migration **0055** for naming policies, version history, scope mappings and proposal ownership. See [VM naming policies](naming-policies.md) for activation, onboarding, evidence limitations and read-only guarantees. No automatic NSX/vCenter tag or name changes are introduced.

@@ -11,12 +11,13 @@ def admin_sections(context):
     namespace = match.namespace if match else ''
     definitions = [
         ('Access', [('Users & access', 'admin:auth_user_changelist'), ('Permission groups', 'admin:auth_group_changelist'), ('Authentication providers', 'authentication-settings')]),
+        ('Naming & tagging', [('Naming policies', 'naming-policies')]),
         ('Finding reviews', [('Finding review criteria', 'finding-policy'), ('Review approvals', 'review-approvals')]),
         ('Collections', [('Environments & sync', 'environment-schedules'), ('Freshness & notifications', 'workspace-policy'), ('Retention', 'retention-settings')]),
         ('Operations', [('System health', 'system-health'), ('Audit & diagnostics', 'audit-log')]),
     ]
     result = []
-    aliases = {'environment-new':'environment-schedules', 'environment-edit':'environment-schedules',
+    aliases = {'naming-policy-edit':'naming-policies', 'environment-new':'environment-schedules', 'environment-edit':'environment-schedules',
                'keycloak-settings':'authentication-settings', 'ldap-settings':'authentication-settings'}
     selected = aliases.get(current, current)
     if namespace == 'admin':

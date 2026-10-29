@@ -335,3 +335,21 @@ body dialog#saved-configuration-dialog{width:min(880px,calc(100vw - 32px))}
 .brand-about {display:inline-block;background:#111827;padding:18px 24px;border-radius:12px;margin-bottom:20px}
 .brand-about img {display:block;width:280px;max-width:100%;height:auto}
 @media(max-width:800px){.mobile-nav-toggle{display:flex}}
+.naming-editor,.naming-component{margin-top:24px}
+.naming-component{border:1px solid var(--line);border-radius:10px;padding:20px;min-width:0}
+.naming-component legend{font-weight:700;padding:0 8px}
+.naming-results{width:100%;table-layout:auto}
+.naming-results td{vertical-align:top;overflow-wrap:anywhere;min-width:120px}
+.naming-results td:first-child{min-width:32px}
+.naming-results details{min-width:200px;max-width:450px}
+@media(max-width:480px){
+ .application-topbar{gap:8px}
+ .application-topbar .environment-switcher{flex:1;min-width:70px}
+ .application-topbar .environment-switcher .workspace-switcher{width:100%}
+ .mobile-nav-toggle span{display:none}
+ .application-topbar .switcher-panel{position:fixed;top:72px;left:12px;right:12px;width:auto;max-width:calc(100vw - 24px)}
+}
+.naming-editor .form-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+.naming-editor .form-field{min-width:0}
+.naming-editor textarea{width:100%;min-width:0;max-width:100%;box-sizing:border-box}
+@media(max-width:800px){.naming-editor .form-grid{grid-template-columns:minmax(0,1fr)}}

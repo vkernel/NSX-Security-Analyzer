@@ -151,3 +151,7 @@ or Broadcom.
 Optional authentication providers: [Keycloak setup](docs/keycloak.md) and [LDAPS setup](docs/ldaps.md), configured under Administration → Authentication providers.
 
 Finding approval and manual decommissioning: [two-person review workflow](docs/finding-review-workflow.md).
+
+## Naming standards
+
+Use [VM naming policies and tagging proposals](docs/naming-policies.md) to compose names from ordered scopes, preview environment-specific rules, and review read-only tagging proposals.

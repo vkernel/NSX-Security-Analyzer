@@ -648,3 +648,54 @@ class FindingLiveCheck(models.Model):
     progress = models.PositiveIntegerField(default=0)
     message = models.CharField(max_length=500, blank=True)
     result = models.JSONField(default=dict)
+
+
+class NamingPolicy(models.Model):
+    name = models.CharField(max_length=120)
+    environment = models.ForeignKey(Environment, null=True, blank=True, on_delete=models.CASCADE)
+    draft = models.JSONField(default=dict)
+    configuration = models.JSONField(default=dict)
+    enabled = models.BooleanField(default=False)
+    revision = models.PositiveIntegerField(default=0)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['name', 'pk']
+
+
+class NamingPolicyVersion(models.Model):
+    policy = models.ForeignKey(NamingPolicy, on_delete=models.CASCADE, related_name='versions')
+    revision = models.PositiveIntegerField()
+    action = models.CharField(max_length=24)
+    configuration = models.JSONField(default=dict)
+    actor = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, on_delete=models.SET_NULL)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-revision']
+        constraints = [models.UniqueConstraint(fields=['policy', 'revision'], name='naming_version_unique')]
+
+
+class NamingScopeBinding(models.Model):
+    draft_scopes = models.JSONField(default=dict)
+    policy = models.ForeignKey(NamingPolicy, on_delete=models.CASCADE, related_name='bindings')
+    environment = models.ForeignKey(Environment, on_delete=models.CASCADE)
+    scopes = models.JSONField(default=dict)
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=['policy', 'environment'], name='naming_binding_unique')]
+
+
+class NamingProposal(models.Model):
+    environment = models.ForeignKey(Environment, on_delete=models.CASCADE)
+    vm_identity = models.CharField(max_length=512)
+    tags = models.JSONField(default=dict)
+    baseline = models.CharField(max_length=64)
+    state = models.CharField(max_length=20, default='draft')
+    owner = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL, related_name='naming_assignments')
+    author = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, on_delete=models.SET_NULL, related_name='+')
+    note = models.CharField(max_length=500, blank=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=['environment', 'vm_identity'], name='naming_proposal_unique')]
