@@ -22,7 +22,8 @@ class RequestLoggingMiddleware(MiddlewareMixin):
             if response.status_code >= 400 or route not in ('health/', 'api/jobs/', 'api/notifications/'):
                 LOG.log(logging.ERROR if response.status_code >= 500 else logging.WARNING if response.status_code >= 400 else logging.INFO,
                         'web request completed', extra={'details': payload})
-            if request.method not in ('GET', 'HEAD', 'OPTIONS'):
+            # Successful automatic naming examples are read-only and must not flood the audit table.
+            if request.method not in ('GET', 'HEAD', 'OPTIONS') and not (route == 'naming/example/' and response.status_code < 400):
                 # HTTP outcome is not a claim that a domain change committed.
                 record('http.mutation_attempt', 'Route', route, outcome='failed' if response.status_code >= 400 else 'processed',
                        details=payload, best_effort=True)

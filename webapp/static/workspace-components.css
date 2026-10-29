@@ -353,3 +353,7 @@ body dialog#saved-configuration-dialog{width:min(880px,calc(100vw - 32px))}
 .naming-editor .form-field{min-width:0}
 .naming-editor textarea{width:100%;min-width:0;max-width:100%;box-sizing:border-box}
 @media(max-width:800px){.naming-editor .form-grid{grid-template-columns:minmax(0,1fr)}}
+
+.naming-picker{width:min(680px,calc(100vw - 32px));max-height:85vh;overflow:auto;border:1px solid var(--line);border-radius:12px;padding:24px;color:var(--ink)}
+.naming-picker::backdrop{background:#10182866}.naming-picker [data-picker-results] section{padding:12px 0;border-bottom:1px solid var(--line)}
+.naming-picker-trigger{align-self:flex-start;margin-top:6px}.naming-mapping-builder{display:grid;gap:12px;padding:12px 0}.naming-mapping-builder input{min-width:0}

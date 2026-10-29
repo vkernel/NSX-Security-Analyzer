@@ -22,5 +22,6 @@
 /infra/domains/default/groups/example,Application,Citrix</pre><button class="button" name="action" value="import">Import CSV as drafts</button></details>
 </section>{% endif %}</form>
 {% include 'inventory/history_pagination.html' %}
+{% include 'inventory/naming_selectors.html' %}
 {% endblock %}
-{% block scripts %}<script src="{% static 'naming-compliance.js' %}" defer></script>{% endblock %}
+{% block scripts %}<script src="{% static 'naming-selectors.js' %}" defer></script><script src="{% static 'naming-compliance.js' %}" defer></script>{% endblock %}

@@ -294,3 +294,43 @@ class NamingTests(TestCase):
         self.policy.draft.pop('target');self.policy.save()
         response=self.client.post(reverse('naming-policy-edit',args=[self.policy.pk]),{'action':'preview'})
         self.assertContains(response,'save a group policy draft')
+
+    def test_scope_and_tag_catalog_counts_sources_and_environment_differences(self):
+        other=Environment.objects.create(name='Amsterdam',slug='naming-ams',manager='https://ams.example')
+        snapshot=Snapshot.objects.create(environment=other,generated_at=timezone.now(),summary={},report={})
+        SnapshotRecord.objects.create(snapshot=snapshot,ordinal=0,view='vms',name='VM',sort_name='vm',compact={},data={'tags':[{'scope':'VMOnly','tag':'Suggested'},{'scope':'VMOnly','tag':'Suggested'}]},columns=[],sort_values={},search_basic='',search_evidence='')
+        url=reverse('naming-suggestions')
+        response=self.client.get(url).json()
+        scope=next(r for r in response['results'] if r['value']=='Environment')
+        self.assertEqual(scope['groups'],1);self.assertEqual(scope['missing_environments'],['Amsterdam'])
+        vm_scope=next(r for r in response['results'] if r['value']=='VMOnly')
+        self.assertEqual(vm_scope['groups'],0);self.assertEqual(vm_scope['vms'],1)
+        values=self.client.get(url,{'environment':self.env.pk,'scope':'Environment','q':'prod'}).json()
+        self.assertEqual([r['value'] for r in values['results']],['Production'])
+        self.assertEqual(self.client.get(url,{'environment':self.env.pk,'scope':'VMOnly'}).json()['results'],[])
+
+    def test_catalog_missing_coverage_and_no_mutations(self):
+        self.snapshot.browsing_status='archived';self.snapshot.save()
+        result=self.client.get(reverse('naming-suggestions'),{'environment':self.env.pk}).json()
+        self.assertEqual(result['results'],[]);self.assertIn('no ready full collection',result['warnings'][0])
+        self.assertEqual(self.client.post(reverse('naming-suggestions')).status_code,405)
+        self.assertEqual(NamingProposal.objects.count(),0)
+        self.client.logout();self.assertEqual(self.client.get(reverse('naming-suggestions')).status_code,302)
+
+    def test_live_example_uses_draft_order_and_never_saves_policy(self):
+        data=self.payload();data['environment']=self.env.pk
+        data['components-0-ORDER']=2;data['components-1-ORDER']=1
+        response=self.client.post(reverse('naming-example'),data)
+        self.assertEqual(response.status_code,200)
+        self.assertEqual(response.json()['proposed'],'RTM-PRD')
+        from .models import AuditEvent
+        self.assertFalse(AuditEvent.objects.filter(action='http.mutation_attempt',target_id='naming/example/').exists())
+        self.policy.refresh_from_db();self.assertEqual(self.policy.revision,0)
+        self.assertEqual(self.policy.versions.count(),0);self.assertEqual(NamingProposal.objects.count(),0)
+        viewer=get_user_model().objects.create_user('catalog-viewer')
+        self.client.force_login(viewer)
+        self.assertEqual(self.client.get(reverse('naming-suggestions')).status_code,200)
+        self.assertEqual(self.client.post(reverse('naming-example'),data).status_code,403)
+
+    def test_live_example_invalid_fields_return_help(self):
+        self.assertIn('Complete',self.client.post(reverse('naming-example'),{}).json()['message'])

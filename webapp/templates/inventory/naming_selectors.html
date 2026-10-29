@@ -1,0 +1,8 @@
+<div data-naming-selectors data-url="{% url 'naming-suggestions' %}" data-environment="{{ environment.pk|default:'' }}" data-example-url="{% url 'naming-example' %}" data-policy="{{ policy.pk|default:'' }}"></div>
+<dialog class="naming-picker" data-naming-picker aria-labelledby="naming-picker-title">
+<div class="page-heading"><h2 id="naming-picker-title">Choose existing evidence</h2><button type="button" data-picker-close>Close</button></div>
+<label>Search scopes or tag values<input type="search" data-picker-search autocomplete="off"></label>
+<p data-picker-status role="status"></p><div data-picker-results></div>
+<p class="muted">Group counts refer to positive VM tag conditions, including conditions that need review. VM-only values are suggestions, not membership evidence. Missing environments may need scope mappings or further collection.</p>
+<button type="button" data-picker-manual>Enter a new scope/value manually</button>
+</dialog>

@@ -17,7 +17,7 @@ class PolicyForm(forms.Form):
 class ComponentForm(forms.Form):
     field = forms.RegexField(r'^[A-Za-z][A-Za-z0-9 _-]{0,63}$', label='Logical field', max_length=64)
     source = forms.ChoiceField(choices=[('tag', 'Definition tag / reviewed scope value'), ('fixed', 'Fixed text'), ('identity', 'Group path suffix'), ('type', 'Group type (map to your prefixes)')])
-    scope = forms.CharField(max_length=128, required=False, label='Default tag scope', widget=forms.TextInput(attrs={'list':'known-naming-scopes'}))
+    scope = forms.CharField(max_length=128, required=False, label='Default tag scope')
     literal = forms.CharField(max_length=128, required=False, label='Fixed text')
     required = forms.BooleanField(required=False, initial=True)
     case = forms.ChoiceField(choices=[('upper', 'UPPERCASE'), ('lower', 'lowercase'), ('keep', 'Keep case')])

@@ -2,6 +2,8 @@
 
 ## Development — 2026-10-29
 
+- Add searchable naming scope/tag selectors with evidence counts and environment comparisons, a value-mapping builder, static-proposal suggestions and an automatic server-evaluated naming example. Manual entry remains available; no migration required.
+
 - Correct naming compliance to assess NSX groups: dynamic/static/mixed templates, definition evidence, reviewed static components, nested/member suggestions, and audited naming exceptions. Migration 0056 isolates legacy VM proposals and requires group policy reactivation.
 
 - Add read-only VM naming policies with ordered components, environment scope mappings, category rules, draft impact previews, activation/version history, compliance and collision checks, bulk proposal ownership, CSV onboarding, stale-proposal safeguards and audit events. Apply migration 0055.

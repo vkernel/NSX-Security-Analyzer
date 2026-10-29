@@ -5,6 +5,8 @@ from . import storage_views, activity_views, authentication_settings, keycloak_s
 urlpatterns = [
     path('administration/naming/', naming_views.policies, name='naming-policies'),
     path('administration/naming/<int:pk>/', naming_views.policies, name='naming-policy-edit'),
+    path('naming/suggestions/', naming_views.suggestions, name='naming-suggestions'),
+    path('naming/example/', naming_views.naming_example, name='naming-example'),
     path('naming/', naming_views.index, name='naming-index'),
     path('environments/<int:pk>/naming/', naming_views.compliance, name='naming-compliance'),
     path("snapshots/<uuid:pk>/restore/", storage_views.restore_browsing, name="restore-browsing"),

@@ -21,6 +21,14 @@ Add ordered components and move them up/down. Sources are definition tag/reviewe
 
 For a type prefix, use the Group type source with mappings such as `dynamic=DGR`, `static=SGR`, `mixed=MGR`. These are examples; prefixes are entirely configurable. A template might produce `DGR-RTM-CTX-PRD` from type, location, application and environment. It does not need to reproduce every membership condition in the name.
 
+Use **Choose existing scope** to search collected scopes. The selector shows how many group definitions and VMs use each scope, labels VM-only suggestions, and compares availability across environments for global policies. Select a scope before choosing its tag values in category filters, the mapping builder or static-group proposals. **Enter a new scope/value manually** keeps new environments supported.
+
+Expand **Build a value mapping**, choose a collected value such as Production, enter PRD and select **Add / update mapping**. The editable mapping text remains available. Choosing suggestions never marks a proposal reviewed or changes NSX.
+
+The **Live naming example** updates as components, mappings or order change. It evaluates an example from up to 100 saved groups in the selected environment (the first environment for a global draft), using saved draft scope bindings. It is illustrative; the full impact preview remains required for policy precedence and collisions. Complete required form fields first.
+
+Suggestions come from ready, retained full snapshots and are cached for two minutes. Coverage warnings and missing collections are shown. Search returns up to 50 matches, from at most 10,000 scope/value pairs per environment; a limit warning is explicit. Manual values remain allowed.
+
 Tag/scope names and mapping keys match case-sensitively. With mappings configured, unmapped values are invalid. Environment scope mappings let a logical field such as Application use `Application` in Rotterdam and `AppCode` in Amsterdam. Suggestions come from saved scopes; free-text entry supports new environments before tagging exists.
 
 Matching environment policies precede global policies. Within that scope, a matching group-type policy precedes an all-type default; category rules then precede generic rules. A category is an exact scope value before mapping. Multiple remaining matches are ambiguous. A nonmatching local policy does not hide a matching global default.

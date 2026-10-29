@@ -8,13 +8,12 @@ from django.contrib.auth.decorators import login_required
 from django.core.exceptions import ValidationError
 from django.core.paginator import Paginator
 from django.db import transaction
-from django.db.models import OuterRef, Subquery
-from django.http import HttpResponse, HttpResponseForbidden
+from django.http import HttpResponse, HttpResponseForbidden, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_http_methods
 from . import naming
 from .audit_events import record
-from .models import Environment, NamingPolicy, NamingPolicyVersion, NamingScopeBinding, NamingProposal, Snapshot, SnapshotRecord
+from .models import Environment, NamingPolicy, NamingPolicyVersion, NamingScopeBinding, NamingProposal, SnapshotRecord
 from .naming_forms import PolicyForm, ComponentSet, BindingForm, ProposalForm, configuration
 
 DEFAULT = {'target': 'group', 'group_type': 'all', 'separator': '-', 'max_length': 63, 'match_field': '', 'match_value': '', 'components': [
@@ -147,13 +146,8 @@ def policies(request, pk=None):
                     snapshot_version(policy, request.user, 'disabled')
                     messages.success(request, 'Naming assessment policy disabled. Observed tags and group names are unchanged.')
                     return redirect('naming-policy-edit', pk=policy.pk)
-    latest_ids = Environment.objects.annotate(latest=Subquery(Snapshot.objects.filter(environment=OuterRef('pk'), testing=False, imported=False).values('pk')[:1])).values_list('latest', flat=True)
-    scopes = list(SnapshotRecord.objects.filter(snapshot_id__in=latest_ids, view='scopes').order_by('name').values_list('name', flat=True).distinct()[:1000])
-    for component in list(formset.forms) + [formset.empty_form]:
-        component.fields['scope'].widget.attrs['list'] = 'known-naming-scopes'
-    binding_form.fields['scope'].widget.attrs['list'] = 'known-naming-scopes'
     return render(request, 'inventory/naming_policy.html', {'policies': NamingPolicy.objects.select_related('environment'), 'policy': policy,
-        'scopes': scopes, 'form': form, 'formset': formset, 'binding_form': binding_form, 'preview': preview, 'error': error,
+        'form': form, 'formset': formset, 'binding_form': binding_form, 'preview': preview, 'error': error,
         'bindings': policy.bindings.select_related('environment') if policy else [], 'versions': policy.versions.select_related('actor')[:30] if policy else []})
 
 
@@ -289,3 +283,71 @@ def compliance(request, pk):
         'proposal_form': proposal_form, 'simulation': simulation, 'owner_filter': owner_filter,
         'owners': get_user_model().objects.filter(is_active=True, is_staff=True).order_by('username'),
         'policies': NamingPolicy.objects.filter(enabled=True), 'query_string': params.urlencode()})
+
+
+@login_required
+@require_http_methods(['GET'])
+def suggestions(request):
+    from .naming_catalog import catalog
+    environment_id = request.GET.get('environment', '')
+    environments = Environment.objects.order_by('name')
+    if environment_id:
+        if not environment_id.isdigit(): return JsonResponse({'error': 'Invalid environment.'}, status=400)
+        environments = environments.filter(pk=environment_id)
+    wanted_scope = request.GET.get('scope', '')
+    query = request.GET.get('q', '').casefold().strip()
+    results, sources, warnings = {}, [], []
+    for env in environments:
+        snapshot = env.snapshots.filter(testing=False, imported=False).only('pk', 'generated_at', 'browsing_status', 'summary').first()
+        sources.append({'id': env.pk, 'name': env.name, 'collected_at': snapshot.generated_at.isoformat() if snapshot else None})
+        if not snapshot or snapshot.browsing_status != 'ready':
+            warnings.append(env.name + ': no ready full collection; manual entry remains available.')
+            continue
+        if snapshot.summary.get('inventory_warnings'):
+            warnings.append(env.name + ': collection coverage has warnings; suggestions may be incomplete.')
+        evidence = catalog(snapshot)
+        if evidence['truncated']: warnings.append(env.name + ': suggestions limited to 10,000 scope/value pairs.')
+        if wanted_scope:
+            values = [p for p in evidence['pairs'] if p['scope'] == wanted_scope]
+        else:
+            values = [{'value': scope, 'groups': evidence['scope_groups'].get(scope, 0), 'vms': evidence['scope_vms'].get(scope, 0)}
+                      for scope in set(evidence['scope_groups']) | set(evidence['scope_vms']) if scope]
+        for item in values:
+            if query not in item['value'].casefold(): continue
+            result = results.setdefault(item['value'], {'value': item['value'], 'groups': 0, 'vms': 0, 'environments': []})
+            result['groups'] += item['groups']; result['vms'] += item['vms']
+            result['environments'].append({'name': env.name, 'groups': item['groups'], 'vms': item['vms']})
+    ordered = sorted(results.values(), key=lambda r: (not bool(r['groups']), r['value'].casefold()))
+    for result in ordered:
+        present = {e['name'] for e in result['environments']}
+        result['missing_environments'] = [env['name'] for env in sources if env['name'] not in present]
+    return JsonResponse({'results': ordered[:50], 'total': len(ordered), 'sources': sources, 'warnings': warnings})
+
+
+@login_required
+@require_http_methods(['POST'])
+def naming_example(request):
+    from types import SimpleNamespace
+    if not request.user.is_superuser: return HttpResponseForbidden('Administrator access is required.')
+    form, components = PolicyForm(request.POST), ComponentSet(request.POST, prefix='components')
+    if not form.is_valid() or not components.is_valid():
+        return JsonResponse({'message': 'Complete the required policy and component fields to see an example.'})
+    config = configuration(form, components)
+    if not form.is_valid(): return JsonResponse({'message': 'Choose a valid category field/value pair.'})
+    policy = NamingPolicy.objects.filter(pk=request.POST.get('policy_id')).first() if request.POST.get('policy_id', '').isdigit() else None
+    environment = form.cleaned_data['environment'] or Environment.objects.order_by('name').first()
+    if not environment: return JsonResponse({'message': 'Add an environment and collect inventory to see an example.'})
+    snapshot = environment.snapshots.filter(testing=False, imported=False).only('pk', 'summary', 'browsing_status').first()
+    if not snapshot or snapshot.browsing_status != 'ready':
+        return JsonResponse({'message': 'No ready full collection. Manual entry and saving drafts remain available.'})
+    warning = 'Collection coverage has warnings; this example is provisional.' if snapshot.summary.get('inventory_warnings') else ''
+    groups = [dict(name=r['name'], identity=r['data__path'] or '', **naming.group_evidence(r['data__configuration']))
+              for r in SnapshotRecord.objects.filter(snapshot=snapshot, view='inventory', data__kind='group').order_by('ordinal').values('name', 'data__path', 'data__configuration')[:100]]
+    replacement = SimpleNamespace(pk=policy.pk if policy else 0, configuration=config, environment_id=environment.pk, name='Draft example')
+    binding = NamingScopeBinding.objects.filter(policy=policy, environment=environment).first() if policy else None
+    bindings = {replacement.pk: binding.draft_scopes if binding else {}}
+    evaluated = [naming.evaluate(group, [replacement], bindings) for group in groups if config['group_type'] in ('all', group['group_type'])]
+    row = next((r for r in evaluated if r['proposed']), next(iter(evaluated), None))
+    if not row: return JsonResponse({'message': warning or 'No matching group in the first 100 saved groups. Save the draft and use the full impact preview.'})
+    return JsonResponse({'name': row['name'], 'environment': environment.name, 'proposed': row['proposed'], 'status': row['status'],
+                         'components': row['components'], 'warning': warning, 'message': 'Illustrative sample from up to 100 saved groups only. Full impact preview checks all groups, policies and name collisions before activation.'})
