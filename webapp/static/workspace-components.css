@@ -187,7 +187,7 @@ body .compact-action-dialog{width:min(520px,calc(100vw - 32px));max-height:calc(
 /* Shared sign-in shell uses the same logo and navy as the application sidebar. */
 .login-main .login-panel{padding:0;max-width:440px;overflow:hidden;border-radius:12px}
 .login-brand{display:flex;justify-content:center;background:#111827;padding:28px 24px;border-bottom:3px solid #2563eb}
-.login-brand img{display:block;width:208px;max-width:100%;height:auto}
+.login-brand img{display:block;width:280px;max-width:100%;height:auto}
 .login-content{padding:28px 32px 24px}
 .login-panel h1{font-size:26px;margin:0 0 8px;line-height:1.25}
 .login-panel .lead{font-size:14px;line-height:1.6;margin:0 0 24px;color:var(--muted)}
@@ -327,3 +327,11 @@ body dialog#saved-configuration-dialog{width:min(880px,calc(100vw - 32px))}
 .review-action-popover button {text-align:left;white-space:normal}
 .compact-action-menu > .review-action-popover:not(:popover-open) {display:none!important}
 @media(max-width:600px){.review-action-popover:popover-open{width:calc(100vw - 32px);padding:16px}.review-action-popover button{min-height:44px}}
+
+/* Network Shield brand: keep the mark static; status indicators remain separate. */
+.mobile-nav-toggle {align-items:center;gap:6px}
+.mobile-nav-toggle img {flex:none}
+.brand-status-icon {display:block;width:40px;height:40px;margin-bottom:16px}
+.brand-about {display:inline-block;background:#111827;padding:18px 24px;border-radius:12px;margin-bottom:20px}
+.brand-about img {display:block;width:280px;max-width:100%;height:auto}
+@media(max-width:800px){.mobile-nav-toggle{display:flex}}

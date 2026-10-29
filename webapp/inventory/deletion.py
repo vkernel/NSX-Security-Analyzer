@@ -533,6 +533,23 @@ def selection(request, pk):
                 elif any(row.pk in revisions and row.revision != revisions[row.pk] for row in rows):
                     error = 'Some selected findings changed. Refresh the finding reviews page and select again.'
                 else:
+                    # The display deadline must also release duplicate-preview reservations.
+                    # Serialize with confirmation and cleanup revalidation (batch before item).
+                    paths = [row.path for row in rows]
+                    candidates = DeletionBatch.objects.filter(environment=env, status='preview_ready',
+                        confirmed_at__isnull=True, items__path__in=paths,
+                        items__status='verified').values_list('pk', flat=True)
+                    for prior in DeletionBatch.objects.select_for_update().filter(pk__in=candidates).order_by('pk'):
+                        if prior.status != 'preview_ready' or prior.confirmed_at:
+                            continue
+                        expired_items = prior.items.filter(path__in=paths, status='verified',
+                            verified_at__lte=timezone.now() - timedelta(minutes=10))
+                        retired = list(expired_items.values_list('pk', flat=True))
+                        if retired:
+                            expired_items.update(status='blocked', message='Preview expired before confirmation. '
+                                'Superseded when a new preview was requested; no execution was started.')
+                            record('nsx.deletion_preview_expired', 'DeletionBatch', prior.pk, actor=request.user.pk,
+                                details={'environment_id': env.pk, 'item_ids': retired, 'reason': 'new_preview_requested'})
                     existing = DeletionItem.objects.filter(batch__environment=env, path__in=[row.path for row in rows],
                         batch__status__in=['preview_queued', 'checking', 'preview_ready', 'queued', 'running'],
                         status__in=['pending', 'verified', 'cleanup_review', 'cleanup_recheck', 'validating', 'sending']).filter(Q(batch__confirmed_at__isnull=True) | Q(batch__status__in=['queued', 'running'])).order_by('-pk').first()
@@ -575,7 +592,7 @@ def detail(request, pk):
                 error = 'Preview is unavailable or execution has already been queued.'
             elif not selected or (requested and set(requested) != {str(item.pk) for item in selected}):
                 error = 'You are not eligible to confirm the selected objects under the current execution settings. Review the next steps below.'
-            elif any(not item.verified_at or timezone.now() - item.verified_at > timedelta(minutes=10) for item in selected):
+            elif any(not item.verified_at or timezone.now() - item.verified_at >= timedelta(minutes=10) for item in selected):
                 error = 'One or more selected object previews expired. Revalidate the plan or create a fresh preview.'
             elif not ticket or len(ticket) > 255 or request.POST.get('confirm') != 'yes':
                 error = 'Provide a change ticket and explicitly confirm permanent deletion.'
@@ -637,13 +654,21 @@ def detail(request, pk):
             'cleanup_review': 'Awaiting cleanup approval', 'cleanup_recheck': 'Revalidating approved cleanup', 'cleanup_rejected': 'Cleanup rejected', 'validating': 'Rechecking live evidence', 'sending': 'Deleting and verifying absence',
             'cancelled': 'Cancelled', 'deleted': 'Deleted', 'blocked': 'Blocked', 'already_absent': 'Already absent',
             'failed': 'Deletion failed', 'uncertain': 'Outcome needs verification'}.get(item.status, item.status)
+    for item in items:
+        if (batch.status == 'preview_ready' and not execution and item.status == 'verified'
+                and item.verified_at and timezone.now() - item.verified_at >= timedelta(minutes=10)):
+            item.display_status = 'Preview expired'
+            item.execution_allowed = False
+            item.execution_guidance = ''
+            item.message = 'Review window ended before execution confirmation. No changes were attempted for this object. Create a new preview.'
+    ready_count = sum(item.status == 'verified' and item.display_status != 'Preview expired' for item in items)
     confirmation_items = [item for item in items if item.execution_allowed]
     stamps = [item.verified_at for item in (confirmation_items or items) if item.status == 'verified' and item.verified_at]
     deadline = (batch.confirmed_at + timedelta(hours=1) if execution else
                 min(stamps) + timedelta(minutes=10) if stamps else None)
     if batch.status in ('cancelled', 'cancelling'): deadline = None
     expired = bool(deadline and timezone.now() >= deadline)
-    review_expired = expired and not execution and batch.status == 'preview_ready' and not counts['cleanup_review']
+    review_expired = expired and not execution and batch.status == 'preview_ready' and not counts['cleanup_review'] and not ready_count
     if review_expired:
         for item in items:
             if item.status == 'verified':
@@ -670,7 +695,7 @@ def detail(request, pk):
         'deadline':deadline, 'expired':expired, 'updated_at':timezone.now(),
         'elapsed_label':f'{max(0, elapsed) // 60}m {max(0, elapsed) % 60}s',
         'latest_snapshot':latest, 'inventory_warnings':warnings, 'inventory_blocked':bool(latest and latest.summary.get('inventory_warnings')),
-        'error':error, 'verified_count':counts['verified'], 'confirmation_items': confirmation_items, 'eligible_count': len(confirmation_items), 'ineligible_count': counts['verified'] - len(confirmation_items),
+        'error':error, 'verified_count':ready_count, 'confirmation_items': confirmation_items, 'eligible_count': len(confirmation_items), 'ineligible_count': ready_count - len(confirmation_items),
         'cleanup_count':sum(len(item.cleanup_plan) for item in confirmation_items),
         'cleanup_rule_deletes':rule_deletes,
         'confirmation_object_count':len(confirmation_items) + rule_deletes,

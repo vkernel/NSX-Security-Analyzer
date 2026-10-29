@@ -408,6 +408,52 @@ class DeletionTests(TestCase):
         self.assertContains(self.client.get(url), 'No pre-deletion configuration')
         self.assertEqual(self.client.get(url + '?download=1').status_code, 404)
 
+    def test_expired_preview_can_be_replaced_without_reusing_old_authorization(self):
+        self.batch.confirmed_at = None
+        self.batch.save()
+        self.item.verified_at = timezone.now() - timedelta(minutes=11)
+        self.item.save()
+        old = self.client.get(reverse('deletion-detail', args=[self.batch.pk]))
+        self.assertTrue(old.context['review_expired'])
+        self.assertEqual(old.context['verified_count'], 0)
+        self.assertFalse(old.context['can_confirm'])
+        self.assertNotContains(old, 'You can confirm execution.')
+        url = reverse('deletion-selection', args=[self.env.pk])
+        with patch.object(d, 'connection', side_effect=AssertionError('No NSX calls during selection')):
+            response = self.client.post(url, {'finding': self.finding.pk})
+        fresh = DeletionBatch.objects.exclude(pk=self.batch.pk).get()
+        self.assertRedirects(response, reverse('deletion-detail', args=[fresh.pk]), fetch_redirect_response=False)
+        self.item.refresh_from_db()
+        self.assertEqual(self.item.status, 'blocked')
+        self.assertIn('Superseded', self.item.message)
+        self.assertIsNone(fresh.confirmed_at)
+        self.assertEqual(fresh.status, 'preview_queued')
+        self.assertEqual(fresh.items.get().status, 'pending')
+        self.assertIsNone(fresh.items.get().verified_at)
+        # Repeated clicks find the genuinely active new request, never the expired one.
+        again = self.client.post(url, {'finding': self.finding.pk})
+        self.assertRedirects(again, reverse('deletion-detail', args=[fresh.pk]), fetch_redirect_response=False)
+        self.assertEqual(DeletionBatch.objects.count(), 2)
+
+    def test_new_preview_preserves_fresh_pending_and_executing_reservations(self):
+        url = reverse('deletion-selection', args=[self.env.pk])
+        cases = [('preview_ready', 'verified', False, 0), ('preview_ready', 'cleanup_review', False, 20),
+                 ('preview_queued', 'pending', False, 20), ('checking', 'validating', False, 20),
+                 ('queued', 'verified', True, 20), ('running', 'sending', True, 20)]
+        for batch_status, item_status, confirmed, age in cases:
+            with self.subTest(batch_status=batch_status, item_status=item_status):
+                self.batch.status = batch_status
+                self.batch.confirmed_at = timezone.now() if confirmed else None
+                self.batch.save()
+                self.item.status = item_status
+                self.item.verified_at = timezone.now() - timedelta(minutes=age)
+                self.item.save()
+                response = self.client.post(url, {'finding': self.finding.pk})
+                self.assertRedirects(response, reverse('deletion-detail', args=[self.batch.pk]), fetch_redirect_response=False)
+                self.assertEqual(DeletionBatch.objects.count(), 1)
+                self.item.refresh_from_db()
+                self.assertEqual(self.item.status, item_status)
+
     def test_selected_preview_rejects_changed_revision(self):
         url = reverse('deletion-selection', args=[self.env.pk])
         response = self.client.post(url, {'selected':f'{self.finding.pk}:{self.finding.revision+1}'})

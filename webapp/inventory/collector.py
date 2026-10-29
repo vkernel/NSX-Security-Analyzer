@@ -2103,6 +2103,9 @@ def dfw_overview(dfw, testing=False):
 def feature_guide():
     """Standalone help for report readers; no connection or external assets needed."""
     content = '''<section data-panel id="feature-guide" tabindex="-1">
+<div style="display:inline-block;background:#111827;padding:20px;border-radius:12px;margin-bottom:20px"><svg xmlns="http://www.w3.org/2000/svg" width="280" height="72" viewBox="0 0 280 72" role="img" aria-labelledby="title"><title id="title">NSX Security Analyzer</title><g transform="translate(0 3)"><path fill="#2563eb" d="M29 3 5 12v21c0 13 9 23 24 30V52C19 47 14 40 14 32V18l15-6Zm6 0 24 9v21c0 13-9 23-24 30V52c10-5 15-12 15-20V18l-15-6Z"/>
+<path d="m20 39 12-17 12 17" fill="none" stroke="#38bdf8" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
+<g fill="#38bdf8"><circle cx="32" cy="22" r="6"/><circle cx="20" cy="39" r="6"/><circle cx="44" cy="39" r="6"/></g></g><g fill="#f8fafc" font-family="Arial, Helvetica, sans-serif"><text x="80" y="43" font-size="46" font-weight="800" letter-spacing="1">NSX</text><text x="81" y="64" font-size="18" font-weight="500">Security Analyzer</text></g></svg></div>
 <div class="section-eyebrow">Help &amp; coverage</div><h2>Report user guide</h2>
 <p>Use this guide to understand what the report checks, how to explore its results and what each finding means. This report displays a saved database snapshot. Opening it or filtering it does not modify NSX.</p>
 
@@ -2501,7 +2504,7 @@ def _render_report(report, *, fragments, indexed=False, row_sink=None):
     status = "Testing sample — not a full audit" if report.get("testing") else "Some checks need review" if needs_review(report) else "Audit completed"
     document = '''<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<title>NSX Security Analyzer report</title><style>
+<title>NSX Security Analyzer report</title><link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2264%22%20height%3D%2264%22%20viewBox%3D%220%200%2064%2064%22%20role%3D%22img%22%20aria-labelledby%3D%22title%22%3E%3Ctitle%20id%3D%22title%22%3ENSX%20Security%20Analyzer%3C%2Ftitle%3E%3Cpath%20fill%3D%22%232563eb%22%20d%3D%22M29%203%205%2012v21c0%2013%209%2023%2024%2030V52C19%2047%2014%2040%2014%2032V18l15-6Zm6%200%2024%209v21c0%2013-9%2023-24%2030V52c10-5%2015-12%2015-20V18l-15-6Z%22%2F%3E%0A%3Cpath%20d%3D%22m20%2039%2012-17%2012%2017%22%20fill%3D%22none%22%20stroke%3D%22%2338bdf8%22%20stroke-width%3D%225%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%2F%3E%0A%3Cg%20fill%3D%22%2338bdf8%22%3E%3Ccircle%20cx%3D%2232%22%20cy%3D%2222%22%20r%3D%226%22%2F%3E%3Ccircle%20cx%3D%2220%22%20cy%3D%2239%22%20r%3D%226%22%2F%3E%3Ccircle%20cx%3D%2244%22%20cy%3D%2239%22%20r%3D%226%22%2F%3E%3C%2Fg%3E%3C%2Fsvg%3E%0A"><style>
 :root{color-scheme:light;--ink:#182b42;--muted:#526479;--line:#dce4ed;--teal:#007f80}
 *{box-sizing:border-box}body{margin:0;background:#f3f6fa;color:var(--ink);font:15px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
 main{max-width:1600px;margin-left:250px;padding:28px 32px}header{background:#142c43;color:white;border-top:5px solid #19b5ac;padding:24px 32px;border-radius:14px}
@@ -2649,7 +2652,9 @@ table{min-width:760px}th{line-height:1.5}td{padding:15px 14px}.path{line-height:
 @media(min-width:1201px) and (max-width:1550px){.overview-charts{grid-template-columns:1fr}.chart-content{flex-wrap:nowrap}.chart-legend{max-width:480px}.snapshot-chart>p{min-height:0}}
 @media(max-width:1100px){.table-widget>.table-tools{grid-template-columns:repeat(2,minmax(0,1fr))}.table-widget>.table-tools>label:first-child,.table-widget>.table-tools>label:nth-child(3),.table-widget>.table-tools>.page-status{grid-column:auto}.table-widget>.table-tools>.search-related{grid-column:1 / -1}}
 @media(max-width:600px){.table-widget>.table-tools{grid-template-columns:minmax(0,1fr)}.table-widget>.table-tools>label,.table-widget>.table-tools>.page-status{grid-column:1!important}.sidebar{max-height:220px}#detail-dialog{padding:18px}.chart-content{flex-wrap:wrap}.meta{flex-direction:column}}
-''' + DIALOG_STYLES + '''</style></head><body><aside class="sidebar"><strong><span class="brand-mark">N</span> NSX Security Analyzer<small>POLICY AUDIT</small></strong><nav aria-label="Report sections">''' + menu + '''</nav></aside><main>
+''' + DIALOG_STYLES + '''</style></head><body><aside class="sidebar"><strong><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="42" height="42" aria-hidden="true" style="vertical-align:middle;margin-right:8px"><path fill="#2563eb" d="M29 3 5 12v21c0 13 9 23 24 30V52C19 47 14 40 14 32V18l15-6Zm6 0 24 9v21c0 13-9 23-24 30V52c10-5 15-12 15-20V18l-15-6Z"/>
+<path d="m20 39 12-17 12 17" fill="none" stroke="#38bdf8" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
+<g fill="#38bdf8"><circle cx="32" cy="22" r="6"/><circle cx="20" cy="39" r="6"/><circle cx="44" cy="39" r="6"/></g></svg> NSX Security Analyzer<small>POLICY AUDIT</small></strong><nav aria-label="Report sections">''' + menu + '''</nav></aside><main>
 <header><div class="eyebrow">Infrastructure / NSX Policy</div><h1>NSX security report</h1>
 <p>Explore your inventory, review findings and inspect the evidence.</p>
 <div class="meta"><span>Manager <strong>''' + safe(report.get("manager", "Not recorded")) + '''</strong></span>

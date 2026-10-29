@@ -491,3 +491,10 @@ synchronizes server-evaluated decision controls. Draft reasons remain intact; a 
 the latest owner approval, including an invalidated approval where retained.
 
 Apply migration **0054** before deploying matching web and worker images.
+
+
+### Replacing an expired deletion preview
+
+A preview expires ten minutes after verification unless confirmed in time. Starting a new preview retires overlapping expired verification entries under a database lock, records the expiry in audit history, and queues fresh verification. It does not reuse the expired authorization or send NSX writes. Fresh previews, cleanup reviews, and queued/running executions still prevent duplicate requests.
+
+On older builds that redirect back to an expired preview, open **More actions & history → Cancel deletion request**, confirm cancellation, then create a fresh preview. Use this workaround only for the unconfirmed request showing **execution never started**; review outcomes before taking action on a request that has begun execution.

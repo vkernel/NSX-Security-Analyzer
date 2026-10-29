@@ -1,3 +1,8 @@
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="webapp/static/nsx-security-analyzer-logo.svg">
+  <img src="webapp/static/nsx-security-analyzer-logo-light.svg" width="360" alt="NSX Security Analyzer">
+</picture>
+
 # NSX Security Analyzer
 
 > **Release 0.5.3** includes compact review actions, returning assignments to

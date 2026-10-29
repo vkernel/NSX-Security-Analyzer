@@ -2,6 +2,10 @@
 
 ## Development — 2026-10-29
 
+- Fix new deletion previews looping back to expired requests: retire expired, unconfirmed verification entries under lock and require fresh checks. Expired entries no longer claim they are ready to confirm.
+
+- Apply the Network Shield SVG identity to sign-in, navigation, favicon, error/status pages, report guide, standalone reports and README; provide light/dark documentation assets.
+
 - Synchronize approval controls with server readiness after live verification, retaining draft reasons and blocking stale revisions.
 - Keep task status updates automatic with reconnect backoff, retry-only controls, stable list updates, and preserved reading/editing state.
 - Render review Actions in a viewport-positioned popover and remove the sticky decision card scrollbar.
