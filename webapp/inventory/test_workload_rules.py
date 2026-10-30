@@ -129,3 +129,26 @@ class WorkloadInvestigationTests(TestCase):
         self.assertEqual(view.filters['source'],'vm-app');self.assertNotIn('snapshot',view.filters)
         self.client.post(url,{'action':'delete_pair','view_id':view.pk})
         self.assertFalse(SegmentationSavedView.objects.exists())
+
+    def test_group_choices_sort_dynamic_by_tag_count_and_reject_partial_matches(self):
+        def tag(scope,value):
+            return {'resource_type':'Condition','member_type':'VirtualMachine','key':'Tag','operator':'EQUALS','value':scope+'|'+value}
+        self.src.data['tags'].append({'scope':'Tier','tag':'Web'});self.src.save()
+        for path,conditions in [('specific',[tag('Application','Portal'),tag('Tier','Web')]),('broad',[tag('Application','Portal')]),('wrong',[tag('Application','Portal'),tag('Tier','Data')])]:
+            expression=[]
+            for condition in conditions:
+                if expression: expression.append({'resource_type':'ConjunctionOperator','conjunction_operator':'AND'})
+                expression.append(condition)
+            self.row({'name':path,'path':'/groups/'+path,'kind':'group','configuration':{'expression':expression}})
+        result=investigate(self.snapshot,self.src,self.dst)
+        dynamic=[g for g in result['source']['groups'] if g['type']=='dynamic']
+        self.assertEqual([(g['name'],g['tag_count']) for g in dynamic],[('broad',1),('specific',2)])
+        response=self.client.get(self.draft_url)
+        self.assertContains(response,'Dynamic — fewest tag conditions first')
+        self.assertContains(response,'<optgroup label="Static">',html=False)
+        response=self.client.post(self.draft_url,self.draft(source='/groups/wrong'))
+        self.assertEqual(response.status_code,200)
+        self.assertEqual(FirewallRuleProposal.objects.count(),0)
+        response=self.client.post(self.draft_url,self.draft(source='/groups/broad'))
+        self.assertEqual(response.status_code,302)
+        self.assertEqual(FirewallRuleProposal.objects.get().configuration['source'],'/groups/broad')

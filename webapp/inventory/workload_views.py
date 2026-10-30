@@ -39,8 +39,8 @@ class PairForm(forms.Form):
 class ProposalForm(forms.Form):
     revision=forms.IntegerField(widget=forms.HiddenInput,initial=0,min_value=0)
     name=forms.CharField(max_length=200,label='Proposed rule name')
-    source=forms.ChoiceField(label='Source group or VM address')
-    destination=forms.ChoiceField(label='Destination group or VM address')
+    source=forms.ChoiceField(label='Source group')
+    destination=forms.ChoiceField(label='Destination group')
     protocol=forms.ChoiceField(choices=[('TCP','TCP'),('UDP','UDP'),('ICMP','ICMP')])
     port=forms.IntegerField(required=False,min_value=0,max_value=65535,label='Destination port')
     rule_action=forms.ChoiceField(label='Proposed action',choices=[('ALLOW','Allow'),('DROP','Drop'),('REJECT','Reject')])
@@ -52,12 +52,25 @@ class ProposalForm(forms.Form):
     acknowledge=forms.BooleanField(label='I understand group selection may affect more workloads than this VM pair. This is a local proposal only.')
     def __init__(self,*args,pair=None,policies=(),saved=None,**kwargs):
         super().__init__(*args,**kwargs)
+        self.order_fields(['source','destination','name','rule_action','protocol','port','policy','placement','logging','owner','justification','acknowledge','revision'])
         self.fields['owner'].queryset=get_user_model().objects.filter(is_active=True)
         for side in ('source','destination'):
             vm=(pair or {}).get(side,{})
-            choices=[('','Choose explicitly')]+[(g['path'],g['name']+' — group, potentially multiple workloads') for g in vm.get('groups',[])]+[(ip,ip+' — saved VM address') for ip in vm.get('ips',[])]
+            choices=[('', 'Choose an existing group')]
+            available=set()
+            for kind, label in [('dynamic', 'Dynamic — fewest tag conditions first'), ('static', 'Static'), ('mixed', 'Mixed / nested — review membership'), ('unknown', 'Unknown definition')]:
+                options=[]
+                for g in vm.get('groups', []):
+                    if g['type'] != kind: continue
+                    detail = f" · {g['tag_count']} tag conditions" if kind == 'dynamic' else ''
+                    evidence = ' · potential membership' if g['potential'] else ' · saved membership evidence'
+                    options.append((g['path'], g['name'] + detail + evidence))
+                    available.add(g['path'])
+                if options: choices.append((label, options))
             old=(saved or {}).get(side)
-            if old and old not in {v for v,_ in choices}: choices.append((old,old+' — retained proposal endpoint; recheck current membership'))
+            if old and old not in available:
+                choices.append((old, old+' — retained proposal endpoint; recheck current membership'))
+            self.fields[side].help_text='Groups may include other VMs. Fewest tag conditions is a sorting aid, not a recommendation to use a broader group.'
             self.fields[side].choices=choices
         choices=[('','Choose destination policy')]+list(policies)
         old=(saved or {}).get('policy')

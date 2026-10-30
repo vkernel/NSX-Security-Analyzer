@@ -57,7 +57,7 @@ def group_evidence(config):
     if complex_logic: notes.append('Alternative or nested condition logic requires review')
     if nested: notes.append('Nested group evidence is supporting evidence, not an automatic naming source')
     needs_review = bool(notes) or kind == 'mixed'
-    return dict(group_type=kind, tags=tags if kind == 'dynamic' and not needs_review else [],
+    return dict(tag_condition_count=sum(n.get('key') == 'Tag' for n in dynamic), group_type=kind, tags=tags if kind == 'dynamic' and not needs_review else [],
                 candidate_tags=tags, conditions=[f"{n.get('member_type', '')} {n.get('key', '')} {n.get('operator', '')} {n.get('value', '')}" for n in dynamic], members=members, nested=nested, evidence_notes=notes, needs_review=needs_review)
 
 

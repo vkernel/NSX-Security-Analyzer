@@ -37,7 +37,7 @@ class ReviewForm(forms.ModelForm):
 def workspace(request, pk=None):
     if pk is None:
         env = Environment.objects.filter(pk=request.GET.get('environment')).first() if request.GET.get('environment','').isdigit() else Environment.objects.first()
-        return redirect('segmentation-pair', pk=env.pk) if env else render(request,'inventory/segmentation.html',{})
+        return redirect('segmentation', pk=env.pk) if env else render(request,'inventory/segmentation.html',{})
     env=get_object_or_404(Environment,pk=pk)
     snapshots=env.snapshots.filter(testing=False, imported=False).defer('report','html')
     latest=snapshots.first()
@@ -55,9 +55,10 @@ def workspace(request, pk=None):
     settings=SegmentationSettings.objects.filter(environment=env).first()
     scope=settings.grouping_scope if settings else ''
     filters={k:request.GET.get(k,'')[:255] for k in ('q','service','tab','disabled','hide')}
-    if filters['tab'] not in ('matrix','map','priorities','changes','settings'): filters['tab']='matrix'
+    if filters['tab'] not in ('matrix','map','priorities','changes','settings'): filters['tab']='map'
+    filters['groups'] = list(dict.fromkeys(request.GET.getlist('groups')))[:12]
     ready=snap and snap.browsing_status=='ready'
-    data=build(snap,filters['q'],scope,filters['service'],filters['disabled']=='1',filters['hide'].split(',')) if ready else {}
+    data=build(snap,filters['q'],scope,filters['service'],filters['disabled']=='1',filters['hide'].split(','), selected_paths=filters['groups'] if filters['tab']=='matrix' else None, application_mode=filters['tab']=='map') if ready else {}
     if snap and (snap.needs_review or snap.summary.get('inventory_warnings')):
         data.setdefault('warnings',[]).append('This snapshot contains collection warnings. Inspect collection coverage before relying on these relationships.')
     rules={r['path']:r for r in data.get('rules',[])}
@@ -81,7 +82,7 @@ def workspace(request, pk=None):
                 SegmentationSettings.objects.update_or_create(environment=env,defaults={'grouping_scope':request.POST.get('scope','').strip()[:255]})
             elif action=='boundary':
                 source=request.POST.get('source','');destination=request.POST.get('destination','')
-                paths={g['path'] for g in data.get('groups',[])}
+                paths={g['path'] for g in data.get('group_catalog',[])}
                 if source in paths and destination in paths:
                     SegmentationBoundary.objects.create(environment=env,name=request.POST.get('name','Boundary')[:200],source=source,destination=destination)
                 else: messages.error(request,'Select source and destination from the displayed groups.')
@@ -111,8 +112,13 @@ def workspace(request, pk=None):
         row['review_stale']=bool(review and (review.fingerprint!=row['fingerprint'] or review.state=='exception' and review.expires_at and review.expires_at<=date.today()))
         params=request.GET.copy();params['rule']=row['path'];row['url']='?'+params.urlencode()
         row['object_url']=reverse('snapshot',args=[snap.pk])+'?'+urlencode({'object':row['path']})
-    for g in data.get('groups',[]):
+    for g in data.get('group_catalog',[]):
         g['url']=reverse('snapshot',args=[snap.pk])+'?'+urlencode({'object':g['path']})
+    application_scopes=sorted({t['scope'] for g in data.get('group_catalog',[]) for t in g['evidence']['tags']})
+    for app in data.get('applications', {}).get('nodes', []):
+        for group in app['groups']:
+            group['url']=reverse('snapshot',args=[snap.pk])+'?'+urlencode({'object':group['path']})
+        app['matrix_url']='?'+urlencode({'snapshot':str(snap.pk),'tab':'matrix','groups':[g['path'] for g in app['groups'][:12]]},doseq=True)
     changes=[];group_changes=[];previous=None
     if ready and filters['tab']=='changes':
         previous=snapshots.filter(generated_at__lt=snap.generated_at,browsing_status='ready').first()
@@ -135,10 +141,12 @@ def workspace(request, pk=None):
         for r in rules.values(): writer.writerow([safe(v) for v in [snap.pk,r['name'],r['action'],r['sources'],r['destinations'],[r['services'],r['inline']],r['reasons']]])
         response=HttpResponse(out.getvalue(),content_type='text/csv');response['Content-Disposition']='attachment; filename="segmentation.csv"';return response
     tabs=[]
-    for key,label in [('matrix','Matrix'),('map','Map'),('priorities','Review priorities'),('changes','Changes'),('settings','Boundaries & grouping')]:
+    for key,label in [('priorities','Review priorities'),('changes','Changes'),('settings','Application grouping & boundaries')]:
         params=request.GET.copy();params['tab']=key;params.pop('rule',None);tabs.append({'name':label,'key':key,'url':'?'+params.urlencode()})
     saved=[]
-    for view in SegmentationSavedView.objects.filter(user=request.user,environment=env).exclude(filters__workspace='pair'): saved.append({'item':view,'url':reverse('segmentation',args=[pk])+'?'+urlencode(view.filters)})
+    for view in SegmentationSavedView.objects.filter(user=request.user,environment=env).exclude(filters__workspace='pair'): saved.append({'item':view,'url':reverse('segmentation',args=[pk])+'?'+urlencode(view.filters, doseq=True)})
+    if len(request.GET.getlist('groups')) > 12:
+        data.setdefault('warnings', []).append('Select up to 12 groups. Only the first 12 selections are included.')
     priority_page=Paginator(data.get('priorities',[]),table_page_size(request)).get_page(request.GET.get('page'))
-    return render(request,'inventory/segmentation.html',dict(priority_page=priority_page,group_changes=group_changes,environment=env,snapshot=snap,latest=latest,snapshots=snapshots[:50],ready=ready,
+    return render(request,'inventory/segmentation.html',dict(application_scopes=application_scopes,priority_page=priority_page,group_changes=group_changes,environment=env,snapshot=snap,latest=latest,snapshots=snapshots[:50],ready=ready,
         scope=scope,filters=filters,tabs=tabs,selected=selected,review_form=form,deviations=deviations,saved_views=saved,changes=changes,previous=previous,**data))

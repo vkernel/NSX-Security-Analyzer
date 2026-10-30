@@ -55,6 +55,12 @@ def memberships(vm, groups):
                 candidates[path] = 'Explicit VM path in saved group definition'
             elif member['kind'] == 'IPAddressExpression' and contains(member['value'],vm['ips']):
                 candidates[path] = 'Saved VM address matches group IP definition'
+        if ev['group_type'] == 'dynamic' and not ev['needs_review'] and ev['tags']:
+            if all((t['scope'], t['tag']) in tags for t in ev['tags']):
+                candidates[path] = 'All positive tag conditions match saved VM tags; live membership not checked'
+            else:
+                candidates.pop(path, None)
+            continue
         if any((t['scope'],t['tag']) in tags for t in ev['candidate_tags']):
             candidates.setdefault(path, 'Potential membership from tag conditions; full expression not evaluated')
     # Bounded closure, including cycles; does not upgrade inferred membership to verified.
@@ -64,8 +70,13 @@ def memberships(vm, groups):
             if path not in candidates and any(child in candidates for child in group['evidence']['nested']):
                 candidates[path]='Potential nested membership; full expression not evaluated';added=True
         if not added: break
-    return [{'path':path, 'name':groups.get(path,{}).get('name',path), 'type':groups.get(path,{}).get('evidence',{}).get('group_type','unknown'),
-             'reason':reason, 'status':'Configuration evidence'} for path,reason in sorted(candidates.items()) if path]
+    result = [{'path': path, 'name': groups[path]['name'], 'type': groups[path]['evidence']['group_type'],
+               'tag_count': groups[path]['evidence'].get('tag_condition_count', 0),
+               'reason': reason, 'potential': reason.startswith('Potential'), 'status': 'Configuration evidence'}
+              for path, reason in candidates.items() if path in groups]
+    return sorted(result, key=lambda g: ({'dynamic': 0, 'static': 1, 'mixed': 2}.get(g['type'], 3),
+                                         g['tag_count'] if g['type'] == 'dynamic' else 0, g['name'].casefold(), g['path']))
+
 
 
 def endpoint(values, vm, members, excluded=False):

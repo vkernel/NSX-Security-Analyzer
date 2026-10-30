@@ -92,3 +92,31 @@ class SegmentationTests(TestCase):
         response=self.client.post(self.url+'&rule=/rules/sql',{'action':'review','fingerprint':build(self.snapshot)['rules'][0]['fingerprint'],'state':'exception','note':''})
         self.assertContains(response,'An exception requires a reason and a future expiry date.')
         self.assertContains(response,'Save review')
+
+    def test_matrix_uses_explicit_snapshot_scoped_selection(self):
+        empty=self.client.get(self.url+'&tab=matrix')
+        self.assertEqual(empty.context['groups'], [])
+        result=build(self.snapshot, selected_paths=['/groups/App','/groups/Data','/other-environment'])
+        self.assertEqual({g['path'] for g in result['groups']}, {'/groups/App','/groups/Data'})
+        self.assertEqual(len(result['edges']),1)
+        self.assertFalse(build(self.snapshot,selected_paths=['/groups/Web'])['edges'])
+        response=self.client.get(self.url+'&tab=matrix&groups=/groups/App&groups=/groups/Data')
+        self.assertEqual(len(response.context['matrix']),2)
+        self.assertContains(response,'Build security matrix')
+
+    def test_application_map_aggregates_beyond_first_twelve_groups(self):
+        def tag(value):
+            return {'resource_type':'Condition','member_type':'VirtualMachine','key':'Tag','operator':'EQUALS','value':'Application|'+value}
+        for i in range(20):
+            self.row({'name':f'Portal {i:02}','path':f'/portal/{i}','kind':'group','configuration':{'expression':[tag('Portal')]}})
+        self.row({'name':'Database','path':'/database','kind':'group','configuration':{'expression':[tag('Database')]}})
+        self.row({'name':'Later group rule','path':'/rules/later','configuration':{'rule':{'action':'ALLOW','source_groups':['/portal/19'],'destination_groups':['/database']}}})
+        graph=build(self.snapshot,scope='Application',application_mode=True)['applications']
+        portal=next(n for n in graph['nodes'] if n['name']=='Portal')
+        self.assertEqual(len(portal['groups']),20)
+        connection=next(e for e in graph['edges'] if e['source']['name']=='Portal')
+        self.assertEqual(connection['destination']['name'],'Database')
+        self.assertEqual(connection['rules'][0]['name'],'Later group rule')
+        self.row({'name':'Ambiguous','path':'/ambiguous','kind':'group','configuration':{'expression':[tag('Portal'),{'resource_type':'ConjunctionOperator','conjunction_operator':'AND'},tag('Database')]}})
+        graph=build(self.snapshot,scope='Application',application_mode=True)['applications']
+        self.assertIn('/ambiguous',[g['path'] for n in graph['nodes'] if n['name']=='Unclassified' for g in n['groups']])
