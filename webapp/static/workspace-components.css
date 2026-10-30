@@ -357,3 +357,13 @@ body dialog#saved-configuration-dialog{width:min(880px,calc(100vw - 32px))}
 .naming-picker{width:min(680px,calc(100vw - 32px));max-height:85vh;overflow:auto;border:1px solid var(--line);border-radius:12px;padding:24px;color:var(--ink)}
 .naming-picker::backdrop{background:#10182866}.naming-picker [data-picker-results] section{padding:12px 0;border-bottom:1px solid var(--line)}
 .naming-picker-trigger{align-self:flex-start;margin-top:6px}.naming-mapping-builder{display:grid;gap:12px;padding:12px 0}.naming-mapping-builder input{min-width:0}
+/* Shared filter and table controls must fit narrow panels and mobile layouts. */
+.filter-fields,.filter-fields .form-field,.reviewer-combobox{min-width:0;box-sizing:border-box}
+.filter-fields :is(input,select,.reviewer-selection){width:100%;max-width:100%;min-width:0;box-sizing:border-box}
+.filter-control[open]>.filter-fields{width:320px;max-width:calc(100vw - 36px);left:auto;right:0}
+.reviewer-filter .reviewer-options{position:static;max-height:240px;margin-top:8px;box-shadow:none}
+.reviewer-filter .reviewer-selection{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.reviewer-filter .reviewer-selection span{min-width:0;overflow-wrap:anywhere}
+.table-footer{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:12px;padding:16px 0;font-size:13px;color:var(--muted)}
+.table-footer label,.table-page-links{display:flex;align-items:center;gap:12px}.table-footer select{width:auto;min-width:72px}.table-page-links [aria-disabled=true]{opacity:.6}
+@media(max-width:800px){.filter-control[open]>.filter-fields{width:100%;max-width:100%}.table-footer{align-items:flex-start}.table-page-links{flex-wrap:wrap}}

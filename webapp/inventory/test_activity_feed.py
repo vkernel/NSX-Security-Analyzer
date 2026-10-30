@@ -42,7 +42,7 @@ class ActivityFeedTests(TestCase):
         self.assertEqual(response.context['page'].paginator.count,1)
         self.assertContains(response,reverse('deletion-detail',args=[self.batch.pk]))
         AuditEvent.objects.bulk_create([AuditEvent(action='finding.assign',details={'environment_id':self.env.pk}) for _ in range(51)])
-        response=self.client.get(self.url,{'tab':'audit','type':'approval'})
+        response=self.client.get(self.url,{'tab':'audit','type':'approval','page_size':'50'})
         self.assertContains(response,'Page 1 of 2')
         self.assertIn('type=approval',response.context['query_string'])
         self.assertContains(self.client.get(self.url,{'tab':'audit','start':'invalid'}),'Enter a valid date')

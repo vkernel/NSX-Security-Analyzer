@@ -1,3 +1,4 @@
+from .preferences import table_page_size
 import copy
 import csv
 import io
@@ -276,10 +277,10 @@ def compliance(request, pk):
                 and (not status or r['status'] == status) and (not policy_id or r['policy'] and str(r['policy'].pk) == policy_id)
                 and (not owner_filter or r['proposal'] and str(r['proposal'].owner_id) == owner_filter)]
     if request.GET.get('export') == 'csv': return csv_response(filtered)
-    page = Paginator(filtered, 50).get_page(request.GET.get('page'))
+    page = Paginator(filtered, table_page_size(request)).get_page(request.GET.get('page'))
     params = request.GET.copy();params.pop('page', None);params.pop('export', None)
     return render(request, 'inventory/naming_compliance.html', {'environment': environment, 'snapshot': snapshot, 'page': page,
-        'group_type': group_type, 'warning': warning, 'totals': totals, 'error': error, 'query': query, 'status': status, 'policy_id': policy_id,
+        'table_total': len(rows), 'group_type': group_type, 'warning': warning, 'totals': totals, 'error': error, 'query': query, 'status': status, 'policy_id': policy_id,
         'proposal_form': proposal_form, 'simulation': simulation, 'owner_filter': owner_filter,
         'owners': get_user_model().objects.filter(is_active=True, is_staff=True).order_by('username'),
         'policies': NamingPolicy.objects.filter(enabled=True), 'query_string': params.urlencode()})

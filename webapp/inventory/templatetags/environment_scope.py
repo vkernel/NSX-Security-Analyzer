@@ -16,7 +16,7 @@ def environment_scope(context):
         if obj is not None and getattr(obj, 'environment_id', None):
             environment = obj.environment
             break
-    lists = {'naming-compliance', 'environment', 'findings', 'collection-history', 'rule-history', 'deletion-history', 'collection-coverage', 'snapshot-comparison'}
+    lists = {'segmentation', 'naming-compliance', 'environment', 'findings', 'collection-history', 'rule-history', 'deletion-history', 'collection-coverage', 'snapshot-comparison'}
     aggregate = name in {'dashboard', 'my-work', 'activity', 'all-collections'}
     browsing = name == 'snapshot' and request.GET.get('browse') == '1'
     switchable = aggregate or name in lists or browsing or name == 'workspace-section' and match.kwargs.get('section') != 'help'

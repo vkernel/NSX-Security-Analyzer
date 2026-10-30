@@ -1,3 +1,4 @@
+from .preferences import table_page_size
 from . import page_queries
 """Environment-level history, coverage and review pages."""
 import json
@@ -48,7 +49,7 @@ def comparison(request, pk):
             if change in change_choices: rows = rows.filter(data__status=change)
             elif change: rows = rows.none()
             rows = rows.values_list('data', flat=True)
-    page = Paginator(rows, preferences(request).page_size).get_page(request.GET.get('page'))
+    page = Paginator(rows, table_page_size(request)).get_page(request.GET.get('page'))
     for row in page:
         for difference in row.get('changes', []):
             difference['label'] = str(difference.get('field', '')).replace('_', ' ').capitalize()
@@ -68,10 +69,10 @@ def coverage(request, pk):
     environment = get_object_or_404(page_queries.environments(), pk=pk)
     days = int(request.GET.get('days', '30')) if request.GET.get('days', '30') in ('7', '30', '90') else 30
     result = dashboard(environment, days, lazy=True)
-    page = Paginator(result.pop('issues'), preferences(request).page_size).get_page(request.GET.get('page'))
+    page = Paginator(result.pop('issues'), table_page_size(request)).get_page(request.GET.get('page'))
     return render(request, 'inventory/coverage.html', {'environment': environment, 'coverage': result,
         'days': days, 'page': page, 'query_string': f'days={days}', 'failed_count': result['failed'].count(),
-        'gap_page': Paginator(result['gaps'], 25).get_page(request.GET.get('gap_page')),
+        'gap_page': Paginator(result['gaps'], table_page_size(request)).get_page(request.GET.get('gap_page')),
         'jobs': page_queries.jobs(result['failed'])[:20]})
 
 
@@ -166,7 +167,10 @@ def findings(request, pk):
     qualification_counts = list(environment.findings.filter(present=True).values('qualification').annotate(total=Count('pk')).order_by('qualification'))
     historical_finding_count = environment.findings.filter(present=False).count()
     rows, form, query = filtered_findings(request, environment, request.GET)
-    page = Paginator(rows, preferences(request).page_size).get_page(request.GET.get('page'))
+    total_params = request.GET.copy()
+    for key in ('q', 'kind', 'owner'): total_params.pop(key, None)
+    table_total = filtered_findings(request, environment, total_params)[0].count()
+    page = Paginator(rows, table_page_size(request)).get_page(request.GET.get('page'))
     from .deletion import KINDS
     from .evidence_coverage import snapshot_issues, relevant
     latest = environment.snapshots.filter(testing=False, imported=False).only('pk', 'summary').first()
@@ -186,7 +190,7 @@ def findings(request, pk):
     cleanup_queue = {'second_review': 'second', 'ready': 'ready', 'owner_review': 'assigned'}.get(request.GET.get('review'), request.GET.get('review') or None)
     return render(request, 'inventory/findings.html', {'environment': environment, 'page': page,
         'cleanup_tasks': cleanup_tasks(request.user, environment=environment.pk, query=query, queue=cleanup_queue),
-        'release_eligible': release_eligible, 'review_return': request.get_full_path(),
+        'table_total': table_total, 'release_eligible': release_eligible, 'review_return': request.get_full_path(),
         'show_release_controls': request.user.is_staff,
         'assignment_form': BulkAssignmentForm(initial={'owner': request.user.pk}),
         'filters_active': any(request.GET.get(key, '').strip() for key in ('q', 'kind', 'review', 'owner')),
@@ -266,7 +270,7 @@ def finding_detail(request, pk, finding_id):
     facts = [(label, fact_labels.get(str(value), str(value).replace('_', ' '))) for label, value in facts]
     owner_label = user_label(finding.owner)
     owner_name, _, owner_detail = owner_label.partition(' · ')
-    page = Paginator(finding.events.select_related('actor__keycloakidentity', 'actor__ldapidentity').defer('details'), 20).get_page(request.GET.get('page'))
+    page = Paginator(finding.events.select_related('actor__keycloakidentity', 'actor__ldapidentity').defer('details'), table_page_size(request)).get_page(request.GET.get('page'))
     from .approval_evidence import saved, SUPPORTED
     approval_evidence = saved(finding) if finding.kind in SUPPORTED else None
     return render(request, 'inventory/finding_detail.html', {'environment': environment, 'finding': finding,
@@ -425,7 +429,7 @@ def my_work(request):
     rows = rows.annotate(assigned_at=Subquery(assigned.values('created_at')[:1]))
     sort = request.GET.get('sort', 'oldest')
     ordering = {'oldest': ['assigned_at', 'pk'], 'name': ['name', 'pk'], 'environment': ['environment__name', 'name', 'pk']}.get(sort, ['assigned_at', 'pk'])
-    page = Paginator(rows.order_by(*ordering), preferences(request).page_size).get_page(request.GET.get('page'))
+    page = Paginator(rows.order_by(*ordering), table_page_size(request)).get_page(request.GET.get('page'))
     from .finding_workflow import approval_readiness
     from .deletion import permitted, KINDS
     show_deletion_controls = queue == 'ready' and permitted(request.user)

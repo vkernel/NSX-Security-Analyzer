@@ -83,7 +83,8 @@
           });
           document.dispatchEvent(new Event('bulk:updated'));
         }
-        status.textContent=result.count?`${page*Number(size.value)+1}–${Math.min((page+1)*Number(size.value),result.count)} of ${result.count}`:'0 results';
+        status.textContent=result.count?`Showing ${page*Number(size.value)+1}–${Math.min((page+1)*Number(size.value),result.count)} of ${result.count} matching objects`:'0 matching objects';
+        if(Number.isInteger(result.total)&&result.total!==result.count)status.textContent+=` · ${result.total} total in this view`;
         previous.disabled=page===0;next.disabled=(page+1)*Number(size.value)>=result.count;empty.hidden=result.count!==0;
         headers.forEach(({header,button,key})=>{const active=sort.value===key;button.textContent=active?(order.value==='asc'?'▲':'▼'):'↕';if(active)header.setAttribute('aria-sort',order.value==='asc'?'ascending':'descending');else header.removeAttribute('aria-sort');});
         widget.dispatchEvent(new Event('table-render'));

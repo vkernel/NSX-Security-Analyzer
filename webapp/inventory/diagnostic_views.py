@@ -1,3 +1,4 @@
+from .preferences import table_page_size
 import json
 from datetime import timedelta
 from django.conf import settings
@@ -40,7 +41,7 @@ def audit_log(request):
         params.pop('page', None)
         params.pop('export', None)
         response = render(request, 'inventory/audit_log.html', {
-            'page': Paginator(rows, 50).get_page(request.GET.get('page')), 'query': query,
+            'page': Paginator(rows, table_page_size(request)).get_page(request.GET.get('page')), 'query': query,
             'outcome': outcome, 'query_string': params.urlencode(),
             'retention_days': settings.AUDIT_EVENT_RETENTION_DAYS,
             'environments': Environment.objects.filter(enabled=True),

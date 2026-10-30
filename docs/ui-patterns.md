@@ -40,3 +40,12 @@ Use `components/page_header.html`, `components/empty_state.html`, and the
 `ui_components.status_badge` inclusion tag for new pages. Load the shared assets from
 `base.html`; keep page-specific styles narrowly scoped. Test workflow permissions and
 refresh state preservation when changing these components.
+
+
+### Table counts and owner filtering
+
+Paginated lists show the displayed range, matching result count, rows per page and previous/next links beneath the table, including single-page and empty results. Size changes preserve filters and reset pagination. Server lists remember the selected size for the browser session; existing preference sizes remain supported alongside 25, 50 and 100. Inventory tables retain their existing page-size preference. Unfiltered totals appear only where the data source provides them.
+
+Small unpaginated tables show rows currently displayed, not an inferred database total. Bulk selection refers to the current page and remains subject to action limits.
+
+The finding Owner filter uses the shared searchable reviewer selector, with Anyone, Assigned to me and Unassigned shortcuts. Changing the search text retains the previous filter until a result is chosen. Apply submits the selected filter.

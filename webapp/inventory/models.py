@@ -702,3 +702,37 @@ class NamingProposal(models.Model):
 
     class Meta:
         constraints = [models.UniqueConstraint(fields=['environment', 'object_type', 'group_path'], name='naming_proposal_unique')]
+
+
+class SegmentationSettings(models.Model):
+    environment = models.OneToOneField(Environment, on_delete=models.CASCADE)
+    grouping_scope = models.CharField(max_length=255, blank=True)
+
+
+class SegmentationBoundary(models.Model):
+    environment = models.ForeignKey(Environment, on_delete=models.CASCADE)
+    name = models.CharField(max_length=200)
+    source = models.TextField()
+    destination = models.TextField()
+    enabled = models.BooleanField(default=True)
+
+
+class SegmentationReview(models.Model):
+    environment = models.ForeignKey(Environment, on_delete=models.CASCADE)
+    rule_path = models.TextField()
+    fingerprint = models.CharField(max_length=64)
+    owner = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL)
+    state = models.CharField(max_length=16, default='open', choices=[('open','Open'),('reviewed','Reviewed'),('exception','Accepted exception')])
+    note = models.TextField(blank=True)
+    expires_at = models.DateField(null=True, blank=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=['environment','rule_path'], name='segmentation_review_unique')]
+
+
+class SegmentationSavedView(models.Model):
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
+    environment = models.ForeignKey(Environment, on_delete=models.CASCADE)
+    name = models.CharField(max_length=100)
+    filters = models.JSONField(default=dict)

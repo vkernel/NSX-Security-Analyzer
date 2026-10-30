@@ -28,3 +28,17 @@ def display_preferences(request):
         selected = environments[0]
     return {'display_preferences': preferences(request), 'interface_state': preferences(request).interface_state,
             'navigation_environments': environments, 'selected_environment': selected}
+
+
+def table_page_size(request, params=None):
+    """Bounded table size, remembered in this signed-in browser session."""
+    params = request.GET if params is None else params
+    value = params.get('page_size', '')
+    allowed = (10, 20, 25, 50, 100)
+    if str(value) in {str(n) for n in allowed}:
+        size = int(value)
+        if hasattr(request, 'session'):
+            request.session['table_page_size'] = size
+        return size
+    saved = getattr(request, 'session', {}).get('table_page_size')
+    return saved if saved in allowed else preferences(request).page_size

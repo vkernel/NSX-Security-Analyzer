@@ -1,0 +1,6 @@
+<nav class="table-footer" aria-label="Table results and pages">
+<span>{% if page.paginator.count %}Showing {{ page.start_index }}–{{ page.end_index }} of {{ page.paginator.count }} matching results{% else %}0 matching results{% endif %}{% if total != None and total != page.paginator.count %} · {{ total }} total in this view{% endif %}</span>
+<label>Rows per page <select data-table-page-size aria-label="Rows per page">{% for size in sizes %}<option value="{{ size.url }}" {% if size.value == page.paginator.per_page %}selected{% endif %}>{{ size.value }}</option>{% endfor %}</select></label>
+<noscript>{% for size in sizes %}<a href="{{ size.url }}">Show {{ size.value }}</a> {% endfor %}</noscript>
+<span class="table-page-links">{% if previous %}<a class="button" href="{{ previous }}">Previous</a>{% else %}<span aria-disabled="true">Previous</span>{% endif %}<span>Page {{ page.number }} of {{ page.paginator.num_pages }}</span>{% if next %}<a class="button" href="{{ next }}">Next</a>{% else %}<span aria-disabled="true">Next</span>{% endif %}</span>
+</nav>

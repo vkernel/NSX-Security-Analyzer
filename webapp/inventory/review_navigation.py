@@ -1,4 +1,5 @@
 """Bounded review navigation; return links can only target known local queues."""
+from .preferences import table_page_size
 from urllib.parse import urlencode, urlsplit
 from django.http import QueryDict
 from django.urls import reverse
@@ -35,7 +36,7 @@ def navigation(request, environment, finding, return_to):
     from .history_views import filtered_findings
     params = QueryDict(parts.query)
     rows, _, _ = filtered_findings(request, environment, params)
-    paginator = Paginator(rows, preferences(request).page_size)
+    paginator = Paginator(rows, table_page_size(request, params))
     page = paginator.get_page(params.get('page'))
     entries = list(page.object_list)
     index = next((i for i, item in enumerate(entries) if item.pk == finding.pk), None)

@@ -1,5 +1,12 @@
 # Changelog
 
+## Development — 2026-10-30
+
+- Add a read-only workload segmentation workspace with snapshot-pinned matrix/map, group and workload lookup, rule evidence, boundary review candidates, assignments and expiring exceptions, saved views, CSV export and bounded snapshot comparisons. Apply migration 0057. Configuration relationships do not establish effective access.
+
+- Replace the finding Owner filter with a searchable reviewer selector and consistent Anyone, Assigned to me and Unassigned choices. Keep controls inside the filter panel on narrow screens.
+- Add shared table counts and page-size controls across review, inventory, history and task lists; preserve filters and remember server-list page sizes for the browser session. Clarify that bulk selection applies to the current page. No migration required.
+
 ## Development — 2026-10-29
 
 - Add searchable naming scope/tag selectors with evidence counts and environment comparisons, a value-mapping builder, static-proposal suggestions and an automatic server-evaluated naming example. Manual entry remains available; no migration required.

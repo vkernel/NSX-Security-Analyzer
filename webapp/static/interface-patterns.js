@@ -48,7 +48,7 @@
     const count = selection.querySelector('[data-selected-count]');
     const update = () => {
       const n = selection.querySelectorAll('input[name="finding"]:checked').length;
-      count.textContent = `${n} selected`;
+      count.textContent = `${n} selected on this page`;
       button.disabled = n === 0 || n > 100;
       button.textContent = n ? `Preview ${n} selected object${n===1?'':'s'}` : 'Select objects to preview';
     };

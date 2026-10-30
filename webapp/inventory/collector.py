@@ -3316,8 +3316,8 @@ table{min-width:760px}th{line-height:1.5}td{padding:15px 14px}.path{line-height:
       page = Math.max(0, Math.min(page, Math.ceil(matching.length / limit) - 1));
       tbody.innerHTML = matching.slice(page * limit, (page + 1) * limit).map(id => renderRow(id)).join('');
       widget.querySelector('.page-status').textContent = matching.length
-        ? number(page * limit + 1) + '–' + number(Math.min((page + 1) * limit, matching.length)) + ' of ' + number(matching.length)
-        : '0 results';
+        ? 'Showing ' + number(page * limit + 1) + '–' + number(Math.min((page + 1) * limit, matching.length)) + ' of ' + number(matching.length) + ' matching objects' + (matching.length !== ids.length ? ' · ' + number(ids.length) + ' total in this view' : '')
+        : '0 matching objects';
       previous.disabled = page === 0;
       next.disabled = (page + 1) * limit >= matching.length;
       widget.querySelector('.no-matches').hidden = matching.length !== 0;

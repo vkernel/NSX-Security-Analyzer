@@ -208,14 +208,17 @@ def snapshot_data(request, pk):
                     if saved_count['query'] != fingerprint or type(saved_count['count']) is not int or saved_count['count'] < 0:
                         raise ValueError('Count does not match query')
                     count = saved_count['count']
+                    total = saved_count['total']
+                    if type(total) is not int or total < count: raise ValueError('Invalid total')
                     reused = True
                 except (signing.BadSignature, ValueError, KeyError, TypeError):
                     count = rows.count()
-                count_token = signing.dumps({'query':fingerprint,'count':count}, salt='snapshot-count', compress=True)
+                    total = SnapshotRecord.objects.filter(snapshot_id=pk, panels__panel__slug=request.GET.get('panel', 'overview')).count()
+                count_token = signing.dumps({'query':fingerprint,'count':count,'total':total}, salt='snapshot-count', compress=True)
                 count_seconds = perf_counter()-count_started
                 rows_started = perf_counter()
                 page = min(max(0,int(request.GET.get('page', '0'))),max(0,(count-1)//size))
-                result = {'count':count,'count_token':count_token,'page':page,'rows':[
+                result = {'count':count,'total':total,'count_token':count_token,'page':page,'rows':[
                     {'id':r.ordinal,'view':r.view,'data':r.compact}
                     for r in rows.only('ordinal','view','compact')[page*size:(page+1)*size]]}
                 assessments = {}

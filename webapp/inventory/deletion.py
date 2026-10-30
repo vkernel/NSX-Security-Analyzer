@@ -1,4 +1,5 @@
 """Explicit, admin-confirmed deletion. No force, redirect, cascade or DELETE retry."""
+from .preferences import table_page_size
 from contextlib import contextmanager
 from datetime import timedelta
 import json
@@ -464,7 +465,7 @@ def history(request, pk):
         blocked_count=Count('items', filter=Q(items__status='blocked')),
         attention_count=Count('items', filter=Q(items__status__in=['failed', 'uncertain'])),
     ).prefetch_related(Prefetch('items', queryset=DeletionItem.objects.annotate(has_configuration=Case(When(before={}, then=Value(False)), default=Value(True), output_field=BooleanField()), has_cleanup=Case(When(cleanup_plan=[], then=Value(False)), default=Value(True), output_field=BooleanField())).defer('before', 'approved_evidence', 'approvals', 'verification', 'cleanup_plan', 'cleanup_approvals', 'cleanup_results').order_by('pk'), to_attr='history_items')).order_by('-created_at')
-    page = Paginator(batches, 25).get_page(request.GET.get('page'))
+    page = Paginator(batches, table_page_size(request)).get_page(request.GET.get('page'))
     for batch in page:
         for item in batch.history_items:
             try:

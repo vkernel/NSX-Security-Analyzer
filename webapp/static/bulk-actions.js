@@ -6,7 +6,7 @@
     if (!toolbar) return;
     const available=boxes(id), selected=available.filter(box=>box.checked), count=selected.length;
     toolbar.hidden=!count;
-    toolbar.querySelector('[data-bulk-count]')?.replaceChildren(document.createTextNode(`${count} selected`));
+    toolbar.querySelector('[data-bulk-count]')?.replaceChildren(document.createTextNode(`${count} selected on this page`));
     let disabled=false;
     toolbar.querySelectorAll('[data-bulk-action]').forEach(button=>{
       button.hidden=count>0 && selected.every(box=>!(box.dataset.bulkAllowed || '').split(' ').includes(button.dataset.bulkAction));

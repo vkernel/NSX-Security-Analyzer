@@ -31,7 +31,7 @@
         ? 'Select up to 100 assigned, ready findings of supported types to preview deletion.'
         : 'Opens a read-only preview; confirmation is required before deletion.';
     }
-    document.getElementById('finding-selection-count').textContent = `${count} selected`;
+    document.getElementById('finding-selection-count').textContent = `${count} selected on this page`;
     document.getElementById('release-title').textContent =
       `Return ${count} finding${count === 1 ? '' : 's'} to unassigned`;
   };

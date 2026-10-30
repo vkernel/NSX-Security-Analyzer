@@ -89,7 +89,7 @@ class DeletionTests(TestCase):
             DeletionBatch(environment=self.env, manager=self.env.manager, requested_by=self.user)
             for _ in range(25)])
         url = reverse('deletion-history', args=[self.env.pk])
-        response = self.client.get(url)
+        response = self.client.get(url, {'page_size': '25'})
         self.assertEqual(response.status_code, 200)
         self.assertEqual(len(response.context['page']), 25)
         self.assertContains(response, 'Page 1 of 2')

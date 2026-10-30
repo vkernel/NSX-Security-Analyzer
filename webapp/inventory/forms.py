@@ -282,7 +282,7 @@ class FindingFilterForm(forms.Form):
         users = get_user_model().objects.filter(pk=int(selected)) if str(selected).isdigit() and len(str(selected)) < 19 else get_user_model().objects.none()
         self.fields['owner'].choices = [('', 'Anyone'), ('me', 'Assigned to me'), ('none', 'Unassigned')] + [(str(u.pk), user_label(u)) for u in with_identities(users)]
         from django.urls import reverse
-        self.fields['owner'].widget.attrs['data-user-search'] = reverse('reviewer-search')
+        self.fields['owner'].widget.attrs.update({'data-user-search': reverse('reviewer-search'), 'data-reviewer-combobox': 'true', 'data-reviewer-filter': 'true'})
 
 
 class ReviewApprovalsForm(forms.ModelForm):

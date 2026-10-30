@@ -1,4 +1,5 @@
 """Read-only overview of independent background queues."""
+from .preferences import table_page_size
 from django.contrib.auth.decorators import login_required
 from django.shortcuts import render, get_object_or_404, redirect
 from django.urls import reverse
@@ -57,7 +58,7 @@ def activity(request):
         tasks += activity_feed.deletion_cards(request, options, selected, state == 'active')
     page = None
     if tab == 'audit':
-        page = Paginator(activity_feed.audit_rows(request, options, selected, kind), 50).get_page(request.GET.get('page'))
+        page = Paginator(activity_feed.audit_rows(request, options, selected, kind), table_page_size(request)).get_page(request.GET.get('page'))
         tasks = activity_feed.audit_cards(page)
     elif tab == 'all' and state != 'active':
         tasks += activity_feed.audit_cards(activity_feed.audit_rows(request, options, selected, kind).filter(action__startswith='finding.').exclude(action__startswith='finding.nsx_')[:100])

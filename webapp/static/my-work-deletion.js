@@ -10,7 +10,7 @@
     const rows = selected();
     const mixed = new Set(rows.map(box => box.dataset.environment)).size > 1;
     bar.hidden = rows.length === 0;
-    bar.querySelector('[data-work-selection-count]').textContent = `${rows.length} selected`;
+    bar.querySelector('[data-work-selection-count]').textContent = `${rows.length} selected on this page`;
     button.disabled = !rows.length || rows.length > 100 || mixed;
     bar.querySelector('[data-work-selection-help]').textContent = mixed
       ? 'Select objects from one environment at a time, or use the Environment filter.'

@@ -1,3 +1,4 @@
+from .preferences import table_page_size
 from . import page_queries
 import json
 import logging
@@ -77,7 +78,7 @@ def dashboard(request):
 @login_required
 def environment_detail(request, pk):
     environment = get_object_or_404(page_queries.environments(), pk=pk)
-    snapshots = Paginator(snapshot_list().filter(environment=environment), preferences(request).page_size).get_page(request.GET.get("page"))
+    snapshots = Paginator(snapshot_list().filter(environment=environment), table_page_size(request)).get_page(request.GET.get("page"))
     from .usability import freshness
     return render(request, "inventory/environment.html", {
         "freshness": freshness(environment),
@@ -366,7 +367,7 @@ def rule_history(request, pk):
         rows = rows.filter(status=selected)
     if query:
         rows = rows.filter(Q(name__icontains=query) | Q(path__icontains=query) | Q(rule_id_text__icontains=query))
-    page = Paginator(rows.order_by('sort_name','path').only('data','status'), preferences(request).page_size).get_page(request.GET.get('page'))
+    page = Paginator(rows.order_by('sort_name','path').only('data','status'), table_page_size(request)).get_page(request.GET.get('page'))
     page.object_list = [dict(timestamps(row.data, ('first','last','last_positive')), label=STATUS_LABELS[row.status])
                         for row in page.object_list]
     params = request.GET.copy()
@@ -425,7 +426,7 @@ def website_settings(request):
 def collection_history(request, pk):
     environment = get_object_or_404(page_queries.environments(), pk=pk)
     jobs = Paginator(page_queries.jobs(environment.jobs.all()),
-                     preferences(request).page_size).get_page(request.GET.get("page"))
+                     table_page_size(request)).get_page(request.GET.get("page"))
     return render(request, "inventory/collection_history.html", {"environment": environment, "jobs": jobs})
 
 
@@ -671,7 +672,7 @@ def environment_directory(request):
         from django.db.models import Q
         environments = environments.filter(Q(name__icontains=query)|Q(manager__icontains=query))
     options=policy()
-    page=Paginator(environments, preferences(request).page_size).get_page(request.GET.get('page'))
+    page=Paginator(environments, table_page_size(request)).get_page(request.GET.get('page'))
     cards=page_queries.cards(page.object_list,options)
     return render(request,'inventory/environment_directory.html',{'cards':cards,'page':page,'query':query,'view':request.GET.get('view','table')})
 
@@ -685,5 +686,5 @@ def all_collections(request):
     state=request.GET.get('status','')
     if state in AuditJob.Status.values:
         jobs=jobs.filter(status=state)
-    page=Paginator(jobs,preferences(request).page_size).get_page(request.GET.get('page'))
+    page=Paginator(jobs,table_page_size(request)).get_page(request.GET.get('page'))
     return render(request,'inventory/all_collections.html',{'jobs':page,'page':page,'selected_status':state,'statuses':AuditJob.Status.choices})
