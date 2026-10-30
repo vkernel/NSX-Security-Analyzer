@@ -122,6 +122,8 @@ class NamingTests(TestCase):
         self.assertContains(self.client.get(self.url()),'PRD-RTM')
         self.assertContains(self.client.get(reverse('naming-policy-edit',args=[self.policy.pk])),'Ordered name components')
         self.assertContains(self.client.get(reverse('naming-policies')),'New policy')
+        self.assertNotContains(self.client.get(reverse('naming-policies')), 'data-naming-components')
+        self.assertContains(self.client.get(reverse('naming-policies')+'?new=1'), 'data-naming-components')
 
     def test_saving_draft_preserves_active_config_and_version_history(self):
         data=self.payload();data['separator']='_'
@@ -334,3 +336,31 @@ class NamingTests(TestCase):
 
     def test_live_example_invalid_fields_return_help(self):
         self.assertIn('Complete',self.client.post(reverse('naming-example'),{}).json()['message'])
+
+    def test_remove_policy_preserves_history_and_excludes_assessment(self):
+        url = reverse('naming-policy-edit', args=[self.policy.pk])
+        self.assertContains(self.client.get(url), 'Remove policy')
+        response = self.client.post(url, {'action': 'remove', 'revision': self.policy.revision, 'confirm_remove': 'yes'})
+        self.assertRedirects(response, reverse('naming-policies'))
+        self.policy.refresh_from_db()
+        self.assertIsNotNone(self.policy.removed_at)
+        self.assertFalse(self.policy.enabled)
+        self.assertEqual(self.policy.versions.get().action, 'removed')
+        self.assertIsNone(self.rows()[0]['policy'])
+        self.assertNotContains(self.client.get(reverse('naming-policies')), url)
+        self.assertContains(self.client.get(reverse('naming-policies') + '?show=removed'), url)
+        self.assertContains(self.client.get(url), 'Saved configurations are read-only')
+        for action in ['activate', 'save', 'binding', 'preview', 'disable', 'remove']:
+            self.assertEqual(self.client.post(url, {'action': action}).status_code, 409)
+
+    def test_remove_requires_confirmation_current_revision_and_admin(self):
+        url = reverse('naming-policy-edit', args=[self.policy.pk])
+        self.client.post(url, {'action': 'remove', 'revision': self.policy.revision})
+        self.policy.refresh_from_db()
+        self.assertIsNone(self.policy.removed_at)
+        self.assertEqual(self.client.post(url, {'action': 'remove', 'revision': 999, 'confirm_remove': 'yes'}).status_code, 409)
+        self.user.is_superuser = False
+        self.user.save()
+        self.assertEqual(self.client.post(url, {'action': 'remove', 'revision': 0, 'confirm_remove': 'yes'}).status_code, 403)
+        self.policy.refresh_from_db()
+        self.assertTrue(self.policy.enabled)

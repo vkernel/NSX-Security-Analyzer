@@ -1,8 +1,13 @@
 from django.urls import path
-from . import approval_evidence, naming_views, segmentation_views
+from . import approval_evidence, naming_views, segmentation_views, workload_views
 from . import storage_views, activity_views, authentication_settings, keycloak_settings, system_health, views, history_views, diagnostic_views, report_views, impact, transient, deletion, task_cancellation, bulk_actions
 
 urlpatterns = [
+    path('environments/<int:pk>/segmentation/workloads/', workload_views.pair_view, name='segmentation-pair'),
+    path('environments/<int:pk>/segmentation/vms/', workload_views.vm_search, name='segmentation-vms'),
+    path('environments/<int:pk>/segmentation/membership/', workload_views.verify_membership, name='segmentation-membership'),
+    path('environments/<int:pk>/segmentation/proposals/new/', workload_views.proposal, name='segmentation-proposal-new'),
+    path('environments/<int:pk>/segmentation/proposals/<int:proposal_id>/', workload_views.proposal, name='segmentation-proposal'),
     path('segmentation/', segmentation_views.workspace, name='segmentation-index'),
     path('environments/<int:pk>/segmentation/', segmentation_views.workspace, name='segmentation'),
     path('administration/naming/', naming_views.policies, name='naming-policies'),

@@ -99,3 +99,21 @@ the three UI/UX batches. These screenshots may be ahead of the published image. 
 Recapture the affected page when its controls or navigation change. Use an isolated
 synthetic database and a separate browser session; never capture a production
 account, secret field, token, real Manager hostname or private inventory.
+
+
+### Drawer interaction checks
+
+- Finding list: open a record without leaving the list; verify Previous/Next, related-record Back, Open full page, Close and Escape. Edit a reason and verify closing asks before discarding it. Approval still uses the existing server-authorized form.
+- Naming policy: switch Scope / Name components, edit a component, choose a collected scope in the same panel, then Done editing. Confirm the changed value remains in the draft and is submitted by Save draft.
+- Naming compliance, deletion verification and reference cleanup: inspect details without expanding the table vertically. Progress may update while read-only evidence is open. Close restores focus to the opener.
+- Collection diagnostics and activity: open details and return with filters and scroll position retained.
+- Inventory retains its existing evidence tabs and related-object Back navigation. Evidence lists use their existing search/pagination; drawer bodies avoid nested scroll boxes.
+- Check at desktop and 390px mobile width. Panels become full screen on mobile. Without native dialog support, ordinary links and expandable details remain available.
+
+### Consistent tabs and accessibility
+
+Object evidence uses Summary, Members when applicable, References, History and Technical details. Snapshot history panels explain when review history is not available; they do not invent historical evidence. Approval lists retain object-specific sections such as Services, Rules and Applied to.
+
+Check Arrow Left/Right, Home and End in tab lists; exactly one tab should participate in the Tab sequence, and each tab must reference its panel. Switching tabs must retain draft field values. Activity event details and collection diagnostic sections are expandable; cleanup approval remains prominent without hiding permission or coverage blockers.
+
+Validated drawer workflows include retained component values, inline scope selection, unsaved-note cancellation, Escape/Close, keyboard category navigation, linked panels, and 1440px/390px layouts. These checks are regression coverage, not a claim of formal WCAG certification.

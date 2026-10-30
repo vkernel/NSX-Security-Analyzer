@@ -66,3 +66,14 @@ Apply migrations **0055 and 0056** before starting matching web/worker versions.
 Assessment uses the latest retained full, non-test, non-imported snapshot. Archived browsing data must be restored. Missing/warning coverage is explicit; saved evidence is not a live NSX check. Nested supporting evidence is bounded to 100 unique definitions and 30 levels, with an explicit limit message.
 
 Results are calculated on request rather than duplicated per collection. Persisted data is policies/version history, scope mappings, and one proposal/exception per environment/group. List pages contain 50 rows; collision checks include all groups in the environment.
+
+
+### Remove a policy
+
+An administrator can open a policy, expand **Remove policy**, acknowledge the impact and confirm. Removal stops assessment by that policy and hides it from the current list. Another matching policy may take over; otherwise affected groups have no applicable naming policy. NSX objects, group names and tags are unchanged.
+
+**Removed policies** retains read-only versions, configurations and the removal actor/time in history. Removed policies cannot be edited or reactivated. Use **Disable policy** instead if you intend to activate it again later. A concurrent change requires reloading before removal. Deploy migration `0059_naming_policy_removal` before using this feature.
+
+### Guided editing
+
+Choose **New policy** from the overview, or open an existing policy. Follow Choose scope → Build name → Preview impact → Activate. The illustrative name preview remains visible on desktop; component issues appear beside their component. Save the draft before previewing full impact. Optional environment mappings and version history are expandable.

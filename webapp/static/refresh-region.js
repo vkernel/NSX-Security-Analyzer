@@ -43,6 +43,9 @@
       const saved=fields.get(key(node,next));
       if(saved && node.type!=='file'){node.value=saved.value;if('checked' in node)node.checked=saved.checked;}
     });
+    // Keep the source of an open evidence panel attached while other status updates render.
+    const reading=[...root.querySelectorAll('[data-panel-reading]')].map(node=>[key(node,root),node]);
+    for(const [identity,node] of reading){const replacement=[...next.querySelectorAll('details')].find(candidate=>key(candidate,next)===identity);if(replacement)replacement.replaceWith(node);}
     const x=window.scrollX,y=window.scrollY;
     root.replaceChildren(...next.childNodes);
     for (const name of ['data-poll','data-active','data-status']) {

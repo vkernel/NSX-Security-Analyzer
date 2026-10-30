@@ -191,7 +191,7 @@ def evaluate(group, policies, bindings):
 
 def assess(environment, replacement=None, simulation=False):
     snapshot, groups, warning = inventory(environment)
-    policies = list(NamingPolicy.objects.filter(enabled=True).filter(Q(environment__isnull=True) | Q(environment=environment)))
+    policies = list(NamingPolicy.objects.filter(enabled=True, removed_at__isnull=True).filter(Q(environment__isnull=True) | Q(environment=environment)))
     if replacement:
         policies = [p for p in policies if p.pk != replacement.pk]
         if replacement.environment_id in (None, environment.pk): policies.append(replacement)

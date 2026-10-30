@@ -37,7 +37,7 @@ class ReviewForm(forms.ModelForm):
 def workspace(request, pk=None):
     if pk is None:
         env = Environment.objects.filter(pk=request.GET.get('environment')).first() if request.GET.get('environment','').isdigit() else Environment.objects.first()
-        return redirect('segmentation', pk=env.pk) if env else render(request,'inventory/segmentation.html',{})
+        return redirect('segmentation-pair', pk=env.pk) if env else render(request,'inventory/segmentation.html',{})
     env=get_object_or_404(Environment,pk=pk)
     snapshots=env.snapshots.filter(testing=False, imported=False).defer('report','html')
     latest=snapshots.first()
@@ -138,7 +138,7 @@ def workspace(request, pk=None):
     for key,label in [('matrix','Matrix'),('map','Map'),('priorities','Review priorities'),('changes','Changes'),('settings','Boundaries & grouping')]:
         params=request.GET.copy();params['tab']=key;params.pop('rule',None);tabs.append({'name':label,'key':key,'url':'?'+params.urlencode()})
     saved=[]
-    for view in SegmentationSavedView.objects.filter(user=request.user,environment=env): saved.append({'item':view,'url':reverse('segmentation',args=[pk])+'?'+urlencode(view.filters)})
+    for view in SegmentationSavedView.objects.filter(user=request.user,environment=env).exclude(filters__workspace='pair'): saved.append({'item':view,'url':reverse('segmentation',args=[pk])+'?'+urlencode(view.filters)})
     priority_page=Paginator(data.get('priorities',[]),table_page_size(request)).get_page(request.GET.get('page'))
     return render(request,'inventory/segmentation.html',dict(priority_page=priority_page,group_changes=group_changes,environment=env,snapshot=snap,latest=latest,snapshots=snapshots[:50],ready=ready,
         scope=scope,filters=filters,tabs=tabs,selected=selected,review_form=form,deviations=deviations,saved_views=saved,changes=changes,previous=previous,**data))

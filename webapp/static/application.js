@@ -2,7 +2,7 @@
   const make=(tag,text,className)=>{const node=document.createElement(tag);if(text)node.textContent=text;if(className)node.className=className;return node;};
   const evidenceTabs=new Map();
   window.workspaceEvidence=(body,title,row)=> {
-    const nodes=Array.from(body.children), groups=new Map([['Overview',[]],['Relationships',[]],['Technical details',[]]]);
+    const nodes=Array.from(body.children), groups=new Map([['Summary',[]],['Members',[]],['References',[]],['History',[]],['Technical details',[]]]);
     const summary=make('dl',null,'evidence-facts');
     if(row){
       if(!row.inventory_type && row.kind)summary.append(make('dt','Type'),make('dd',row.kind.replaceAll('_',' ')));
@@ -16,20 +16,22 @@
     if(row?.statistics_checked_at){const timing=make('p','Counters checked: '),time=make('time');time.dateTime=row.statistics_checked_at;time.textContent=new Date(row.statistics_checked_at).toString();if(window.workspaceTime){const template=document.createElement('template');template.innerHTML=window.workspaceTime(row.statistics_checked_at);timing.append(template.content);}else timing.append(time);groups.get('Technical details').push(timing);}
     const impactBase=document.querySelector('[data-impact-base]')?.dataset.impactBase;
     if(impactBase && row?.path && (row.kind==='group' || row.inventory_type==='Group' || row.policy_path || row.rule_count!==undefined)){
-      const link=make('a','Impact preview','button');link.href=impactBase+'?'+new URLSearchParams({path:row.path});groups.get('Overview').push(link);
+      const link=make('a','Impact preview','button');link.href=impactBase+'?'+new URLSearchParams({path:row.path});groups.get('Summary').push(link);
     }
     if(impactBase && (row?.inventory_type==='Virtual machine' || row?.inventory_type==='Tag')){
       const params=row.inventory_type==='Tag'?{action:'remove-tag',scope:row.scope||'',tag:row.name}:{action:'delete-vm',path:row.path};
-      const link=make('a','Impact preview','button');link.href=impactBase+'?'+new URLSearchParams(params);groups.get('Overview').push(link);
+      const link=make('a','Impact preview','button');link.href=impactBase+'?'+new URLSearchParams(params);groups.get('Summary').push(link);
     }
-    if(summary.children.length)groups.get('Overview').push(summary);
+    if(summary.children.length)groups.get('Summary').push(summary);
     for(const node of nodes){
       // Explicit sections are emitted by new reports. Keep older saved reports readable.
       const caption=node.querySelector(':scope > summary')?.textContent || '';
       const section=node.dataset.evidenceSection;
-      let key=section==='relationships'?'Relationships':section==='technical'?'Technical details':section==='overview'?'Overview':/reference|assignment|firewall|via group/i.test(caption)?'Relationships':/definition|condition|inventory details/i.test(caption)?'Technical details':'Overview';
+      let key=section==='relationships'?'References':section==='technical'?'Technical details':section==='overview'?'Summary':/reference|assignment|firewall|via group/i.test(caption)?'References':/definition|condition|inventory details/i.test(caption)?'Technical details':'Summary';
+      if(section==='members'||/^(resolved |explicit |group )?members\b/i.test(caption))key='Members';
+      if(section==='history'||/observation history|review history|changes since/i.test(caption))key='History';
       if(node.matches('.code-block,pre'))key='Technical details';
-      if(node.tagName==='DETAILS')node.open=key==='Overview';
+      if(node.tagName==='DETAILS')node.open=key==='Summary';
       groups.get(key).push(node);
     }
     if(row && !row.evidence_summary_only && !groups.get('Technical details').some(node=>node.matches('details,pre,.code-block')) && row.power_state===undefined){
@@ -37,7 +39,7 @@
       source.addEventListener('toggle',()=>{if(source.open&&!content.children.length)content.append(window.technicalEvidence(row));});groups.get('Technical details').push(source);
     }
     // Object references remain inside the drawer; the table is never navigated or reset.
-    for(const node of groups.get('Relationships'))node.querySelectorAll('code').forEach(code=>{
+    for(const node of groups.get('References'))node.querySelectorAll('code').forEach(code=>{
       const path=code.textContent.trim();if(!path.startsWith('/infra/')||path.includes(',')||code.closest('button'))return;
       const link=make('button',path,'evidence-object-link');link.type='button';link.onclick=()=>window.openRelatedEvidence(body,{path},path.split('/').pop());code.replaceWith(link);
     });
@@ -46,7 +48,9 @@
     const type=row?.inventory_type || row?.kind || (row?.power_state!==undefined?'vm':row?.action!==undefined?'rule':'object');
     let first=true;
     groups.forEach((items,label)=>{
-      if(!items.length)items.push(make('p',label==='Relationships'?'No relationship details recorded for this object.':'No additional details recorded.','muted'));
+      if(!items.length&&label==='Members'&&!(row?.kind==='group'||row?.inventory_type==='Group'))return;
+      if(!items.length&&label==='History')items.push(make('p','This snapshot contains point-in-time evidence. Open Finding reviews for decision and observation history.','muted'));
+      if(!items.length)items.push(make('p',label==='References'?'No relationship details recorded for this object.':'No additional details recorded.','muted'));
       const button=make('button',label), panel=make('div',null,'evidence-panel');button.type='button';
       const id='evidence-'+label.toLowerCase().replaceAll(' ','-');panel.id=id;button.id=id+'-tab';button.setAttribute('role','tab');button.setAttribute('aria-controls',id);button.setAttribute('aria-selected',String(first));button.tabIndex=first?0:-1;
       panel.setAttribute('role','tabpanel');panel.setAttribute('aria-labelledby',button.id);panel.tabIndex=0;panel.hidden=!first;first=false;panel.append(...items);tabs.append(button);body.append(panel);
@@ -94,7 +98,7 @@
     const snapshot=document.getElementById('snapshot-switcher');if(snapshot){const label=snapshot.closest('.snapshot-select'),home=label.parentElement;const place=()=>{if(mobile.matches)home.append(label);else document.getElementById('snapshot-topbar-slot').append(label);};place();mobile.addEventListener('change',place);}
     const tabs=document.querySelector('.report-section-tabs');
     const inventory=[['VMs','all-vms'],['Groups','all-groups'],['Services','all-services'],['Tags','tags-all'],['Scopes','tags-scopes']];
-    const firewall=[['Overview','dfw-overview'],['Policies','dfw-policies'],['Rules','dfw-rules']];
+    const firewall=[['Summary','dfw-overview'],['Policies','dfw-policies'],['Rules','dfw-rules']];
     const filters={
       groups:[['All groups','all-groups'],['Unused candidates','unused-groups'],['Empty groups','empty-groups'],['Incomplete membership checks','unknown-membership']],
       services:[['All services','all-services'],['Unused custom services','unused-services']],

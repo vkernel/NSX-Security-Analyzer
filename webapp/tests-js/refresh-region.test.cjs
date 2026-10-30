@@ -226,3 +226,11 @@ test('new list identities are offered without moving selected rows',async()=>{
  w.document.querySelector('[data-show-results]').click();
  assert.equal(w.document.querySelector('tr').dataset.refreshKey,'b');w.close();
 });
+
+test('refresh keeps the source of an open evidence panel while updating progress',()=>{
+ const dom=setup('<main id="root"><p>Running</p><div data-refresh-key="item-1"><details data-panel-reading="true"><summary>Verification</summary><!-- panel content --></details></div></main>'),d=dom.window.document;
+ const root=d.getElementById('root'),original=root.querySelector('details');
+ const next=d.createElement('main');next.innerHTML='<p>Completed</p><div data-refresh-key="item-1"><details><summary>Verification</summary><p>Fresh evidence</p></details></div>';
+ dom.window.RefreshRegion.replace(root,next);
+ assert.equal(root.querySelector('p').textContent,'Completed');assert.equal(root.querySelector('details'),original);dom.window.close();
+});

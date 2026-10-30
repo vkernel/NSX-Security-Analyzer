@@ -2,16 +2,16 @@
 (() => {
   const make=(tag,text)=>{const el=document.createElement(tag);if(text!==undefined)el.textContent=text;return el;};
   const text=value=>{if(typeof value==='string')return value;if(value && (value.display_name||value.name))return [value.display_name||value.name,value.path||value.id||value.external_id,...(value.ip_addresses||[])].filter(Boolean).join(' · ');return JSON.stringify(value);};
-  function section(parent,title,load){
+  function section(parent,title,load,key){
     const details=make('details'),summary=make('summary',title),input=make('input'),list=make('ul'),controls=make('div'),previous=make('button','Previous'),next=make('button','Next'),status=make('span');
-    details.className='review-disclosure';input.type='search';input.placeholder='Search this list';input.setAttribute('aria-label','Search '+title);previous.type=next.type='button';previous.className=next.className='button';
+    details.className='review-disclosure';details.dataset.evidenceKey=key||'';input.type='search';input.placeholder='Search this list';input.setAttribute('aria-label','Search '+title);previous.type=next.type='button';previous.className=next.className='button';
     controls.className='form-actions';controls.append(previous,status,next);details.append(summary,input,list,controls);parent.append(details);
     let page=0,version=0,timer;
     async function render(){const current=++version;status.textContent='Loading…';try{const data=await load(input.value,page);if(current!==version)return;list.replaceChildren(...data.items.map(v=>make('li',text(v))));status.textContent=data.count?`${page*25+1}–${Math.min((page+1)*25,data.count)} of ${data.count}`:'No entries available';previous.disabled=page===0;next.disabled=(page+1)*25>=data.count;}catch(e){status.textContent=e.message;}}
     details.addEventListener('toggle',()=>{if(details.open)render();});input.addEventListener('input',()=>{clearTimeout(timer);page=0;timer=setTimeout(render,200);});previous.onclick=()=>{page--;render();};next.onclick=()=>{page++;render();};
   }
   const saved=document.getElementById('approval-saved-sections');
-  if(saved){for(const data of JSON.parse(saved.textContent)){section(document.getElementById('saved-approval-sections'),`${data.title} (${data.available ? data.items.length : "not retained"})`,async(q,page)=>{const rows=data.items.filter(v=>text(v).toLowerCase().includes(q.toLowerCase()));return {items:rows.slice(page*25,(page+1)*25),count:rows.length};});}}
+  if(saved){for(const data of JSON.parse(saved.textContent)){section(document.getElementById('saved-approval-sections'),`${data.title} (${data.available ? data.items.length : "not retained"})`,async(q,page)=>{const rows=data.items.filter(v=>text(v).toLowerCase().includes(q.toLowerCase()));return {items:rows.slice(page*25,(page+1)*25),count:rows.length};},data.key);}}
   const root=document.querySelector('[data-live-evidence]');if(!root)return;
   const url=root.dataset.liveEvidence,status=root.querySelector('[data-live-status]'),bar=root.querySelector('progress'),form=root.querySelector('form'),button=form.querySelector('button'),results=root.querySelector('[data-live-results]');
   let timer,signature='',busy=false,failures=0;
@@ -27,7 +27,7 @@
       const facts=make('dl');facts.className='review-facts';for(const [label,value] of r.facts||[]){const item=make('div');item.append(make('dt',label),make('dd',value));facts.append(item);}results.append(facts);
       for(const error of r.errors||[])results.append(make('p',error));
       for(const change of r.changes||[])results.append(make('p',`${change.field}: ${change.before} → ${change.after}`));
-      for(const entry of r.sections||[])section(results,`${entry.title}: ${entry.count}${entry.retained<entry.count?' (first '+entry.retained+' retained)':''}`,async(q,page)=>{const u=new URL(url,location.href);u.search=new URLSearchParams({section:entry.key,q,page});return get(u);});
+      for(const entry of r.sections||[])section(results,`${entry.title}: ${entry.count}${entry.retained<entry.count?' (first '+entry.retained+' retained)':''}`,async(q,page)=>{const u=new URL(url,location.href);u.search=new URLSearchParams({section:entry.key,q,page});return get(u);},entry.key);
     }
     timer=setTimeout(refresh,active?3000:15000);
   }

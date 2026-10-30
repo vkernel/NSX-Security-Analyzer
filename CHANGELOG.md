@@ -2,6 +2,17 @@
 
 ## Development — 2026-10-30
 
+- Standardize inventory and rule evidence tabs (Summary, applicable Members, References, History and Technical details), add a shared keyboard-accessible tab controller, and simplify activity/collection diagnostics and cleanup actions. Clarify when snapshot evidence contains no review history.
+
+- Add shared record drawers for finding reviews, cleanup plans and collection diagnostics, plus compact evidence panels for naming, segmentation and deletion results. Preserve forms, reading position and full-page navigation; add naming component editing panels, single-panel scope pickers and evidence category navigation.
+
+- Separate naming policy overview and editing, add setup steps and a persistent component preview with inline issues. Add segmentation evidence summaries and a keyboard-accessible rule drawer; group secondary actions and optional details.
+
+- Add administrator naming-policy removal with explicit confirmation, revision safeguards, retained version/audit history and a separate removed-policy list. Removed policies no longer participate in assessment. Apply migration 0059.
+
+- Add VM-to-VM investigations with searchable workload pickers, explained candidate/unresolved firewall rules, IP/CIDR and protocol/port matching, bounded read-only membership checks, saved investigations and CSV export. Replace circular segmentation graphics with readable directional relationship cards.
+- Add local firewall rule proposals with explicit endpoints, intended policy/placement, owner, justification, preview, editing, discard, JSON export and revision safeguards. No NSX writes or deployment action. Apply migration 0058.
+
 - Add a read-only workload segmentation workspace with snapshot-pinned matrix/map, group and workload lookup, rule evidence, boundary review candidates, assignments and expiring exceptions, saved views, CSV export and bounded snapshot comparisons. Apply migration 0057. Configuration relationships do not establish effective access.
 
 - Replace the finding Owner filter with a searchable reviewer selector and consistent Anyone, Assigned to me and Unassigned choices. Keep controls inside the filter panel on narrow screens.

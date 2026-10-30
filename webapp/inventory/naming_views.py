@@ -12,6 +12,7 @@ from django.db import transaction
 from django.http import HttpResponse, HttpResponseForbidden, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_http_methods
+from django.utils import timezone
 from . import naming
 from .audit_events import record
 from .models import Environment, NamingPolicy, NamingPolicyVersion, NamingScopeBinding, NamingProposal, SnapshotRecord
@@ -27,6 +28,7 @@ def snapshot_version(policy, actor, action):
     policy.save()
     config = {'name': policy.name, 'environment': policy.environment_id, 'draft': policy.draft,
               'configuration': policy.configuration, 'enabled': policy.enabled,
+              'removed_at': policy.removed_at.isoformat() if policy.removed_at else None,
               'bindings': list(policy.bindings.order_by('environment_id').values('environment_id', 'scopes', 'draft_scopes'))}
     NamingPolicyVersion.objects.create(policy=policy, revision=policy.revision, actor=actor, action=action, configuration=config)
     record('naming.policy_' + action, 'NamingPolicy', policy.pk, actor=actor.pk, details={'revision': policy.revision})
@@ -63,6 +65,11 @@ def impact(policy):
 def policies(request, pk=None):
     if not request.user.is_superuser: return HttpResponseForbidden('Administrator access is required.')
     policy = get_object_or_404(NamingPolicy, pk=pk) if pk else None
+    if policy and policy.removed_at:
+        if request.method == 'POST':
+            return HttpResponse('This policy has been removed and cannot be edited or activated.', status=409)
+        return render(request, 'inventory/naming_policy_removed.html', {
+            'policy': policy, 'versions': policy.versions.select_related('actor')})
     config = policy.draft if policy else DEFAULT
     if policy and request.method == 'GET' and request.GET.get('version', '').isdigit():
         version = get_object_or_404(policy.versions, revision=request.GET['version'])
@@ -84,6 +91,8 @@ def policies(request, pk=None):
                 with transaction.atomic():
                     if policy:
                         policy = NamingPolicy.objects.select_for_update().get(pk=policy.pk)
+                        if policy.removed_at:
+                            return HttpResponse('This policy has been removed. Reload the policy list.', status=409)
                     if policy and policy.revision != form.cleaned_data['revision']:
                         error = 'The policy changed. Reload before saving; your submitted draft is shown below.'
                     else:
@@ -101,6 +110,8 @@ def policies(request, pk=None):
                 data = binding_form.cleaned_data
                 with transaction.atomic():
                     policy = NamingPolicy.objects.select_for_update().get(pk=policy.pk)
+                    if policy.removed_at:
+                        return HttpResponse('This policy has been removed. Reload the policy list.', status=409)
                     fields = {c['field'] for c in policy.draft['components'] if c['source'] == 'tag'}
                     if policy.revision != data['revision']:
                         error = 'The policy changed. Reload before editing mappings.'
@@ -118,6 +129,8 @@ def policies(request, pk=None):
         elif policy and action in ('preview', 'activate'):
             with transaction.atomic():
                 policy = NamingPolicy.objects.select_for_update().get(pk=policy.pk)
+                if policy.removed_at:
+                    return HttpResponse('This policy has been removed. Reload the policy list.', status=409)
                 preview = impact(policy)
                 key = 'naming-preview-' + str(policy.pk)
                 if action == 'preview':
@@ -137,9 +150,25 @@ def policies(request, pk=None):
                     request.session.pop(key, None)
                     messages.success(request, 'Naming policy activated for read-only assessment. No NSX or group configuration was changed.')
                     return redirect('naming-policy-edit', pk=policy.pk)
+        elif policy and action == 'remove':
+            with transaction.atomic():
+                policy = NamingPolicy.objects.select_for_update().get(pk=policy.pk)
+                if policy.removed_at or request.POST.get('revision') != str(policy.revision):
+                    return HttpResponse('Policy changed. Reload before removing.', status=409)
+                if request.POST.get('confirm_remove') != 'yes':
+                    error = 'Confirm removal before continuing.'
+                else:
+                    policy.enabled = False
+                    policy.removed_at = timezone.now()
+                    snapshot_version(policy, request.user, 'removed')
+                    request.session.pop('naming-preview-' + str(policy.pk), None)
+                    messages.success(request, 'Naming policy removed. History is retained; NSX objects are unchanged.')
+                    return redirect('naming-policies')
         elif policy and action == 'disable':
             with transaction.atomic():
                 policy = NamingPolicy.objects.select_for_update().get(pk=policy.pk)
+                if policy.removed_at:
+                    return HttpResponse('This policy has been removed. Reload the policy list.', status=409)
                 if request.POST.get('revision') != str(policy.revision):
                     error = 'Policy changed. Reload before disabling.'
                 else:
@@ -147,7 +176,7 @@ def policies(request, pk=None):
                     snapshot_version(policy, request.user, 'disabled')
                     messages.success(request, 'Naming assessment policy disabled. Observed tags and group names are unchanged.')
                     return redirect('naming-policy-edit', pk=policy.pk)
-    return render(request, 'inventory/naming_policy.html', {'policies': NamingPolicy.objects.select_related('environment'), 'policy': policy,
+    return render(request, 'inventory/naming_policy.html', {'policies': NamingPolicy.objects.filter(removed_at__isnull=request.GET.get('show') != 'removed').select_related('environment'), 'show_removed': request.GET.get('show') == 'removed', 'editing_policy': bool(policy or request.GET.get('new') or request.method == 'POST'), 'policy': policy,
         'form': form, 'formset': formset, 'binding_form': binding_form, 'preview': preview, 'error': error,
         'bindings': policy.bindings.select_related('environment') if policy else [], 'versions': policy.versions.select_related('actor')[:30] if policy else []})
 
@@ -283,7 +312,7 @@ def compliance(request, pk):
         'table_total': len(rows), 'group_type': group_type, 'warning': warning, 'totals': totals, 'error': error, 'query': query, 'status': status, 'policy_id': policy_id,
         'proposal_form': proposal_form, 'simulation': simulation, 'owner_filter': owner_filter,
         'owners': get_user_model().objects.filter(is_active=True, is_staff=True).order_by('username'),
-        'policies': NamingPolicy.objects.filter(enabled=True), 'query_string': params.urlencode()})
+        'policies': NamingPolicy.objects.filter(enabled=True, removed_at__isnull=True), 'query_string': params.urlencode()})
 
 
 @login_required

@@ -2,11 +2,11 @@
 (() => {
  const config=document.querySelector('[data-naming-selectors]');if(!config)return;
  const dialog=document.querySelector('[data-naming-picker]'),search=dialog.querySelector('[data-picker-search]'),results=dialog.querySelector('[data-picker-results]'),status=dialog.querySelector('[data-picker-status]');
- let target=null,scope='',environment='',timer,controller,opener;
+ let target=null,scope='',environment='',timer,controller,opener,panelReturn;
  function node(tag,text){const e=document.createElement(tag);e.textContent=text;return e;}
  function set(input,value){input.value=value;input.dispatchEvent(new Event('input',{bubbles:true}));input.dispatchEvent(new Event('change',{bubbles:true}));}
- function env(input){return input.closest('form')?.querySelector('[name=environment]')?.value??config.dataset.environment;}
- function close(){controller?.abort();clearTimeout(timer);dialog.close();opener?.focus();}
+ function env(input){return (input.form||input.closest('form'))?.querySelector('[name=environment]')?.value??config.dataset.environment;}
+ function close(){controller?.abort();clearTimeout(timer);if(panelReturn){panelReturn();panelReturn=null;}else dialog.close();opener?.focus();}
  dialog.querySelector('[data-picker-close]').onclick=close;
  dialog.addEventListener('cancel',()=>{controller?.abort();clearTimeout(timer);});
  dialog.querySelector('[data-picker-manual]').onclick=()=>{close();target?.focus();};
@@ -24,7 +24,7 @@
   }catch(e){if(e.name!=='AbortError')status.textContent='Evidence could not be loaded. Search again to retry, or enter a value manually.';}
  }
  search.oninput=()=>{clearTimeout(timer);controller?.abort();timer=setTimeout(load,250);};
- function pick(input,actualScope,button){target=input;scope=actualScope;environment=env(input);opener=button;search.value='';dialog.querySelector('h2').textContent=scope?'Choose a value for '+scope:'Choose a tag scope';dialog.showModal();search.focus();load();}
+ function pick(input,actualScope,button){target=input;scope=actualScope;environment=env(input);opener=button;search.value='';dialog.querySelector('h2').textContent=scope?'Choose a value for '+scope:'Choose a tag scope';panelReturn=window.WorkspacePanels?.openPicker(dialog);if(!panelReturn)dialog.showModal();search.focus();load();}
  function componentScope(form){const field=form.querySelector('[name=match_field]')?.value;const rows=[...form.querySelectorAll('.naming-component')];return rows.find(r=>r.querySelector('[name$="-field"]')?.value===field)?.querySelector('[name$="-scope"]')?.value||'';}
  function attach(input,scopeGetter,label){if(!input||input.dataset.pickerReady)return;input.dataset.pickerReady='1';const button=node('button',label);button.type='button';button.className='button naming-picker-trigger';const hint=node('small','');hint.setAttribute('role','status');button.onclick=()=>{const actual=scopeGetter();if(actual===null){hint.textContent='Choose the component scope (and category field, if applicable) first.';input.focus();return;}hint.textContent='';pick(input,actual,button);};input.after(button,hint);}
  function enhance(){
@@ -51,7 +51,8 @@
  const form=root?.closest('form'),example=document.querySelector('[data-naming-example]');let exampleTimer,exampleController;
  function schedule(){if(!form||!example)return;clearTimeout(exampleTimer);exampleController?.abort();example.textContent='Updating example…';exampleTimer=setTimeout(refreshExample,600);}
  async function refreshExample(){exampleController=new AbortController();const active=exampleController;const data=new FormData(form);data.set('policy_id',config.dataset.policy);const selected=form.querySelector('[name=environment]');if(selected)data.set('environment',selected.value);
-  try{const response=await fetch(config.dataset.exampleUrl,{method:'POST',body:data,signal:active.signal,headers:{Accept:'application/json'}});if(!response.ok)throw Error();const result=await response.json();if(active!==exampleController)return;example.replaceChildren();if(result.name){example.append(node('strong',`${result.environment} · ${result.name} → ${result.proposed||'Needs review'}`));example.append(node('p',result.status));const list=node('ol','');for(const c of result.components)list.append(node('li',`${c.field}: ${c.observed} → ${c.output||'Unavailable'}${c.issue?' · '+c.issue:''}`));example.append(list);}example.append(node('p',result.message));if(result.warning)example.append(node('p',result.warning));}
+  try{const response=await fetch(config.dataset.exampleUrl,{method:'POST',body:data,signal:active.signal,headers:{Accept:'application/json'}});if(!response.ok)throw Error();const result=await response.json();if(active!==exampleController)return;example.replaceChildren();if(result.name){example.append(node('strong',`${result.environment} · ${result.name} → ${result.proposed||'Needs review'}`));example.append(node('p',result.status));const list=node('ol','');for(const c of result.components){const item=node('li','');item.className=c.issue?'naming-token naming-token-error':'naming-token';item.append(node('strong',c.field),node('span',`${c.observed} → ${c.output||'Unavailable'}`));if(c.issue)item.append(node('small',c.issue));list.append(item);}
+for(const row of root.children){row.querySelector('[data-component-feedback]')?.remove();const field=row.querySelector('[name$="-field"]')?.value;const issue=result.components.find(c=>c.field===field&&c.issue);if(issue){const hint=node('p',`${issue.field}: ${issue.issue} (observed: ${issue.observed})`);hint.dataset.componentFeedback='';hint.className='notice warning';row.append(hint);}}example.append(list);}example.append(node('p',result.message));if(result.warning)example.append(node('p',result.warning));}
   catch(e){if(e.name!=='AbortError')example.textContent='Example unavailable. Edit a field to retry, or save and use Preview affected groups.';}
  }
  form?.addEventListener('input',schedule);form?.addEventListener('change',schedule);schedule();

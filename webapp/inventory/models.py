@@ -656,6 +656,7 @@ class NamingPolicy(models.Model):
     draft = models.JSONField(default=dict)
     configuration = models.JSONField(default=dict)
     enabled = models.BooleanField(default=False)
+    removed_at = models.DateTimeField(null=True, blank=True)
     revision = models.PositiveIntegerField(default=0)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -736,3 +737,18 @@ class SegmentationSavedView(models.Model):
     environment = models.ForeignKey(Environment, on_delete=models.CASCADE)
     name = models.CharField(max_length=100)
     filters = models.JSONField(default=dict)
+
+
+class FirewallRuleProposal(models.Model):
+    """Local planning artifact. Never accepted by any NSX execution workflow."""
+    environment = models.ForeignKey(Environment, on_delete=models.CASCADE)
+    snapshot = models.ForeignKey(Snapshot, null=True, on_delete=models.SET_NULL)
+    creator = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name='firewall_proposals')
+    owner = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL, related_name='assigned_firewall_proposals')
+    name = models.CharField(max_length=200)
+    configuration = models.JSONField(default=dict)
+    justification = models.TextField()
+    state = models.CharField(max_length=12, default='draft', choices=[('draft','Draft'),('discarded','Discarded')])
+    revision = models.PositiveIntegerField(default=1)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)

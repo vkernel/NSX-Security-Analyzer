@@ -1,0 +1,5 @@
+<nav class="seg-tabs seg-primary" aria-label="Segmentation views">
+<a href="{% url 'segmentation-pair' environment.pk %}{% if snapshot %}?snapshot={{ snapshot.pk }}{% endif %}" {% if request.resolver_match.url_name == 'segmentation-pair' %}aria-current="page"{% endif %}>Between workloads</a>
+<a href="{% url 'segmentation' environment.pk %}?tab=map{% if snapshot %}&amp;snapshot={{ snapshot.pk }}{% endif %}" {% if request.resolver_match.url_name == 'segmentation' and filters.tab != 'priorities' %}aria-current="page"{% endif %}>Application map</a>
+<a href="{% url 'segmentation' environment.pk %}?tab=priorities{% if snapshot %}&amp;snapshot={{ snapshot.pk }}{% endif %}" {% if filters.tab == 'priorities' %}aria-current="page"{% endif %}>Review priorities</a>
+</nav>
