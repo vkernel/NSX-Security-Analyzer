@@ -567,12 +567,10 @@ class ReferenceCleanupTests(TestCase):
         self.assertContains(response, reverse('deletion-reference-cleanup', args=[self.item.pk]))
         self.assertTrue(any(row['id'] == 'cleanup-' + str(self.item.pk) for row in self.client.get(reverse('notifications')).json()['items']))
         self.approve(second, revalidate=False)
-        self.assertEqual(self.item.status, 'cleanup_recheck')
+        self.assertEqual(self.item.status, 'verified')
         self.batch.refresh_from_db()
-        self.assertEqual(self.batch.status, 'preview_queued')
+        self.assertEqual(self.batch.status, 'preview_ready')
         self.nsx.http.request.assert_not_called()
-        self.batch.status = 'checking'; self.batch.save()
-        with self.live(): d.run(self.batch.pk)
         self.item.refresh_from_db(); self.batch.refresh_from_db()
         self.assertEqual(self.item.status, 'verified')
         self.assertEqual(len(self.item.cleanup_approvals), 2)
@@ -581,7 +579,9 @@ class ReferenceCleanupTests(TestCase):
         self.assertTrue(any('Ready to confirm' in row['label'] for row in self.client.get(reverse('notifications')).json()['items']))
 
     def test_changed_plan_during_revalidation_requires_new_review(self):
-        self.preview(); self.approve(revalidate=False)
+        self.preview()
+        self.item.verified_at = timezone.now() - timedelta(minutes=11); self.item.save()
+        self.approve(revalidate=False)
         self.state[self.rule['path']]['action'] = 'DROP'
         self.batch.refresh_from_db(); self.batch.status = 'checking'; self.batch.save()
         with self.live(): d.run(self.batch.pk)
@@ -620,7 +620,9 @@ class ReferenceCleanupTests(TestCase):
 
 
     def test_revalidation_refreshes_approved_peers_but_not_pending_reviews(self):
-        self.preview(); self.approve(revalidate=False)
+        self.preview()
+        self.item.verified_at = timezone.now() - timedelta(minutes=11); self.item.save()
+        self.approve(revalidate=False)
         peer = DeletionItem.objects.create(batch=self.batch, finding=self.finding, path='/infra/services/peer',
                                            name='Peer', revision=1, status='verified')
         pending = DeletionItem.objects.create(batch=self.batch, finding=self.finding, path='/infra/services/pending',
@@ -824,3 +826,19 @@ class ReferenceCleanupTests(TestCase):
         self.assertEqual(plan, self.item.cleanup_plan[0])
         plan['action'] = 'delete_rule'; plan['fields'][0]['after'] = []
         self.assertIn('only source object', ' '.join(cleanup.readable_changes(plan)))
+
+    def test_refresh_retains_cleanup_decisions_when_only_server_revision_changes(self):
+        self.preview(); self.approve()
+        decisions=deepcopy(self.item.cleanup_approvals)
+        self.item.verified_at=timezone.now()-timedelta(minutes=11);self.item.save()
+        self.state[self.group['path']]['_revision']+=1
+        with patch.object(d,'approvals_valid',return_value={}):
+            response=self.client.post(reverse('deletion-detail',args=[self.batch.pk]), {'action':'refresh_verification'})
+        self.assertEqual(response.status_code,302)
+        self.batch.refresh_from_db();self.batch.status='checking';self.batch.save()
+        with self.live(): d.run(self.batch.pk)
+        self.item.refresh_from_db()
+        self.assertEqual(self.item.status,'verified',self.item.message)
+        self.assertEqual(self.item.cleanup_approvals,decisions)
+        cleanup.validate_approvals(self.item)
+        self.nsx.http.request.assert_not_called()

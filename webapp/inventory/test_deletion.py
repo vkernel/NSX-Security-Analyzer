@@ -549,6 +549,63 @@ class DeletionTests(TestCase):
             search.return_value=([obj],{'mode':'explicit_types'})
             with self.assertRaises(ValidationError): d.validate_live(client,self.finding)
 
+    def test_read_only_batch_cache_reuses_search_but_never_failed_or_expired_evidence(self):
+        cache={'targets':[self.obj['path']]}
+        client=Mock(inventory_warnings=[],preview_dependency_cache=cache)
+        client.get.return_value=self.obj
+        with patch.object(d,'approvals_valid',return_value={}), patch.object(d.collector,'objects',return_value=[]), \
+             patch.object(d.collector,'verified_configuration_search',return_value=([self.obj],{'mode':'all_types'})) as search, \
+             patch.object(d.collector,'collect_references',wraps=d.collector.collect_references) as references:
+            d.validate_live(client,self.finding)
+            d.validate_live(client,self.finding)
+            self.assertEqual(search.call_count,1)
+            self.assertEqual(references.call_count,1)
+            cache['evidence']['completed']-=61
+            d.validate_live(client,self.finding)
+            self.assertEqual(search.call_count,2)
+            cache['evidence']['completed']-=61
+            search.side_effect=ValidationError('Search incomplete')
+            with self.assertRaises(ValidationError): d.validate_live(client,self.finding)
+            self.assertNotIn('evidence',cache)
+
+    def test_expired_standard_preview_refresh_retains_approvals_and_never_executes(self):
+        self.batch.status='preview_ready';self.batch.confirmed_at=None;self.batch.save()
+        self.item.verified_at=timezone.now()-timedelta(minutes=11);self.item.save()
+        approvals=self.finding.approvals.copy()
+        url=reverse('deletion-detail',args=[self.batch.pk])
+        with patch.object(d,'approvals_valid',return_value={}):
+            response=self.client.post(url,{'action':'refresh_verification'})
+            self.assertEqual(response.status_code,302)
+            self.item.refresh_from_db();self.batch.refresh_from_db()
+            self.assertTrue(self.item.verification['refresh_requested'])
+            self.assertEqual(self.batch.status,'preview_queued')
+            self.batch.status='checking';self.batch.save()
+            client=Mock(inventory_warnings=[],cleanup_plan=[],search_diagnostics={})
+            with patch.object(d,'connection') as connect, patch.object(d,'validate_live',return_value=self.obj), patch.object(d,'delete_once') as delete:
+                connect.return_value.__enter__.return_value=client
+                d.run(self.batch.pk)
+                delete.assert_not_called()
+        self.item.refresh_from_db();self.finding.refresh_from_db();self.batch.refresh_from_db()
+        self.assertEqual(self.item.status,'verified',self.item.message)
+        self.assertEqual(self.finding.approvals,approvals)
+        self.assertNotIn('refresh_requested',self.item.verification)
+        self.assertIn('timings',self.item.verification)
+        self.assertIsNone(self.batch.confirmed_at)
+
+    def test_execute_never_uses_preview_dependency_cache(self):
+        client=Mock(inventory_warnings=[],cleanup_plan=[])
+        def check(current,finding):
+            self.assertIsNone(current.preview_dependency_cache)
+            raise ValidationError('New references found during fresh execution check')
+        with patch.object(d,'approvals_valid',return_value={}), patch.object(d,'connection') as connect, \
+             patch.object(d,'validate_live',side_effect=check), patch.object(d,'delete_once') as delete:
+            connect.return_value.__enter__.return_value=client
+            d.process_item(self.item,execute=True,preview_cache={'evidence':'old'})
+            delete.assert_not_called()
+        self.item.refresh_from_db()
+        self.assertEqual(self.item.status,'blocked')
+
+
 @override_settings(STORAGES={'staticfiles': {'BACKEND': 'django.contrib.staticfiles.storage.StaticFilesStorage'}})
 class RemainingWorkTests(TestCase):
     def setUp(self):

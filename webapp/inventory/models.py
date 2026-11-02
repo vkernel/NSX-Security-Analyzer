@@ -577,6 +577,7 @@ class InitialPasswordChange(models.Model):
 
 
 class DeletionBatch(models.Model):
+    execution_intent = models.JSONField(default=dict, blank=True)
     confirmed_actor_id = models.CharField(max_length=32, blank=True, default='')
     confirmed_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, on_delete=models.SET_NULL, related_name='confirmed_nsx_deletions')
     source_request = models.ForeignKey('self', null=True, blank=True, on_delete=models.SET_NULL, related_name='execution_requests')

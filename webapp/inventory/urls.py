@@ -1,5 +1,5 @@
 from django.urls import path
-from . import approval_evidence, naming_views, segmentation_views, workload_views
+from . import deletion_plan, approval_evidence, naming_views, segmentation_views, workload_views
 from . import storage_views, activity_views, authentication_settings, keycloak_settings, system_health, views, history_views, diagnostic_views, report_views, impact, transient, deletion, task_cancellation, bulk_actions
 
 urlpatterns = [
@@ -23,6 +23,7 @@ urlpatterns = [
     path('environments/<int:pk>/deletions/history/', deletion.history, name='deletion-history'),
     path('environments/<int:pk>/deletions/', deletion.selection, name='deletion-selection'),
     path('deletion-items/<int:pk>/configuration/', deletion.saved_configuration, name='deletion-configuration'),
+    path('deletions/<uuid:pk>/plan/', deletion_plan.review, name='deletion-plan'),
     path('deletions/<uuid:pk>/', deletion.detail, name='deletion-detail'),
     path('administration/transient-emptiness/', transient.settings_view, name='transient-emptiness'),
     path("snapshots/<uuid:pk>/impact/", impact.impact_preview, name="impact-preview"),

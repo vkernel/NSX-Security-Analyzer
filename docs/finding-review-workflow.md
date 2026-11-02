@@ -543,7 +543,7 @@ API references: [Group deletion](https://developer.broadcom.com/xapis/nsx-t-data
    does not delete anything. Review each result and its saved-snapshot impact link.
 3. When verified objects are available, open **Review permanent deletion**, check
    their names and paths, enter a change ticket and explicitly confirm. The preview
-   expires ten minutes after verification; request a fresh preview if it expires.
+   expires ten minutes after verification; use Refresh verification to recheck the same request while preserving unchanged approvals.
 4. Refresh the result page after execution. Check every row; a completed batch does
    not mean every object was deleted.
 
@@ -822,7 +822,7 @@ with a required reason. Existing finding decisions do not approve firewall edits
 The requesting administrator returns to the deletion request and explicitly confirms
 both the rule changes and deletion with a change ticket. Cleanup approvals are
 asynchronous and do not expire after ten minutes. Completing the required approvals
-queues fresh read-only verification in the existing preview worker. Only the exact
+keeps a preview that is still within its ten-minute verification window ready for confirmation, without an additional scan. If verification is stale, it queues fresh read-only verification in the existing preview worker. Only the exact
 unchanged group and plan retain their approvals. Changed objects, references, rules
 or invalid approvals block execution and require a new review. After successful
 verification, the requester receives a **Ready to confirm** notification and has ten
@@ -907,7 +907,7 @@ underlying issue or create a new preview and obtain fresh approvals.
 
 The first reviewer sees **Your approval is recorded** and cannot approve twice. A
 second eligible administrator sees **Submit second approval**. After a successful
-second approval, the task moves to read-only revalidation. Only the requester sees
+second approval, the task becomes ready to confirm while verification remains fresh; stale verification queues a read-only recheck. Only the requester sees
 **Continue to execution confirmation** when verification passes.
 
 Cleanup task rows use one primary review action. **More** contains links to the
@@ -1035,7 +1035,7 @@ exports download JSON without changing NSX.
 | --- | --- |
 | My work | Assign unassigned findings to yourself; reassign or release owned work; export evidence; administrators can preview deletion of ready findings from one environment. |
 | Finding reviews | Assign unassigned findings; reassign owned findings with a reason; release findings; export evidence; preview approved deletion. |
-| Firewall reference cleanup tasks | Cancel pending plans with a reason or export their plans and outcomes. Each plan still requires its own approval review. |
+| Firewall reference cleanup tasks | Cancel pending plans with a reason or export their plans and outcomes. The complete-plan page can record approvals together; each plan retains its own distinct-approver requirement. |
 | Deletion history | Select requests to export all their object outcomes or download saved configurations and cleanup plans. Missing configurations are explicitly marked. |
 | Inventory groups and services | Export selected saved objects, compare their details side by side, or view links to their related finding reviews. No deletion is offered here. |
 | Collections and environment collection history | Export selected diagnostics or cancel queued collections with a reason. Running collections must be stopped individually. |
@@ -1048,3 +1048,52 @@ change. Results show succeeded, skipped and failed items, with individual reason
 Cancellation preserves history and cannot cancel cleanup execution already started.
 A deletion preview remains read-only and uses the existing live checks and separate
 execution confirmation.
+
+## Faster previews and retained approvals
+
+Read-only batch previews share a complete dependency inventory and reference lookup for up to 60 seconds, measured from scan completion. The cache exists only inside one worker job. Failed, limited or warning-bearing scans are not shared. Expired entries are discarded before a new scan. Identity, approvals, target configuration, finding conditions and membership are checked separately for every object. Target conditions and membership remain separate live checks, including when an inventory is shared.
+
+On an unconfirmed request, eligible executors can select **Refresh verification · retain unchanged approvals**. This queues read-only checks in the existing background preview worker; it does not authorize execution or send a DELETE. Only unchanged object configuration and cleanup plans retain their decisions, and current reviewer eligibility and approval requirements are checked again. Rejected, cancelled, failed and partially executed requests cannot be resumed through this action.
+
+Completing cleanup approvals does not repeat a preview that remains fresh. The user still confirms the exact rule changes and object deletions with a ticket. Execution never uses the preview cache: full fresh dependency checks and immediate identity/configuration checks remain in place, including after reference cleanup. Read-only previews check up to three targets concurrently on PostgreSQL, with synchronized shared inventory access. NSX mutations remain sequential.
+
+Verification details and audit outcomes record identity/approval time, dependency time, remaining condition/reference time, total processing time and whether the preview reused a shared scan. Progress text identifies the current check. Use these measurements to determine remaining bottlenecks before changing execution concurrency. These durations exclude waiting in the worker queue. No production speedup is assumed from test fixtures.
+
+
+### Complete-plan review and optional execution authorization
+
+**Review complete plan & execution options** shows the selected object deletions and
+exact firewall edits together. An administrator can record their cleanup approval for
+all pending plans on this screen. Each plan still requires its configured number of
+distinct approvers; existing finding approvals remain required.
+
+The optional **Execute after final approval** form requires a change ticket and an
+explicit checkbox authorizing the exact permanent changes. It expires after one hour.
+The requester or a recorded approver can authorize; current execution policy must
+permit that authorizing administrator to execute every object when approvals finish.
+Changed configuration, changed plans, lost permissions or failed checks stop the
+operation. Stale preview checks refresh automatically before queuing execution.
+The normal worker then performs full fresh execution checks. Authorization can be
+revoked while waiting; once queued, use cancellation on the deletion request.
+Without this opt-in, confirmation remains manual. No failed writes are retried.
+
+A targeted final reference query cannot currently guarantee complete dependency
+coverage. Execution therefore retains the full scan, including after firewall cleanup.
+
+### Measure performance after deployment
+
+Apply migration `0060_deletion_execution_intent` through the normal deployment
+migration step before starting the updated web and worker processes. Publishing an
+image does not update a running Kubernetes deployment.
+
+Run this read-only command in an updated web container:
+
+```sh
+python manage.py deletion_performance --days 7 --json
+```
+
+It reports preview/execution sample counts and p50/p95 durations, without object
+names or configurations. It uses the latest attempt per deletion item (at most 10,000
+items), so execution may replace an earlier preview sample. Queue time is excluded.
+Compare equivalent batch sizes and environments; production savings must be measured
+rather than inferred from mocked tests.
