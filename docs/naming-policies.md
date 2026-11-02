@@ -77,3 +77,32 @@ An administrator can open a policy, expand **Remove policy**, acknowledge the im
 ### Guided editing
 
 Choose **New policy** from the overview, or open an existing policy. Follow Choose scope → Build name → Preview impact → Activate. The illustrative name preview remains visible on desktop; component issues appear beside their component. Save the draft before previewing full impact. Optional environment mappings and version history are expandable.
+
+
+## Match a VDI scope with any user value
+
+Open **Naming compliance → Naming policies**, edit the VDI policy, and choose
+**1. Scope**. Set **Match condition** to **Scope exists — any value**. Set
+**Category field** to the logical field of the tag component (for example `VDI user`),
+and leave **Category tag value** blank. Under **2. Name components**, set that
+component's source to **Definition tag / reviewed scope value** and its default
+scope to `VDI_Gebruiker`. Scope spelling is case-sensitive; active environment scope
+mappings are respected. This matches any nonempty observed value in that scope.
+
+Use fixed text `SZ-TRD_VDI00-C-P0_VDI-DC_POL` as the first component with the extended
+character format, followed by the required VDI user component with digits-only format,
+and use a hyphen separator. Leave value mappings empty for arbitrary user IDs.
+Save the draft, preview affected groups, then activate it. Draft edits alone do not
+change assessments.
+
+Keep the general dynamic-group policy's Category field/value blank as the fallback.
+Environment-specific policies still precede global policies, and group-type policies
+precede all-type policies. Within that priority, exact category matches precede
+scope-exists matches, which precede general defaults. Equally specific matches are
+reported as ambiguous; no policy is chosen by name or creation order. Existing policies
+without a Match condition retain their previous exact-category behavior.
+
+Filtering by either conflicting policy includes ambiguous groups. Outcome filters
+still apply; use **Show all outcomes and policies** in an empty result to clear them.
+The impact preview warns explicitly when activation would turn compliant groups into
+ambiguous groups. No NSX tags, memberships or names are changed by these settings.

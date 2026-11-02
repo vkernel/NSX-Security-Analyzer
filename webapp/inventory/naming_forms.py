@@ -9,6 +9,7 @@ class PolicyForm(forms.Form):
     group_type = forms.ChoiceField(choices=[('all', 'All group types'), ('dynamic', 'Dynamic'), ('static', 'Static'), ('mixed', 'Mixed / nested')], initial='all')
     separator = forms.ChoiceField(choices=[('-', 'Hyphen (-)'), ('_', 'Underscore (_)'), ('.', 'Dot (.)'), ('', 'No separator')], required=False)
     max_length = forms.IntegerField(min_value=1, max_value=255, initial=63, label='Maximum name length')
+    match_mode = forms.ChoiceField(choices=[('exact', 'Exact category value'), ('exists', 'Scope exists — any value')], required=False, initial='exact', label='Match condition', help_text='For Scope exists, select the logical field of a tag component below; leave category value blank. Leave category field blank for a general fallback.')
     match_field = forms.CharField(max_length=64, required=False, label='Category field', help_text='Optional logical field below. Leave blank to cover all groups.')
     match_value = forms.CharField(max_length=256, required=False, label='Category tag value', help_text='Exact observed value, before value mapping.')
     revision = forms.IntegerField(widget=forms.HiddenInput, initial=0)
@@ -59,10 +60,15 @@ def configuration(form, formset):
     field = form.cleaned_data.get('match_field', '')
     if field and not any(r['field'] == field and r['source'] == 'tag' for r in rows):
         form.add_error('match_field', 'Choose the logical name of a tag component below.')
-    if bool(field) != bool(form.cleaned_data.get('match_value')):
+    mode = form.cleaned_data.get('match_mode') or 'exact'
+    if mode == 'exists' and not field:
+        form.add_error('match_field', 'Choose a tag component logical field for Scope exists.')
+    if mode == 'exists' and form.cleaned_data.get('match_value'):
+        form.add_error('match_value', 'Leave category value blank when matching any value in a scope.')
+    if mode == 'exact' and bool(field) != bool(form.cleaned_data.get('match_value')):
         form.add_error('match_value', 'Provide both category field and value, or leave both blank.')
     return {'target': 'group', 'group_type': form.cleaned_data['group_type'], 'separator': form.cleaned_data['separator'], 'max_length': form.cleaned_data['max_length'],
-            'match_field': field, 'match_value': form.cleaned_data.get('match_value', ''), 'components': rows}
+            'match_mode': mode, 'match_field': field, 'match_value': form.cleaned_data.get('match_value', ''), 'components': rows}
 
 
 class BindingForm(forms.Form):

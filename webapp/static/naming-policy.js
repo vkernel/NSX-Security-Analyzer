@@ -8,7 +8,22 @@
  add.onclick=()=>{const n=Number(total.value);if(n>=16){status.textContent='Up to 16 components are supported. Remove components and save before adding more.';return;}
  const template=document.getElementById('naming-empty-component').innerHTML.replaceAll('__prefix__',String(n));
  const container=document.createElement('div');container.innerHTML=template;root.append(container.firstElementChild);total.value=n+1;order();root.lastElementChild.querySelector('input').focus();};
- root.addEventListener('input',event=>{const row=event.target.closest('fieldset');if(row&&event.target.name.endsWith('-field'))row.querySelector('summary').textContent=event.target.value||'New field';});
+ // Bind to the row itself: the sidebar moves it outside this list and form.
+ const attached=new WeakSet();
+ function attach(row){
+  if(attached.has(row))return;attached.add(row);
+  const value=key=>row.querySelector(`[name$="-${key}"]`)?.value||'';
+  function summary(){
+   const source=value('source');
+   const detail=source==='fixed'?`Fixed text: ${value('literal')||'Not set'}`:
+    source==='tag'?`Tag scope: ${value('scope')||'Not set'}`:
+    source==='identity'?'Group path suffix':source==='type'?'Group type':'Choose a source';
+   row.querySelector('summary').textContent=`${value('field')||'New field'} · ${detail}`;
+  }
+  row.addEventListener('input',summary);row.addEventListener('change',summary);summary();
+ }
+ function enhance(){root.querySelectorAll('.naming-component').forEach(attach);}
+ enhance();new MutationObserver(enhance).observe(root,{childList:true});
  root.addEventListener('click',event=>{const button=event.target.closest('[data-move]');if(!button)return;const row=button.closest('fieldset');
  if(button.dataset.move==='up'&&row.previousElementSibling)row.previousElementSibling.before(row);
  if(button.dataset.move==='down'&&row.nextElementSibling)row.nextElementSibling.after(row);

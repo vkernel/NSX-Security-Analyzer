@@ -87,6 +87,48 @@ class NamingTests(TestCase):
         self.add_vm('vm-2','PRD-RTM',[])
         self.assertEqual(self.rows()[0]['status'], 'Duplicate proposed name')
 
+    def test_scope_exists_draft_validation_and_persistence(self):
+        data=self.payload();data.update(match_mode='exists',match_field='Environment',match_value='')
+        url=reverse('naming-policy-edit',args=[self.policy.pk])
+        self.assertEqual(self.client.post(url,data).status_code,302)
+        self.policy.refresh_from_db();self.assertEqual(self.policy.draft['match_mode'],'exists')
+        data['revision']=self.policy.revision;data['match_value']='Production'
+        self.assertContains(self.client.post(url,data),'Leave category value blank')
+        data.update(match_field='',match_value='')
+        self.assertContains(self.client.post(url,data),'Choose a tag component logical field')
+
+    def test_scope_exists_matches_any_value_and_falls_back_when_absent(self):
+        config=copy.deepcopy(self.config);config.update(match_mode='exists',match_field='Environment',match_value='')
+        specific=NamingPolicy.objects.create(name='Scope policy',enabled=True,configuration=config,draft=config)
+        self.assertEqual(self.rows()[0]['policy'].pk,specific.pk)
+        self.vm.data['configuration']=self.definition([{'scope':'Environment','tag':'Testing'}]);self.vm.save()
+        self.assertEqual(self.rows()[0]['policy'].pk,specific.pk)
+        self.vm.data['configuration']=self.definition([{'scope':'Other','tag':'Testing'}]);self.vm.save()
+        self.assertEqual(self.rows()[0]['policy'].pk,self.policy.pk)
+
+    def test_exact_category_precedes_scope_exists_and_bindings_are_respected(self):
+        config=copy.deepcopy(self.config);config.update(match_mode='exists',match_field='Environment',match_value='')
+        scope_policy=NamingPolicy.objects.create(name='Scope',enabled=True,configuration=config,draft=config)
+        config=copy.deepcopy(config);config.update(match_mode='exact',match_value='Production')
+        exact=NamingPolicy.objects.create(name='Exact',enabled=True,configuration=config,draft=config)
+        self.assertEqual(self.rows()[0]['policy'].pk,exact.pk)
+        exact.enabled=False;exact.save()
+        NamingScopeBinding.objects.create(policy=scope_policy,environment=self.env,scopes={'Environment':'Missing'},draft_scopes={})
+        self.assertEqual(self.rows()[0]['policy'].pk,self.policy.pk)
+
+    def test_conflicting_policy_filter_keeps_rows_and_preview_warns(self):
+        self.vm.name='PRD-RTM';self.vm.save()
+        self.assertEqual(self.rows()[0]['status'],'Compliant')
+        other=NamingPolicy.objects.create(name='Conflict',enabled=False,configuration={},draft=self.config)
+        from .naming_views import impact
+        self.assertEqual(impact(other)['summaries'][0]['new_conflicts'],1)
+        other.configuration=self.config;other.enabled=True;other.save()
+        for policy in (self.policy,other):
+            response=self.client.get(self.url(),{'policy':policy.pk})
+            self.assertEqual(response.context['page'].paginator.count,1)
+            self.assertContains(response,'Ambiguous policy')
+        self.assertContains(self.client.get(self.url(),{'status':'Compliant'}),'Show all outcomes and policies')
+
     def test_duplicate_policy_is_not_silently_selected(self):
         NamingPolicy.objects.create(name='Conflict', enabled=True, configuration=self.config, draft=self.config)
         self.assertEqual(self.rows()[0]['status'], 'Ambiguous policy')

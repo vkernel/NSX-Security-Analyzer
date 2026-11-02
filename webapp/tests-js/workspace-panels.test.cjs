@@ -5,3 +5,20 @@ test('evidence categories show one section without deleting other content',()=>{
 test('modified clicks keep normal navigation and regular click opens one record frame',()=>{const dom=setup(),d=dom.window.document,a=d.querySelector('[data-record-panel]');a.dispatchEvent(new dom.window.MouseEvent('click',{bubbles:true,ctrlKey:true,cancelable:true}));assert.equal(d.querySelector('.workspace-panel').open,false);a.click();assert.equal(d.querySelectorAll('[data-workspace-frame]').length,1);assert.equal(d.querySelector('[data-workspace-frame]').src,'https://example.test/finding/1');dom.window.close();});
 
  test('component validation restores controls before focusing the invalid field',()=>{const dom=setup(`<nav class="workspace-steps"><a href="#policy-components">Components</a></nav><section class="naming-editor"><form method="post"><div class="form-grid"><input name="policy_name"></div><h3 id="policy-components">Components</h3><p>Help</p><div data-naming-components><fieldset class="naming-component"><details><summary>Component</summary><input name="components-0-scope" required></details></fieldset></div><button data-add-component type="button">Add</button><p data-component-status></p></form></section>`),d=dom.window.document;d.querySelector('[data-step=components]').click();d.querySelector('.naming-component summary').click();const field=d.querySelector('[name="components-0-scope"]');assert.equal(field.closest('dialog').open,true);field.dispatchEvent(new dom.window.Event('invalid',{cancelable:true}));assert.equal(field.closest('dialog'),null);assert.equal(field.closest('details').open,true);assert.equal(d.querySelector('[data-naming-components]').hidden,false);dom.window.close();});
+
+test('component summary tracks sidebar edits and keeps edited values in the draft',()=>{
+ const dom=setup(`<section class="naming-editor"><form method="post"><div class="form-grid"></div><h3 id="policy-components">Components</h3><p>Help</p><input name="components-TOTAL_FORMS" value="1"><div data-naming-components><fieldset class="naming-component"><details><summary>Old summary</summary><input name="components-0-field" value="Location"><select name="components-0-source"><option value="tag">Tag</option><option value="fixed">Fixed</option></select><input name="components-0-scope" value="Location"><input name="components-0-literal"><input name="components-0-ORDER" value="1"></details></fieldset></div><button data-add-component type="button">Add</button><p data-component-status></p></form></section>`),d=dom.window.document;
+ dom.window.eval(fs.readFileSync(path.join(__dirname,'../static/naming-policy.js'),'utf8'));
+ d.querySelector('[data-step=components]').click();
+ const row=d.querySelector('.naming-component'),summary=row.querySelector('summary'),form=row.closest('form');summary.click();
+ assert.ok(row.closest('dialog'));
+ const edit=(key,value,type='input')=>{const input=row.querySelector(`[name$="-${key}"]`);input.value=value;input.dispatchEvent(new dom.window.Event(type,{bubbles:true}));};
+ edit('field','VDI user');edit('scope','VDI_Gebruiker');
+ assert.equal(summary.textContent,'VDI user · Tag scope: VDI_Gebruiker');
+ edit('source','fixed','change');edit('literal','SZ-TRD_VDI00-C-P0_VDI-DC_POL');
+ assert.equal(summary.textContent,'VDI user · Fixed text: SZ-TRD_VDI00-C-P0_VDI-DC_POL');
+ assert.equal(new dom.window.FormData(form).get('components-0-literal'),'SZ-TRD_VDI00-C-P0_VDI-DC_POL');
+ d.querySelector('.workspace-panel footer button').click();
+ assert.equal(row.closest('form'),form);assert.match(summary.textContent,/Fixed text: SZ-/);
+ dom.window.close();
+});

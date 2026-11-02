@@ -125,7 +125,11 @@ def evaluate(group, policies, bindings):
         match_field = config.get('match_field')
         if match_field:
             component = next((c for c in config['components'] if c['field'] == match_field), None)
-            if not component or config.get('match_value') not in values[scope(component, bindings.get(policy.pk, {}))]:
+            if not component: continue
+            observed = values[scope(component, bindings.get(policy.pk, {}))]
+            if config.get('match_mode', 'exact') == 'exists':
+                if not any(observed): continue
+            elif config.get('match_value') not in observed:
                 continue
         candidates.append(policy)
     # Explicit environment overrides precede global rules; category rules precede defaults.
@@ -135,7 +139,9 @@ def evaluate(group, policies, bindings):
     candidates = typed or candidates
     specific = [p for p in candidates if p.configuration.get('match_field')]
     candidates = specific or candidates
-    row = dict(group, proposed='', policy=None, status='No applicable policy', reasons=[], components=[])
+    exact = [p for p in candidates if p.configuration.get('match_field') and p.configuration.get('match_mode', 'exact') == 'exact']
+    candidates = exact or candidates
+    row = dict(group, proposed='', policy=None, status='No applicable policy', reasons=[], components=[], matching_policy_ids=[str(p.pk) for p in candidates])
     if not candidates:
         return row
     if len(candidates) != 1:

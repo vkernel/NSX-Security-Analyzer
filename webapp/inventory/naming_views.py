@@ -50,6 +50,7 @@ def impact(policy):
             if len(examples) < 40 and (old.get('proposed') != row['proposed'] or old.get('status') != row['status'] or row['status'] != 'Compliant'):
                 examples.append({'environment': env.name, 'name': row['name'], 'before': old.get('proposed', ''), 'after': row['proposed'], 'status': row['status'], 'reasons': row['reasons']})
         summaries.append({'environment': env, 'counts': naming.counts(after), 'total': len(after), 'warning': warning,
+                          'new_conflicts': transitions[('Compliant', 'Ambiguous policy')],
                           'transitions': [{'before': a, 'after': b, 'count': count} for (a, b), count in sorted(transitions.items())]})
         stamp.append([env.pk, str(old_snapshot.pk) if old_snapshot else '', str(snapshot.pk) if snapshot else '', warning,
                       [(r['identity'], r['baseline'], r['status'], r['proposed']) for r in after]])
@@ -303,7 +304,7 @@ def compliance(request, pk):
     owner_filter = request.GET.get('owner', '')
     filtered = [r for r in rows if (not query or query.casefold() in (r['name']+' '+r['identity']+' '+str(r['observed_tags'])).casefold())
                 and (not group_type or r['group_type'] == group_type)
-                and (not status or r['status'] == status) and (not policy_id or r['policy'] and str(r['policy'].pk) == policy_id)
+                and (not status or r['status'] == status) and (not policy_id or policy_id in r.get('matching_policy_ids', []))
                 and (not owner_filter or r['proposal'] and str(r['proposal'].owner_id) == owner_filter)]
     if request.GET.get('export') == 'csv': return csv_response(filtered)
     page = Paginator(filtered, table_page_size(request)).get_page(request.GET.get('page'))
