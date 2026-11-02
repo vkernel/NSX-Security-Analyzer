@@ -13,7 +13,7 @@ from django.utils.dateparse import parse_datetime
 from django.views.decorators.http import require_http_methods
 from .models import DeletionBatch
 from . import deletion, reference_cleanup as cleanup
-from .execution_policy import can_execute
+from .execution_policy import can_execute, describe
 from .audit_events import record
 from .user_labels import user_label
 
@@ -123,11 +123,40 @@ def review(request, pk):
             except ValidationError as exc:
                 error='; '.join(exc.messages)
     for item in items:
+        item.execution_guidance = describe(request.user, item) if item.status == 'verified' else ''
         item.plan_summary=cleanup.summary(item.cleanup_plan) if item.cleanup_plan else 'Delete this object after fresh execution checks.'
         item.approval_count=len({str(d.get('actor_id')) for d in item.cleanup_approvals})
         item.approval_required=cleanup.requirement(item.finding) if item.cleanup_plan and item.finding else 0
+        item.plan_status = {'verified':'Ready for confirmation', 'cleanup_review':'Awaiting cleanup approval', 'cleanup_recheck':'Rechecking approved cleanup', 'pending':'Waiting for verification', 'deleted':'Deleted', 'blocked':'Blocked', 'failed':'Failed', 'cancelled':'Cancelled'}.get(item.status, item.status.replace('_',' ').capitalize())
+    pending_items = [item for item in items if item.status == 'cleanup_review']
+    remaining = sum(max(0, item.approval_required-item.approval_count) for item in pending_items)
+    has_pending = any(not any(str(d.get('actor_id')) == str(request.user.pk) for d in item.cleanup_approvals) for item in pending_items)
+    intent = batch.execution_intent
+    state = intent.get('state', '')
+    if batch.confirmed_at:
+        status_title = 'Execution authorized'
+        status_message = 'Follow deletion progress for verified outcomes, failures and operations not attempted.'
+    elif state == 'stopped':
+        status_title = 'Execution authorization stopped'
+        status_message = intent.get('message') or 'Review the current plan before authorizing execution again.'
+    elif pending_items:
+        status_title = 'Waiting for remaining cleanup approvals'
+        status_message = f'{remaining} approval(s) remain across {len(pending_items)} cleanup plan(s). ' + ('Review the exact changes and record your decision below.' if has_pending else 'Your approval is recorded. A different eligible administrator must review the remaining changes.')
+    elif batch.status == 'preview_ready' and any(item.status == 'verified' and (not item.verified_at or timezone.now()-item.verified_at >= timedelta(minutes=10)) for item in items):
+        status_title = 'Verification needs refreshing'
+        status_message = 'Open deletion progress to refresh live checks. Existing approvals remain valid while the approved plan is unchanged.'
+    elif batch.status == 'preview_ready':
+        status_title = 'Ready for execution confirmation'
+        status_message = 'Review the complete plan, then use deletion progress to confirm execution with a change ticket.'
+    else:
+        status_title = batch.status_label
+        status_message = 'Open deletion progress for the current next step and each object outcome.'
+    intent_labels = {'armed':'Authorized — waiting for approvals and verification', 'queued':'Execution queued', 'stopped':'Authorization stopped', 'revoked':'Authorization revoked'}
     response=render(request,'inventory/deletion_plan.html',{'batch':batch,'items':items,'fingerprint':digest,'error':error,
+        'status_title':status_title,'status_message':status_message,
+        'intent_label':intent_labels.get(state, 'Recorded authorization'),
+        'intent_deadline':parse_datetime(intent.get('expires_at', '')),
         'can_review':batch.status=='preview_ready' and not batch.confirmed_at,
-        'has_pending':any(item.status=='cleanup_review' for item in items)})
+        'has_pending':has_pending})
     response['Cache-Control']='no-store'
     return response

@@ -89,3 +89,90 @@ body.reduced-motion *,body.reduced-motion *::before,body.reduced-motion *::after
 
 .workspace-main .deletion-summary {grid-template-columns:repeat(auto-fit,minmax(155px,1fr));gap:.75rem}
 .workspace-main .deletion-summary>div {padding:.85rem 1rem}.workspace-main .deletion-summary strong {font-size:1.35rem}
+
+/* Unslop craft pass: paired themes, quiet hierarchy and responsive context.
+   Design method: Damir Sokolovsky (@heydamir), CC BY 4.0. */
+body[data-theme] {--ui-gap:16px;--ui-shadow:none}
+.workspace-main {font-size:14px}
+.workspace-main :is(h1,h2,h3,h4) {font-weight:600}
+.workspace-main :is(th,.eyebrow,.operation-eyebrow) {text-transform:none;letter-spacing:normal}
+.workspace-main .eyebrow,.workspace-main .operation-eyebrow {font-size:12px;color:var(--muted);font-weight:500}
+.workspace-main .page-heading {margin-bottom:20px}
+.workspace-main .form-card {padding:24px;margin-bottom:20px}
+.workspace-main .metrics {gap:16px;margin-bottom:20px;grid-template-columns:repeat(auto-fit,minmax(140px,1fr))}
+.workspace-main .metrics article {padding:16px 20px}
+.workspace-main .metrics strong {font-size:28px;line-height:1.4;letter-spacing:normal;font-variant-numeric:tabular-nums}
+.workspace-main :is(.page-actions,.form-actions) {gap:8px}
+.workspace-main .page-tabs a {display:flex;align-items:center;gap:8px}
+.workspace-main .page-tabs .tab-count {font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums}
+.workspace-main .table-empty-message {padding:32px 24px;text-align:center;overflow-wrap:anywhere}
+.table-empty-message strong {display:block;font-size:16px}
+.table-empty-message p {margin:8px auto 16px;max-width:60ch;color:var(--muted)}
+.workspace-main .table-scroll.has-empty-table {overflow:visible}
+.ui-refresh-toolbar {border:0;border-bottom:1px solid var(--line);border-radius:0;background:transparent;padding:0 0 8px;margin-bottom:16px;gap:8px;min-height:32px}
+body[data-theme] .ui-refresh-toolbar button {min-height:32px;padding:4px 8px;font-size:12px;background:transparent}
+.ui-refresh-toolbar p {font-size:12px}
+body[data-theme] .workspace-panel {background:var(--app-surface);color:var(--ink);border-color:var(--line)}
+body[data-theme] .workspace-panel>header {background:var(--app-surface);border-color:var(--line)}
+body[data-theme] :is(.panel-step-tabs,.panel-evidence-tabs) button[aria-selected=true],body[data-theme] .workspace-steps a[aria-current=step] {background:var(--info-bg);color:var(--info-text);border-color:var(--app-accent)}
+body[data-theme] .workspace-panel :is(input,select,textarea) {min-width:0}
+body[data-theme] .naming-results mark {background:var(--info-bg);color:var(--info-text);border-radius:3px;padding:0 2px;box-decoration-break:clone}
+.workspace-main .naming-results :is(th,td) {overflow-wrap:anywhere}
+.workspace-main .naming-results th:first-child:has(input) {width:44px}
+.workspace-main .naming-results :is(td,th):last-child {min-width:160px}
+.naming-results :is(td,th) small.review-wrap {font-family:ui-monospace,monospace;font-size:12px}
+.naming-context {margin:0 0 16px;color:var(--muted);font-size:13px}
+.naming-toolbar {display:flex;flex-wrap:wrap;align-items:end;gap:12px;margin:0 0 16px;padding:16px;border:1px solid var(--line);border-radius:12px;background:var(--app-surface)}
+.naming-toolbar>label {flex:1;min-width:200px}
+.naming-toolbar label {display:grid;gap:4px;font-size:13px;color:var(--muted)}
+.naming-toolbar :is(input,select) {width:100%;min-width:0;box-sizing:border-box}
+.naming-toolbar>details {flex-basis:100%;order:3}
+.naming-toolbar>details>summary {color:var(--muted)}
+.naming-toolbar .form-grid {padding-top:12px;margin-bottom:8px}
+.naming-filter-summary {display:flex;gap:8px;flex-wrap:wrap;margin:0 0 12px;font-size:13px;color:var(--muted)}
+.naming-filter-summary span {background:var(--app-surface-soft);padding:4px 8px;border-radius:6px}
+.naming-list-actions {display:flex;justify-content:space-between;gap:12px;align-items:center;flex-wrap:wrap;margin:12px 0}
+.naming-selection-bar {display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:12px 16px;border:1px solid var(--app-accent);border-radius:8px;background:var(--info-bg);margin:12px 0}
+.naming-selection-bar [data-naming-selected] {margin:0 auto 0 0}
+.naming-action-dialog .form-grid {grid-template-columns:1fr}
+.naming-action-dialog :is(input:not([type=checkbox]),textarea,select) {width:100%}
+.naming-action-dialog .form-field {min-width:0}
+.naming-action-dialog [data-naming-action-help] {color:var(--muted);font-size:13px}
+.naming-action-dialog .naming-fields {margin-top:20px}
+.naming-action-dialog .naming-action-choice {display:grid;gap:8px}
+.naming-confirmation {width:min(640px,calc(100vw - 32px));max-height:85dvh;padding:24px;border-radius:12px}
+.naming-confirmation h2 {margin-top:0;font-size:20px}
+.naming-confirmation .confirmation-list {max-height:35dvh;overflow:auto;border-block:1px solid var(--line);margin:16px 0}
+.naming-confirmation ul {padding-left:24px;overflow-wrap:anywhere}
+.naming-confirmation footer {display:flex;justify-content:flex-end;gap:8px;margin-top:20px}
+@media(max-width:800px) {
+ body:has(.application-topbar :is(.environment-switcher,.environment-fixed)) {--app-topbar-height:132px}
+ .application-topbar:has(:is(.environment-switcher,.environment-fixed)) {display:grid;grid-template-columns:auto 1fr;grid-template-rows:44px 60px;gap:8px 12px;padding:8px 16px}
+ .application-topbar .mobile-nav-toggle {grid-row:1;grid-column:1;display:flex;align-items:center;gap:8px}
+ .application-topbar .topbar-actions {grid-row:1;grid-column:2;justify-content:flex-end;margin:0}
+ .application-topbar :is(.environment-switcher,.environment-fixed) {grid-row:2;grid-column:1/-1;max-width:none;width:100%;min-width:0}
+ .application-topbar .environment-switcher .workspace-switcher {width:100%}
+ .application-topbar .environment-fixed a {max-width:100%}
+ .application-topbar .environment-fixed small {display:block}
+ .application-topbar .switcher-panel,.application-topbar .notification-center .topbar-popover {position:fixed;top:var(--app-topbar-height);left:12px;right:12px;width:auto;max-width:none}
+ .workspace-main .metrics article {padding:16px}
+ .workspace-main .form-card {padding:16px}
+ .naming-toolbar>label {min-width:0;flex-basis:100%}
+ .naming-toolbar :is(.button,button) {flex:1;white-space:normal}
+ .naming-action-dialog .workspace-panel-body {padding:16px}
+ .table-footer {gap:12px}
+ .table-footer>span:first-child {flex-basis:100%}
+}
+
+.plan-object>details>summary {display:flex;flex-wrap:wrap;gap:8px 20px;align-items:baseline;list-style:disclosure-closed}
+.plan-object>details>summary>strong {font-size:16px}
+.plan-object>details>summary>span {font-size:13px;color:var(--muted)}
+.plan-object>details[open]>summary {margin-bottom:16px}
+.workspace-main .workflow-status {box-shadow:none;margin:12px 0 20px;padding:16px 20px}
+.workspace-main .workflow-status p {margin-bottom:0;font-size:14px}
+
+@media(max-width:800px){body[data-theme] .mobile-nav-toggle span{display:inline;font-size:18px}.application-topbar .mobile-nav-toggle img{width:24px;height:24px}}
+
+body[data-theme] .workspace-panel.naming-action-dialog {width:min(640px,100vw)}
+.workspace-panel.naming-action-dialog .form-grid {grid-template-columns:minmax(0,1fr)}
+.workspace-panel.naming-action-dialog>footer {justify-content:flex-end}

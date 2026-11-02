@@ -240,7 +240,10 @@ def assess(environment, replacement=None, simulation=False):
         row['progress_label'] = 'Resolved' if resolved else 'Review required — evidence changed' if changed else {'in_review':'In review','prepared':'Change prepared','awaiting':'Awaiting verification'}.get(work.get('state'), 'In review' if proposal and proposal.owner_id else 'Unassigned')
         row['next_action'] = {'Name differs':'Review name correction','Ambiguous policy':'Resolve conflicting policies','No applicable policy':'Configure a naming policy','Duplicate proposed name':'Resolve name collision','Evidence incomplete':'Review collection coverage'}.get(row['status'], 'Review component evidence')
 
-        row['name_diff'] = [{'changed':tag!='equal', 'old':row['name'][a:b], 'new':row['proposed'][c:d]} for tag,a,b,c,d in SequenceMatcher(None, row['name'], row['proposed']).get_opcodes()] if row['proposed'] else []
+        # Compare complete name segments so incidental shared letters do not fragment the evidence.
+        before_parts = re.findall(r'[^-_.\s]+|[-_.\s]+', row['name'])
+        after_parts = re.findall(r'[^-_.\s]+|[-_.\s]+', row['proposed'] or '')
+        row['name_diff'] = [{'changed':tag!='equal', 'old':''.join(before_parts[a:b]), 'new':''.join(after_parts[c:d])} for tag,a,b,c,d in SequenceMatcher(None, before_parts, after_parts, autojunk=False).get_opcodes()] if row['proposed'] else []
         proposal = row['proposal']
         row['decision_stamp'] = digest([row['baseline'], policy_stamp, [proposal.state, proposal.tags, proposal.note, str(proposal.updated_at)] if proposal else None])
         row['exception_stale'] = bool(proposal and proposal.state == 'exception' and (row['stale'] or proposal.exception_policy_stamp != policy_stamp or not proposal.owner_id or not proposal.expires_at or proposal.expires_at < timezone.localdate()))

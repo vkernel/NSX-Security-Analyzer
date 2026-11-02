@@ -22,3 +22,8 @@ test('component summary tracks sidebar edits and keeps edited values in the draf
  assert.equal(row.closest('form'),form);assert.match(summary.textContent,/Fixed text: SZ-/);
  dom.window.close();
 });
+
+test('explicit policy sections keep components, guidance and save controls in document order',()=>{
+ const dom=setup(`<nav class="workspace-steps"><a href="#policy-scope">Scope</a><a href="#policy-components">Components</a></nav><section class="naming-editor"><form method="post"><div data-policy-scope><div class="form-grid"><input name="name"></div></div><div data-policy-components><h3 id="policy-components">Components</h3><p>Component guidance</p><div data-naming-components><fieldset class="naming-component"><details><summary>Application</summary><input name="scope" required></details></fieldset></div><button data-add-component type="button">Add</button></div><div class="form-actions"><button>Save</button></div></form></section>`),d=dom.window.document;
+ d.querySelector('[data-step=components]').click();assert.equal(d.querySelector('[data-policy-scope]').hidden,true);assert.equal(d.querySelector('[data-policy-components]').hidden,false);assert.equal(d.querySelector('.naming-editor form').lastElementChild.className,'form-actions');assert.equal(d.querySelectorAll('.workspace-steps').length,1);dom.window.close();
+});

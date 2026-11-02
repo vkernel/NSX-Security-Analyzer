@@ -8,6 +8,11 @@
    const previous=footer.previousElementSibling;
    if(previous?.matches('table'))previous.dataset.serverFooter='true';
    else if(previous)previous.querySelectorAll('table').forEach(table=>table.dataset.serverFooter='true');
+   const tables=previous?.matches('table')?[previous]:[...previous?.querySelectorAll('table')||[]];
+   const n=tables.reduce((count,table)=>count+table.querySelectorAll('tbody input[type=checkbox]:checked').length,0);
+   let selected=footer.querySelector('[data-server-selected-count]');
+   if(n){if(!selected){selected=document.createElement('span');selected.dataset.serverSelectedCount='';footer.append(selected);}const text=`${n} selected on this page`;if(selected.textContent!==text)selected.textContent=text;}
+   else selected?.remove();
   });
   document.querySelectorAll('main table').forEach(table=>{
    if(table.closest('.table-widget')||table.dataset.serverFooter||table.closest('template'))return;

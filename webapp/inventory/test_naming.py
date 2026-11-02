@@ -25,6 +25,15 @@ class NamingTests(TestCase):
         self.vm = self.add_vm('vm-1', 'old-name', self.tags)
         self.client.force_login(self.user)
 
+    def test_name_comparison_preserves_whole_components_and_queue_counts(self):
+        row = self.rows()[0]
+        self.assertEqual(''.join(part['old'] for part in row['name_diff']), row['name'])
+        self.assertEqual(''.join(part['new'] for part in row['name_diff']), row['proposed'])
+        self.assertTrue(any(part['new'] == 'PRD' for part in row['name_diff']))
+        response = self.client.get(reverse('naming-compliance', args=[self.env.pk]), {'q':'no-such-group'})
+        self.assertEqual(response.context['tab_counts']['all'], 1)
+        self.assertEqual(response.context['page'].paginator.count, 0)
+
     @staticmethod
     def definition(tags):
         return {'expression': [{'resource_type': 'Condition', 'member_type': 'VirtualMachine', 'key': 'Tag', 'operator': 'EQUALS', 'value': t['scope']+'|'+t['tag']} for t in tags]}

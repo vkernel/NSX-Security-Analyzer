@@ -44,6 +44,27 @@ class ConsolidatedPlanTests(TestCase):
         self.assertEqual(len(self.item.cleanup_approvals),2)
         self.assertEqual(self.batch.ticket,'CHG-automatic')
         self.nsx.http.request.assert_not_called()
+    def test_status_explains_next_reviewer_and_does_not_offer_duplicate_approval(self):
+        self.preview()
+        WorkspacePolicy.objects.update_or_create(pk=1, defaults={'required_approvals':2})
+        self.approve(revalidate=False)
+        response = self.client.get(self.url())
+        self.assertContains(response, 'Your approval is recorded')
+        self.assertNotContains(response, 'Record my approval for this plan')
+        second = get_user_model().objects.create_superuser('next-plan-reviewer', password='test')
+        self.client.force_login(second)
+        response = self.client.get(self.url())
+        self.assertContains(response, 'Record my approval for this plan')
+        self.assertContains(response, 'deletion-plan-status')
+        self.nsx.http.request.assert_not_called()
+
+    def test_non_review_status_and_stale_verification_are_readable(self):
+        self.preview(); self.approve()
+        self.item.verified_at = timezone.now()-timedelta(minutes=11); self.item.save()
+        self.assertContains(self.client.get(self.url()), 'Verification needs refreshing')
+        self.batch.status='checking'; self.batch.save()
+        self.assertContains(self.client.get(self.url()), 'Checking live deletion preview')
+
     def test_opt_in_requires_ticket_and_exact_plan(self):
         self.preview()
         for data in [{'action':'authorize','fingerprint':self.token(),'ticket':'CHG'},

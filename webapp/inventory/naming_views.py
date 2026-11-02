@@ -324,6 +324,12 @@ def compliance(request, pk):
         except (ValidationError, UnicodeError, csv.Error) as exc:
             error = '; '.join(exc.messages) if isinstance(exc, ValidationError) else 'Cannot read this UTF-8 CSV file.'
     totals = naming.counts(rows)
+    tab_counts = {
+        'attention': sum(bool(r['needs_attention']) for r in rows),
+        'compliant': sum(r['status'] == 'Compliant' and not r['needs_attention'] for r in rows),
+        'exceptions': sum(r['status'] == 'Reviewed exception' for r in rows),
+        'all': len(rows),
+    }
     group_type = request.GET.get('group_type', '')
     query, status, policy_id = request.GET.get('q', '').strip(), request.GET.get('status', ''), request.GET.get('policy', '')
     owner_filter = request.GET.get('owner', '')
@@ -346,7 +352,7 @@ def compliance(request, pk):
     page = Paginator(filtered, table_page_size(request)).get_page(request.GET.get('page'))
     params = request.GET.copy();params.pop('page', None);params.pop('export', None)
     return render(request, 'inventory/naming_compliance.html', {'environment': environment, 'snapshot': snapshot, 'page': page,
-        'tab':tab, 'issue_groups':list(groups.values()), 'table_total': len(rows), 'group_type': group_type, 'warning': warning, 'totals': totals, 'error': error, 'query': query, 'status': status, 'policy_id': policy_id,
+        'tab':tab, 'tab_counts':tab_counts, 'selected_ids':request.POST.getlist('selected'), 'submitted_action':request.POST.get('action', ''), 'issue_groups':list(groups.values()), 'table_total': len(rows), 'group_type': group_type, 'warning': warning, 'totals': totals, 'error': error, 'query': query, 'status': status, 'policy_id': policy_id,
         'proposal_form': proposal_form, 'simulation': simulation, 'owner_filter': owner_filter,
         'owners': get_user_model().objects.filter(is_active=True, is_staff=True).order_by('username'),
         'policies': NamingPolicy.objects.filter(enabled=True, removed_at__isnull=True), 'query_string': params.urlencode()})

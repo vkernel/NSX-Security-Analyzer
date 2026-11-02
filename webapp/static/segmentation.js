@@ -6,7 +6,10 @@ window.addEventListener('pagehide',()=>clearTimeout(timer));check();})();
 (()=>{
  const nodes=[...document.querySelectorAll('[data-application]')];
  function focus(id, label){
-  nodes.forEach(n=>n.classList.toggle('is-active',n.dataset.application===id));
+  const connected=new Set([id]);
+  document.querySelectorAll('[data-edge-source]').forEach(e=>{if(e.dataset.edgeSource===id)connected.add(e.dataset.edgeDestination);if(e.dataset.edgeDestination===id)connected.add(e.dataset.edgeSource);});
+  nodes.forEach(n=>{n.classList.toggle('is-active',n.dataset.application===id);n.classList.toggle('is-muted',id!==null&&!connected.has(n.dataset.application));if(n.dataset.application===id)n.setAttribute('aria-current','true');else n.removeAttribute('aria-current');});
+  const clear=document.querySelector('[data-clear-application]');if(clear)clear.disabled=id===null;
   document.querySelectorAll('[data-edge-source]').forEach(e=>{
    const active=id===null||e.dataset.edgeSource===id||e.dataset.edgeDestination===id;
    e.classList.toggle('is-muted',!active);e.classList.toggle('is-active',id!==null&&active);
@@ -14,8 +17,8 @@ window.addEventListener('pagehide',()=>clearTimeout(timer));check();})();
   document.querySelectorAll('[data-connection-source]').forEach(e=>{e.hidden=id!==null&&e.dataset.connectionSource!==id&&e.dataset.connectionDestination!==id;});
   const status=document.querySelector('[data-application-status]');if(status)status.textContent=id===null?'All displayed applications':`Connections involving ${label}`;
  }
- nodes.forEach(node=>node.addEventListener('click',event=>{event.preventDefault();const id=node.dataset.application;const detail=document.getElementById(`application-${id}`);if(detail){detail.open=true;focus(id,detail.querySelector('summary').textContent.trim());detail.scrollIntoView({block:'nearest'});detail.querySelector('summary').focus();}}));
- document.querySelector('[data-clear-application]')?.addEventListener('click',()=>focus(null,''));
+ nodes.forEach(node=>node.addEventListener('click',event=>{event.preventDefault();const id=node.dataset.application;const detail=document.getElementById(`application-${id}`);if(detail){focus(id,detail.querySelector('summary').textContent.trim());detail.querySelector('summary').click();}}));
+ document.querySelector('[data-clear-application]')?.addEventListener('click',()=>focus(null,''));focus(null,'');
  const search=document.querySelector('[data-group-search]');
  const options=[...document.querySelectorAll('[data-group-option]')];
  search?.addEventListener('input',()=>{const term=search.value.toLowerCase();options.forEach(o=>{o.hidden=!(o.textContent+' '+o.querySelector('input').value).toLowerCase().includes(term);});});

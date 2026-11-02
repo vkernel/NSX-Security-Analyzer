@@ -1,0 +1,688 @@
+[
+  {
+    "name": "overview",
+    "mode": "desktop",
+    "status": 200,
+    "url": "http://127.0.0.1:8873/",
+    "errors": [],
+    "width": 1440,
+    "scrollWidth": 1440,
+    "height": 1000,
+    "h1": "Workspace overview",
+    "buttons": [],
+    "environment": {
+      "x": 256,
+      "y": 5.140625,
+      "width": 302.390625,
+      "height": 64.734375,
+      "top": 5.140625,
+      "right": 558.390625,
+      "bottom": 69.875,
+      "left": 256
+    },
+    "font": "-apple-system, \"system-ui\", \"Segoe UI\", sans-serif"
+  },
+  {
+    "name": "environments",
+    "mode": "desktop",
+    "status": 200,
+    "url": "http://127.0.0.1:8873/workspace/environments/",
+    "errors": [],
+    "width": 1440,
+    "scrollWidth": 1440,
+    "height": 1000,
+    "h1": "Environments",
+    "buttons": [],
+    "environment": {
+      "x": 256,
+      "y": 5.140625,
+      "width": 302.390625,
+      "height": 64.734375,
+      "top": 5.140625,
+      "right": 558.390625,
+      "bottom": 69.875,
+      "left": 256
+    },
+    "font": "-apple-system, \"system-ui\", \"Segoe UI\", sans-serif"
+  },
+  {
+    "name": "findings",
+    "mode": "desktop",
+    "status": 200,
+    "url": "http://127.0.0.1:8873/environments/1/findings/",
+    "errors": [],
+    "width": 1440,
+    "scrollWidth": 1440,
+    "height": 1087,
+    "h1": "Finding reviews",
+    "buttons": [
+      "Pause updates",
+      "Change",
+      "Apply"
+    ],
+    "environment": {
+      "x": 256,
+      "y": 5.140625,
+      "width": 302.390625,
+      "height": 64.734375,
+      "top": 5.140625,
+      "right": 558.390625,
+      "bottom": 69.875,
+      "left": 256
+    },
+    "font": "-apple-system, \"system-ui\", \"Segoe UI\", sans-serif"
+  },
+  {
+    "name": "snapshot",
+    "mode": "desktop",
+    "status": 200,
+    "url": "http://127.0.0.1:8873/snapshots/fbbfac0f-c8aa-487b-bd16-a8d632407aa2/",
+    "errors": [],
+    "width": 1440,
+    "scrollWidth": 1440,
+    "height": 2093,
+    "h1": "Inventory at a glance",
+    "buttons": [
+      "View details",
+      "View details"
+    ],
+    "font": "-apple-system, \"system-ui\", \"Segoe UI\", sans-serif"
+  },
+  {
+    "name": "administration",
+    "mode": "desktop",
+    "status": 200,
+    "url": "http://127.0.0.1:8873/administration/",
+    "errors": [],
+    "width": 1440,
+    "scrollWidth": 1440,
+    "height": 1077,
+    "h1": "Administration",
+    "buttons": [],
+    "font": "-apple-system, \"system-ui\", \"Segoe UI\", sans-serif"
+  },
+  {
+    "name": "naming",
+    "mode": "desktop",
+    "status": 200,
+    "url": "http://127.0.0.1:8873/environments/1/naming/",
+    "errors": [],
+    "width": 1440,
+    "scrollWidth": 1440,
+    "height": 1107,
+    "h1": "Group naming compliance",
+    "buttons": [
+      "Apply filters",
+      "Choose existing scope",
+      "Choose existing tag value",
+      "Save component proposals",
+      "Update progress",
+      "Assign owner",
+      "Mark reviewed",
+      "Reject / clear proposals",
+      "Accept exception",
+      "Import CSV as drafts"
+    ],
+    "environment": {
+      "x": 256,
+      "y": 5.140625,
+      "width": 302.390625,
+      "height": 64.734375,
+      "top": 5.140625,
+      "right": 558.390625,
+      "bottom": 69.875,
+      "left": 256
+    },
+    "font": "-apple-system, \"system-ui\", \"Segoe UI\", sans-serif"
+  },
+  {
+    "name": "policies",
+    "mode": "desktop",
+    "status": 200,
+    "url": "http://127.0.0.1:8873/administration/naming/",
+    "errors": [],
+    "width": 1440,
+    "scrollWidth": 1440,
+    "height": 1000,
+    "h1": "Naming policies",
+    "buttons": [],
+    "font": "-apple-system, \"system-ui\", \"Segoe UI\", sans-serif"
+  },
+  {
+    "name": "policy-editor",
+    "mode": "desktop",
+    "status": 200,
+    "url": "http://127.0.0.1:8873/administration/naming/1/",
+    "errors": [],
+    "width": 1440,
+    "scrollWidth": 1440,
+    "height": 1751,
+    "h1": "Edit naming policy",
+    "buttons": [
+      "Choose existing category value",
+      "Save draft",
+      "Choose existing scope",
+      "Save draft mapping",
+      "Remove policy"
+    ],
+    "font": "-apple-system, \"system-ui\", \"Segoe UI\", sans-serif"
+  },
+  {
+    "name": "segmentation",
+    "mode": "desktop",
+    "status": 200,
+    "url": "http://127.0.0.1:8873/environments/1/segmentation/?snapshot=fbbfac0f-c8aa-487b-bd16-a8d632407aa2",
+    "errors": [],
+    "width": 1440,
+    "scrollWidth": 1440,
+    "height": 1013,
+    "h1": "Workload segmentation",
+    "buttons": [
+      "Apply",
+      "Save current filters"
+    ],
+    "environment": {
+      "x": 256,
+      "y": 5.140625,
+      "width": 302.390625,
+      "height": 64.734375,
+      "top": 5.140625,
+      "right": 558.390625,
+      "bottom": 69.875,
+      "left": 256
+    },
+    "font": "-apple-system, \"system-ui\", \"Segoe UI\", sans-serif"
+  },
+  {
+    "name": "overview",
+    "mode": "mobile",
+    "status": 200,
+    "url": "http://127.0.0.1:8873/",
+    "errors": [],
+    "width": 390,
+    "scrollWidth": 390,
+    "height": 1136,
+    "h1": "Workspace overview",
+    "buttons": [],
+    "environment": {
+      "x": 16,
+      "y": 57.640625,
+      "width": 358,
+      "height": 64.734375,
+      "top": 57.640625,
+      "right": 374,
+      "bottom": 122.375,
+      "left": 16
+    },
+    "font": "-apple-system, \"system-ui\", \"Segoe UI\", sans-serif"
+  },
+  {
+    "name": "environments",
+    "mode": "mobile",
+    "status": 200,
+    "url": "http://127.0.0.1:8873/workspace/environments/",
+    "errors": [],
+    "width": 390,
+    "scrollWidth": 390,
+    "height": 844,
+    "h1": "Environments",
+    "buttons": [],
+    "environment": {
+      "x": 16,
+      "y": 57.640625,
+      "width": 358,
+      "height": 64.734375,
+      "top": 57.640625,
+      "right": 374,
+      "bottom": 122.375,
+      "left": 16
+    },
+    "font": "-apple-system, \"system-ui\", \"Segoe UI\", sans-serif"
+  },
+  {
+    "name": "findings",
+    "mode": "mobile",
+    "status": 200,
+    "url": "http://127.0.0.1:8873/environments/1/findings/",
+    "errors": [],
+    "width": 390,
+    "scrollWidth": 390,
+    "height": 1369,
+    "h1": "Finding reviews",
+    "buttons": [
+      "Pause updates",
+      "Change",
+      "Apply"
+    ],
+    "environment": {
+      "x": 16,
+      "y": 57.640625,
+      "width": 358,
+      "height": 64.734375,
+      "top": 57.640625,
+      "right": 374,
+      "bottom": 122.375,
+      "left": 16
+    },
+    "font": "-apple-system, \"system-ui\", \"Segoe UI\", sans-serif"
+  },
+  {
+    "name": "snapshot",
+    "mode": "mobile",
+    "status": 200,
+    "url": "http://127.0.0.1:8873/snapshots/fbbfac0f-c8aa-487b-bd16-a8d632407aa2/",
+    "errors": [],
+    "width": 390,
+    "scrollWidth": 390,
+    "height": 4147,
+    "h1": "Inventory at a glance",
+    "buttons": [
+      "02 Nov 2026, 12:18 UTC",
+      "View details",
+      "View details"
+    ],
+    "font": "-apple-system, \"system-ui\", \"Segoe UI\", sans-serif"
+  },
+  {
+    "name": "administration",
+    "mode": "mobile",
+    "status": 200,
+    "url": "http://127.0.0.1:8873/administration/",
+    "errors": [],
+    "width": 390,
+    "scrollWidth": 390,
+    "height": 1418,
+    "h1": "Administration",
+    "buttons": [],
+    "font": "-apple-system, \"system-ui\", \"Segoe UI\", sans-serif"
+  },
+  {
+    "name": "naming",
+    "mode": "mobile",
+    "status": 200,
+    "url": "http://127.0.0.1:8873/environments/1/naming/",
+    "errors": [],
+    "width": 390,
+    "scrollWidth": 390,
+    "height": 1562,
+    "h1": "Group naming compliance",
+    "buttons": [
+      "Apply filters",
+      "Choose existing scope",
+      "Choose existing tag value",
+      "Save component proposals",
+      "Update progress",
+      "Assign owner",
+      "Mark reviewed",
+      "Reject / clear proposals",
+      "Accept exception",
+      "Import CSV as drafts"
+    ],
+    "environment": {
+      "x": 16,
+      "y": 57.640625,
+      "width": 358,
+      "height": 64.734375,
+      "top": 57.640625,
+      "right": 374,
+      "bottom": 122.375,
+      "left": 16
+    },
+    "font": "-apple-system, \"system-ui\", \"Segoe UI\", sans-serif"
+  },
+  {
+    "name": "policies",
+    "mode": "mobile",
+    "status": 200,
+    "url": "http://127.0.0.1:8873/administration/naming/",
+    "errors": [],
+    "width": 390,
+    "scrollWidth": 390,
+    "height": 844,
+    "h1": "Naming policies",
+    "buttons": [],
+    "font": "-apple-system, \"system-ui\", \"Segoe UI\", sans-serif"
+  },
+  {
+    "name": "policy-editor",
+    "mode": "mobile",
+    "status": 200,
+    "url": "http://127.0.0.1:8873/administration/naming/1/",
+    "errors": [],
+    "width": 390,
+    "scrollWidth": 390,
+    "height": 2292,
+    "h1": "Edit naming policy",
+    "buttons": [
+      "Choose existing category value",
+      "Save draft",
+      "Choose existing scope",
+      "Save draft mapping",
+      "Remove policy"
+    ],
+    "font": "-apple-system, \"system-ui\", \"Segoe UI\", sans-serif"
+  },
+  {
+    "name": "segmentation",
+    "mode": "mobile",
+    "status": 200,
+    "url": "http://127.0.0.1:8873/environments/1/segmentation/?snapshot=fbbfac0f-c8aa-487b-bd16-a8d632407aa2",
+    "errors": [],
+    "width": 390,
+    "scrollWidth": 390,
+    "height": 1336,
+    "h1": "Workload segmentation",
+    "buttons": [
+      "Apply",
+      "Save current filters"
+    ],
+    "environment": {
+      "x": 16,
+      "y": 57.640625,
+      "width": 358,
+      "height": 64.734375,
+      "top": 57.640625,
+      "right": 374,
+      "bottom": 122.375,
+      "left": 16
+    },
+    "font": "-apple-system, \"system-ui\", \"Segoe UI\", sans-serif"
+  },
+  {
+    "name": "overview",
+    "mode": "small",
+    "status": 200,
+    "url": "http://127.0.0.1:8873/",
+    "errors": [],
+    "width": 320,
+    "scrollWidth": 320,
+    "height": 1220,
+    "h1": "Workspace overview",
+    "buttons": [],
+    "environment": {
+      "x": 16,
+      "y": 57.640625,
+      "width": 288,
+      "height": 64.734375,
+      "top": 57.640625,
+      "right": 304,
+      "bottom": 122.375,
+      "left": 16
+    },
+    "font": "-apple-system, \"system-ui\", \"Segoe UI\", sans-serif"
+  },
+  {
+    "name": "environments",
+    "mode": "small",
+    "status": 200,
+    "url": "http://127.0.0.1:8873/workspace/environments/",
+    "errors": [],
+    "width": 320,
+    "scrollWidth": 320,
+    "height": 844,
+    "h1": "Environments",
+    "buttons": [],
+    "environment": {
+      "x": 16,
+      "y": 57.640625,
+      "width": 288,
+      "height": 64.734375,
+      "top": 57.640625,
+      "right": 304,
+      "bottom": 122.375,
+      "left": 16
+    },
+    "font": "-apple-system, \"system-ui\", \"Segoe UI\", sans-serif"
+  },
+  {
+    "name": "findings",
+    "mode": "small",
+    "status": 200,
+    "url": "http://127.0.0.1:8873/environments/1/findings/",
+    "errors": [],
+    "width": 320,
+    "scrollWidth": 320,
+    "height": 1447,
+    "h1": "Finding reviews",
+    "buttons": [
+      "Pause updates",
+      "Change",
+      "Apply"
+    ],
+    "environment": {
+      "x": 16,
+      "y": 57.640625,
+      "width": 288,
+      "height": 64.734375,
+      "top": 57.640625,
+      "right": 304,
+      "bottom": 122.375,
+      "left": 16
+    },
+    "font": "-apple-system, \"system-ui\", \"Segoe UI\", sans-serif"
+  },
+  {
+    "name": "snapshot",
+    "mode": "small",
+    "status": 200,
+    "url": "http://127.0.0.1:8873/snapshots/fbbfac0f-c8aa-487b-bd16-a8d632407aa2/",
+    "errors": [],
+    "width": 320,
+    "scrollWidth": 320,
+    "height": 4208,
+    "h1": "Inventory at a glance",
+    "buttons": [
+      "02 Nov 2026, 12:18 UTC",
+      "View details",
+      "View details"
+    ],
+    "font": "-apple-system, \"system-ui\", \"Segoe UI\", sans-serif"
+  },
+  {
+    "name": "administration",
+    "mode": "small",
+    "status": 200,
+    "url": "http://127.0.0.1:8873/administration/",
+    "errors": [],
+    "width": 320,
+    "scrollWidth": 320,
+    "height": 1418,
+    "h1": "Administration",
+    "buttons": [],
+    "font": "-apple-system, \"system-ui\", \"Segoe UI\", sans-serif"
+  },
+  {
+    "name": "naming",
+    "mode": "small",
+    "status": 200,
+    "url": "http://127.0.0.1:8873/environments/1/naming/",
+    "errors": [],
+    "width": 320,
+    "scrollWidth": 320,
+    "height": 1616,
+    "h1": "Group naming compliance",
+    "buttons": [
+      "Apply filters",
+      "Choose existing scope",
+      "Choose existing tag value",
+      "Save component proposals",
+      "Update progress",
+      "Assign owner",
+      "Mark reviewed",
+      "Reject / clear proposals",
+      "Accept exception",
+      "Import CSV as drafts"
+    ],
+    "environment": {
+      "x": 16,
+      "y": 57.640625,
+      "width": 288,
+      "height": 64.734375,
+      "top": 57.640625,
+      "right": 304,
+      "bottom": 122.375,
+      "left": 16
+    },
+    "font": "-apple-system, \"system-ui\", \"Segoe UI\", sans-serif"
+  },
+  {
+    "name": "policies",
+    "mode": "small",
+    "status": 200,
+    "url": "http://127.0.0.1:8873/administration/naming/",
+    "errors": [],
+    "width": 320,
+    "scrollWidth": 320,
+    "height": 844,
+    "h1": "Naming policies",
+    "buttons": [],
+    "font": "-apple-system, \"system-ui\", \"Segoe UI\", sans-serif"
+  },
+  {
+    "name": "policy-editor",
+    "mode": "small",
+    "status": 200,
+    "url": "http://127.0.0.1:8873/administration/naming/1/",
+    "errors": [],
+    "width": 320,
+    "scrollWidth": 320,
+    "height": 2522,
+    "h1": "Edit naming policy",
+    "buttons": [
+      "Choose existing category value",
+      "Save draft",
+      "Choose existing scope",
+      "Save draft mapping",
+      "Remove policy"
+    ],
+    "font": "-apple-system, \"system-ui\", \"Segoe UI\", sans-serif"
+  },
+  {
+    "name": "segmentation",
+    "mode": "small",
+    "status": 200,
+    "url": "http://127.0.0.1:8873/environments/1/segmentation/?snapshot=fbbfac0f-c8aa-487b-bd16-a8d632407aa2",
+    "errors": [],
+    "width": 320,
+    "scrollWidth": 320,
+    "height": 1447,
+    "h1": "Workload segmentation",
+    "buttons": [
+      "Apply",
+      "Save current filters"
+    ],
+    "environment": {
+      "x": 16,
+      "y": 57.640625,
+      "width": 288,
+      "height": 64.734375,
+      "top": 57.640625,
+      "right": 304,
+      "bottom": 122.375,
+      "left": 16
+    },
+    "font": "-apple-system, \"system-ui\", \"Segoe UI\", sans-serif"
+  },
+  {
+    "name": "overview",
+    "mode": "dark",
+    "status": 200,
+    "url": "http://127.0.0.1:8873/",
+    "errors": [],
+    "width": 1440,
+    "scrollWidth": 1440,
+    "height": 1000,
+    "h1": "Workspace overview",
+    "buttons": [],
+    "environment": {
+      "x": 256,
+      "y": 5.140625,
+      "width": 302.390625,
+      "height": 64.734375,
+      "top": 5.140625,
+      "right": 558.390625,
+      "bottom": 69.875,
+      "left": 256
+    },
+    "font": "-apple-system, \"system-ui\", \"Segoe UI\", sans-serif"
+  },
+  {
+    "name": "naming",
+    "mode": "dark",
+    "status": 200,
+    "url": "http://127.0.0.1:8873/environments/1/naming/",
+    "errors": [],
+    "width": 1440,
+    "scrollWidth": 1440,
+    "height": 1107,
+    "h1": "Group naming compliance",
+    "buttons": [
+      "Apply filters",
+      "Choose existing scope",
+      "Choose existing tag value",
+      "Save component proposals",
+      "Update progress",
+      "Assign owner",
+      "Mark reviewed",
+      "Reject / clear proposals",
+      "Accept exception",
+      "Import CSV as drafts"
+    ],
+    "environment": {
+      "x": 256,
+      "y": 5.140625,
+      "width": 302.390625,
+      "height": 64.734375,
+      "top": 5.140625,
+      "right": 558.390625,
+      "bottom": 69.875,
+      "left": 256
+    },
+    "font": "-apple-system, \"system-ui\", \"Segoe UI\", sans-serif"
+  },
+  {
+    "name": "policy-editor",
+    "mode": "dark",
+    "status": 200,
+    "url": "http://127.0.0.1:8873/administration/naming/1/",
+    "errors": [],
+    "width": 1440,
+    "scrollWidth": 1440,
+    "height": 1751,
+    "h1": "Edit naming policy",
+    "buttons": [
+      "Choose existing category value",
+      "Save draft",
+      "Choose existing scope",
+      "Save draft mapping",
+      "Remove policy"
+    ],
+    "font": "-apple-system, \"system-ui\", \"Segoe UI\", sans-serif"
+  },
+  {
+    "name": "segmentation",
+    "mode": "dark",
+    "status": 200,
+    "url": "http://127.0.0.1:8873/environments/1/segmentation/?snapshot=fbbfac0f-c8aa-487b-bd16-a8d632407aa2",
+    "errors": [],
+    "width": 1440,
+    "scrollWidth": 1440,
+    "height": 1013,
+    "h1": "Workload segmentation",
+    "buttons": [
+      "Apply",
+      "Save current filters"
+    ],
+    "environment": {
+      "x": 256,
+      "y": 5.140625,
+      "width": 302.390625,
+      "height": 64.734375,
+      "top": 5.140625,
+      "right": 558.390625,
+      "bottom": 69.875,
+      "left": 256
+    },
+    "font": "-apple-system, \"system-ui\", \"Segoe UI\", sans-serif"
+  }
+]

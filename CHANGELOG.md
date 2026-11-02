@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+- Refine shared spacing, theme contrast, mobile environment context and table empty states.
+- Simplify naming compliance with contextual correction drawers, policy-grouped bulk review and clear selection counts.
+- Clarify policy drafts, component editing and activation; prevent save controls from covering editor content.
+- Improve application map setup, focused evidence and reading-position preservation.
+- Show readable deletion-plan status, execution guidance and the next eligible cleanup reviewer.
+
+
 ## Development — 2026-10-30
 
 - Standardize inventory and rule evidence tabs (Summary, applicable Members, References, History and Technical details), add a shared keyboard-accessible tab controller, and simplify activity/collection diagnostics and cleanup actions. Clarify when snapshot evidence contains no review history.

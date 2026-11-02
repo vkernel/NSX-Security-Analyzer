@@ -4,7 +4,20 @@
   if (!main) return;
   function enhance() {
     for (const region of main.querySelectorAll('.table-scroll')) {
-      const overflow = region.scrollWidth > region.clientWidth;
+      const table = region.querySelector('table');
+      const rows = table?.querySelectorAll('tbody > tr');
+      const cell = rows?.length === 1 ? rows[0].querySelector('td[colspan]') : null;
+      const empty = cell && (cell.classList.contains('empty-state') || !cell.closest('tr').querySelector('input,button,form'));
+      let message = region.querySelector(':scope > .table-empty-message');
+      if (empty && (!message || message.dataset.source !== cell.innerHTML)) {
+        if (!message) { message = document.createElement('div'); message.className = 'table-empty-message'; region.append(message); }
+        message.replaceChildren(); message.dataset.source = cell.innerHTML;
+        // Keep the source row for refresh identity comparisons; expose only the readable copy.
+        for (const child of cell.childNodes) message.append(child.cloneNode(true));
+      } else if (!empty && message) message.remove();
+      if (table) table.hidden = !!empty;
+      region.classList.toggle('has-empty-table', !!empty);
+      const overflow = !empty && region.scrollWidth > region.clientWidth;
       if (overflow) {
         region.tabIndex = 0;
         region.setAttribute('role', 'region');

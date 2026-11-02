@@ -14,11 +14,11 @@
  const back=node('button','Back'),full=node('a','Open full page'),close=node('button','Close');
  back.type=close.type='button';full.className='button';back.hidden=true;
  header.append(back,title,full,close);const body=node('div');body.className='workspace-panel-body';dialog.append(header,body);document.body.append(dialog);
- let origin,restore,frame,stack=[],loadingTimer,frameURL='',overlayRestore;
+ let origin,position,restore,frame,stack=[],loadingTimer,frameURL='',overlayRestore;
  const footer=node('footer'),done=node('button','Done editing');done.type='button';done.className='button primary';footer.append(node('span','Changes stay in your draft. Save the draft to persist them.'),done);footer.hidden=true;dialog.append(footer);done.onclick=()=>dialog.close();
  function closePanel(){if(overlayRestore){overlayRestore();return;}if(restore){dialog.close();return;}let root=body;try{if(frame)root=frame.contentDocument||body;}catch(_){}if(allowClose(root))dialog.close();}
  close.onclick=closePanel;dialog.addEventListener('cancel',e=>{e.preventDefault();closePanel();});
- dialog.addEventListener('close',()=>{footer.hidden=true;clearTimeout(loadingTimer);restore?.();restore=null;frame=null;body.replaceChildren();stack=[];back.hidden=true;origin?.focus();document.dispatchEvent(new CustomEvent('workspace-panel-closed'));});
+ dialog.addEventListener('close',()=>{footer.hidden=true;clearTimeout(loadingTimer);restore?.();restore=null;frame=null;body.replaceChildren();stack=[];back.hidden=true;origin?.focus({preventScroll:true});if(position&&(window.scrollX!==position[0]||window.scrollY!==position[1]))window.scrollTo(position[0],position[1]);document.dispatchEvent(new CustomEvent('workspace-panel-closed'));});
  const safeURL=value=>{const u=new URL(value,location.href);if(u.origin!==location.origin)throw Error('Only local pages can open in this panel.');return u.href;};
  function loadRecord(url,push=true){
   if(frame){try{if(!allowClose(frame.contentDocument))return;}catch(_){}}
@@ -39,12 +39,12 @@
  document.addEventListener('click',e=>{
   const link=e.target.closest('a[data-record-panel]');if(!link||embedded||e.defaultPrevented||e.button||e.ctrlKey||e.metaKey||e.shiftKey||link.target)return;
   if(typeof dialog.showModal!=='function')return;
-  e.preventDefault();origin=link;title.textContent=link.textContent.trim()||'Record details';full.hidden=false;frameURL='';loadRecord(link.href);dialog.showModal();
+  e.preventDefault();position=[window.scrollX,window.scrollY];origin=link;title.textContent=link.textContent.trim()||'Record details';full.hidden=false;frameURL='';loadRecord(link.href);dialog.showModal();
  });
  // Move real nodes, rather than copies, so form values and event handlers survive.
  function openSection(details,trigger){
   if(embedded||document.querySelector('dialog[open]'))return;
-  details.dataset.panelReading='true';origin=trigger;title.textContent=details.querySelector('summary')?.textContent||'Details';full.hidden=true;back.hidden=true;
+  details.dataset.panelReading='true';position=[window.scrollX,window.scrollY];origin=trigger;title.textContent=details.querySelector('summary')?.textContent||'Details';full.hidden=true;back.hidden=true;
   const component=details.closest('.naming-component');footer.hidden=!component;
   const source=component||details,marker=document.createComment('panel content');
   if(component)component.before(marker);else details.append(marker);
@@ -64,18 +64,22 @@
  // One view of naming setup at a time; validation remains server-authoritative.
  function namingSteps(){const editor=document.querySelector('.naming-editor');if(!editor)return;
   const form=editor.querySelector('form'),components=form.querySelector('[data-naming-components]');if(!components)return;
-  const tabs=node('nav');tabs.className='panel-step-tabs';tabs.setAttribute('aria-label','Edit naming draft');
-  const scope=form.querySelector('.form-grid'),componentHeader=document.getElementById('policy-components');
-  const componentNodes=[componentHeader,componentHeader?.nextElementSibling,components,form.querySelector('[data-add-component]'),form.querySelector('[data-component-status]')].filter(Boolean);
-  const scopeNodes=[scope,...form.querySelectorAll(':scope > p.muted')];
+  const scope=form.querySelector('[data-policy-scope]'),componentSection=form.querySelector('[data-policy-components]');
+  // Real section containers keep management fields, guidance and actions together.
+  // Legacy markup remains supported for embedded records and cached test fixtures.
+  const scopeNodes=scope?[scope]:[form.querySelector('.form-grid'),...form.querySelectorAll(':scope > p.muted')].filter(Boolean);
+  const componentHeader=document.getElementById('policy-components');
+  const componentNodes=componentSection?[componentSection]:[componentHeader,componentHeader?.nextElementSibling,components,form.querySelector('[data-add-component]'),form.querySelector('[data-component-status]')].filter(Boolean);
   const previewSection=document.getElementById('policy-preview')?.closest('section'),mappings=document.getElementById('policy-mappings');
-  const select=(mode)=>{editor.hidden=['preview','activate'].includes(mode);if(previewSection)previewSection.hidden=!['preview','activate'].includes(mode);if(mappings)mappings.hidden=mode!=='scope';document.querySelectorAll('.workspace-steps a').forEach(a=>{const match={scope:'#policy-scope',components:'#policy-components',preview:'#policy-preview',activate:'#policy-activate'}[mode];if(a.getAttribute('href')===match)a.setAttribute('aria-current','step');else a.removeAttribute('aria-current');});scopeNodes.forEach(n=>n.hidden=mode!=='scope');componentNodes.forEach(n=>n.hidden=mode!=='components');tabs.querySelectorAll('button').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.step===mode)));};
-  for(const [key,label]of [['scope','1. Scope'],['components','2. Name components']]){const b=node('button',label);b.type='button';b.dataset.step=key;b.onclick=()=>select(key);tabs.append(b);}form.before(tabs);
-  document.querySelector('a[href="#policy-scope"]')?.addEventListener('click',()=>select('scope'));
-  document.querySelector('a[href="#policy-components"]')?.addEventListener('click',()=>select('components'));
-  document.querySelector('a[href="#policy-preview"]')?.addEventListener('click',()=>select('preview'));
-  document.querySelector('a[href="#policy-activate"]')?.addEventListener('click',()=>select('activate'));
-  document.addEventListener('invalid',e=>{if(e.target.form!==form)return;if(restore){const finish=restore;restore=null;finish();dialog.close();}select(components.contains(e.target)?'components':'scope');const detail=e.target.closest('details');if(detail)detail.open=true;},true);
+  let tabs=document.querySelector('.workspace-steps');
+  if(!tabs){tabs=node('nav');tabs.className='workspace-steps';tabs.setAttribute('aria-label','Edit naming draft');for(const [key,label]of [['scope','Scope'],['components','Name components']]){const a=node('a',label);a.href='#policy-'+key;tabs.append(a);}form.before(tabs);}
+  const select=(mode)=>{editor.hidden=['preview','activate'].includes(mode);if(previewSection)previewSection.hidden=!['preview','activate'].includes(mode);if(mappings)mappings.hidden=mode!=='scope';
+   tabs.querySelectorAll('a').forEach(a=>{const match={scope:'#policy-scope',components:'#policy-components',preview:'#policy-preview',activate:'#policy-activate'}[mode];if(a.getAttribute('href')===match)a.setAttribute('aria-current','step');else a.removeAttribute('aria-current');});
+   scopeNodes.forEach(n=>n.hidden=mode!=='scope');componentNodes.forEach(n=>n.hidden=mode!=='components');
+  };
+  tabs.querySelectorAll('a[href^="#policy-"]').forEach(a=>{const step=a.getAttribute('href').slice(8);a.dataset.step=step;a.addEventListener('click',e=>{e.preventDefault();select(step);});});
+  document.addEventListener('invalid',e=>{if(e.target.form!==form)return;if(restore){const finish=restore;restore=null;finish();dialog.close();}select(components.contains(e.target)?'components':'scope');let ancestor=e.target.parentElement;while(ancestor){if(ancestor.tagName==='DETAILS')ancestor.open=true;ancestor=ancestor.parentElement;}},true);
+  form.querySelectorAll('.form-error-summary a').forEach(link=>link.addEventListener('click',()=>{const field=document.getElementById(link.getAttribute('href').slice(1));select(components.contains(field)?'components':'scope');field?.focus();}));
   select(components.querySelector('.errorlist')?'components':document.getElementById('policy-activate')?'preview':'scope');
   function mark(){components.querySelectorAll('fieldset > details').forEach(d=>{d.dataset.sectionPanel='';if(!d.querySelector('.errorlist'))d.open=false;});}mark();new MutationObserver(mark).observe(components,{childList:true});
  }

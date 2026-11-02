@@ -15,10 +15,18 @@
   const value=key=>row.querySelector(`[name$="-${key}"]`)?.value||'';
   function summary(){
    const source=value('source');
+   for(const key of ['scope','literal']){const field=row.querySelector(`[name$="-${key}"]`);const wrapper=field?.closest('.form-field');if(wrapper)wrapper.hidden=key==='scope'?source!=='tag':source!=='fixed';}
+   const removed=row.querySelector('[name$="-DELETE"]')?.checked;row.classList.toggle('component-removed',!!removed);
    const detail=source==='fixed'?`Fixed text: ${value('literal')||'Not set'}`:
     source==='tag'?`Tag scope: ${value('scope')||'Not set'}`:
     source==='identity'?'Group path suffix':source==='type'?'Group type':'Choose a source';
-   row.querySelector('summary').textContent=`${value('field')||'New field'} · ${detail}`;
+   row.querySelector('summary').textContent=`${removed?'Remove · ':''}${value('field')||'New field'} · ${detail}`;
+  }
+  const grid=row.querySelector('.form-grid');
+  if(grid&&!row.querySelector('[data-component-advanced]')){
+   const advanced=document.createElement('details');advanced.dataset.componentAdvanced='';const heading=document.createElement('summary');heading.textContent='Formatting and value mappings';const fields=document.createElement('div');fields.className='form-grid';advanced.append(heading,fields);
+   for(const key of ['case','format','max_length','mapping_text','ORDER']){const control=row.querySelector(`[name$="-${key}"]`);const wrapper=control?.closest('.form-field');if(wrapper)fields.append(wrapper);}
+   if(fields.childElementCount){grid.after(advanced);if(advanced.querySelector('.errorlist'))advanced.open=true;}
   }
   row.addEventListener('input',summary);row.addEventListener('change',summary);summary();
  }
