@@ -689,6 +689,8 @@ class NamingScopeBinding(models.Model):
 
 
 class NamingProposal(models.Model):
+    workflow = models.JSONField(default=dict, blank=True)
+    expires_at = models.DateField(null=True, blank=True)
     environment = models.ForeignKey(Environment, on_delete=models.CASCADE)
     group_path = models.CharField(max_length=512)
     object_type = models.CharField(max_length=12, default="group")

@@ -79,6 +79,9 @@ class BindingForm(forms.Form):
 
 
 class ProposalForm(forms.Form):
+    ticket = forms.CharField(max_length=120, required=False, label='Change ticket')
+    progress = forms.ChoiceField(required=False, choices=[('in_review','In review'),('prepared','Change prepared'),('awaiting','Awaiting verification')])
+    expires_at = forms.DateField(required=False, widget=forms.DateInput(attrs={'type':'date'}), label='Exception expiry date')
     scope = forms.CharField(max_length=128, required=False)
     value = forms.CharField(max_length=256, required=False)
     note = forms.CharField(max_length=500, required=False, widget=forms.Textarea(attrs={'rows': 2}))

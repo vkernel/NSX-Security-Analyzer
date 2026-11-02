@@ -1,3 +1,5 @@
+from difflib import SequenceMatcher
+from django.utils import timezone
 """Read-only naming evaluation. No NSX/vCenter client or mutation capability."""
 import hashlib
 import json
@@ -212,7 +214,7 @@ def assess(environment, replacement=None, simulation=False):
         if proposal and not stale and (accepted or simulation and proposal.state == 'draft'):
             effective = dict(group, reviewed_components=accepted, proposed_scopes=set(proposal.tags), component_source='Reviewed value' if accepted else 'Draft simulation', tags=[t for t in group['tags'] if t.get('scope') not in proposal.tags] + [{'scope': k, 'tag': v} for k, v in proposal.tags.items()])
         row = evaluate(effective, policies, bindings)
-        row.update(proposal=proposal, stale=stale, observed_tags=group['tags'], baseline=baseline(group))
+        row.update(observed_status=evaluate(group, policies, bindings)['status'], proposal=proposal, stale=stale, observed_tags=group['tags'], baseline=baseline(group))
         rows.append(row)
     names = defaultdict(set)
     for group in groups: names[group['name'].casefold()].add(group['identity'])
@@ -229,11 +231,25 @@ def assess(environment, replacement=None, simulation=False):
     for row in rows:
         row['policy_stamp'] = policy_stamp
         proposal = row['proposal']
+        work = proposal.workflow if proposal else {}
+        definition_stamp = digest([row['identity'], row.get('definition'), row.get('unique_id'), row['observed_tags']])
+        row['definition_stamp'] = definition_stamp
+        changed = bool(work and (work.get('policy_stamp') != policy_stamp or work.get('definition_stamp') != definition_stamp))
+        resolved = bool(work.get('state') == 'awaiting' and not changed and not warning and not simulation and snapshot and str(snapshot.pk) != work.get('snapshot') and snapshot.generated_at.isoformat() > work.get('snapshot_time', '') and row['status'] == 'Compliant' and row['observed_status'] == 'Compliant' and row['name'] == work.get('proposed'))
+        row['work_stale'] = changed
+        row['progress_label'] = 'Resolved' if resolved else 'Review required — evidence changed' if changed else {'in_review':'In review','prepared':'Change prepared','awaiting':'Awaiting verification'}.get(work.get('state'), 'In review' if proposal and proposal.owner_id else 'Unassigned')
+        row['next_action'] = {'Name differs':'Review name correction','Ambiguous policy':'Resolve conflicting policies','No applicable policy':'Configure a naming policy','Duplicate proposed name':'Resolve name collision','Evidence incomplete':'Review collection coverage'}.get(row['status'], 'Review component evidence')
+
+        row['name_diff'] = [{'changed':tag!='equal', 'old':row['name'][a:b], 'new':row['proposed'][c:d]} for tag,a,b,c,d in SequenceMatcher(None, row['name'], row['proposed']).get_opcodes()] if row['proposed'] else []
+        proposal = row['proposal']
         row['decision_stamp'] = digest([row['baseline'], policy_stamp, [proposal.state, proposal.tags, proposal.note, str(proposal.updated_at)] if proposal else None])
-        row['exception_stale'] = bool(proposal and proposal.state == 'exception' and (row['stale'] or proposal.exception_policy_stamp != policy_stamp))
+        row['exception_stale'] = bool(proposal and proposal.state == 'exception' and (row['stale'] or proposal.exception_policy_stamp != policy_stamp or not proposal.owner_id or not proposal.expires_at or proposal.expires_at < timezone.localdate()))
         if proposal and proposal.state == 'exception' and not row['exception_stale']:
             row['reasons'].append('Reviewed exception: ' + proposal.note)
             row['status'] = 'Reviewed exception'
+        if proposal and proposal.state == 'exception' and row['exception_stale']:
+            row['reasons'].append('Exception expired or evidence changed; review it again.')
+        row['needs_attention'] = row['status'] not in ('Compliant','Reviewed exception') or row['work_stale'] or row['exception_stale']
     return snapshot, rows, warning
 
 

@@ -106,3 +106,40 @@ Filtering by either conflicting policy includes ambiguous groups. Outcome filter
 still apply; use **Show all outcomes and policies** in an empty result to clear them.
 The impact preview warns explicitly when activation would turn compliant groups into
 ambiguous groups. No NSX tags, memberships or names are changed by these settings.
+
+## Duplicate a policy
+
+Select **Duplicate policy** in the policy list, or **Duplicate saved draft** while
+editing. This opens a new form populated from the saved draft, with a suggested copy
+name and editable environment. Nothing is created until **Save draft**. The new policy
+is inactive and requires its own impact preview and activation. Unsaved editor changes,
+environment scope bindings, activation state and version history are not copied.
+
+## Naming remediation work
+
+The default **Needs attention** tab lists naming issues, expired exceptions and work
+whose policy or group definition changed. **Compliant**, **Exceptions**, and **All groups**
+keep those views separate. Common issues are grouped by outcome and applicable policies
+so an administrator can fix a shared policy before editing many objects. Current and
+proposed names highlight changed text; the evidence panel explains every component.
+
+Select up to 100 rows in the current environment to assign an operator, record reviewed
+values, accept an exception or update progress. Confirmation lists selected names grouped
+by policy. Validation is atomic: if any selected record is invalid, nothing is saved.
+CSV exports include owner, progress, ticket and exception expiry. Existing policy impact
+previews show before/after outcome counts and newly ambiguous groups before activation.
+
+Progress is Unassigned, In review, Change prepared, Awaiting verification, or Resolved.
+Prepared/awaiting work requires an owner, a determinable proposed name and a change ticket.
+No action renames NSX objects. After external work, choose Awaiting verification. A later
+full collection must show the expected compliant name, complete coverage, and unchanged
+policy and definition before the UI reports Resolved. Simulation and reviewed component
+values alone cannot resolve work. Resolution is derived from current evidence rather than
+an operator checkbox; a later regression reopens the assessment. Objects missing from the
+latest inventory are not assumed resolved. Notes and assignments remain stored.
+
+Group-definition or policy changes mark tracked work as needing review. Operators can
+review the new evidence and update progress again; notes and ownership are preserved.
+Exceptions require an administrator, reason, owner and expiry date. Legacy exceptions
+without an expiry must be reviewed again. Expired or invalidated exceptions return to
+Needs attention. Migration 0061 adds workflow and expiry fields; apply it before deployment.

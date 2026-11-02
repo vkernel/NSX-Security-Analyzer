@@ -13,6 +13,7 @@ from django.http import HttpResponse, HttpResponseForbidden, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_http_methods
 from django.utils import timezone
+from django.urls import reverse
 from . import naming
 from .audit_events import record
 from .models import Environment, NamingPolicy, NamingPolicyVersion, NamingScopeBinding, NamingProposal, SnapshotRecord
@@ -71,11 +72,14 @@ def policies(request, pk=None):
             return HttpResponse('This policy has been removed and cannot be edited or activated.', status=409)
         return render(request, 'inventory/naming_policy_removed.html', {
             'policy': policy, 'versions': policy.versions.select_related('actor')})
-    config = policy.draft if policy else DEFAULT
+    duplicate = None
+    if not policy and request.method == 'GET' and request.GET.get('duplicate', '').isdigit():
+        duplicate = get_object_or_404(NamingPolicy, pk=request.GET['duplicate'], removed_at__isnull=True)
+    config = copy.deepcopy(duplicate.draft) if duplicate else policy.draft if policy else DEFAULT
     if policy and request.method == 'GET' and request.GET.get('version', '').isdigit():
         version = get_object_or_404(policy.versions, revision=request.GET['version'])
         config = version.configuration['draft']
-    initial = dict(config, name=policy.name if policy else '', environment=policy.environment_id if policy else None, revision=policy.revision if policy else 0)
+    initial = dict(config, name=policy.name if policy else (duplicate.name[:113] + ' (copy)' if duplicate else ''), environment=policy.environment_id if policy else duplicate.environment_id if duplicate else None, revision=policy.revision if policy else 0)
     components = [dict(c, mapping_text='\n'.join(f'{a}={b}' for a,b in c.get('mapping', {}).items())) for c in config.get('components', [])]
     editing = request.method == 'POST' and request.POST.get('action') == 'save'
     form = PolicyForm(request.POST if editing else None, initial=initial)
@@ -177,7 +181,7 @@ def policies(request, pk=None):
                     snapshot_version(policy, request.user, 'disabled')
                     messages.success(request, 'Naming assessment policy disabled. Observed tags and group names are unchanged.')
                     return redirect('naming-policy-edit', pk=policy.pk)
-    return render(request, 'inventory/naming_policy.html', {'policies': NamingPolicy.objects.filter(removed_at__isnull=request.GET.get('show') != 'removed').select_related('environment'), 'show_removed': request.GET.get('show') == 'removed', 'editing_policy': bool(policy or request.GET.get('new') or request.method == 'POST'), 'policy': policy,
+    return render(request, 'inventory/naming_policy.html', {'policies': NamingPolicy.objects.filter(removed_at__isnull=request.GET.get('show') != 'removed').select_related('environment'), 'show_removed': request.GET.get('show') == 'removed', 'editing_policy': bool(policy or duplicate or request.GET.get('new') or request.method == 'POST'), 'policy': policy, 'duplicate_source': duplicate,
         'form': form, 'formset': formset, 'binding_form': binding_form, 'preview': preview, 'error': error,
         'bindings': policy.bindings.select_related('environment') if policy else [], 'versions': policy.versions.select_related('actor')[:30] if policy else []})
 
@@ -186,9 +190,11 @@ def csv_response(rows):
     response = HttpResponse(content_type='text/csv; charset=utf-8')
     response['Content-Disposition'] = 'attachment; filename="naming-assessment.csv"'
     writer = csv.writer(response)
-    writer.writerow(['group_path', 'group_type', 'current_name', 'proposed_name', 'policy', 'status', 'issues'])
+    writer.writerow(['group_path', 'group_type', 'current_name', 'proposed_name', 'policy', 'status', 'issues', 'owner', 'progress', 'ticket', 'exception_expiry'])
     for row in rows:
         values = [row['identity'], row['group_type'], row['name'], row['proposed'], row['policy'].name if row['policy'] else '', row['status'], '; '.join(row['reasons'])]
+        proposal = row.get('proposal')
+        values.extend([proposal.owner.username if proposal and proposal.owner else '', row.get('progress_label',''), proposal.workflow.get('ticket','') if proposal else '', str(proposal.expires_at or '') if proposal else ''])
         writer.writerow(["'" + value if value.lstrip().startswith(('=', '+', '-', '@', '\t', '\r')) else value for value in values])
     return response
 
@@ -248,9 +254,20 @@ def compliance(request, pk):
                 changes = {r['identity']: {proposal_form.cleaned_data['scope']: proposal_form.cleaned_data['value']} for r in selected}
             if not selected or (action != 'import' and (len(selected) != len(set(ids)) or len(selected)>100)):
                 raise ValidationError('Select 1–100 current groups, or import a CSV for current group paths.')
-            if action not in ('propose', 'import', 'assign', 'review', 'reject', 'exception'): raise ValidationError('Choose a supported proposal action.')
+            if action not in ('propose', 'import', 'assign', 'review', 'reject', 'exception', 'workflow'): raise ValidationError('Choose a supported proposal action.')
             if action == 'exception' and (not request.user.is_superuser or not proposal_form.is_valid() or not proposal_form.cleaned_data.get('note')):
                 raise ValidationError('An administrator must record a reason for a naming exception.')
+            if action == 'exception':
+                expiry = proposal_form.cleaned_data.get('expires_at')
+                if not expiry or expiry < timezone.localdate() or not owner:
+                    raise ValidationError('Exceptions require an owner and an expiry date today or later.')
+            if action == 'workflow':
+                if not proposal_form.is_valid() or not proposal_form.cleaned_data.get('progress'):
+                    raise ValidationError('Choose a progress state.')
+                if any(not row['proposed'] for row in selected) and proposal_form.cleaned_data['progress'] != 'in_review':
+                    raise ValidationError('Resolve missing names and policy conflicts before preparing a change.')
+                if proposal_form.cleaned_data['progress'] in ('prepared','awaiting') and not proposal_form.cleaned_data.get('ticket'):
+                    raise ValidationError('Record a change ticket before preparing or verifying a change.')
             if action == 'assign' and not owner: raise ValidationError('Select an owner.')
             with transaction.atomic():
                 Environment.objects.select_for_update().get(pk=environment.pk)
@@ -258,7 +275,7 @@ def compliance(request, pk):
                     raise ValidationError('A new collection arrived. Reload before saving proposals.')
                 for row in selected:
                     proposal = NamingProposal.objects.select_for_update().filter(environment=environment, object_type='group', group_path=row['identity']).first()
-                    if action in ('review', 'exception', 'reject'):
+                    if action in ('review', 'exception', 'reject', 'workflow', 'assign', 'propose'):
                         stamp = naming.digest([row['baseline'], row['policy_stamp'], [proposal.state, proposal.tags, proposal.note, str(proposal.updated_at)] if proposal else None])
                         if request.POST.get('decision_stamp_' + str(row['id'])) != stamp:
                             raise ValidationError('The proposal or naming policy changed. Reload and review the current evidence before recording a decision.')
@@ -272,9 +289,17 @@ def compliance(request, pk):
                         proposal.baseline, proposal.state, proposal.author = row['baseline'], 'draft', request.user
                         proposal.note = proposal_form.cleaned_data.get('note', '')
                         if owner: proposal.owner = owner
+                    elif action == 'workflow':
+                        proposal = proposal or NamingProposal(environment=environment, group_path=row['identity'], baseline=row['baseline'], author=request.user)
+                        if owner: proposal.owner = owner
+                        if not proposal.owner_id: raise ValidationError('Assign an owner before updating progress.')
+                        proposal.workflow = {'state':proposal_form.cleaned_data['progress'], 'ticket':proposal_form.cleaned_data.get('ticket',''), 'snapshot':str(snapshot.pk), 'snapshot_time':snapshot.generated_at.isoformat(), 'policy_stamp':row['policy_stamp'], 'definition_stamp':row['definition_stamp'], 'proposed':row['proposed']}
+                        if proposal_form.cleaned_data.get('note'): proposal.note = proposal_form.cleaned_data['note']
                     elif action == 'exception':
                         proposal = proposal or NamingProposal(environment=environment, group_path=row['identity'])
                         proposal.state, proposal.baseline = 'exception', row['baseline']
+                        proposal.owner = owner
+                        proposal.expires_at = proposal_form.cleaned_data['expires_at']
                         proposal.exception_policy_stamp = row['policy_stamp']
                         proposal.note = proposal_form.cleaned_data['note']
                         proposal.reviewed_by = request.user
@@ -293,7 +318,7 @@ def compliance(request, pk):
                         raise ValidationError('A group path must fit 512 characters and proposals may contain at most 128 scopes.')
                     proposal.save()
                     record('naming.proposal_' + action, 'NamingProposal', proposal.pk, actor=request.user.pk,
-                           details={'environment_id': environment.pk, 'group_path': row['identity'], 'state': proposal.state, 'tags': proposal.tags, 'owner_id': proposal.owner_id, 'note': proposal.note, 'reviewed_by_id': proposal.reviewed_by_id, 'baseline': proposal.baseline, 'exception_policy_stamp': proposal.exception_policy_stamp})
+                           details={'environment_id': environment.pk, 'group_path': row['identity'], 'state': proposal.state, 'tags': proposal.tags, 'owner_id': proposal.owner_id, 'note': proposal.note, 'reviewed_by_id': proposal.reviewed_by_id, 'baseline': proposal.baseline, 'exception_policy_stamp': proposal.exception_policy_stamp, 'workflow':proposal.workflow, 'expires_at':str(proposal.expires_at)})
             messages.success(request, f'{len(selected)} proposal(s) updated. No tags or group names were changed in NSX or vCenter.')
             return redirect('naming-compliance', pk=environment.pk)
         except (ValidationError, UnicodeError, csv.Error) as exc:
@@ -302,7 +327,18 @@ def compliance(request, pk):
     group_type = request.GET.get('group_type', '')
     query, status, policy_id = request.GET.get('q', '').strip(), request.GET.get('status', ''), request.GET.get('policy', '')
     owner_filter = request.GET.get('owner', '')
-    filtered = [r for r in rows if (not query or query.casefold() in (r['name']+' '+r['identity']+' '+str(r['observed_tags'])).casefold())
+    tab = request.GET.get('tab', 'attention')
+    if tab not in ('attention','compliant','exceptions','all'): tab = 'attention'
+    groups = {}
+    policy_names = {str(policy.pk):policy for policy in NamingPolicy.objects.filter(enabled=True, removed_at__isnull=True)}
+    for row in rows:
+        row['next_url'] = reverse('collection-coverage', args=[environment.pk]) if row['status'] == 'Evidence incomplete' else reverse('naming-policies') if row['status'] in ('Ambiguous policy','No applicable policy') else '#naming-work-actions'
+        row['conflicting_policies'] = [policy_names[value] for value in row.get('matching_policy_ids', []) if value in policy_names] if row['status']=='Ambiguous policy' else []
+        if row['status'] in ('Ambiguous policy','No applicable policy','Invalid value','Missing required tags','Duplicate proposed name'):
+            key = (row['status'], tuple(row.get('matching_policy_ids', [])))
+            bucket = groups.setdefault(key, {'issue':row['status'],'count':0,'policies':[policy_names[value] for value in key[1] if value in policy_names]})
+            bucket['count'] += 1
+    filtered = [r for r in rows if (tab == 'all' or tab == 'attention' and r['needs_attention'] or tab == 'compliant' and r['status'] == 'Compliant' and not r['needs_attention'] or tab == 'exceptions' and r['status'] == 'Reviewed exception') and (not query or query.casefold() in (r['name']+' '+r['identity']+' '+str(r['observed_tags'])).casefold())
                 and (not group_type or r['group_type'] == group_type)
                 and (not status or r['status'] == status) and (not policy_id or policy_id in r.get('matching_policy_ids', []))
                 and (not owner_filter or r['proposal'] and str(r['proposal'].owner_id) == owner_filter)]
@@ -310,7 +346,7 @@ def compliance(request, pk):
     page = Paginator(filtered, table_page_size(request)).get_page(request.GET.get('page'))
     params = request.GET.copy();params.pop('page', None);params.pop('export', None)
     return render(request, 'inventory/naming_compliance.html', {'environment': environment, 'snapshot': snapshot, 'page': page,
-        'table_total': len(rows), 'group_type': group_type, 'warning': warning, 'totals': totals, 'error': error, 'query': query, 'status': status, 'policy_id': policy_id,
+        'tab':tab, 'issue_groups':list(groups.values()), 'table_total': len(rows), 'group_type': group_type, 'warning': warning, 'totals': totals, 'error': error, 'query': query, 'status': status, 'policy_id': policy_id,
         'proposal_form': proposal_form, 'simulation': simulation, 'owner_filter': owner_filter,
         'owners': get_user_model().objects.filter(is_active=True, is_staff=True).order_by('username'),
         'policies': NamingPolicy.objects.filter(enabled=True, removed_at__isnull=True), 'query_string': params.urlencode()})

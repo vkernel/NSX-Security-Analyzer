@@ -51,6 +51,51 @@ class NamingTests(TestCase):
             data[f'components-{index}-ORDER'] = index+1
         return data
 
+    def test_duplicate_opens_new_editable_policy_without_changing_source(self):
+        url=reverse('naming-policies')
+        count=NamingPolicy.objects.count()
+        response=self.client.get(url,{'duplicate':self.policy.pk})
+        self.assertContains(response,'New policy based on the saved draft')
+        self.assertEqual(response.context['form'].initial['name'],self.policy.name+' (copy)')
+        self.assertFalse(response.context['form'].fields['environment'].disabled)
+        self.assertEqual(NamingPolicy.objects.count(),count)
+        data=self.payload();data.update(name='VDI copy',environment=self.env.pk,revision=0)
+        self.assertEqual(self.client.post(url,data).status_code,302)
+        duplicate=NamingPolicy.objects.get(name='VDI copy')
+        self.assertFalse(duplicate.enabled);self.assertFalse(duplicate.configuration)
+        self.policy.refresh_from_db();self.assertTrue(self.policy.enabled)
+        self.assertEqual(self.policy.configuration,self.config)
+        self.assertEqual(duplicate.bindings.count(),0)
+
+    def test_duplicate_removed_policy_is_not_available(self):
+        self.policy.removed_at=timezone.now();self.policy.save()
+        self.assertEqual(self.client.get(reverse('naming-policies'),{'duplicate':self.policy.pk}).status_code,404)
+
+    def test_workflow_requires_ticket_and_resolves_only_after_later_collection(self):
+        self.assertContains(self.post(action='workflow',progress='prepared',owner=self.user.pk),'change ticket')
+        self.assertEqual(self.post(action='workflow',progress='awaiting',ticket='CHG-1',owner=self.user.pk,note='External rename').status_code,302)
+        self.assertEqual(self.rows()[0]['progress_label'],'Awaiting verification')
+        self.vm.name='PRD-RTM';self.vm.save()
+        self.assertEqual(self.rows()[0]['progress_label'],'Awaiting verification')
+        from datetime import timedelta
+        self.snapshot=Snapshot.objects.create(environment=self.env,generated_at=timezone.now()+timedelta(minutes=1),summary={},report={})
+        self.vm=self.add_vm('vm-1','PRD-RTM',self.tags)
+        self.assertEqual(self.rows()[0]['progress_label'],'Resolved')
+        self.assertNotEqual(self.rows(simulation=True)[0]['progress_label'],'Resolved')
+        self.policy.revision+=1;self.policy.save()
+        self.assertTrue(self.rows()[0]['work_stale'])
+        proposal=NamingProposal.objects.get();self.assertEqual(proposal.owner,self.user);self.assertEqual(proposal.note,'External rename')
+        self.assertContains(self.client.get(self.url()),'Review required')
+
+    def test_exception_expiry_and_attention_tabs(self):
+        self.assertContains(self.post(action='exception',note='Temporary',owner=self.user.pk),'expiry date')
+        self.assertEqual(self.post(action='exception',note='Temporary',owner=self.user.pk,expires_at='2099-01-01').status_code,302)
+        self.assertEqual(self.client.get(self.url()).context['page'].paginator.count,0)
+        self.assertEqual(self.client.get(self.url(),{'tab':'exceptions'}).context['page'].paginator.count,1)
+        proposal=NamingProposal.objects.get();proposal.expires_at='2000-01-01';proposal.save()
+        self.assertTrue(self.rows()[0]['needs_attention'])
+        self.assertEqual(self.client.get(self.url()).context['page'].paginator.count,1)
+
     def test_order_case_mapping_and_observed_name(self):
         row=self.rows()[0]
         self.assertEqual(row['proposed'], 'PRD-RTM')
@@ -305,7 +350,7 @@ class NamingTests(TestCase):
 
     def test_exception_requires_admin_reason_and_invalidates_on_policy_change(self):
         self.assertContains(self.post(action='exception'),'record a reason')
-        self.assertEqual(self.post(action='exception',note='Intentional integration name').status_code,302)
+        self.assertEqual(self.post(action='exception',note='Intentional integration name',owner=self.user.pk,expires_at='2099-01-01').status_code,302)
         self.assertEqual(self.rows()[0]['status'],'Reviewed exception')
         self.policy.revision+=1;self.policy.save()
         self.assertTrue(self.rows()[0]['exception_stale'])
