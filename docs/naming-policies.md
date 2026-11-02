@@ -82,9 +82,9 @@ Choose **New policy** from the overview, or open an existing policy. Follow Choo
 ## Match a VDI scope with any user value
 
 Open **Naming compliance → Naming policies**, edit the VDI policy, and choose
-**1. Scope**. Set **Match condition** to **Scope exists — any value**. Set
-**Category field** to the logical field of the tag component (for example `VDI user`),
-and leave **Category tag value** blank. Under **2. Name components**, set that
+**1. Scope**. Set **Match condition** to **Scope exists — any value**. Select
+**Category field** from the dropdown of tag components (for example `VDI user — VDI_Gebruiker`).
+The category-value field and picker are hidden and not submitted in Scope exists mode. Under **2. Name components**, set that
 component's source to **Definition tag / reviewed scope value** and its default
 scope to `VDI_Gebruiker`. Scope spelling is case-sensitive; active environment scope
 mappings are respected. This matches any nonempty observed value in that scope.

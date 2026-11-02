@@ -27,6 +27,27 @@
  function pick(input,actualScope,button){target=input;scope=actualScope;environment=env(input);opener=button;search.value='';dialog.querySelector('h2').textContent=scope?'Choose a value for '+scope:'Choose a tag scope';panelReturn=window.WorkspacePanels?.openPicker(dialog);if(!panelReturn)dialog.showModal();search.focus();load();}
  function componentScope(form){const field=form.querySelector('[name=match_field]')?.value;const rows=[...form.querySelectorAll('.naming-component')];return rows.find(r=>r.querySelector('[name$="-field"]')?.value===field)?.querySelector('[name$="-scope"]')?.value||'';}
  function attach(input,scopeGetter,label){if(!input||input.dataset.pickerReady)return;input.dataset.pickerReady='1';const button=node('button',label);button.type='button';button.className='button naming-picker-trigger';const hint=node('small','');hint.setAttribute('role','status');button.onclick=()=>{const actual=scopeGetter();if(actual===null){hint.textContent='Choose the component scope (and category field, if applicable) first.';input.focus();return;}hint.textContent='';pick(input,actual,button);};input.after(button,hint);}
+ let selectedComponent=null;
+ function updateMatchControls(){
+  let field=document.querySelector('[name=match_field]');if(!field)return;
+  if(field.tagName!=='SELECT'){
+   const select=document.createElement('select');
+   for(const attr of field.attributes)if(!['type','value','maxlength','list'].includes(attr.name))select.setAttribute(attr.name,attr.value);
+   select.dataset.initialValue=field.value;field.replaceWith(select);field=select;
+   field.addEventListener('change',()=>{selectedComponent=null;updateMatchControls();});
+  }
+  const rows=[...document.querySelectorAll('.naming-component')].filter(row=>row.querySelector('[name$="-field"]')?.form===field.form && row.querySelector('[name$="-source"]')?.value==='tag' && !row.querySelector('[name$="-DELETE"]')?.checked);
+  let value=field.dataset.initialValue??field.value;delete field.dataset.initialValue;
+  if(selectedComponent&&rows.includes(selectedComponent))value=selectedComponent.querySelector('[name$="-field"]').value;
+  const options=[new Option('Choose a tag component (blank for general fallback)', '')];
+  for(const row of rows){const name=row.querySelector('[name$="-field"]').value.trim(),scope=row.querySelector('[name$="-scope"]')?.value;if(name)options.push(new Option(scope?`${name} — ${scope}`:name,name));}
+  if(value&&!options.some(option=>option.value===value))options.push(new Option(`${value} — unavailable; choose a tag component`,value));
+  field.replaceChildren(...options);field.value=value;
+  selectedComponent=rows.find(row=>row.querySelector('[name$="-field"]').value===value)||null;
+  const exists=document.querySelector('[name=match_mode]')?.value==='exists',category=document.querySelector('[name=match_value]');
+  field.required=exists;
+  if(category){category.disabled=exists;const wrapper=category.closest('.form-field');if(wrapper)wrapper.hidden=exists;}
+ }
  function enhance(){
   document.querySelectorAll('[name$="-scope"], [name="scope"]').forEach(input=>attach(input,()=>'', 'Choose existing scope'));
   const category=document.querySelector('[name=match_value]');attach(category,()=>componentScope(category.form)||null,'Choose existing category value');
@@ -43,9 +64,11 @@
     const lines=textarea.value.split('\n').filter(s=>s.trim()&&s.split('=')[0].trim()!==a);lines.push(a+'='+b);const output=lines.join('\n');if(output.length>8000){feedback.textContent='Mapping limit reached.';return;}set(textarea,output);feedback.textContent='Mapping added to the draft. Save and preview before activation.';
    };textarea.before(details);
   });
-  const field=document.querySelector('[name=match_field]');if(field){let list=document.getElementById('naming-logical-fields');if(!list){list=document.createElement('datalist');list.id='naming-logical-fields';field.after(list);field.setAttribute('list',list.id);}list.replaceChildren(...[...document.querySelectorAll('.naming-component [name$="-field"]')].map(e=>{const o=document.createElement('option');o.value=e.value;return o;}));}
+  updateMatchControls();
  }
- enhance();document.querySelector('[data-naming-components]')?.addEventListener('input',enhance);
+ enhance();
+ document.addEventListener('input',event=>{if(event.target.closest('.naming-component'))enhance();});
+ document.addEventListener('change',event=>{if(event.target.name==='match_mode'||event.target.closest('.naming-component'))enhance();});
  const root=document.querySelector('[data-naming-components]');if(root)new MutationObserver(()=>{enhance();schedule();}).observe(root,{childList:true});
  // Server evaluates an illustrative saved group with the same validation/evaluator as assessment.
  const form=root?.closest('form'),example=document.querySelector('[data-naming-example]');let exampleTimer,exampleController;

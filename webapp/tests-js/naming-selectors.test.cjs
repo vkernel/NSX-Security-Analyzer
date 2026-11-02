@@ -1,0 +1,12 @@
+const {test}=require('node:test');const assert=require('node:assert/strict');const {JSDOM}=require('jsdom');const fs=require('node:fs');const path=require('node:path');
+test('category dropdown follows tag components and hides unused value controls',async()=>{
+ const dom=new JSDOM(`<div data-naming-selectors></div><dialog data-naming-picker><h2></h2><input data-picker-search><div data-picker-results></div><p data-picker-status></p><button data-picker-close></button><button data-picker-manual></button></dialog><form id="policy"><select name="match_mode"><option value="exact">Exact</option><option value="exists" selected>Exists</option></select><input name="match_field" value="VDI user"><div class="form-field"><input name="match_value" value="123"></div><div data-naming-components><fieldset class="naming-component"><input name="components-0-field" value="VDI user"><select name="components-0-source"><option value="tag">Tag</option></select><input name="components-0-scope" value="VDI_Gebruiker"></fieldset><fieldset class="naming-component"><input name="components-1-field" value="Prefix"><select name="components-1-source"><option value="fixed">Fixed</option></select></fieldset></div></form>`,{url:'https://example.test',runScripts:'outside-only'});
+ const w=dom.window,d=w.document;w.eval(fs.readFileSync(path.join(__dirname,'../static/naming-selectors.js'),'utf8'));
+ const field=d.querySelector('[name=match_field]'),value=d.querySelector('[name=match_value]'),form=d.querySelector('form');
+ assert.equal(field.tagName,'SELECT');assert.equal(field.value,'VDI user');assert.equal(field.options.length,2);assert.match(field.options[1].textContent,/VDI_Gebruiker/);
+ assert.equal(value.closest('.form-field').hidden,true);assert.equal(new w.FormData(form).has('match_value'),false);assert.equal(field.required,true);
+ const row=d.querySelector('.naming-component');row.querySelectorAll('input,select').forEach(control=>control.setAttribute('form','policy'));d.body.append(row);
+ const name=row.querySelector('[name$="-field"]');name.value='User ID';name.dispatchEvent(new w.Event('input',{bubbles:true}));assert.equal(field.value,'User ID');
+ const mode=d.querySelector('[name=match_mode]');mode.value='exact';mode.dispatchEvent(new w.Event('change',{bubbles:true}));assert.equal(value.disabled,false);assert.equal(value.closest('.form-field').hidden,false);assert.equal(new w.FormData(form).get('match_value'),'123');assert.equal(field.required,false);
+ await new Promise(resolve=>w.setTimeout(resolve,0));dom.window.close();
+});

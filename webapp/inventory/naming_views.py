@@ -364,7 +364,7 @@ def naming_example(request):
     if not form.is_valid() or not components.is_valid():
         return JsonResponse({'message': 'Complete the required policy and component fields to see an example.'})
     config = configuration(form, components)
-    if not form.is_valid(): return JsonResponse({'message': 'Choose a valid category field/value pair.'})
+    if not form.is_valid(): return JsonResponse({'message': ' '.join(str(message) for errors in form.errors.values() for message in errors)})
     policy = NamingPolicy.objects.filter(pk=request.POST.get('policy_id')).first() if request.POST.get('policy_id', '').isdigit() else None
     environment = form.cleaned_data['environment'] or Environment.objects.order_by('name').first()
     if not environment: return JsonResponse({'message': 'Add an environment and collect inventory to see an example.'})

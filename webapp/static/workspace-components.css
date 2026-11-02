@@ -367,3 +367,6 @@ body dialog#saved-configuration-dialog{width:min(880px,calc(100vw - 32px))}
 .table-footer{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:12px;padding:16px 0;font-size:13px;color:var(--muted)}
 .table-footer label,.table-page-links{display:flex;align-items:center;gap:12px}.table-footer select{width:auto;min-width:72px}.table-page-links [aria-disabled=true]{opacity:.6}
 @media(max-width:800px){.filter-control[open]>.filter-fields{width:100%;max-width:100%}.table-footer{align-items:flex-start}.table-page-links{flex-wrap:wrap}}
+
+/* Conditional naming fields must override the shared flex field layout. */
+.naming-editor .form-field[hidden]{display:none}

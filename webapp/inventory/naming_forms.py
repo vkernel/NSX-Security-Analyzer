@@ -9,8 +9,8 @@ class PolicyForm(forms.Form):
     group_type = forms.ChoiceField(choices=[('all', 'All group types'), ('dynamic', 'Dynamic'), ('static', 'Static'), ('mixed', 'Mixed / nested')], initial='all')
     separator = forms.ChoiceField(choices=[('-', 'Hyphen (-)'), ('_', 'Underscore (_)'), ('.', 'Dot (.)'), ('', 'No separator')], required=False)
     max_length = forms.IntegerField(min_value=1, max_value=255, initial=63, label='Maximum name length')
-    match_mode = forms.ChoiceField(choices=[('exact', 'Exact category value'), ('exists', 'Scope exists — any value')], required=False, initial='exact', label='Match condition', help_text='For Scope exists, select the logical field of a tag component below; leave category value blank. Leave category field blank for a general fallback.')
-    match_field = forms.CharField(max_length=64, required=False, label='Category field', help_text='Optional logical field below. Leave blank to cover all groups.')
+    match_mode = forms.ChoiceField(choices=[('exact', 'Exact category value'), ('exists', 'Scope exists — any value')], required=False, initial='exact', label='Match condition', help_text='For Scope exists, choose a tag component; no category value is needed. For a general fallback, choose Exact category value and leave both category fields blank.')
+    match_field = forms.CharField(max_length=64, required=False, label='Category field', help_text='Choose the tag component whose scope determines which groups match. Required for Scope exists.')
     match_value = forms.CharField(max_length=256, required=False, label='Category tag value', help_text='Exact observed value, before value mapping.')
     revision = forms.IntegerField(widget=forms.HiddenInput, initial=0)
 
