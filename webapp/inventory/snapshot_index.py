@@ -102,6 +102,8 @@ def clear_index(snapshot_id, keep_coverage=False):
     dependent links first; keep source snapshots and history projections intact.
     """
     Snapshot.objects.select_for_update().only('pk').get(pk=snapshot_id)
+    from .analysis_index import invalidate
+    invalidate(snapshot_id)
     quote = connection.ops.quote_name
     panel = quote(SnapshotPanel._meta.db_table)
     record = quote(SnapshotRecord._meta.db_table)
@@ -246,4 +248,7 @@ def build(snapshot, rendered=None):
     SnapshotPresentation.objects.create(snapshot=snapshot, shell=shell, tag_evidence=metadata)
     from django.utils import timezone
     Snapshot.objects.filter(pk=snapshot.pk).update(browsing_status="ready", browsing_refreshed_at=timezone.now())
+    from .analysis_index import prepare
+    snapshot.browsing_status = 'ready'
+    prepare(snapshot)
     checkpoint(snapshot.pk, "save_presentation_complete")

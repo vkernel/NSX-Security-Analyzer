@@ -1,23 +1,24 @@
 """Bounded configuration relationships. Never a reachability or traffic evaluator."""
 from collections import defaultdict
 import math
-from .naming import group_evidence, digest
+from .analysis_index import load
 from .models import SnapshotRecord
 
 MAX_GROUPS = 12
 MAX_RULES = 10000
 
 
-def build(snapshot, query='', scope='', service='', include_disabled=False, hidden_paths=(), selected_paths=None, application_mode=False):
+def build(snapshot, query='', scope='', service='', include_disabled=False, hidden_paths=(), selected_paths=None, application_mode=False, rules_needed=True, application_graph_data=None):
+    index = load(snapshot, 'groups', *(['rules', 'services'] if rules_needed else []))
     groups = {}
-    for item in SnapshotRecord.objects.filter(snapshot=snapshot, data__kind='group').values('name', 'data__path', 'data__configuration', 'data__membership').iterator(chunk_size=500):
-        path = item['data__path']
+    for item in index['groups']:
+        path = item['path']
         if not path: continue
-        evidence = group_evidence(item['data__configuration'])
+        evidence = item['evidence']
         values = sorted({t['tag'] for t in evidence['tags'] if t['scope'] == scope}) if scope else []
         groups[path] = {'path': path, 'name': item['name'], 'type': evidence['group_type'],
-                        'membership': item['data__membership'] or 'unknown', 'classification': values[0] if len(values) == 1 else 'Unclassified',
-                        'definition': item['data__configuration'], 'evidence': evidence}
+                        'membership': item['membership'], 'classification': values[0] if len(values) == 1 else 'Unclassified',
+                        'definition': item['definition'], 'evidence': evidence}
     # Search VMs only when requested; these are potential configuration relationships.
     workloads = []
     if query:
@@ -37,13 +38,11 @@ def build(snapshot, query='', scope='', service='', include_disabled=False, hidd
     visible = visible[:MAX_GROUPS]
     selected = {g['path'] for g in visible}
     cells, rules, warnings = defaultdict(list), [], []
-    source = SnapshotRecord.objects.filter(snapshot=snapshot, data__configuration__rule__isnull=False).order_by('ordinal').values('data')[:MAX_RULES+1]
-    source = list(source)
-    service_paths={path for row in source[:MAX_RULES] for path in (row['data'].get('configuration',{}).get('rule',{}).get('services') or []) if path != 'ANY'}
-    service_catalog={r['data__path']:{'name':r['name'],'definition':r['data__configuration']} for r in SnapshotRecord.objects.filter(snapshot=snapshot,data__kind='service',data__path__in=service_paths).values('name','data__path','data__configuration')}
+    source = index.get('rules', [])
+    service_catalog = index.get('services', {})
     if len(source)>MAX_RULES: warnings.append('Rule limit reached. Relationships are partial; narrow the evidence in the firewall inventory.')
-    for record in source[:MAX_RULES]:
-        row = record['data']; config = row.get('configuration') or {}; rule = config.get('rule') or {}
+    for row in source[:MAX_RULES]:
+        config = row.get('configuration') or {}; rule = config.get('rule') or {}
         disabled = bool(rule.get('disabled', row.get('disabled')))
         if disabled and not include_disabled: continue
         services = rule.get('services', [])
@@ -64,7 +63,7 @@ def build(snapshot, query='', scope='', service='', include_disabled=False, hidd
                      action=rule.get('action',row.get('action','Unknown')), disabled=disabled, sources=sources,
                      destinations=destinations, services=services, service_evidence=service_evidence, inline=inline, scope=rule.get('scope',config.get('policy',{}).get('scope',[])),
                      order=rule.get('sequence_number'), direction=rule.get('direction','Not recorded'), reasons=reasons,
-                     configuration=config, hits=row.get('hit_count'), fingerprint=digest(config))
+                     configuration=config, hits=row.get('hit_count'), fingerprint=row['fingerprint'])
         rules.append(entry)
         # ANY is a symbolic endpoint, never materialized into every workload pair.
         if not excluded:
@@ -72,7 +71,7 @@ def build(snapshot, query='', scope='', service='', include_disabled=False, hidd
                 for b in set(destinations) & (selected | {'ANY'}): cells[a,b].append(entry)
     if any('ANY' in r['sources']+r['destinations'] for r in rules):
         visible.append({'path':'ANY','name':'ANY','type':'symbolic','membership':'Not a workload group','classification':'Any matching endpoint'})
-    applications = application_graph(application_groups, rules) if application_mode else {}
+    applications = (application_graph_data if application_graph_data is not None else application_graph(application_groups, rules)) if application_mode else {}
     if application_mode: visible = []
     matrix, edges = [], []
     for a in visible:
@@ -114,13 +113,13 @@ def application_graph(groups, rules):
     for i, name in enumerate(names):
         angle = 2 * math.pi * i / max(1, len(names)) - math.pi / 2
         nodes.append({'id': i, 'name': name, 'short_name': name if len(name) < 24 else name[:21] + '…',
-                      'groups': buckets[name], 'x': round(500 + 345 * math.cos(angle), 1),
+                      'groups': buckets[name], 'group_count':len(buckets[name]), 'x': round(500 + 345 * math.cos(angle), 1),
                       'y': round(330 + 235 * math.sin(angle), 1)})
     lookup = {g['path']: node for node in nodes for g in node['groups']}
     connections = {}
     unresolved = 0
     for rule in rules:
-        definition = rule['configuration']['rule']
+        definition = rule['configuration'].get('rule') or {}
         if definition.get('sources_excluded') or definition.get('destinations_excluded'):
             unresolved += 1
             continue

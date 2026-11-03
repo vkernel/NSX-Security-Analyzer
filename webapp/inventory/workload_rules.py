@@ -1,7 +1,7 @@
 """Explain candidate configuration rules for a VM pair; never an access verdict."""
 import ipaddress
-from .models import SnapshotRecord
-from .naming import group_evidence
+from .models import SnapshotVMMembership
+from .analysis_index import load
 
 RULE_LIMIT = 10000
 CATEGORIES = {'Ethernet': 0, 'Emergency': 1, 'Infrastructure': 2, 'Environment': 3, 'Application': 4}
@@ -82,14 +82,14 @@ def memberships(vm, groups):
 def endpoint(values, vm, members, excluded=False):
     if excluded: return 'unknown', ['Negated endpoint requires manual assessment']
     if not values: return 'unknown', ['Endpoint definition unavailable']
-    names={g['path']:g['name'] for g in members}
+    names=members if isinstance(members,dict) else {g['path']:g['name'] for g in members}
     matches=[];unknown=[]
     for value in values:
         if value == 'ANY': matches.append('ANY (any matching endpoint, not necessarily internet)')
         elif value in names: matches.append(names[value])
-        elif contains(value,vm['ips']): matches.append(value+' (saved VM address)')
         elif value.startswith('/'):
             unknown.append(value)
+        elif contains(value,vm['ips']): matches.append(value+' (saved VM address)')
         else:
             try: ipaddress.ip_network(value,strict=False)
             except ValueError: unknown.append(value)
@@ -142,25 +142,31 @@ def service_match(rule, catalog, protocol='', port=''):
 
 def investigate(snapshot, source_record, destination_record, protocol='', port='', include_disabled=False):
     source,destination=vm_summary(source_record),vm_summary(destination_record)
-    groups={}
-    for row in SnapshotRecord.objects.filter(snapshot=snapshot,data__kind='group').values('name','data__path','data__configuration'):
-        groups[row['data__path']]={'name':row['name'],'evidence':group_evidence(row['data__configuration'])}
-    source['groups']=memberships(source,groups);destination['groups']=memberships(destination,groups)
-    catalog={r['data__path']:r['data__configuration'] for r in SnapshotRecord.objects.filter(snapshot=snapshot,data__kind='service').values('data__path','data__configuration')}
-    rows=list(SnapshotRecord.objects.filter(snapshot=snapshot,data__configuration__rule__isnull=False).order_by('ordinal').values('data')[:RULE_LIMIT+1])
+    index=load(snapshot, 'groups', 'rules', 'services')
+    groups={g['path']:{'name':g['name'],'evidence':g['evidence']} for g in index['groups']}
+    for vm in (source,destination):
+        cached=SnapshotVMMembership.objects.filter(snapshot=snapshot,record_id=vm['id']).values_list('groups',flat=True).first()
+        if cached is None:
+            cached=memberships(vm,groups)
+            SnapshotVMMembership.objects.get_or_create(snapshot=snapshot,record_id=vm['id'],defaults={'groups':cached})
+        vm['groups']=cached
+    catalog={path:service['definition'] for path,service in index['services'].items()}
+    rows=index['rules']
+    source_names={g['path']:g['name'] for g in source['groups']}
+    destination_names={g['path']:g['name'] for g in destination['groups']}
     candidates=[];unresolved=[];disabled_count=0
-    for stored in rows[:RULE_LIMIT]:
-        item=stored['data'];config=item.get('configuration') or {};rule=config.get('rule') or {};policy=config.get('policy') or {}
+    for item in rows[:RULE_LIMIT]:
+        config=item.get('configuration') or {};rule=config.get('rule') or {};policy=config.get('policy') or {}
         disabled=bool(rule.get('disabled',item.get('disabled')))
         if disabled and not include_disabled: disabled_count+=1;continue
-        a,why_a=endpoint(rule.get('source_groups'),source,source['groups'],rule.get('sources_excluded',False))
-        b,why_b=endpoint(rule.get('destination_groups'),destination,destination['groups'],rule.get('destinations_excluded',False))
+        a,why_a=endpoint(rule.get('source_groups'),source,source_names,rule.get('sources_excluded',False))
+        b,why_b=endpoint(rule.get('destination_groups'),destination,destination_names,rule.get('destinations_excluded',False))
         svc,why_s=service_match(rule,catalog,protocol,port)
         if 'no_match' in (a,b,svc): continue
         scope=rule.get('scope',policy.get('scope',[]))
-        sa,_=endpoint(scope,source,source['groups']);sb,_=endpoint(scope,destination,destination['groups'])
+        sa,_=endpoint(scope,source,source_names);sb,_=endpoint(scope,destination,destination_names)
         entry={'name':item.get('name','Unnamed rule'),'path':item.get('path',''),'policy':item.get('policy_name',''),
-            'category':item.get('category',policy.get('category','Unknown')), 'policy_order':policy.get('sequence_number'),
+            'category':item.get('category') or policy.get('category','Unknown'), 'policy_order':policy.get('sequence_number'),
             'order':rule.get('sequence_number'), 'action':rule.get('action',item.get('action','Unknown')), 'disabled':disabled,
             'direction':rule.get('direction','Not recorded'), 'scope':scope, 'scope_status':'Potential endpoint scope match' if 'candidate' in (sa,sb) else 'Scope requires manual assessment',
             'source_reason':why_a,'destination_reason':why_b,'service_reason':why_s,

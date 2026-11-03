@@ -1,0 +1,8 @@
+{% if stale %}
+<p role="status">The saved evidence has changed or is no longer available. <a href="{{ reload_url }}">Reopen the application map</a> before viewing this connection.</p>
+{% else %}
+<p>{{ environment.name }} · Saved collection {{ snapshot.generated_at }}</p>
+{% for rule in rules %}<p><a href="{{ rule.url }}">{{ rule.name }}</a> · {{ rule.action }}{% if rule.disabled %} · Disabled{% endif %}</p>{% empty %}<p>No retained rule links are available for this connection. Review collection coverage.</p>{% endfor %}
+{% if rule_count > 25 %}<p>First 25 rule links shown of {{ rule_count }}. Use firewall inventory for the complete list.</p>{% endif %}
+{% if missing_rules %}<p role="status">Some rule links are unavailable. Review collection coverage before relying on this connection.</p>{% endif %}
+{% endif %}

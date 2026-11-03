@@ -355,7 +355,50 @@ class SnapshotRecord(models.Model):
 
     class Meta:
         constraints = [models.UniqueConstraint(fields=['snapshot', 'ordinal'], name='snapshot_record_unique')]
-        indexes = [models.Index(fields=['snapshot', 'sort_name'], name='snapshot_record_name')]
+        indexes = [models.Index(fields=['snapshot', 'sort_name'], name='snapshot_record_name'),
+                   models.Index(fields=['snapshot', 'ordinal'], condition=models.Q(data__kind='group'), name='snapshot_group_projection'),
+                   models.Index(fields=['snapshot', 'ordinal'], condition=models.Q(data__configuration__rule__isnull=False), name='snapshot_rule_projection')]
+
+
+class SnapshotAnalysisIndex(models.Model):
+    """Disposable, versioned configuration projections shared by web workers."""
+    snapshot = models.OneToOneField(Snapshot, primary_key=True, on_delete=models.CASCADE, related_name='analysis_index')
+    version = models.PositiveIntegerField(default=0)
+    groups = models.JSONField(null=True)
+    rules = models.JSONField(null=True)
+    services = models.JSONField(null=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+
+class SnapshotApplicationMap(models.Model):
+    projection = models.ForeignKey(SnapshotAnalysisIndex, on_delete=models.CASCADE, related_name='application_maps')
+    cache_key = models.CharField(max_length=64)
+    version = models.PositiveIntegerField()
+    source_stamp = models.DateTimeField()
+    payload = models.JSONField(default=dict)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=['projection','cache_key'], name='snapshot_application_map_key')]
+
+
+class SnapshotVMMembership(models.Model):
+    snapshot = models.ForeignKey(Snapshot, on_delete=models.CASCADE)
+    record_id = models.PositiveBigIntegerField()
+    groups = models.JSONField(default=list)
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=['snapshot', 'record_id'], name='snapshot_vm_membership')]
+
+
+class SnapshotNamingAssessment(models.Model):
+    snapshot = models.ForeignKey(Snapshot, on_delete=models.CASCADE)
+    simulation = models.BooleanField(default=False)
+    signature = models.CharField(max_length=64)
+    rows = models.JSONField(default=list)
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=['snapshot', 'simulation'], name='snapshot_naming_mode')]
 
 
 class SnapshotRecordPanel(models.Model):

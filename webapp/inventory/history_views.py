@@ -9,13 +9,15 @@ from django.core.paginator import Paginator
 from django.db import transaction
 from django.db.models import Q
 from django.http import HttpResponseForbidden
-from django.shortcuts import get_object_or_404, redirect, render
+from django.shortcuts import get_object_or_404, redirect
+from .page_response import render
 from django.utils import timezone
 from django.views.decorators.http import require_GET, require_http_methods
 from .models import Environment, Finding, FindingEvent, DeletionItem
 from .forms import SnapshotComparisonForm, FindingReviewForm, BulkAssignmentForm
 from .findings import LABELS
 from .preferences import preferences
+from .page_response import status_request
 
 
 @login_required
@@ -164,8 +166,8 @@ def findings(request, pk):
         return redirect(request.get_full_path())
     # Only findings that met the administration policy enter the review queue.
     from django.db.models import Count
-    qualification_counts = list(environment.findings.filter(present=True).values('qualification').annotate(total=Count('pk')).order_by('qualification'))
-    historical_finding_count = environment.findings.filter(present=False).count()
+    qualification_counts = [] if status_request(request) else list(environment.findings.filter(present=True).values('qualification').annotate(total=Count('pk')).order_by('qualification'))
+    historical_finding_count = 0 if status_request(request) else environment.findings.filter(present=False).count()
     rows, form, query = filtered_findings(request, environment, request.GET)
     total_params = request.GET.copy()
     for key in ('q', 'kind', 'owner'): total_params.pop(key, None)
@@ -173,7 +175,14 @@ def findings(request, pk):
     page = Paginator(rows, table_page_size(request)).get_page(request.GET.get('page'))
     from .deletion import KINDS
     from .evidence_coverage import snapshot_issues, relevant
-    latest = environment.snapshots.filter(testing=False, imported=False).only('pk', 'summary').first()
+    latest_data = environment.snapshots.filter(testing=False, imported=False).values('pk','summary__evidence_coverage','summary__inventory_warnings').first()
+    latest = None
+    if latest_data:
+        from .models import Snapshot
+        summary = {'inventory_warnings':latest_data['summary__inventory_warnings']}
+        if latest_data['summary__evidence_coverage'] is not None:
+            summary['evidence_coverage'] = latest_data['summary__evidence_coverage']
+        latest = Snapshot(pk=latest_data['pk'],summary=summary)
     coverage = snapshot_issues(latest) if latest else []
     release_eligible = 0
     for row in page:
@@ -296,6 +305,8 @@ def finding_policy(request):
         return HttpResponseForbidden('Administrator access is required.')
     selected = request.GET.get('environment', '')
     environment = get_object_or_404(Environment, pk=selected) if selected else None
+    if status_request(request):
+        return render(request,'inventory/finding_policy.html',{'recalculations':FindingRecalculation.objects.filter(**({'environment':environment} if environment else {})).select_related('environment').defer('environment__password_ciphertext','environment__ca_certificate').order_by('-requested_at')[:20]})
     scope = str(environment.pk) if environment else 'global'
     saved = FindingPolicy.objects.filter(scope=scope).first()
     inherited = policy_for(environment) if environment else FindingPolicy.objects.filter(scope='global').first() or FindingPolicy()
@@ -413,6 +424,9 @@ def my_work(request):
         return HttpResponseForbidden('Operator access required.')
     queue = request.GET.get('queue', 'assigned')
     if queue not in ('assigned', 'second', 'ready', 'unassigned'): queue = 'assigned'
+    if status_request(request):
+        from .cleanup_tasks import tasks
+        return render(request,'inventory/my_work.html',{'cleanup_tasks':tasks(request.user,environment=request.GET.get('environment',''),query=request.GET.get('q','').strip()[:255],queue=queue)})
     rows = Finding.objects.exclude(qualification='suppressed').select_related('environment', 'owner__keycloakidentity', 'owner__ldapidentity').defer('evidence', 'approvals')
     if queue == 'unassigned': rows = rows.filter(owner__isnull=True, present=True, qualification='eligible').exclude(workflow_state='decommissioned')
     elif queue == 'assigned': rows = rows.filter(owner=request.user, workflow_state='owner_review')

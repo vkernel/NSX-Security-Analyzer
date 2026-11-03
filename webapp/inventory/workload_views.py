@@ -12,7 +12,8 @@ from django.core.paginator import Paginator
 from django.db import transaction
 from django.db.models import Q
 from django.http import Http404, HttpResponse, HttpResponseForbidden, JsonResponse
-from django.shortcuts import get_object_or_404, redirect, render
+from django.shortcuts import get_object_or_404, redirect
+from .page_response import render, analyze
 from django.urls import reverse
 from django.utils import timezone
 from django.views.decorators.cache import never_cache
@@ -84,7 +85,7 @@ class ProposalForm(forms.Form):
 
 
 def snapshot_for(request,env):
-    snapshots=env.snapshots.filter(testing=False,imported=False).defer('report','html')
+    snapshots=env.snapshots.filter(testing=False,imported=False).defer('report','html','summary')
     value=request.GET.get('snapshot')
     if value:
         try: UUID(value)
@@ -94,12 +95,34 @@ def snapshot_for(request,env):
 
 
 def owned_proposals(user,env):
-    qs=FirewallRuleProposal.objects.filter(environment=env).select_related('snapshot','creator','owner')
+    qs=FirewallRuleProposal.objects.filter(environment=env).select_related('snapshot','creator','owner').defer('snapshot__report','snapshot__html','snapshot__summary')
     return qs if user.is_superuser else qs.filter(Q(creator=user)|Q(owner=user))
 
 
 def vm_record(snapshot,path):
-    return SnapshotRecord.objects.filter(snapshot=snapshot,view='vms',data__path=path).first() if path else None
+    return SnapshotRecord.objects.filter(snapshot=snapshot,view='vms',data__path=path).only('pk','name','data').first() if path else None
+
+
+@login_required
+@require_http_methods(['GET'])
+def membership_page(request,pk):
+    from .models import SnapshotVMMembership
+    from .analysis_index import load
+    from .workload_rules import memberships
+    env=get_object_or_404(Environment,pk=pk)
+    snapshot=snapshot_for(request,env)
+    if not snapshot or snapshot.browsing_status!='ready': raise Http404('Browsing evidence unavailable')
+    record=vm_record(snapshot,request.GET.get('vm',''))
+    if record is None: raise Http404('VM not in selected snapshot')
+    vm=vm_summary(record)
+    groups=SnapshotVMMembership.objects.filter(snapshot=snapshot,record_id=record.pk).values_list('groups',flat=True).first()
+    if groups is None:
+        index=load(snapshot,'groups')['groups']
+        groups=memberships(vm,{g['path']:{'name':g['name'],'evidence':g['evidence']} for g in index})
+        SnapshotVMMembership.objects.get_or_create(snapshot=snapshot,record_id=record.pk,defaults={'groups':groups})
+    page=Paginator(groups,25).get_page(request.GET.get('page'))
+    params=request.GET.copy();params.pop('page',None)
+    return render(request,'inventory/workload_memberships.html',{'environment':env,'snapshot':snapshot,'vm':vm,'membership_page':page,'membership_query':params.urlencode()})
 
 
 @login_required
@@ -130,7 +153,7 @@ def pair_view(request,pk):
         for side,value in [('source',source),('destination',destination)]:
             if form.cleaned_data[side] and not value: form.add_error(None,f'The selected {side} VM is not present in this snapshot. Choose it again.')
         if source and destination:
-            pair=investigate(snapshot,source,destination,form.cleaned_data['protocol'],str(form.cleaned_data['port']) if form.cleaned_data['port'] is not None else '',form.cleaned_data['disabled'])
+            pair=analyze(request,investigate,snapshot,source,destination,form.cleaned_data['protocol'],str(form.cleaned_data['port']) if form.cleaned_data['port'] is not None else '',form.cleaned_data['disabled'])
     if request.method=='POST':
         if request.POST.get('action')=='delete_pair':
             value=request.POST.get('view_id','')
@@ -143,8 +166,6 @@ def pair_view(request,pk):
                 messages.success(request,'VM investigation saved. Opening it uses the latest full collection.')
         return redirect(request.get_full_path())
     candidates=pair['candidates'] if pair else [];unresolved=pair['unresolved'] if pair else []
-    for rule in candidates+unresolved:
-        rule['object_url']=reverse('snapshot',args=[snapshot.pk])+'?'+urlencode({'object':rule['path']})
     if request.GET.get('export')=='csv' and pair:
         out=io.StringIO();w=csv.writer(out);w.writerow(['Snapshot','Source VM','Destination VM','Status','Rule','Policy','Action','Source explanation','Destination explanation','Service explanation','Scope'])
         def safe(v):
@@ -159,6 +180,9 @@ def pair_view(request,pk):
     query=params.copy();query['export']='csv';export_url='?'+query.urlencode()
     selected_status=request.GET.get('status','candidate')
     page=Paginator(unresolved if selected_status=='unresolved' else candidates,table_page_size(request)).get_page(request.GET.get('page'))
+    object_base=reverse('snapshot',args=[snapshot.pk]) if snapshot else ''
+    for rule in page:
+        rule['object_url']=object_base+'?'+urlencode({'object':rule['path']})
     saved=[{'id':v.pk,'name':v.name,'url':reverse('segmentation-pair',args=[pk])+'?'+urlencode({k:val for k,val in v.filters.items() if k!='workspace'})} for v in SegmentationSavedView.objects.filter(environment=env,user=request.user,filters__workspace='pair')]
     return render(request,'inventory/workload_pair.html',dict(environment=env,snapshot=snapshot,ready=ready,form=form,pair=pair,
         snapshots=env.snapshots.filter(testing=False,imported=False).only('pk','generated_at')[:50],source_vm=vm_summary(source) if source else None,destination_vm=vm_summary(destination) if destination else None,
@@ -177,7 +201,7 @@ def proposal(request,pk,proposal_id=None):
     saved=existing.configuration if existing else {}
     source_path=saved.get('source_vm',request.GET.get('source',''));destination_path=saved.get('destination_vm',request.GET.get('destination',''))
     src=vm_record(snapshot,source_path) if snapshot else None;dst=vm_record(snapshot,destination_path) if snapshot else None
-    pair=investigate(snapshot,src,dst) if src and dst and snapshot.browsing_status=='ready' else None
+    pair=analyze(request,investigate,snapshot,src,dst) if src and dst and snapshot.browsing_status=='ready' else None
     if not existing and not pair: raise Http404('Choose both VMs in the same saved snapshot first.')
     policies=[]
     if snapshot and snapshot.browsing_status=='ready':

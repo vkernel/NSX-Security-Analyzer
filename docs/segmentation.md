@@ -1,5 +1,9 @@
 # Workload segmentation
 
+For preparation, caching, bounded group/member lists and request timings, see [Workspace performance](workspace-performance.md).
+
+Application maps reuse an assembled snapshot/filter cache. Expand a configured connection to load its rule links. Reopening the same connection reuses those links locally; changed evidence asks you to reopen the map. The map keeps complete counts while displaying at most 50 group labels per application and 25 rule links per connection.
+
 Open **Segmentation** in the sidebar and choose an environment. The page pins the latest full, non-imported collection in its URL. A new collection produces a notification; it never replaces evidence while you are reviewing it. Archived browsing data must be restored from the snapshot page first. Environment switching opens that environment's latest full collection.
 
 ## Explore

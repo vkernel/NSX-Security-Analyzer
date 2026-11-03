@@ -1,7 +1,8 @@
 """Read-only overview of independent background queues."""
 from .preferences import table_page_size
 from django.contrib.auth.decorators import login_required
-from django.shortcuts import render, get_object_or_404, redirect
+from django.shortcuts import get_object_or_404, redirect
+from .page_response import render
 from django.urls import reverse
 from django.views.decorators.http import require_GET
 from . import activity_feed

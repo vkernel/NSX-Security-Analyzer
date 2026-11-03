@@ -5,7 +5,10 @@ from . import storage_views, activity_views, authentication_settings, keycloak_s
 urlpatterns = [
     path('environments/<int:pk>/segmentation/workloads/', workload_views.pair_view, name='segmentation-pair'),
     path('environments/<int:pk>/segmentation/vms/', workload_views.vm_search, name='segmentation-vms'),
+    path('environments/<int:pk>/segmentation/groups/', segmentation_views.group_search, name='segmentation-groups'),
+    path('environments/<int:pk>/segmentation/connections/', segmentation_views.connection_details, name='segmentation-connection'),
     path('environments/<int:pk>/segmentation/membership/', workload_views.verify_membership, name='segmentation-membership'),
+    path('environments/<int:pk>/segmentation/memberships/', workload_views.membership_page, name='segmentation-memberships'),
     path('environments/<int:pk>/segmentation/proposals/new/', workload_views.proposal, name='segmentation-proposal-new'),
     path('environments/<int:pk>/segmentation/proposals/<int:proposal_id>/', workload_views.proposal, name='segmentation-proposal'),
     path('segmentation/', segmentation_views.workspace, name='segmentation-index'),

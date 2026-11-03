@@ -32,6 +32,8 @@ class StorageLifecycleTests(TestCase):
         build(self.latest)
 
     def test_archive_preserves_sources_and_observations_and_rebuilds(self):
+        from .models import SnapshotAnalysisIndex
+        self.assertTrue(SnapshotAnalysisIndex.objects.filter(snapshot=self.old).exists())
         source = self.old.report
         SnapshotFindingEvidence.objects.create(snapshot=self.old, kind='empty_group', path='/g', name='G', fingerprint='same')
         cleanup_storage(self.now)
@@ -42,6 +44,7 @@ class StorageLifecycleTests(TestCase):
         self.assertTrue(SnapshotFindingEvidence.objects.filter(snapshot=self.old).exists())
         self.assertTrue(SnapshotHistoryData.objects.filter(snapshot=self.old).exists())
         self.assertFalse(SnapshotRecord.objects.filter(snapshot=self.old).exists())
+        self.assertFalse(SnapshotAnalysisIndex.objects.filter(snapshot=self.old).exists())
         self.assertTrue(SnapshotPresentation.objects.filter(snapshot=self.latest).exists())
         admin = get_user_model().objects.create_superuser('storage-admin', password='test')
         self.client.force_login(admin)
@@ -55,6 +58,7 @@ class StorageLifecycleTests(TestCase):
         self.old.refresh_from_db()
         self.assertEqual(self.old.browsing_status, 'ready')
         self.assertTrue(SnapshotRecord.objects.filter(snapshot=self.old).exists())
+        self.assertTrue(SnapshotAnalysisIndex.objects.filter(snapshot=self.old).exists())
         cleanup_storage(self.now)
         self.assertTrue(SnapshotPresentation.objects.filter(snapshot=self.old).exists())
 

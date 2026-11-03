@@ -98,7 +98,7 @@
  // Refresh only safe list regions after a record drawer closes; never reload the page.
  document.addEventListener('workspace-panel-closed',async()=>{
   const roots=[...document.querySelectorAll('#finding-list-results,#activity-results')];if(!roots.length||!window.RefreshRegion)return;
-  try{const response=await fetch(location.href,{credentials:'same-origin',cache:'no-store',signal:AbortSignal.timeout(15000)});if(!response.ok||response.redirected)return;const doc=new DOMParser().parseFromString(await response.text(),'text/html');
+  try{const response=await fetch(location.href,{credentials:'same-origin',cache:'no-store',signal:AbortSignal.timeout(15000),headers:{'X-Requested-With':'task-status'}});if(!response.ok||response.redirected)return;const doc=new DOMParser().parseFromString(await response.text(),'text/html');
    roots.forEach(root=>{const fresh=doc.getElementById(root.id);if(fresh)window.RefreshRegion.replace(root,fresh);});
   }catch(_){} // Existing live status remains the authoritative connectivity indicator.
  });

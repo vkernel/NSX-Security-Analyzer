@@ -5,7 +5,7 @@ import hashlib
 import json
 import re
 from collections import Counter, defaultdict
-from django.db.models import Q
+from django.db.models import Q, F
 from .models import NamingPolicy, NamingScopeBinding, NamingProposal, SnapshotRecord
 
 
@@ -63,18 +63,23 @@ def group_evidence(config):
                 candidate_tags=tags, conditions=[f"{n.get('member_type', '')} {n.get('key', '')} {n.get('operator', '')} {n.get('value', '')}" for n in dynamic], members=members, nested=nested, evidence_notes=notes, needs_review=needs_review)
 
 
-def inventory(environment):
-    snapshot = environment.snapshots.filter(testing=False, imported=False).only('pk', 'generated_at', 'summary', 'browsing_status').first()
+def inventory_snapshot(environment):
+    return environment.snapshots.filter(testing=False, imported=False).defer('report','html','summary').annotate(
+        inventory_warning=F('summary__inventory_warnings')).first()
+
+
+def inventory(environment, snapshot=None):
+    snapshot = snapshot or inventory_snapshot(environment)
     if not snapshot:
         return None, [], 'No full collection is available. Collect this environment before evaluating names.'
     if snapshot.browsing_status != 'ready':
         return snapshot, [], 'Snapshot browsing data is archived or being prepared. Restore its browsing data first.'
-    records = SnapshotRecord.objects.filter(snapshot=snapshot, view='inventory', data__kind='group').order_by('ordinal').values('pk', 'name', 'data__path', 'data__configuration', 'data__unique_id')
+    from .analysis_index import load
+    records = load(snapshot,'groups')['groups']
     groups = []
-    for r in records.iterator(chunk_size=500):
-        definition = r['data__configuration']
-        groups.append(dict(id=r['pk'], identity=r['data__path'] or '', name=r['name'], definition=definition,
-                           unique_id=r['data__unique_id'], **group_evidence(definition)))
+    for r in records:
+        groups.append(dict(id=r['id'], identity=r['path'], name=r['name'], definition=r['definition'],
+                           unique_id=r['unique_id'], **r['evidence']))
     by_path = {g['identity']: g for g in groups}
     # Project only explicit VM identities and tags, not large rule/member payloads.
     vm_tags = {}
@@ -101,7 +106,7 @@ def inventory(environment):
             if member['kind'] == 'ExternalIDExpression' and member['member_type'] == 'VirtualMachine':
                 tags = vm_tags.get(member['value'])
                 group['supporting'].append({'source': member['value'], 'detail': 'Member VM tags: suggestion only' if tags is not None else 'Member VM evidence unavailable', 'tags': tags or []})
-    warning = 'Inventory coverage has warnings; results are provisional and cannot establish compliance.' if snapshot.summary.get('inventory_warnings') else ''
+    warning = 'Inventory coverage has warnings; results are provisional and cannot establish compliance.' if snapshot.inventory_warning else ''
     if not groups: warning = 'No indexed groups found. Check collection coverage and browsing preparation.'
     return snapshot, groups, warning
 
@@ -198,13 +203,31 @@ def evaluate(group, policies, bindings):
 
 
 def assess(environment, replacement=None, simulation=False):
-    snapshot, groups, warning = inventory(environment)
+    snapshot = inventory_snapshot(environment)
     policies = list(NamingPolicy.objects.filter(enabled=True, removed_at__isnull=True).filter(Q(environment__isnull=True) | Q(environment=environment)))
     if replacement:
         policies = [p for p in policies if p.pk != replacement.pk]
         if replacement.environment_id in (None, environment.pk): policies.append(replacement)
     bindings = {b.policy_id: (b.draft_scopes if replacement and b.policy_id == replacement.pk else b.scopes) for b in NamingScopeBinding.objects.filter(environment=environment)}
     proposals = {p.group_path: p for p in NamingProposal.objects.filter(environment=environment, object_type='group').select_related('owner', 'reviewed_by')}
+    from .models import SnapshotNamingAssessment
+    from .analysis_index import VERSION
+    signature = digest(['naming-assessment-v1', VERSION, str(snapshot.pk) if snapshot else None,
+                        snapshot.browsing_status if snapshot else None, bool(snapshot.inventory_warning) if snapshot else False,
+                        str(timezone.localdate()), simulation,
+                        [(p.pk,p.revision,p.name,p.configuration) for p in policies], bindings,
+                        [{k:v for k,v in p.__dict__.items() if k!='_state'} for p in proposals.values()]])
+    if snapshot and snapshot.browsing_status=='ready' and replacement is None:
+        cached=SnapshotNamingAssessment.objects.filter(snapshot=snapshot,simulation=simulation,signature=signature).values_list('rows',flat=True).first()
+        if cached is not None:
+            by_policy={p.pk:p for p in policies}
+            for row in cached:
+                row['policy']=by_policy.get(row.pop('_policy_id'))
+                row['proposal']=proposals.get(row['identity'])
+            warning='Inventory coverage has warnings; results are provisional and cannot establish compliance.' if snapshot.inventory_warning else ''
+            if not cached: warning='No indexed groups found. Check collection coverage and browsing preparation.'
+            return snapshot,cached,warning
+    snapshot, groups, warning = inventory(environment, snapshot)
     rows = []
     for group in groups:
         proposal = proposals.get(group['identity'])
@@ -214,7 +237,7 @@ def assess(environment, replacement=None, simulation=False):
         if proposal and not stale and (accepted or simulation and proposal.state == 'draft'):
             effective = dict(group, reviewed_components=accepted, proposed_scopes=set(proposal.tags), component_source='Reviewed value' if accepted else 'Draft simulation', tags=[t for t in group['tags'] if t.get('scope') not in proposal.tags] + [{'scope': k, 'tag': v} for k, v in proposal.tags.items()])
         row = evaluate(effective, policies, bindings)
-        row.update(observed_status=evaluate(group, policies, bindings)['status'], proposal=proposal, stale=stale, observed_tags=group['tags'], baseline=baseline(group))
+        row.update(observed_status=evaluate(group, policies, bindings)['status'] if effective is not group else row['status'], proposal=proposal, stale=stale, observed_tags=group['tags'], baseline=baseline(group))
         rows.append(row)
     names = defaultdict(set)
     for group in groups: names[group['name'].casefold()].add(group['identity'])
@@ -253,6 +276,14 @@ def assess(environment, replacement=None, simulation=False):
         if proposal and proposal.state == 'exception' and row['exception_stale']:
             row['reasons'].append('Exception expired or evidence changed; review it again.')
         row['needs_attention'] = row['status'] not in ('Compliant','Reviewed exception') or row['work_stale'] or row['exception_stale']
+    if snapshot and snapshot.browsing_status=='ready' and replacement is None:
+        stored=[]
+        for row in rows:
+            payload={key:value for key,value in row.items() if key not in ('policy','proposal','proposed_scopes')}
+            payload['_policy_id']=row['policy'].pk if row['policy'] else None
+            if 'proposed_scopes' in row: payload['proposed_scopes']=sorted(row['proposed_scopes'])
+            stored.append(payload)
+        SnapshotNamingAssessment.objects.update_or_create(snapshot=snapshot,simulation=simulation,defaults={'signature':signature,'rows':stored})
     return snapshot, rows, warning
 
 

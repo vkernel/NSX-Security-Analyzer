@@ -10,7 +10,8 @@ from django.core.exceptions import ValidationError
 from django.core.paginator import Paginator
 from django.db import transaction
 from django.http import HttpResponse, HttpResponseForbidden, JsonResponse
-from django.shortcuts import get_object_or_404, redirect, render
+from django.shortcuts import get_object_or_404, redirect
+from .page_response import render, analyze
 from django.views.decorators.http import require_http_methods
 from django.utils import timezone
 from django.urls import reverse
@@ -212,14 +213,14 @@ def index(request):
 def compliance(request, pk):
     environment = get_object_or_404(Environment, pk=pk)
     simulation = request.GET.get('simulate') == '1'
-    snapshot, rows, warning = naming.assess(environment, simulation=simulation)
+    snapshot, rows, warning = analyze(request,naming.assess,environment,simulation=simulation)
     proposal_form = ProposalForm(request.POST or None, request.FILES or None)
     error = ''
     if request.method == 'POST':
         if not request.user.is_staff: return HttpResponseForbidden('Operator access is required for proposals.')
         action = request.POST.get('action')
         # Always bind proposals to observed data, never to a previous simulation.
-        if simulation: snapshot, rows, warning = naming.assess(environment)
+        if simulation: snapshot, rows, warning = analyze(request,naming.assess,environment)
         by_id = {str(row['id']): row for row in rows}
         ids = request.POST.getlist('selected')
         selected = [by_id[i] for i in set(ids) if i in by_id]

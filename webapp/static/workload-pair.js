@@ -46,7 +46,17 @@
   }));
  }
  document.querySelector('[data-copy-pair]')?.addEventListener('click',async()=>{const status=document.querySelector('[data-copy-status]');try{await navigator.clipboard.writeText(location.href);status.textContent='Snapshot link copied';}catch(_){status.textContent='Copy the address from your browser to share this snapshot.';}});
- document.querySelectorAll('[data-membership-check]').forEach(form=>form.addEventListener('submit',async event=>{event.preventDefault();const button=form.querySelector('button'),status=form.querySelector('[data-membership-result]');button.disabled=true;status.textContent='Checking live VM membership…';const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),45000);
+ async function loadMemberships(root,path){
+  if(root.dataset.loading==='true')return;root.dataset.loading='true';
+  const url=new URL(path||root.dataset.membershipPageUrl,new URL(root.dataset.membershipPageUrl,location.href));
+  let status=root.querySelector('[role=status]');if(!status){status=document.createElement('p');status.role='status';root.prepend(status);}status.textContent='Loading group relationships…';
+  try{const response=await fetch(url,{credentials:'same-origin',signal:AbortSignal.timeout(15000)});if(!response.ok||response.redirected)throw Error();const html=await response.text();const doc=new DOMParser().parseFromString(html,'text/html');root.replaceChildren(...doc.body.childNodes);root.dataset.loaded='true';}
+  catch(_){status.textContent='Unable to load group relationships. Use Show group relationships to retry.';}
+  finally{delete root.dataset.loading;}
+ }
+ document.addEventListener('click',event=>{const button=event.target.closest('[data-membership-load]');if(!button)return;const root=button.closest('[data-membership-page-url]');if(root){event.preventDefault();loadMemberships(root,button.dataset.membershipLoad);}});
+ if('IntersectionObserver' in window){const observer=new IntersectionObserver(entries=>entries.forEach(entry=>{if(entry.isIntersecting){observer.unobserve(entry.target);if(!entry.target.dataset.loaded)loadMemberships(entry.target);}}));document.querySelectorAll('[data-membership-page-url]').forEach(root=>observer.observe(root));}
+ document.addEventListener('submit',async event=>{const form=event.target.closest('[data-membership-check]');if(!form)return;event.preventDefault();const button=form.querySelector('button'),status=form.querySelector('[data-membership-result]');button.disabled=true;status.textContent='Checking live VM membership…';const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),45000);
   try{const response=await fetch(form.action,{method:'POST',body:new FormData(form),credentials:'same-origin',signal:controller.signal});let result;try{result=await response.json();}catch(_){throw Error('Session expired or membership service unavailable. Sign in again if necessary.');}if(!response.ok)throw Error(result.error||'Membership check denied.');status.textContent=result.message+' Checked '+new Date(result.checked_at).toLocaleString()+'. '+result.note;}catch(error){status.textContent=error.name==='AbortError'?'Membership read timed out. No conclusion was made. You may retry.':error.message;}finally{clearTimeout(timer);button.disabled=false;}
- }));
+ });
 })();

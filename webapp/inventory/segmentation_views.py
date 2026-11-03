@@ -6,18 +6,20 @@ from uuid import UUID
 from django.http import Http404
 from django.core.paginator import Paginator
 from .preferences import table_page_size
-from urllib.parse import urlencode
+from urllib.parse import urlencode, quote_plus
 from django import forms
 from django.contrib import messages
 from django.contrib.auth import get_user_model
 from django.contrib.auth.decorators import login_required
 from django.http import HttpResponse, HttpResponseForbidden, JsonResponse
-from django.shortcuts import get_object_or_404, redirect, render
+from django.shortcuts import get_object_or_404, redirect
+from .page_response import render, analyze
 from django.urls import reverse
 from django.views.decorators.http import require_http_methods
 from .models import Environment, Snapshot, SegmentationSettings, SegmentationBoundary, SegmentationReview, SegmentationSavedView
 from .audit_events import record
 from .segmentation import build
+from .application_maps import cached_map, VERSION as MAP_VERSION
 
 
 class ReviewForm(forms.ModelForm):
@@ -37,18 +39,21 @@ class ReviewForm(forms.ModelForm):
 def workspace(request, pk=None):
     if pk is None:
         env = Environment.objects.filter(pk=request.GET.get('environment')).first() if request.GET.get('environment','').isdigit() else Environment.objects.first()
-        return redirect('segmentation', pk=env.pk) if env else render(request,'inventory/segmentation.html',{})
+        if not env: return render(request,'inventory/segmentation.html',{})
+        latest_id=env.snapshots.filter(testing=False,imported=False).values_list('pk',flat=True).first()
+        return redirect(reverse('segmentation',args=[env.pk])+('?' + urlencode({'snapshot':latest_id}) if latest_id else ''))
     env=get_object_or_404(Environment,pk=pk)
-    snapshots=env.snapshots.filter(testing=False, imported=False).defer('report','html')
+    snapshots=env.snapshots.filter(testing=False, imported=False).defer('report','html','summary')
+    if request.GET.get('check')=='1':
+        latest_id=snapshots.values_list('pk',flat=True).first()
+        response=JsonResponse({'latest':str(latest_id) if latest_id else ''})
+        response['Cache-Control']='private, no-store'
+        return response
     latest=snapshots.first()
     if request.GET.get('snapshot'):
         try: UUID(request.GET['snapshot'])
         except ValueError: raise Http404('Invalid snapshot')
     snap=get_object_or_404(snapshots,pk=request.GET['snapshot']) if request.GET.get('snapshot') else latest
-    if request.GET.get('check')=='1':
-        response=JsonResponse({'latest':str(latest.pk) if latest else ''})
-        response['Cache-Control']='private, no-store'
-        return response
     if snap and not request.GET.get('snapshot'):
         query=request.GET.copy();query['snapshot']=str(snap.pk)
         return redirect(reverse('segmentation',args=[pk])+'?'+query.urlencode())
@@ -58,8 +63,16 @@ def workspace(request, pk=None):
     if filters['tab'] not in ('matrix','map','priorities','changes','settings'): filters['tab']='map'
     filters['groups'] = list(dict.fromkeys(request.GET.getlist('groups')))[:12]
     ready=snap and snap.browsing_status=='ready'
-    data=build(snap,filters['q'],scope,filters['service'],filters['disabled']=='1',filters['hide'].split(','), selected_paths=filters['groups'] if filters['tab']=='matrix' else None, application_mode=filters['tab']=='map') if ready else {}
-    if snap and (snap.needs_review or snap.summary.get('inventory_warnings')):
+    rules_needed=bool(filters['tab']!='settings' and (filters['tab']!='matrix' or filters['groups']) or request.GET.get('rule') or request.GET.get('export'))
+    map_data=analyze(request,cached_map,snap,filters['q'],scope,filters['service'],filters['disabled']=='1',filters['hide'].split(',')) if ready and filters['tab']=='map' else None
+    if map_data is not None and request.method=='GET' and not request.GET.get('rule') and not request.GET.get('export'):
+        data=map_data
+    else:
+        data=analyze(request,build,snap,filters['q'],scope,filters['service'],filters['disabled']=='1',filters['hide'].split(','), selected_paths=filters['groups'] if filters['tab']=='matrix' else None, application_mode=filters['tab']=='map', rules_needed=rules_needed, application_graph_data=map_data['applications'] if map_data else None) if ready else {}
+        if map_data is not None:
+            data.update(map_context=map_data['map_context'],map_source_stamp=map_data['map_source_stamp'])
+    coverage_warning=Snapshot.objects.filter(pk=snap.pk).values_list('summary__inventory_warnings',flat=True).first() if snap else False
+    if snap and (snap.needs_review or coverage_warning):
         data.setdefault('warnings',[]).append('This snapshot contains collection warnings. Inspect collection coverage before relying on these relationships.')
     rules={r['path']:r for r in data.get('rules',[])}
     selected=rules.get(request.GET.get('rule',''))
@@ -101,29 +114,42 @@ def workspace(request, pk=None):
             if not redisplay:
                 record('segmentation.'+str(action),'Environment',env.pk,actor=request.user.pk,details={'snapshot':str(snap.pk) if snap else ''})
         if not redisplay: return redirect(request.get_full_path())
-    boundaries=list(SegmentationBoundary.objects.filter(environment=env,enabled=True))
+    boundaries=list(SegmentationBoundary.objects.filter(environment=env,enabled=True)) if filters['tab'] in ('priorities','settings') else []
     deviations=[]
     for boundary in boundaries:
-        matches=[r for r in rules.values() if not r['disabled'] and r['action']=='ALLOW' and not (r['configuration']['rule'].get('sources_excluded') or r['configuration']['rule'].get('destinations_excluded')) and (boundary.source in r['sources'] or 'ANY' in r['sources']) and (boundary.destination in r['destinations'] or 'ANY' in r['destinations'])]
+        matches=[r for r in rules.values() if not r['disabled'] and r['action']=='ALLOW' and not (r['configuration']['rule'].get('sources_excluded') or r['configuration']['rule'].get('destinations_excluded')) and (boundary.source in r['sources'] or 'ANY' in r['sources']) and (boundary.destination in r['destinations'] or 'ANY' in r['destinations'])] if filters['tab']=='priorities' else []
         deviations.append({'boundary':boundary,'rules':matches})
-    reviews={r.rule_path:r for r in SegmentationReview.objects.filter(environment=env)}
-    for row in rules.values():
+    priority_page=Paginator(data.get('priorities',[]),table_page_size(request)).get_page(request.GET.get('page'))
+    displayed={r['path']:r for r in priority_page} if filters['tab']=='priorities' else {}
+    if selected: displayed[selected['path']]=selected
+    for edge in data.get('applications',{}).get('edges',[]) + data.get('edges',[]) + deviations:
+        displayed.update({r['path']:r for r in edge['rules']})
+    reviews={r.rule_path:r for r in SegmentationReview.objects.filter(environment=env,rule_path__in=list(displayed))}
+    object_base=reverse('snapshot',args=[snap.pk])+'?object=' if snap else ''
+    params=request.GET.copy();params.pop('rule',None)
+    rule_base='?'+params.urlencode()+'&rule='
+    for row in displayed.values():
         review=reviews.get(row['path']);row['review']=review
         row['review_stale']=bool(review and (review.fingerprint!=row['fingerprint'] or review.state=='exception' and review.expires_at and review.expires_at<=date.today()))
-        params=request.GET.copy();params['rule']=row['path'];row['url']='?'+params.urlencode()
-        row['object_url']=reverse('snapshot',args=[snap.pk])+'?'+urlencode({'object':row['path']})
-    for g in data.get('group_catalog',[]):
-        g['url']=reverse('snapshot',args=[snap.pk])+'?'+urlencode({'object':g['path']})
+        row['url']=rule_base+quote_plus(row['path'])
+        row['object_url']=object_base+quote_plus(row['path'])
     application_scopes=sorted({t['scope'] for g in data.get('group_catalog',[]) for t in g['evidence']['tags']})
     for app in data.get('applications', {}).get('nodes', []):
-        for group in app['groups']:
-            group['url']=reverse('snapshot',args=[snap.pk])+'?'+urlencode({'object':group['path']})
+        for group in app['groups'][:50]:
+            group['url']=object_base+quote_plus(group['path'])
         app['matrix_url']='?'+urlencode({'snapshot':str(snap.pk),'tab':'matrix','groups':[g['path'] for g in app['groups'][:12]]},doseq=True)
+    if map_data is not None:
+        context=data['map_context']
+        detail_base=reverse('segmentation-connection',args=[env.pk])
+        for edge in data['applications']['edges']:
+            edge['details_url']=detail_base+'?'+urlencode({'snapshot':str(snap.pk),'source':edge['source']['name'],'destination':edge['destination']['name'],
+                'stamp':data['map_source_stamp'],'version':MAP_VERSION,'q':context['query'],'scope':context['scope'],'service':context['service'],
+                'disabled':'1' if context['include_disabled'] else '', 'hide':','.join(context['hidden_paths'])})
     changes=[];group_changes=[];previous=None
     if ready and filters['tab']=='changes':
         previous=snapshots.filter(generated_at__lt=snap.generated_at,browsing_status='ready').first()
         if previous:
-            old=build(previous,filters['q'],scope,filters['service'],filters['disabled']=='1',filters['hide'].split(','))
+            old=analyze(request,build,previous,filters['q'],scope,filters['service'],filters['disabled']=='1',filters['hide'].split(','))
             before={r['path']:r for r in old['rules']}
             old_groups={g['path']:g for g in old['groups']}
             for g in data['groups']:
@@ -147,6 +173,66 @@ def workspace(request, pk=None):
     for view in SegmentationSavedView.objects.filter(user=request.user,environment=env).exclude(filters__workspace='pair'): saved.append({'item':view,'url':reverse('segmentation',args=[pk])+'?'+urlencode(view.filters, doseq=True)})
     if len(request.GET.getlist('groups')) > 12:
         data.setdefault('warnings', []).append('Select up to 12 groups. Only the first 12 selections are included.')
-    priority_page=Paginator(data.get('priorities',[]),table_page_size(request)).get_page(request.GET.get('page'))
+    catalog=data.get('group_catalog',[])
+    catalog_total=len(catalog)
+    data['group_catalog']=[g for i,g in enumerate(catalog) if i<50 or g['selected']]
     return render(request,'inventory/segmentation.html',dict(application_scopes=application_scopes,priority_page=priority_page,group_changes=group_changes,environment=env,snapshot=snap,latest=latest,snapshots=snapshots[:50],ready=ready,
-        scope=scope,filters=filters,tabs=tabs,selected=selected,review_form=form,deviations=deviations,saved_views=saved,changes=changes,previous=previous,**data))
+        catalog_total=catalog_total,scope=scope,filters=filters,tabs=tabs,selected=selected,review_form=form,deviations=deviations,saved_views=saved,changes=changes,previous=previous,**data))
+
+
+@login_required
+@require_http_methods(['GET'])
+def group_search(request, pk):
+    from .workload_views import snapshot_for
+    from .analysis_index import load
+    env=get_object_or_404(Environment,pk=pk)
+    snapshot=snapshot_for(request,env)
+    results=[]
+    if snapshot and snapshot.browsing_status=='ready':
+        term=request.GET.get('q','').strip()[:200].casefold()
+        for group in load(snapshot,'groups')['groups']:
+            if term and term not in (group['name']+' '+group['path']).casefold(): continue
+            results.append({'path':group['path'],'name':group['name'],'type':group['evidence']['group_type']})
+        results.sort(key=lambda g:(g['name'].casefold(),g['path']))
+    response=JsonResponse({'results':results[:50],'total':len(results),'more':len(results)>50})
+    response['Cache-Control']='private, no-store'
+    return response
+
+
+@login_required
+@require_http_methods(['GET'])
+def connection_details(request,pk):
+    from .workload_views import snapshot_for
+    from .analysis_index import load, VERSION
+    from .models import SnapshotAnalysisIndex
+    env=get_object_or_404(Environment,pk=pk)
+    if not request.GET.get('snapshot'): raise Http404('Choose a pinned snapshot')
+    snapshot=snapshot_for(request,env)
+    reload_url=reverse('segmentation',args=[pk])+'?'+urlencode({'snapshot':snapshot.pk,'tab':'map'})
+    projection=SnapshotAnalysisIndex.objects.filter(snapshot=snapshot).values('version','updated_at').first()
+    if snapshot.browsing_status!='ready' or not projection or projection['version']!=VERSION or request.GET.get('version')!=str(MAP_VERSION) or request.GET.get('stamp')!=projection['updated_at'].isoformat():
+        return render(request,'inventory/application_connection.html',{'stale':True,'reload_url':reload_url},status=409)
+    data=analyze(request,cached_map,snapshot,request.GET.get('q','')[:255],request.GET.get('scope','')[:255],
+        request.GET.get('service','')[:255],request.GET.get('disabled')=='1',request.GET.get('hide','')[:255].split(','))
+    edge=next((e for e in data['applications']['edges'] if e['source']['name']==request.GET.get('source') and e['destination']['name']==request.GET.get('destination')),None)
+    if edge is None: raise Http404('Connection not in this application view')
+    # A cache eviction can rebuild the same map; changed evidence must not replace it.
+    if data['map_source_stamp']!=request.GET['stamp']:
+        return render(request,'inventory/application_connection.html',{'stale':True,'reload_url':reload_url},status=409)
+    paths=edge['rule_paths']
+    wanted=set(paths)
+    stored={r.get('path'):r for r in load(snapshot,'rules')['rules'] if r.get('path') in wanted}
+    current_stamp=SnapshotAnalysisIndex.objects.filter(snapshot=snapshot,version=VERSION).values_list('updated_at',flat=True).first()
+    if current_stamp is None or current_stamp.isoformat()!=request.GET['stamp']:
+        return render(request,'inventory/application_connection.html',{'stale':True,'reload_url':reload_url},status=409)
+    params={key:request.GET[key] for key in ('snapshot','q','service','disabled','hide') if key in request.GET}
+    params['tab']='map'
+    rule_base=reverse('segmentation',args=[pk])+'?'+urlencode(params)+'&rule='
+    rules=[]
+    for path in paths:
+        if path not in stored: continue
+        item=stored[path];rule=item['configuration'].get('rule') or {}
+        rules.append({'name':item['name'],'action':rule.get('action',item.get('action','Unknown')),
+                      'disabled':bool(rule.get('disabled',item.get('disabled'))),'url':rule_base+quote_plus(path)})
+    return render(request,'inventory/application_connection.html',{'rules':rules,'rule_count':edge['rule_count'],
+        'missing_rules':len(rules)!=len(paths),'environment':env,'snapshot':snapshot})
