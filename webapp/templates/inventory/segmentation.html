@@ -1,6 +1,7 @@
 {% extends 'base.html' %}{% load static table_controls %}
+{% block extra_head %}<link rel="stylesheet" href="{% static 'segmentation.css' %}"><link rel="stylesheet" href="{% static 'workload-pair.css' %}">{% endblock %}
 {% block content %}
-<link rel="stylesheet" href="{% static 'segmentation.css' %}"><link rel="stylesheet" href="{% static 'workload-pair.css' %}">
+
 <div class="page-heading"><div><h1>Workload segmentation</h1><p class="lead">See application connections, find VM-to-VM rules and plan group-based changes.</p></div></div>
 {% include 'inventory/segmentation_navigation.html' %}
 {% if snapshot %}

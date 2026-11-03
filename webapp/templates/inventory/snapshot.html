@@ -1,7 +1,7 @@
 {% extends 'base.html' %}{% load workspace_time %}{% load static %}
 {% block title %}{{ snapshot.environment.name }} report · NSX Security Analyzer{% endblock %}
 {% block body_class %}snapshot-page{% endblock %}
-{% block report_styles %}<style>{{ report.styles|safe }}</style>{% endblock %}
+{% block report_styles %}<style data-snapshot-styles>@layer snapshot-report { @scope (.report-content, #detail-dialog, .column-filter-dialog, #collection-results) { {{ report.styles|safe }} } }</style>{% endblock %}
 {% block extra_head %}<link rel="stylesheet" href="{% static 'report-workspace.css' %}">{% endblock %}
 
 {% block content %}

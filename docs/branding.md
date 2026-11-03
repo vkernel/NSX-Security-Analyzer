@@ -16,3 +16,15 @@ Light, Dark and System can be selected from Appearance in the top bar or Persona
 Keep the logo static; progress uses a separate status indicator. Give the full brand descriptive alternative text and hide decorative icons beside labels from assistive technology. Fresh standalone reports embed Relay artwork and remain self-contained. Previously stored reports and historical screenshots retain their original artwork.
 
 Design methodology: [Unslop by Damir Sokolovsky (@heydamir)](https://github.com/heydamir/unslop), CC BY 4.0. See `NOTICE` and the [Relay exploration](design/relay-iterations.md).
+
+## Shared style contract
+
+`webapp/static/design-system.css` owns the light/dark palette, semantic colors, typography families, overlays and neutral shadows. Component styles consume those tokens; they must not introduce another palette or separate dark-mode overrides. `relay.css` supplies the selected rail, section panel and shared geometry.
+
+Page-specific CSS belongs in the template's `extra_head` block, before the shared design system and Relay stylesheet. Keep stylesheet links out of page content and dynamically opened panels.
+
+Integrated snapshots place retained report CSS in a lower-priority `snapshot-report` layer, scoped to report content and its native evidence/filter dialogs. This applies to retained presentations at display time: no new collection, report rewrite or index rebuild is required. Standalone report downloads retain their self-contained presentation.
+
+Use neutral surfaces for evidence, fields and code viewers; reserve semantic colors for outcomes. Primary controls use `--action-text`, including administration widgets and dark mode. Dense tables scroll inside their own containers; long NSX paths and callback URLs wrap without widening the page.
+
+See the [application-wide consistency audit](design/relay-consistency-2026-11-03.md).

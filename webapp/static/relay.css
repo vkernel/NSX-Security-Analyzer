@@ -1,5 +1,5 @@
 /* Relay 04: compact module rail + task panel. Unslop methodology, CC BY 4.0. */
-body[data-theme]{--app-nav-width:288px;--app-topbar-height:64px;--relay-rail-width:80px;font-family:"Avenir Next",-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;min-height:100dvh}
+body[data-theme]{--app-nav-width:288px;--app-topbar-height:64px;--relay-rail-width:80px;font-family:var(--font-interface);line-height:1.6;min-height:100dvh}
 body[data-theme] :is(h1,h2,h3){font-weight:500}
 body[data-theme] :is(.page-heading h1,.report-toolbar h1){font-size:30px;line-height:1.25;letter-spacing:-.4px}
 body[data-theme] :is(.eyebrow,.section-eyebrow){letter-spacing:0;font-size:12px;font-weight:500}
@@ -15,7 +15,7 @@ body[data-theme] .workspace-module-rail :is(nav.workspace-navigation a,.sidebar-
 body[data-theme] .workspace-module-rail :is(nav.workspace-navigation a,.sidebar-bottom a)[aria-current]{background:var(--app-surface-soft);color:var(--app-accent);border-color:var(--line);box-shadow:none}
 .workspace-module-rail .nav-icon{width:18px;height:18px;stroke-width:1.65;stroke-linecap:square}
 body[data-theme] .workspace-module-rail .sidebar-bottom{margin-top:auto;padding:24px 0 0;gap:0}
-.workspace-section-panel{display:flex;flex-direction:column;min-width:0;min-height:0;background:var(--app-surface);overflow:auto;padding:24px 12px 16px;scrollbar-width:thin}
+.workspace-section-panel{display:flex;flex-direction:column;min-width:0;min-height:0;background:var(--app-surface);overflow:auto;margin:0;border:0;border-radius:0;box-shadow:none;padding:24px 12px 16px;scrollbar-width:thin}
 .section-panel-heading{padding:0 8px 24px}.section-environment{font-size:12px;color:var(--muted);overflow-wrap:anywhere;display:block;margin-bottom:8px}
 body[data-theme] .section-panel-heading h2{font-size:20px;line-height:1.35;letter-spacing:0;margin:0;overflow-wrap:anywhere;color:var(--ink)}
 .section-link-group{display:grid;gap:4px;margin:0 0 24px!important}
@@ -28,7 +28,7 @@ body[data-theme] .workspace-sidebar .section-link-group a:hover{background:var(-
 body[data-theme] .application-topbar{left:var(--app-nav-width);height:var(--app-topbar-height);min-height:64px;padding:12px 28px;background:var(--app-surface);border-color:var(--line);box-shadow:none;gap:24px}
 body[data-theme] .application-topbar>.topbar-actions>a.button{border:0;background:transparent;color:var(--app-accent)}
 body[data-theme] .application-topbar .avatar{background:var(--app-surface-soft);color:var(--muted)}
-body[data-theme] .application-topbar .topbar-popover{background:var(--app-surface);border-color:var(--line);box-shadow:0 8px 24px #00000018}
+body[data-theme] .application-topbar .topbar-popover{background:var(--app-surface);border-color:var(--line);box-shadow:var(--shadow-popover)}
 .relay-theme-menu>summary{display:flex;align-items:center;justify-content:center;min-width:36px;min-height:36px;cursor:pointer;list-style:none;color:var(--muted);border-radius:5px}.relay-theme-menu>summary::-webkit-details-marker{display:none}.relay-theme-menu>summary:hover{background:var(--hover);color:var(--ink)}
 .relay-theme-menu{position:relative}.relay-theme-menu .topbar-popover{width:260px}.relay-theme-options{display:grid;grid-template-columns:repeat(3,1fr);gap:4px;margin-top:16px}
 body[data-theme] .relay-theme-options button{font-size:13px;padding:8px;min-height:36px}.relay-theme-options button[aria-pressed=true]{color:var(--app-accent);border-color:var(--app-accent);background:var(--app-surface-soft)}[data-relay-theme-status]{font-size:12px;color:var(--muted);margin:12px 0 0}
@@ -75,3 +75,27 @@ body[data-theme].high-contrast .workspace-sidebar :is(a,summary,small,.nav-label
 body[data-theme].text-large .workspace-module-rail nav.workspace-navigation a{font-size:12px}
 body[data-theme] :is(.seg-tabs,.admin-tabs,.admin-subtabs,.access-navigation) a[aria-current]{color:var(--app-accent);border-color:var(--app-accent)}
 @media(max-width:800px){body[data-theme] .workspace-sidebar .section-link-group a{min-height:44px}}
+
+/* Typography and control hierarchy remain the same in reports, settings and dialogs. */
+body[data-theme] :is(button,input,select,textarea){font-family:var(--font-interface)}
+body[data-theme] :is(strong,b){font-weight:600}
+body[data-theme] :is(h4,.operation-eyebrow){font-weight:500;letter-spacing:0;text-transform:none}
+body[data-theme] :is(.workspace-metrics strong,.metrics strong,.finding-counts dd){font-weight:500;font-variant-numeric:tabular-nums}
+body[data-theme] :is(.pair-endpoint>small,.pair-rule-focus>small){font-size:12px;font-weight:500;letter-spacing:0}
+body[data-theme] :is(.pair-picker,.pair-endpoint,.pair-rule-focus,.pair-rule,.pair-proposal-preview,.workspace-metrics>a,.workspace-metrics>div,.seg-summary,.seg-node,.seg-graph,.rule-evidence-drawer){border-radius:8px;box-shadow:none}
+body[data-theme] #notification-count:not(:empty){color:var(--action-text)}
+body[data-theme] :is(.pair-rule-focus,.pair-proposal-preview){background:var(--app-surface-soft)}
+body[data-theme] .pair-endpoint{border-top-width:2px}
+body[data-theme] .pair-rule-focus{border-top-width:2px;border-top-color:var(--line)}
+body[data-theme] .pair-icon{color:var(--muted);background:var(--app-surface-soft);font-weight:500;border-radius:6px}
+body[data-theme] .pair-badge{color:var(--muted);background:var(--app-surface-soft);border-color:var(--line);border-radius:6px;font-weight:400}
+body[data-theme] .pair-selected{border-color:var(--app-accent);box-shadow:inset 0 0 0 1px var(--app-accent)}
+
+/* Long NSX paths, external callback URLs and dense tables stay within their page. */
+body[data-theme] :is(.workspace-main,.workspace-main fieldset,.workspace-main .form-grid,.workspace-main .form-card){min-width:0}
+body[data-theme] .workspace-main code{overflow-wrap:anywhere}
+body[data-theme] .workspace-main pre{max-width:100%;overflow:auto}
+body[data-theme] .workspace-main :is(button,.button){max-width:100%;white-space:normal;text-align:center}
+body[data-theme] .workspace-main .table-scroll{max-width:100%;overflow:auto}
+
+@media(max-width:600px){body[data-theme] .metrics{grid-template-columns:1fr;gap:12px}body[data-theme] .metrics article{padding:16px;grid-template-columns:minmax(0,1fr) auto;gap:12px}body[data-theme] .metrics strong{overflow-wrap:anywhere}}

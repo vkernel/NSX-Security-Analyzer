@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Contain retained report CSS so it cannot restyle the Relay navigation; load component styles before the shared theme. Replace legacy component palettes with Bridge/Relay tokens across segmentation, naming, evidence, progress, settings and administration. Correct dark-mode action labels and mobile table/path/metric overflow.
+
 - Apply Relay option 04 navigation and the selected Bridge 06 light palette: white/silver content, steel-blue controls and a dark module rail. Retain Relay dark mode, add saved top-bar appearance switching, improve mobile keyboard navigation and update sign-in/report branding. No database migration required.
 
 - Refine shared spacing, theme contrast, mobile environment context and table empty states.

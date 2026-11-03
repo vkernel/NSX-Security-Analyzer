@@ -2,19 +2,19 @@
 .snapshot-page{background:var(--canvas);font:14px/1.65 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
 .snapshot-page .workspace-main{margin-left:244px;max-width:none;padding:32px 40px}
 .snapshot-page .workspace-sidebar{z-index:5}
-.snapshot-page .workspace-sidebar .brand{color:#fff}
+.snapshot-page .workspace-sidebar .brand{color:var(--ink)}
 .snapshot-page .workspace-sidebar .brand strong{color:inherit}
 .snapshot-page .nav-label{margin-top:26px}
 .snapshot-page .report-navigation{padding-bottom:20px}
 .snapshot-page .report-navigation .menu-category{margin:4px 0}
-.snapshot-page .report-navigation summary{list-style:none;cursor:pointer;display:flex;align-items:center;gap:8px;padding:10px 12px;font-size:13px;color:#c7d8e4;border-radius:8px}
+.snapshot-page .report-navigation summary{list-style:none;cursor:pointer;display:flex;align-items:center;gap:8px;padding:10px 12px;font-size:13px;color:var(--muted);border-radius:8px}
 .snapshot-page .report-navigation summary::-webkit-details-marker{display:none}
 .snapshot-page .report-navigation summary::before{content:'›';font-size:18px;line-height:1}
 .snapshot-page .report-navigation details[open]>summary::before{transform:rotate(90deg)}
-.snapshot-page .report-navigation summary:hover{background:#294558;color:#fff}
-.snapshot-page .report-navigation .submenu{margin-left:14px;padding-left:5px;border-left:1px solid #355064}
+.snapshot-page .report-navigation summary:hover{background:var(--hover);color:var(--ink)}
+.snapshot-page .report-navigation .submenu{margin-left:14px;padding-left:5px;border-left:1px solid var(--line)}
 .snapshot-page .report-navigation .submenu a{padding:8px 10px;font-size:12px;gap:8px}
-.snapshot-page .report-navigation a span{font-size:11px;color:#a8c7d6;font-variant-numeric:tabular-nums}
+.snapshot-page .report-navigation a span{font-size:11px;color:var(--muted);font-variant-numeric:tabular-nums}
 .snapshot-page .sidebar-note{display:none}
 .snapshot-page .account{margin-top:auto}
 .snapshot-page .report-toolbar{padding-bottom:20px;border-bottom:1px solid var(--line)}
@@ -34,3 +34,26 @@
 /* Saved legacy report shells may still contain retrieval metrics. Diagnostics live on the collection page. */
 .snapshot-page .report-content > p.muted:first-child,
 .snapshot-page .report-content > .report-performance {display:none}
+
+/* Saved report styles are scoped and layered; integrated paint follows the active theme. */
+.report-content{font:inherit;color:var(--ink)}
+:is(.report-content,#detail-dialog,.column-filter-dialog,#collection-results) :is(.path,.notes,.meta,.chart-caption,.chart-legend,.snapshot-chart .chart-empty){color:var(--muted)}
+:is(.report-content,#detail-dialog,.column-filter-dialog,#collection-results) :is(.inventory-shortcuts a,.empty-state,.snapshot-chart,.guide-start){background:var(--app-surface);border-color:var(--line);box-shadow:none}
+:is(.report-content,#detail-dialog,.column-filter-dialog,#collection-results) :is(.inventory-shortcuts b,.detail-summary span,.guide-topics>details>summary,.table-tools,.snapshot-chart .chart-empty){background:var(--app-surface-soft);color:var(--ink);border-color:var(--line)}
+:is(.report-content,#detail-dialog,.column-filter-dialog,#collection-results) :is(.inventory-shortcuts a:hover,.guide-topics>details[open]>summary){background:var(--hover);color:var(--ink)}
+:is(.report-content,#detail-dialog) .badge.purple{background:var(--info-bg);color:var(--info-text)}
+:is(.report-content,#detail-dialog) .search-error{color:var(--error-text)}
+:is(.report-content,#detail-dialog,.column-filter-dialog,#collection-results) :is(.card,.snapshot-chart){border-color:var(--line);box-shadow:none;border-radius:8px}
+.report-content .card strong{font-size:32px;font-weight:500;letter-spacing:0}
+:is(.report-content,#detail-dialog,.column-filter-dialog,#collection-results) :is(.chart-total,.chart-caption){fill:var(--ink)}
+.report-content .chart-legend a:hover{background:var(--hover)}
+.report-content .table-tools :is(input,select):disabled{background:var(--app-surface-soft);color:var(--muted)}
+:is(.report-content,#detail-dialog) .detail-button{background:var(--app-surface);color:var(--ink);border-color:var(--line)}
+body[data-theme] :is(.code-lines,.technical-viewer,.code-block,.collection-error){background:var(--app-surface-soft);color:var(--ink);border-color:var(--line)}
+body[data-theme] :is(.code-lines li::marker,.code-lines .line-number){color:var(--muted)}
+body[data-theme] .syntax-key{color:var(--app-accent)}
+body[data-theme] .syntax-string{color:var(--success-text)}
+body[data-theme] .syntax-literal{color:var(--warning-text)}
+
+.report-content #feature-guide>div:has(>svg){max-width:100%;background:var(--nav)!important}
+.report-content #feature-guide svg{max-width:100%;height:auto}

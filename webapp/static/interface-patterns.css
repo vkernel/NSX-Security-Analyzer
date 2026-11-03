@@ -1,5 +1,5 @@
 /* Shared interface contract: all pages, report workspaces, light/dark themes. */
-body[data-theme] {--ui-radius:12px; --ui-gap:1.25rem; --ui-shadow:0 2px 8px #10243a08}
+body[data-theme] {--ui-radius:12px; --ui-gap:1.25rem; --ui-shadow:var(--shadow-popover)}
 .workspace-main {line-height:1.6}
 .workspace-main h1 {font-size:clamp(1.65rem,2.2vw,2.15rem); letter-spacing:-.025em; line-height:1.25; overflow-wrap:anywhere}
 .workspace-main h2 {font-size:1.2rem; line-height:1.4; letter-spacing:-.01em}
@@ -8,7 +8,7 @@ body[data-theme] {--ui-radius:12px; --ui-gap:1.25rem; --ui-shadow:0 2px 8px #102
 .page-heading .lead {color:var(--muted); margin:.55rem 0 0; max-width:72ch}
 .page-context {color:var(--muted); font-size:.85rem; margin:.5rem 0 0}
 .page-actions,.form-actions {display:flex; gap:.65rem; align-items:center; flex-wrap:wrap}
-.workspace-main :is(.form-card,.deletion-confirm-summary,.deletion-progress-card,.environment-summary,.settings-panel) {border-radius:var(--ui-radius); box-shadow:var(--ui-shadow); background:var(--app-surface); color:var(--ink)}
+.workspace-main :is(.form-card,.deletion-confirm-summary,.deletion-progress-card,.environment-summary,.settings-panel) {border-radius:var(--ui-radius); box-shadow:none; background:var(--app-surface); color:var(--ink)}
 body[data-theme] .operation-state-warning {background:var(--warning-bg); border-top-color:var(--warning-text)}
 .workspace-main :is(.notice,.form-error-summary) {border-radius:8px; line-height:1.6}
 .workspace-main [role=alert]:not(input):not(textarea) {border-inline-start:4px solid var(--error-text); background:var(--error-bg); color:var(--error-text); padding:1rem 1.25rem; border-radius:8px; overflow-wrap:anywhere}
@@ -74,9 +74,9 @@ body.reduced-motion *,body.reduced-motion *::before,body.reduced-motion *::after
 .workspace-main .technical-details,.workspace-main .evidence-disclosure,.configuration-comparison {margin:.75rem 0;color:var(--ink)}
 .technical-details summary,.evidence-disclosure summary,.configuration-comparison summary {font-size:.875rem;color:var(--muted);cursor:pointer;padding:.35rem 0}
 .evidence-disclosure[open] nav {display:flex;flex-direction:column;align-items:flex-start;gap:.65rem;padding:.7rem 0}
-.workspace-main summary:focus-visible,.workspace-main a:focus-visible,.workspace-main button:focus-visible,.workspace-switcher summary:focus-visible {outline:3px solid #2563eb;outline-offset:3px}
-.workspace-main .operation-state {border-left:4px solid #2563eb}
-.workspace-main .operation-state-warning {border-left-color:#b45309}
+.workspace-main summary:focus-visible,.workspace-main a:focus-visible,.workspace-main button:focus-visible,.workspace-switcher summary:focus-visible {outline:3px solid var(--app-accent);outline-offset:3px}
+.workspace-main .operation-state {border-left:4px solid var(--app-accent)}
+.workspace-main .operation-state-warning {border-left-color:var(--warning-text)}
 .workspace-main .deletion-confirm-summary h2 {margin-top:0}
 .workspace-main .deletion-results td {vertical-align:top;padding-top:1.25rem;padding-bottom:1.25rem}
 .workspace-main .deletion-results td:first-child>a {font-weight:650}

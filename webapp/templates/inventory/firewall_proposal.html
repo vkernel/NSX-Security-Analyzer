@@ -1,5 +1,6 @@
-{% extends 'base.html' %}{% load static %}{% block content %}
-<link rel="stylesheet" href="{% static 'segmentation.css' %}"><link rel="stylesheet" href="{% static 'workload-pair.css' %}">
+{% extends 'base.html' %}{% load static %}{% block extra_head %}<link rel="stylesheet" href="{% static 'segmentation.css' %}"><link rel="stylesheet" href="{% static 'workload-pair.css' %}">{% endblock %}
+{% block content %}
+
 <a href="{% url 'segmentation-pair' environment.pk %}{% if snapshot %}?snapshot={{ snapshot.pk }}{% if pair %}&amp;source={{ pair.source.path|urlencode }}&amp;destination={{ pair.destination.path|urlencode }}{% endif %}{% endif %}">← Back to workload investigation</a>
 <div class="page-heading"><div><p class="eyebrow">LOCAL PLANNING / {{ environment.name }}</p><h1>{% if proposal %}{{ proposal.name }}{% else %}Draft a firewall rule{% endif %}</h1><p class="lead">Prepare a reviewable proposal from workload evidence.</p></div><span class="pair-badge">{% if proposal.state == 'discarded' %}Discarded{% else %}Draft only{% endif %} — not deployed to NSX</span></div>
 {% if stale %}<p class="notice">A newer collection exists or the source snapshot is no longer retained. Recheck memberships, policy existence and similar rules before using this proposal.</p>{% endif %}
