@@ -1,0 +1,77 @@
+/* Relay 04: compact module rail + task panel. Unslop methodology, CC BY 4.0. */
+body[data-theme]{--app-nav-width:288px;--app-topbar-height:64px;--relay-rail-width:80px;font-family:"Avenir Next",-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;min-height:100dvh}
+body[data-theme] :is(h1,h2,h3){font-weight:500}
+body[data-theme] :is(.page-heading h1,.report-toolbar h1){font-size:30px;line-height:1.25;letter-spacing:-.4px}
+body[data-theme] :is(.eyebrow,.section-eyebrow){letter-spacing:0;font-size:12px;font-weight:500}
+body[data-theme] :is(button,.button){font-weight:500}
+body[data-theme] :is(.button.primary,button.primary,.workspace-main input[type=submit]){color:var(--action-text)}
+body[data-theme] .workspace-sidebar{width:var(--app-nav-width);padding:0;display:grid;grid-template-columns:var(--relay-rail-width) minmax(0,1fr);background:var(--nav);color:var(--ink);border-right:1px solid var(--line);overflow:hidden;height:100dvh;max-height:none}
+.workspace-module-rail{--app-accent:#5EE0B0;--app-muted:var(--relay-rail-muted);--ink:#EDF3F7;--muted:var(--relay-rail-muted);--line:#3B4855;--app-surface-soft:#25313A;--focus:#5EE0B0;display:flex;flex-direction:column;min-height:0;overflow:auto;border-right:1px solid var(--line);padding:20px 6px 12px;scrollbar-width:thin}
+body[data-theme] .workspace-module-rail .brand{margin:0 auto 24px;width:44px;height:44px;justify-content:center;color:var(--app-accent)}
+.relay-mark{display:block;width:40px;height:40px;flex-shrink:0;color:var(--app-accent)}
+body[data-theme] .workspace-module-rail nav.workspace-navigation{display:grid;gap:4px;margin:0}
+body[data-theme] .workspace-module-rail nav.workspace-navigation a,body[data-theme] .workspace-module-rail .sidebar-bottom a{display:flex;flex-direction:column;justify-content:center;align-items:center;gap:4px;margin:0;padding:8px 2px;min-height:56px;border:1px solid transparent;border-radius:5px;font-size:11px;font-weight:400;line-height:16px;color:var(--muted);text-align:center;box-shadow:none}
+body[data-theme] .workspace-module-rail :is(nav.workspace-navigation a,.sidebar-bottom a):hover{background:var(--app-surface-soft);color:var(--ink);text-decoration:none}
+body[data-theme] .workspace-module-rail :is(nav.workspace-navigation a,.sidebar-bottom a)[aria-current]{background:var(--app-surface-soft);color:var(--app-accent);border-color:var(--line);box-shadow:none}
+.workspace-module-rail .nav-icon{width:18px;height:18px;stroke-width:1.65;stroke-linecap:square}
+body[data-theme] .workspace-module-rail .sidebar-bottom{margin-top:auto;padding:24px 0 0;gap:0}
+.workspace-section-panel{display:flex;flex-direction:column;min-width:0;min-height:0;background:var(--app-surface);overflow:auto;padding:24px 12px 16px;scrollbar-width:thin}
+.section-panel-heading{padding:0 8px 24px}.section-environment{font-size:12px;color:var(--muted);overflow-wrap:anywhere;display:block;margin-bottom:8px}
+body[data-theme] .section-panel-heading h2{font-size:20px;line-height:1.35;letter-spacing:0;margin:0;overflow-wrap:anywhere;color:var(--ink)}
+.section-link-group{display:grid;gap:4px;margin:0 0 24px!important}
+body[data-theme] .section-link-group h3{font-size:12px;line-height:1.5;letter-spacing:0;margin:0 8px 8px;color:var(--muted);font-weight:400}
+body[data-theme] .workspace-sidebar .section-link-group a{display:flex;align-items:center;gap:8px;justify-content:space-between;min-height:36px;font-size:13px;font-weight:400;line-height:20px;margin:0;padding:8px;border:1px solid transparent;border-radius:5px;color:var(--muted);box-shadow:none;overflow-wrap:anywhere}
+body[data-theme] .workspace-sidebar .section-link-group a[aria-current]{background:var(--app-surface-soft);border-color:var(--line);color:var(--app-accent);box-shadow:none}
+body[data-theme] .workspace-sidebar .section-link-group a:hover{background:var(--hover);color:var(--ink);text-decoration:none}
+.section-link-group a>span{font-size:12px;color:var(--muted);white-space:nowrap}.section-link-group .count{background:none;padding:0;flex-shrink:0}
+.section-panel-footer{margin-top:auto;padding:24px 8px 0;font-size:12px;color:var(--muted)}.section-panel-footer span{display:block;margin-bottom:8px}.section-panel-footer a{color:var(--app-accent)}
+body[data-theme] .application-topbar{left:var(--app-nav-width);height:var(--app-topbar-height);min-height:64px;padding:12px 28px;background:var(--app-surface);border-color:var(--line);box-shadow:none;gap:24px}
+body[data-theme] .application-topbar>.topbar-actions>a.button{border:0;background:transparent;color:var(--app-accent)}
+body[data-theme] .application-topbar .avatar{background:var(--app-surface-soft);color:var(--muted)}
+body[data-theme] .application-topbar .topbar-popover{background:var(--app-surface);border-color:var(--line);box-shadow:0 8px 24px #00000018}
+.relay-theme-menu>summary{display:flex;align-items:center;justify-content:center;min-width:36px;min-height:36px;cursor:pointer;list-style:none;color:var(--muted);border-radius:5px}.relay-theme-menu>summary::-webkit-details-marker{display:none}.relay-theme-menu>summary:hover{background:var(--hover);color:var(--ink)}
+.relay-theme-menu{position:relative}.relay-theme-menu .topbar-popover{width:260px}.relay-theme-options{display:grid;grid-template-columns:repeat(3,1fr);gap:4px;margin-top:16px}
+body[data-theme] .relay-theme-options button{font-size:13px;padding:8px;min-height:36px}.relay-theme-options button[aria-pressed=true]{color:var(--app-accent);border-color:var(--app-accent);background:var(--app-surface-soft)}[data-relay-theme-status]{font-size:12px;color:var(--muted);margin:12px 0 0}
+body[data-theme] :is(.workspace-main,.snapshot-page .workspace-main,.workspace-admin .workspace-main){margin-left:var(--app-nav-width);padding:calc(var(--app-topbar-height) + 28px) 28px 40px;max-width:none}
+body[data-theme] :is(.form-card,.settings-panel,.environment-card,.table-widget,.snapshot-chart,.seg-card,.pair-panel){border-radius:8px;box-shadow:none}
+body[data-theme] .operational-metrics>a{border-top:1px solid var(--line);border-radius:8px;box-shadow:none}
+body[data-theme] .operational-metrics strong{font-weight:500;font-variant-numeric:tabular-nums}
+body[data-theme] :is(.panel-step-tabs,.panel-evidence-tabs,.evidence-tabs) :is([aria-pressed=true],[aria-selected=true]){background:var(--app-surface-soft);color:var(--app-accent);border-color:var(--app-accent)}
+body[data-theme] .workspace-steps a[aria-current=step]{background:var(--app-surface-soft);color:var(--app-accent);border-color:var(--line)}
+body[data-theme] :is(.workspace-panel,.workspace-panel>header){background:var(--app-surface);border-color:var(--line);color:var(--ink)}
+body[data-theme] :is(.workspace-panel>header,.evidence-tabs){border-color:var(--line)}
+body[data-theme] :is(.panel-evidence-tabs [role=tab],.evidence-tabs [role=tab],.workspace-panel button,.workspace-panel a):focus-visible{outline-color:var(--focus)}
+body[data-theme] .theme-choices button::before{background:var(--app-surface-soft)}
+body[data-theme] .ui-refresh-toolbar{border-radius:8px}
+body[data-theme] .mobile-nav-close{color:var(--ink);z-index:3}
+body[data-theme] .login-brand .relay-logo-dark{display:none}body[data-theme] .login-brand .relay-logo-light{display:block}
+body[data-theme=dark] .login-brand .relay-logo-dark{display:block}body[data-theme=dark] .login-brand .relay-logo-light{display:none}
+body[data-theme] .login-main{min-height:100dvh;display:grid;place-items:center;padding:32px;background:var(--canvas)}
+body[data-theme] .login-panel{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);width:min(1120px,100%);max-width:none;min-height:680px;padding:0;margin:auto;border:1px solid var(--line);border-radius:12px;overflow:hidden;box-shadow:none;background:var(--app-surface)}
+body[data-theme] .login-brand{display:flex;flex-direction:column;align-items:start;justify-content:space-between;gap:48px;padding:48px 40px;background:var(--app-surface-soft);border-bottom:0;border-right:1px solid var(--line);color:var(--ink)}
+.login-brand>div:first-child{width:100%}.login-brand img{width:260px;max-width:100%;height:auto}
+body[data-theme] .login-brand-message h2{font-size:36px;line-height:1.2;font-weight:500;letter-spacing:-.5px;margin-bottom:20px}.login-brand-message p{font-size:16px;line-height:1.65;color:var(--muted);max-width:32ch;margin:0}.login-brand-caption{font-size:12px;color:var(--muted);margin:0}
+body[data-theme] .login-content{padding:48px 40px;align-self:center}.login-content h1{font-size:30px}.login-content .lead{margin-bottom:28px}.login-content form{margin-top:20px}
+body[data-theme] .brand-about{background:var(--app-surface);border:1px solid var(--line)}
+@media(prefers-color-scheme:dark){body[data-theme=system] .login-brand .relay-logo-dark{display:block}body[data-theme=system] .login-brand .relay-logo-light{display:none}}
+@media(min-width:801px){.relay-context-source{display:none!important}.admin-navigation:has(.relay-context-source){display:none}.relay-settings-context .settings-layout{grid-template-columns:minmax(0,1fr);max-width:960px}}
+@media(max-width:1100px){body[data-theme] .application-topbar{padding-inline:20px;gap:16px}body[data-theme] :is(.workspace-main,.snapshot-page .workspace-main,.workspace-admin .workspace-main){padding-inline:24px}.workspace-section-panel{padding-inline:8px}.section-panel-heading{padding-inline:8px}}
+@media(max-width:800px){body[data-theme]{--app-nav-width:0px}body[data-theme] .workspace-sidebar{width:288px;max-width:calc(100vw - 20px);grid-template-columns:76px minmax(0,1fr);inset:0 auto 0 0;z-index:100;transform:translateX(-100%);transition:transform 180ms ease}body[data-theme].navigation-open .workspace-sidebar{transform:translateX(0)}body[data-theme] .application-topbar{left:0;height:var(--app-topbar-height);padding:8px 16px;gap:8px 12px}body[data-theme] :is(.workspace-main,.snapshot-page .workspace-main,.workspace-admin .workspace-main){margin-left:0;padding:calc(var(--app-topbar-height) + 20px) 16px 28px}body[data-theme] .workspace-section-panel{padding-top:40px}body[data-theme] .workspace-module-rail{padding-top:20px}.mobile-nav-toggle .relay-mark{width:28px;height:28px}.relay-theme-menu .topbar-popover{position:fixed;left:12px;right:12px;top:var(--app-topbar-height);width:auto;max-width:none}body[data-theme] .section-panel-heading h2{font-size:18px}body[data-theme] .application-topbar .topbar-actions{gap:4px}body[data-theme] .application-topbar .topbar-actions>.button{font-size:12px;padding-inline:6px}body[data-theme] .login-main{padding:16px}body[data-theme] .login-panel{grid-template-columns:1fr;min-height:0;max-width:540px}body[data-theme] .login-brand{padding:28px;gap:24px;border-right:0;border-bottom:1px solid var(--line)}.login-brand-message,.login-brand-caption{display:none}body[data-theme] .login-content{padding:28px}.login-brand img{width:240px}.section-link-group h3{line-height:1.5}}
+@media(prefers-reduced-motion:reduce){body[data-theme] .workspace-sidebar{transition:none}}
+
+/* The topology is the visual focus; its neutral grid should not compete with evidence. */
+body[data-theme] .application-canvas{background:var(--app-surface)}
+body[data-theme] #application-grid circle{fill:var(--line);opacity:.28}
+body[data-theme] #application-arrow path{fill:context-stroke}
+body[data-theme] .application-canvas [data-application] circle{fill:var(--app-accent)}
+body[data-theme] .application-edge.edge-allow{stroke:var(--app-accent)}
+body[data-theme] .application-legend span:before{border-color:var(--app-accent)}
+body[data-theme] .application-edge.edge-drop{stroke:var(--error-text)}
+body[data-theme] .application-legend .legend-drop:before{border-color:var(--error-text)}
+body[data-theme] .application-edge.edge-mixed{stroke:var(--warning-text)}
+body[data-theme] .application-legend .legend-mixed:before{border-color:var(--warning-text)}
+body[data-theme] .application-canvas :is(a:hover,a:focus,a.is-active) .application-node{stroke:var(--app-accent);stroke-width:2}
+body[data-theme].high-contrast .workspace-sidebar :is(a,summary,small,.nav-label){color:var(--ink)}
+body[data-theme].text-large .workspace-module-rail nav.workspace-navigation a{font-size:12px}
+body[data-theme] :is(.seg-tabs,.admin-tabs,.admin-subtabs,.access-navigation) a[aria-current]{color:var(--app-accent);border-color:var(--app-accent)}
+@media(max-width:800px){body[data-theme] .workspace-sidebar .section-link-group a{min-height:44px}}

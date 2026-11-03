@@ -1,0 +1,61 @@
+{
+  "checks": [
+    {
+      "check": "Relay workflows",
+      "passed": true
+    },
+    {
+      "check": "Northstar workflows",
+      "passed": true
+    },
+    {
+      "check": "Ion workflows",
+      "passed": true
+    },
+    {
+      "check": "Strata workflows",
+      "passed": true
+    },
+    {
+      "check": "Vector workflows",
+      "passed": true
+    },
+    {
+      "check": "Beacon workflows",
+      "passed": true
+    },
+    {
+      "check": "Gridline workflows",
+      "passed": true
+    },
+    {
+      "check": "Forge workflows",
+      "passed": true
+    },
+    {
+      "check": "Aperture workflows",
+      "passed": true
+    },
+    {
+      "check": "Nexus workflows",
+      "passed": true
+    },
+    {
+      "check": "Family chooser and share links",
+      "passed": true
+    },
+    {
+      "check": "Two-design comparison and assets",
+      "passed": true
+    },
+    {
+      "check": "overview-1 assets",
+      "passed": true
+    },
+    {
+      "check": "overview-2 assets",
+      "passed": true
+    }
+  ],
+  "errors": []
+}

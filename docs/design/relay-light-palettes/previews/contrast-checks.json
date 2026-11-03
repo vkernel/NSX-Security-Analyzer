@@ -1,0 +1,62 @@
+[
+  {
+    "palette": "arctic",
+    "contrast": {
+      "body": 13.43,
+      "secondary": 6.14,
+      "accent_text": 10.35,
+      "primary_button": 10.35,
+      "navigation": 6.14
+    }
+  },
+  {
+    "palette": "glacier",
+    "contrast": {
+      "body": 13.2,
+      "secondary": 5.87,
+      "accent_text": 6.35,
+      "primary_button": 6.35,
+      "navigation": 5.87
+    }
+  },
+  {
+    "palette": "alloy",
+    "contrast": {
+      "body": 12.11,
+      "secondary": 5.81,
+      "accent_text": 6.08,
+      "primary_button": 6.08,
+      "navigation": 5.81
+    }
+  },
+  {
+    "palette": "paper",
+    "contrast": {
+      "body": 13.11,
+      "secondary": 6.14,
+      "accent_text": 9.69,
+      "primary_button": 9.69,
+      "navigation": 6.14
+    }
+  },
+  {
+    "palette": "clay",
+    "contrast": {
+      "body": 12.91,
+      "secondary": 6.02,
+      "accent_text": 5.93,
+      "primary_button": 5.93,
+      "navigation": 6.02
+    }
+  },
+  {
+    "palette": "bridge",
+    "contrast": {
+      "body": 12.04,
+      "secondary": 5.81,
+      "accent_text": 7.43,
+      "primary_button": 7.43,
+      "navigation": 10.67
+    }
+  }
+]

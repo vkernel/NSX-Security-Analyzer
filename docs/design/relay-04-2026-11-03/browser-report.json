@@ -1,0 +1,722 @@
+[
+  {
+    "name": "overview",
+    "mode": "desktop",
+    "status": 200,
+    "errors": [],
+    "width": 1440,
+    "scrollWidth": 1440,
+    "heading": "Overview",
+    "active": [
+      "overview"
+    ],
+    "sections": "WorkspaceOverviewActivity",
+    "surface": "#fff"
+  },
+  {
+    "name": "environments",
+    "mode": "desktop",
+    "status": 200,
+    "errors": [],
+    "width": 1440,
+    "scrollWidth": 1440,
+    "heading": "Environments",
+    "active": [
+      "environments"
+    ],
+    "sections": "EnvironmentsAll environmentsSynthetic audit · RotterdamSnapshotsCompare snapshotsFinding reviewsCollection coverage",
+    "surface": "#fff"
+  },
+  {
+    "name": "findings",
+    "mode": "desktop",
+    "status": 200,
+    "errors": [],
+    "width": 1440,
+    "scrollWidth": 1440,
+    "heading": "Environments",
+    "active": [
+      "environments"
+    ],
+    "sections": "Environment analysisSnapshotsCompare snapshotsFinding reviewsCollection coverageReview queuesMy reviewsUnassignedAwaiting second approvalReady for decommissioningRejectedDecommissionedDeletion historySuppressed",
+    "surface": "#fff"
+  },
+  {
+    "name": "snapshot",
+    "mode": "desktop",
+    "status": 200,
+    "errors": [],
+    "width": 1440,
+    "scrollWidth": 1440,
+    "heading": "Inventory",
+    "active": [
+      "inventory"
+    ],
+    "sections": "Report pagesSnapshot overviewVMsGroupsServicesTagsScopes",
+    "surface": "#fff"
+  },
+  {
+    "name": "administration",
+    "mode": "desktop",
+    "status": 200,
+    "errors": [],
+    "width": 1440,
+    "scrollWidth": 1440,
+    "heading": "Administration",
+    "active": [
+      "administration"
+    ],
+    "sections": "Administration categoriesOverviewAccessNaming & taggingFinding reviewsCollectionsOperations",
+    "surface": "#fff"
+  },
+  {
+    "name": "naming",
+    "mode": "desktop",
+    "status": 200,
+    "errors": [],
+    "width": 1440,
+    "scrollWidth": 1440,
+    "heading": "Naming compliance",
+    "active": [
+      "naming"
+    ],
+    "sections": "Naming workNeeds attention 3Compliant 0Exceptions 0All groups 3",
+    "surface": "#fff"
+  },
+  {
+    "name": "policy-editor",
+    "mode": "desktop",
+    "status": 200,
+    "errors": [],
+    "width": 1440,
+    "scrollWidth": 1440,
+    "heading": "Administration",
+    "active": [
+      "administration"
+    ],
+    "sections": "Administration categoriesOverviewAccessNaming & taggingFinding reviewsCollectionsOperations",
+    "surface": "#fff"
+  },
+  {
+    "name": "segmentation",
+    "mode": "desktop",
+    "status": 200,
+    "errors": [],
+    "width": 1440,
+    "scrollWidth": 1440,
+    "heading": "Segmentation",
+    "active": [
+      "segmentation"
+    ],
+    "sections": "Segmentation viewsApplications overviewVM-to-VM rulesSecurity matrix",
+    "surface": "#fff"
+  },
+  {
+    "name": "pair",
+    "mode": "desktop",
+    "status": 200,
+    "errors": [],
+    "width": 1440,
+    "scrollWidth": 1440,
+    "heading": "Segmentation",
+    "active": [
+      "segmentation"
+    ],
+    "sections": "Segmentation viewsApplications overviewVM-to-VM rulesSecurity matrix",
+    "surface": "#fff"
+  },
+  {
+    "name": "my-work",
+    "mode": "desktop",
+    "status": 200,
+    "errors": [],
+    "width": 1440,
+    "scrollWidth": 1440,
+    "heading": "My work",
+    "active": [
+      "work"
+    ],
+    "sections": "Work queuesUnassignedAssigned to meAvailable for second approvalReady for decommissioning",
+    "surface": "#fff"
+  },
+  {
+    "name": "settings",
+    "mode": "desktop",
+    "status": 200,
+    "errors": [],
+    "width": 1440,
+    "scrollWidth": 1440,
+    "heading": "Personal settings",
+    "active": [],
+    "sections": "Settings categoriesAppearanceDates & timeTables & navigationLive updatesNotifications",
+    "surface": "#fff"
+  },
+  {
+    "name": "collections",
+    "mode": "desktop",
+    "status": 200,
+    "errors": [],
+    "width": 1440,
+    "scrollWidth": 1440,
+    "heading": "Collections",
+    "active": [
+      "collections"
+    ],
+    "sections": "CollectionsAll collectionsEnvironment history",
+    "surface": "#fff"
+  },
+  {
+    "name": "users",
+    "mode": "desktop",
+    "status": 200,
+    "errors": [],
+    "width": 1440,
+    "scrollWidth": 1440,
+    "heading": "Administration",
+    "active": [
+      "administration"
+    ],
+    "sections": "Administration categoriesOverviewAccessNaming & taggingFinding reviewsCollectionsOperationsAdministration pagesUsers & accessPermission groupsAuthentication providers",
+    "surface": "#fff"
+  },
+  {
+    "name": "overview",
+    "mode": "dark",
+    "status": 200,
+    "errors": [],
+    "width": 1440,
+    "scrollWidth": 1440,
+    "heading": "Overview",
+    "active": [
+      "overview"
+    ],
+    "sections": "WorkspaceOverviewActivity",
+    "surface": "#1B222A"
+  },
+  {
+    "name": "environments",
+    "mode": "dark",
+    "status": 200,
+    "errors": [],
+    "width": 1440,
+    "scrollWidth": 1440,
+    "heading": "Environments",
+    "active": [
+      "environments"
+    ],
+    "sections": "EnvironmentsAll environmentsSynthetic audit · RotterdamSnapshotsCompare snapshotsFinding reviewsCollection coverage",
+    "surface": "#1B222A"
+  },
+  {
+    "name": "findings",
+    "mode": "dark",
+    "status": 200,
+    "errors": [],
+    "width": 1440,
+    "scrollWidth": 1440,
+    "heading": "Environments",
+    "active": [
+      "environments"
+    ],
+    "sections": "Environment analysisSnapshotsCompare snapshotsFinding reviewsCollection coverageReview queuesMy reviewsUnassignedAwaiting second approvalReady for decommissioningRejectedDecommissionedDeletion historySuppressed",
+    "surface": "#1B222A"
+  },
+  {
+    "name": "snapshot",
+    "mode": "dark",
+    "status": 200,
+    "errors": [],
+    "width": 1440,
+    "scrollWidth": 1440,
+    "heading": "Inventory",
+    "active": [
+      "inventory"
+    ],
+    "sections": "Report pagesSnapshot overviewVMsGroupsServicesTagsScopes",
+    "surface": "#1B222A"
+  },
+  {
+    "name": "administration",
+    "mode": "dark",
+    "status": 200,
+    "errors": [],
+    "width": 1440,
+    "scrollWidth": 1440,
+    "heading": "Administration",
+    "active": [
+      "administration"
+    ],
+    "sections": "Administration categoriesOverviewAccessNaming & taggingFinding reviewsCollectionsOperations",
+    "surface": "#1B222A"
+  },
+  {
+    "name": "naming",
+    "mode": "dark",
+    "status": 200,
+    "errors": [],
+    "width": 1440,
+    "scrollWidth": 1440,
+    "heading": "Naming compliance",
+    "active": [
+      "naming"
+    ],
+    "sections": "Naming workNeeds attention 3Compliant 0Exceptions 0All groups 3",
+    "surface": "#1B222A"
+  },
+  {
+    "name": "policy-editor",
+    "mode": "dark",
+    "status": 200,
+    "errors": [],
+    "width": 1440,
+    "scrollWidth": 1440,
+    "heading": "Administration",
+    "active": [
+      "administration"
+    ],
+    "sections": "Administration categoriesOverviewAccessNaming & taggingFinding reviewsCollectionsOperations",
+    "surface": "#1B222A"
+  },
+  {
+    "name": "segmentation",
+    "mode": "dark",
+    "status": 200,
+    "errors": [],
+    "width": 1440,
+    "scrollWidth": 1440,
+    "heading": "Segmentation",
+    "active": [
+      "segmentation"
+    ],
+    "sections": "Segmentation viewsApplications overviewVM-to-VM rulesSecurity matrix",
+    "surface": "#1B222A"
+  },
+  {
+    "name": "pair",
+    "mode": "dark",
+    "status": 200,
+    "errors": [],
+    "width": 1440,
+    "scrollWidth": 1440,
+    "heading": "Segmentation",
+    "active": [
+      "segmentation"
+    ],
+    "sections": "Segmentation viewsApplications overviewVM-to-VM rulesSecurity matrix",
+    "surface": "#1B222A"
+  },
+  {
+    "name": "my-work",
+    "mode": "dark",
+    "status": 200,
+    "errors": [],
+    "width": 1440,
+    "scrollWidth": 1440,
+    "heading": "My work",
+    "active": [
+      "work"
+    ],
+    "sections": "Work queuesUnassignedAssigned to meAvailable for second approvalReady for decommissioning",
+    "surface": "#1B222A"
+  },
+  {
+    "name": "settings",
+    "mode": "dark",
+    "status": 200,
+    "errors": [],
+    "width": 1440,
+    "scrollWidth": 1440,
+    "heading": "Personal settings",
+    "active": [],
+    "sections": "Settings categoriesAppearanceDates & timeTables & navigationLive updatesNotifications",
+    "surface": "#1B222A"
+  },
+  {
+    "name": "collections",
+    "mode": "dark",
+    "status": 200,
+    "errors": [],
+    "width": 1440,
+    "scrollWidth": 1440,
+    "heading": "Collections",
+    "active": [
+      "collections"
+    ],
+    "sections": "CollectionsAll collectionsEnvironment history",
+    "surface": "#1B222A"
+  },
+  {
+    "name": "users",
+    "mode": "dark",
+    "status": 200,
+    "errors": [],
+    "width": 1440,
+    "scrollWidth": 1440,
+    "heading": "Administration",
+    "active": [
+      "administration"
+    ],
+    "sections": "Administration categoriesOverviewAccessNaming & taggingFinding reviewsCollectionsOperationsAdministration pagesUsers & accessPermission groupsAuthentication providers",
+    "surface": "#1B222A"
+  },
+  {
+    "name": "overview",
+    "mode": "mobile",
+    "status": 200,
+    "errors": [],
+    "width": 390,
+    "scrollWidth": 390,
+    "heading": "Overview",
+    "active": [
+      "overview"
+    ],
+    "sections": "WorkspaceOverviewActivity",
+    "surface": "#fff"
+  },
+  {
+    "name": "environments",
+    "mode": "mobile",
+    "status": 200,
+    "errors": [],
+    "width": 390,
+    "scrollWidth": 390,
+    "heading": "Environments",
+    "active": [
+      "environments"
+    ],
+    "sections": "EnvironmentsAll environmentsSynthetic audit · RotterdamSnapshotsCompare snapshotsFinding reviewsCollection coverage",
+    "surface": "#fff"
+  },
+  {
+    "name": "findings",
+    "mode": "mobile",
+    "status": 200,
+    "errors": [],
+    "width": 390,
+    "scrollWidth": 390,
+    "heading": "Environments",
+    "active": [
+      "environments"
+    ],
+    "sections": "Environment analysisSnapshotsCompare snapshotsFinding reviewsCollection coverageReview queuesMy reviewsUnassignedAwaiting second approvalReady for decommissioningRejectedDecommissionedDeletion historySuppressed",
+    "surface": "#fff"
+  },
+  {
+    "name": "snapshot",
+    "mode": "mobile",
+    "status": 200,
+    "errors": [],
+    "width": 390,
+    "scrollWidth": 390,
+    "heading": "Inventory",
+    "active": [
+      "inventory"
+    ],
+    "sections": "Report pagesSnapshot overviewVMsGroupsServicesTagsScopes",
+    "surface": "#fff"
+  },
+  {
+    "name": "administration",
+    "mode": "mobile",
+    "status": 200,
+    "errors": [],
+    "width": 390,
+    "scrollWidth": 390,
+    "heading": "Administration",
+    "active": [
+      "administration"
+    ],
+    "sections": "Administration categoriesOverviewAccessNaming & taggingFinding reviewsCollectionsOperations",
+    "surface": "#fff"
+  },
+  {
+    "name": "naming",
+    "mode": "mobile",
+    "status": 200,
+    "errors": [],
+    "width": 390,
+    "scrollWidth": 390,
+    "heading": "Naming compliance",
+    "active": [
+      "naming"
+    ],
+    "sections": "Naming workNeeds attention 3Compliant 0Exceptions 0All groups 3",
+    "surface": "#fff"
+  },
+  {
+    "name": "policy-editor",
+    "mode": "mobile",
+    "status": 200,
+    "errors": [],
+    "width": 390,
+    "scrollWidth": 390,
+    "heading": "Administration",
+    "active": [
+      "administration"
+    ],
+    "sections": "Administration categoriesOverviewAccessNaming & taggingFinding reviewsCollectionsOperations",
+    "surface": "#fff"
+  },
+  {
+    "name": "segmentation",
+    "mode": "mobile",
+    "status": 200,
+    "errors": [],
+    "width": 390,
+    "scrollWidth": 390,
+    "heading": "Segmentation",
+    "active": [
+      "segmentation"
+    ],
+    "sections": "Segmentation viewsApplications overviewVM-to-VM rulesSecurity matrix",
+    "surface": "#fff"
+  },
+  {
+    "name": "pair",
+    "mode": "mobile",
+    "status": 200,
+    "errors": [],
+    "width": 390,
+    "scrollWidth": 390,
+    "heading": "Segmentation",
+    "active": [
+      "segmentation"
+    ],
+    "sections": "Segmentation viewsApplications overviewVM-to-VM rulesSecurity matrix",
+    "surface": "#fff"
+  },
+  {
+    "name": "my-work",
+    "mode": "mobile",
+    "status": 200,
+    "errors": [],
+    "width": 390,
+    "scrollWidth": 390,
+    "heading": "My work",
+    "active": [
+      "work"
+    ],
+    "sections": "Work queuesUnassignedAssigned to meAvailable for second approvalReady for decommissioning",
+    "surface": "#fff"
+  },
+  {
+    "name": "settings",
+    "mode": "mobile",
+    "status": 200,
+    "errors": [],
+    "width": 390,
+    "scrollWidth": 390,
+    "heading": "Personal settings",
+    "active": [],
+    "sections": "Settings categoriesAppearanceDates & timeTables & navigationLive updatesNotifications",
+    "surface": "#fff"
+  },
+  {
+    "name": "collections",
+    "mode": "mobile",
+    "status": 200,
+    "errors": [],
+    "width": 390,
+    "scrollWidth": 390,
+    "heading": "Collections",
+    "active": [
+      "collections"
+    ],
+    "sections": "CollectionsAll collectionsEnvironment history",
+    "surface": "#fff"
+  },
+  {
+    "name": "users",
+    "mode": "mobile",
+    "status": 200,
+    "errors": [],
+    "width": 390,
+    "scrollWidth": 390,
+    "heading": "Administration",
+    "active": [
+      "administration"
+    ],
+    "sections": "Administration categoriesOverviewAccessNaming & taggingFinding reviewsCollectionsOperationsAdministration pagesUsers & accessPermission groupsAuthentication providers",
+    "surface": "#fff"
+  },
+  {
+    "name": "overview",
+    "mode": "small",
+    "status": 200,
+    "errors": [],
+    "width": 320,
+    "scrollWidth": 320,
+    "heading": "Overview",
+    "active": [
+      "overview"
+    ],
+    "sections": "WorkspaceOverviewActivity",
+    "surface": "#1B222A"
+  },
+  {
+    "name": "environments",
+    "mode": "small",
+    "status": 200,
+    "errors": [],
+    "width": 320,
+    "scrollWidth": 320,
+    "heading": "Environments",
+    "active": [
+      "environments"
+    ],
+    "sections": "EnvironmentsAll environmentsSynthetic audit · RotterdamSnapshotsCompare snapshotsFinding reviewsCollection coverage",
+    "surface": "#1B222A"
+  },
+  {
+    "name": "findings",
+    "mode": "small",
+    "status": 200,
+    "errors": [],
+    "width": 320,
+    "scrollWidth": 320,
+    "heading": "Environments",
+    "active": [
+      "environments"
+    ],
+    "sections": "Environment analysisSnapshotsCompare snapshotsFinding reviewsCollection coverageReview queuesMy reviewsUnassignedAwaiting second approvalReady for decommissioningRejectedDecommissionedDeletion historySuppressed",
+    "surface": "#1B222A"
+  },
+  {
+    "name": "snapshot",
+    "mode": "small",
+    "status": 200,
+    "errors": [],
+    "width": 320,
+    "scrollWidth": 320,
+    "heading": "Inventory",
+    "active": [
+      "inventory"
+    ],
+    "sections": "Report pagesSnapshot overviewVMsGroupsServicesTagsScopes",
+    "surface": "#1B222A"
+  },
+  {
+    "name": "administration",
+    "mode": "small",
+    "status": 200,
+    "errors": [],
+    "width": 320,
+    "scrollWidth": 320,
+    "heading": "Administration",
+    "active": [
+      "administration"
+    ],
+    "sections": "Administration categoriesOverviewAccessNaming & taggingFinding reviewsCollectionsOperations",
+    "surface": "#1B222A"
+  },
+  {
+    "name": "naming",
+    "mode": "small",
+    "status": 200,
+    "errors": [],
+    "width": 320,
+    "scrollWidth": 320,
+    "heading": "Naming compliance",
+    "active": [
+      "naming"
+    ],
+    "sections": "Naming workNeeds attention 3Compliant 0Exceptions 0All groups 3",
+    "surface": "#1B222A"
+  },
+  {
+    "name": "policy-editor",
+    "mode": "small",
+    "status": 200,
+    "errors": [],
+    "width": 320,
+    "scrollWidth": 320,
+    "heading": "Administration",
+    "active": [
+      "administration"
+    ],
+    "sections": "Administration categoriesOverviewAccessNaming & taggingFinding reviewsCollectionsOperations",
+    "surface": "#1B222A"
+  },
+  {
+    "name": "segmentation",
+    "mode": "small",
+    "status": 200,
+    "errors": [],
+    "width": 320,
+    "scrollWidth": 320,
+    "heading": "Segmentation",
+    "active": [
+      "segmentation"
+    ],
+    "sections": "Segmentation viewsApplications overviewVM-to-VM rulesSecurity matrix",
+    "surface": "#1B222A"
+  },
+  {
+    "name": "pair",
+    "mode": "small",
+    "status": 200,
+    "errors": [],
+    "width": 320,
+    "scrollWidth": 320,
+    "heading": "Segmentation",
+    "active": [
+      "segmentation"
+    ],
+    "sections": "Segmentation viewsApplications overviewVM-to-VM rulesSecurity matrix",
+    "surface": "#1B222A"
+  },
+  {
+    "name": "my-work",
+    "mode": "small",
+    "status": 200,
+    "errors": [],
+    "width": 320,
+    "scrollWidth": 320,
+    "heading": "My work",
+    "active": [
+      "work"
+    ],
+    "sections": "Work queuesUnassignedAssigned to meAvailable for second approvalReady for decommissioning",
+    "surface": "#1B222A"
+  },
+  {
+    "name": "settings",
+    "mode": "small",
+    "status": 200,
+    "errors": [],
+    "width": 320,
+    "scrollWidth": 320,
+    "heading": "Personal settings",
+    "active": [],
+    "sections": "Settings categoriesAppearanceDates & timeTables & navigationLive updatesNotifications",
+    "surface": "#1B222A"
+  },
+  {
+    "name": "collections",
+    "mode": "small",
+    "status": 200,
+    "errors": [],
+    "width": 320,
+    "scrollWidth": 320,
+    "heading": "Collections",
+    "active": [
+      "collections"
+    ],
+    "sections": "CollectionsAll collectionsEnvironment history",
+    "surface": "#1B222A"
+  },
+  {
+    "name": "users",
+    "mode": "small",
+    "status": 200,
+    "errors": [],
+    "width": 320,
+    "scrollWidth": 320,
+    "heading": "Administration",
+    "active": [
+      "administration"
+    ],
+    "sections": "Administration categoriesOverviewAccessNaming & taggingFinding reviewsCollectionsOperationsAdministration pagesUsers & accessPermission groupsAuthentication providers",
+    "surface": "#1B222A"
+  }
+]

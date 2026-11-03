@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Apply Relay option 04 navigation and the selected Bridge 06 light palette: white/silver content, steel-blue controls and a dark module rail. Retain Relay dark mode, add saved top-bar appearance switching, improve mobile keyboard navigation and update sign-in/report branding. No database migration required.
+
 - Refine shared spacing, theme contrast, mobile environment context and table empty states.
 - Simplify naming compliance with contextual correction drawers, policy-grouped bulk review and clear selection counts.
 - Clarify policy drafts, component editing and activation; prevent save controls from covering editor content.

@@ -1,0 +1,162 @@
+[
+  {
+    "concept": "harbor",
+    "screen": "segmentation",
+    "width": 1440,
+    "scrollWidth": 1440,
+    "height": 1284,
+    "errors": []
+  },
+  {
+    "concept": "harbor",
+    "screen": "naming",
+    "width": 1440,
+    "scrollWidth": 1440,
+    "height": 960,
+    "errors": []
+  },
+  {
+    "concept": "harbor",
+    "screen": "login",
+    "width": 1440,
+    "scrollWidth": 1440,
+    "height": 960,
+    "errors": []
+  },
+  {
+    "concept": "harbor",
+    "screen": "mobile",
+    "width": 390,
+    "scrollWidth": 390,
+    "height": 1272,
+    "errors": []
+  },
+  {
+    "concept": "ledger",
+    "screen": "segmentation",
+    "width": 1440,
+    "scrollWidth": 1440,
+    "height": 1288,
+    "errors": []
+  },
+  {
+    "concept": "ledger",
+    "screen": "naming",
+    "width": 1440,
+    "scrollWidth": 1440,
+    "height": 960,
+    "errors": []
+  },
+  {
+    "concept": "ledger",
+    "screen": "login",
+    "width": 1440,
+    "scrollWidth": 1440,
+    "height": 960,
+    "errors": []
+  },
+  {
+    "concept": "ledger",
+    "screen": "mobile",
+    "width": 390,
+    "scrollWidth": 390,
+    "height": 1278,
+    "errors": []
+  },
+  {
+    "concept": "circuit",
+    "screen": "segmentation",
+    "width": 1440,
+    "scrollWidth": 1440,
+    "height": 1238,
+    "errors": []
+  },
+  {
+    "concept": "circuit",
+    "screen": "naming",
+    "width": 1440,
+    "scrollWidth": 1440,
+    "height": 960,
+    "errors": []
+  },
+  {
+    "concept": "circuit",
+    "screen": "login",
+    "width": 1440,
+    "scrollWidth": 1440,
+    "height": 960,
+    "errors": []
+  },
+  {
+    "concept": "circuit",
+    "screen": "mobile",
+    "width": 390,
+    "scrollWidth": 390,
+    "height": 1262,
+    "errors": []
+  },
+  {
+    "concept": "atlas",
+    "screen": "segmentation",
+    "width": 1440,
+    "scrollWidth": 1440,
+    "height": 1299,
+    "errors": []
+  },
+  {
+    "concept": "atlas",
+    "screen": "naming",
+    "width": 1440,
+    "scrollWidth": 1440,
+    "height": 960,
+    "errors": []
+  },
+  {
+    "concept": "atlas",
+    "screen": "login",
+    "width": 1440,
+    "scrollWidth": 1440,
+    "height": 960,
+    "errors": []
+  },
+  {
+    "concept": "atlas",
+    "screen": "mobile",
+    "width": 390,
+    "scrollWidth": 390,
+    "height": 1308,
+    "errors": []
+  },
+  {
+    "concept": "sentinel",
+    "screen": "segmentation",
+    "width": 1440,
+    "scrollWidth": 1440,
+    "height": 1263,
+    "errors": []
+  },
+  {
+    "concept": "sentinel",
+    "screen": "naming",
+    "width": 1440,
+    "scrollWidth": 1440,
+    "height": 960,
+    "errors": []
+  },
+  {
+    "concept": "sentinel",
+    "screen": "login",
+    "width": 1440,
+    "scrollWidth": 1440,
+    "height": 960,
+    "errors": []
+  },
+  {
+    "concept": "sentinel",
+    "screen": "mobile",
+    "width": 390,
+    "scrollWidth": 390,
+    "height": 1256,
+    "errors": []
+  }
+]

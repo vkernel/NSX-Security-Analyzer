@@ -1,0 +1,12 @@
+{
+  "checks": [
+    "Theme saved across reload; in-progress input and URL retained during change.",
+    "Failed preference save reported and rolled back; System preference restored.",
+    "Snapshot inventory/firewall switching keeps the exact snapshot and updates both navigation columns.",
+    "Naming queue links use real filters and active-state counts.",
+    "320 px navigation focus trap, Escape, focus restoration and real module navigation.",
+    "Large text and high contrast remain contained at 320 px.",
+    "Segmentation application selection and evidence drawer remain functional."
+  ],
+  "errors": []
+}

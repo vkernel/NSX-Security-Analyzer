@@ -55,6 +55,7 @@ urlpatterns = [
     path('administration/review-approvals/', history_views.review_approvals, name='review-approvals'),
     path('administration/finding-policy/', history_views.finding_policy, name='finding-policy'),
     path('administration/collection-policy/', views.workspace_policy, name='workspace-policy'),
+    path('api/preferences/theme/', views.theme_preferences, name='theme-preferences'),
     path('api/preferences/interface/', views.interface_preferences, name='interface-preferences'),
     path('api/notifications/', views.notifications, name='notifications'),
     path('api/notifications/read/', views.notifications_read, name='notifications-read'),

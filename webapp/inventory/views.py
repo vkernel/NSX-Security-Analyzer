@@ -688,3 +688,15 @@ def all_collections(request):
         jobs=jobs.filter(status=state)
     page=Paginator(jobs,table_page_size(request)).get_page(request.GET.get('page'))
     return render(request,'inventory/all_collections.html',{'jobs':page,'page':page,'selected_status':state,'statuses':AuditJob.Status.choices})
+
+
+@login_required
+@require_POST
+def theme_preferences(request):
+    """Save only appearance mode, without disturbing a user's other preferences."""
+    from .models import UserPreferences
+    theme = request.POST.get('theme', '')
+    if theme not in {'system', 'light', 'dark'}:
+        return JsonResponse({'error': 'Choose System, Light or Dark.'}, status=400)
+    UserPreferences.objects.update_or_create(user=request.user, defaults={'theme': theme})
+    return JsonResponse({'theme': theme})

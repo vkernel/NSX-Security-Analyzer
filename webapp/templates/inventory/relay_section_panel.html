@@ -1,0 +1,5 @@
+<section class="workspace-section-panel" aria-labelledby="workspace-section-title" data-relay-section data-section-module="{{ relay.active }}">
+<div class="section-panel-heading"><span class="section-environment">{{ relay.scope_label }}</span><h2 id="workspace-section-title">{{ relay.title }}</h2></div>
+<div class="section-panel-content" data-section-links>{% for group in relay.groups %}<nav class="section-link-group" aria-label="{{ group.label }}"><h3>{{ group.label }}</h3>{% for link in group.links %}<a href="{{ link.url }}" {% if link.active %}aria-current="page"{% endif %}>{{ link.label }}</a>{% endfor %}</nav>{% endfor %}</div>
+<div class="section-panel-footer"><span>Configuration evidence</span><a href="{% url 'website-settings' %}?section=appearance">Appearance settings</a></div>
+</section>

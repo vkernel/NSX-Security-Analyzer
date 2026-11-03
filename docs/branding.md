@@ -1,13 +1,18 @@
-# Network Shield branding
+# Relay branding
 
-The Network Shield is the application identity: a split cobalt shield with three connected cyan nodes. It represents protected networks and follows logo concept 1.
+Relay is the selected NSX Security Analyzer identity. Its continuous route inside a protected hexagon represents connected infrastructure and reviewed changes. The application uses **Relay option 04: module rail + section panel**.
 
-- [Dark-background wordmark](../webapp/static/nsx-security-analyzer-logo.svg): sidebar, sign-in headers and guide.
-- [Light-background wordmark](../webapp/static/nsx-security-analyzer-logo-light.svg): documents and light surfaces.
-- [Standalone mark](../webapp/static/nsx-security-analyzer-icon.svg): browser favicon, mobile navigation and status pages.
+- [Dark wordmark](../webapp/static/nsx-security-analyzer-logo.svg): dark sign-in and other dark surfaces.
+- [Light wordmark](../webapp/static/nsx-security-analyzer-logo-light.svg): light sign-in and documents.
+- [Adaptive standalone mark](../webapp/static/nsx-security-analyzer-icon.svg): favicon and status pages.
+- [Inline mark](../webapp/templates/inventory/relay_mark.html): rail and mobile menu; follows the selected application theme.
 
-Keep the SVG aspect ratio and transparent background. Use at least 12 px clear space around the mark. Use the standalone mark below 160 px of available width; avoid squeezing the full wordmark. The sidebar renders the full logo at 208 px and sign-in at 280 px. Colors: cobalt `#2563eb`, cyan `#38bdf8`, navy `#111827`, light text `#f8fafc`.
+Use the mark at 32–40 px in navigation. Keep the SVG aspect ratio, transparent background and at least 12 px of clear space. Never squeeze the full wordmark into the 80 px module rail. The section panel identifies the current module and environment.
 
-Use descriptive alternative text for the full brand. Icons next to an existing label are decorative. Do not animate the logo to indicate progress; use a separate status label or progress bar. Existing historical screenshots retain their original branding until recaptured.
+The dark palette uses canvas `#14191F`, surface `#1B222A`, mint `#5EE0B0` and text `#EDF3F7`. The selected **Bridge 06** light palette uses canvas `#F7F8FA`, white surfaces, silver raised areas `#EFF2F4`, steel-blue actions `#315A70` and text `#26343D`. The module rail stays dark `#10161C`, with mint selection and the Relay mark. Its section panel remains white. Semantic success, warning and error colors keep their established meanings. Main type is Avenir Next, with local system sans-serif fallbacks. No external font request is required.
 
-Standalone HTML reports embed the same artwork so downloaded reports do not depend on the application's static asset server. When changing the mark, update the embedded report artwork too.
+Light, Dark and System can be selected from Appearance in the top bar or Personal settings. The choice is saved to the signed-in user's preferences. Changing it does not reload the page or discard entered review text. System follows the browser color-scheme preference. Reduced motion, larger text, high contrast and density settings remain available.
+
+Keep the logo static; progress uses a separate status indicator. Give the full brand descriptive alternative text and hide decorative icons beside labels from assistive technology. Fresh standalone reports embed Relay artwork and remain self-contained. Previously stored reports and historical screenshots retain their original artwork.
+
+Design methodology: [Unslop by Damir Sokolovsky (@heydamir)](https://github.com/heydamir/unslop), CC BY 4.0. See `NOTICE` and the [Relay exploration](design/relay-iterations.md).

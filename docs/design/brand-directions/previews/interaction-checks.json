@@ -1,0 +1,11 @@
+{
+  "checks": [
+    "harbor: concept selection, naming selection, nested VM evidence, map focus and preview-only sign-in passed",
+    "ledger: concept selection, naming selection, nested VM evidence, map focus and preview-only sign-in passed",
+    "circuit: concept selection, naming selection, nested VM evidence, map focus and preview-only sign-in passed",
+    "atlas: concept selection, naming selection, nested VM evidence, map focus and preview-only sign-in passed",
+    "sentinel: concept selection, naming selection, nested VM evidence, map focus and preview-only sign-in passed",
+    "Mobile navigation and document width passed"
+  ],
+  "errors": []
+}

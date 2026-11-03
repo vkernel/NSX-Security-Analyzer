@@ -1,0 +1,24 @@
+[
+  {
+    "theme": "dark",
+    "contrast": {
+      "body": 15.79,
+      "muted": 8.19,
+      "link": 9.75,
+      "navigation": 10.67,
+      "active_navigation": 11.07,
+      "primary_button": 9.28
+    }
+  },
+  {
+    "theme": "light",
+    "contrast": {
+      "body": 13.51,
+      "muted": 6.1,
+      "link": 5.62,
+      "navigation": 6.1,
+      "active_navigation": 5.62,
+      "primary_button": 5.62
+    }
+  }
+]
