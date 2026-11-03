@@ -1,0 +1,63 @@
+{
+  "header": {
+    "topbar": {
+      "y": 0,
+      "height": 64
+    },
+    "environment": "65.9844px",
+    "cssFiles": 9,
+    "selectors": [
+      {
+        "label": "Environment: Synthetic audit \u00b7 Rotterdam",
+        "height": 44.390625
+      },
+      {
+        "label": "Snapshot: 02 Nov 2026, 12:18 UTC",
+        "height": 44.390625
+      }
+    ]
+  },
+  "details": [
+    {
+      "tag": "BUTTON",
+      "html": "<button type=\"button\" class=\"detail-button\" aria-haspopup=\"dialog\" data-title=\"Collection diagnostics\">View details</button>",
+      "parent": "<div class=\"detail-popup\"><button type=\"button\" class=\"detail-button\" aria-haspopup=\"dialog\" data-title=\"Collection diagnostics\">View details</button><div class=\"detail-content\" hidden=\"\"><p>TESTING SAMPLE \u2014 Fresh retrieval: \u2014 HTTP requests, 0 retries; \u2014 seconds, \u2014 workers.</p></div></div>"
+    },
+    {
+      "tag": "BUTTON",
+      "html": "<button type=\"button\" class=\"detail-button\" aria-haspopup=\"dialog\" data-title=\"Collection scope\">View details</button>",
+      "parent": "<div class=\"detail-popup\"><button type=\"button\" class=\"detail-button\" aria-haspopup=\"dialog\" data-title=\"Collection scope\">View details</button><div class=\"detail-content\" hidden=\"\"><p>3 groups and 1 custom services scanned \u00b7 0 default/system groups excluded.</p>\n<p>1 DFW policies and 3 DFW rules inventoried.</p>\n<p>Categories can overlap: an unused group can also be empty. Unknown membership is counted separately from empty.</p></div></div>"
+    }
+  ],
+  "detailsDestination": [
+    {
+      "title": "Collection diagnostics",
+      "text": "\nCollection diagnosticsExpandCloseSynthetic audit \u00b7 Rotterdam \u00b7 02 Nov 2026, 12:18 UTC\nSummaryReferencesHistoryTechnical detailsTESTING SAMPLE \u2014 Fresh retrieval: \u2014 HTTP requests, 0 retries; \u2014 seconds, \u2014 workers.No relationship details recorded for this object.This snapshot contains point-in-time evidence. Open Finding reviews for decision and observation history.No additional details recorded."
+    }
+  ],
+  "theme": {
+    "before": "system",
+    "after": "system",
+    "popupOpen": true
+  },
+  "environmentOptions": [
+    "Synthetic audit \u00b7 Rotterdam",
+    "Synthetic empty environment"
+  ],
+  "environmentNavigation": [
+    {
+      "path": "/workspace/inventory/",
+      "preflight": true,
+      "navigation": false
+    },
+    {
+      "path": "/workspace/inventory/",
+      "preflight": false,
+      "navigation": true
+    }
+  ],
+  "compliant": {
+    "issueSummary": [],
+    "copy": "\n\n\nAutomatic task updatesRefresh nowPause updates\n\nGroup naming complianceSynthetic audit \u00b7 Rotterdam \u00b7 Group definitions from the latest full collectionNaming policies\nReview group names and coordinate corrections. Changes in this workspace are recorded in the application; NSX names and tags are updated separately.\nSource collection: Nov. 2, 2026, 12:18 p.m. \u00b7 View source inventory \u00b7 Review coverage\n\n\nNeeds attention 3Compliant 0Exceptions 0All groups 3\n\n\nSearch groups\nApply filtersReset\nMore filters\nGroup typeAll typesDynamicStaticMixed / nestedUnknown\nOutcomeAll outcomesName differs\nPolicyAll policiesSynthetic application groups\nProposal ownerAll ownersadminaudit-admin\n Simulate draft component values\n\n0 matching groupsExport assessmentImport component proposals\n\nNo groups selectedChoose actionClear selection\nGroup / type / pathProposed name / policyOutcomeEvidence and proposal\nNo matching groups for these filters. A new policy may have changed their outcome to Ambiguous policy. Show all outcomes and policies.No matching groups for these filters. A new policy may have changed their outcome to Ambiguous policy. Show all outcomes and policies.\n\n0 matching results \u00b7 3 total in this view\nRows per page 202550100\n<a href=\"?tab=compliant&amp;page_size=20\">Show 20</a> <a href=\"?tab=compliant&amp;page_size=25\">Show 25</a> <a href=\"?tab=compliant&amp;page_size=50\">Show 50</a> <a href=\"?tab=compliant&amp;page_size=100\">Show 100</a> \nPreviousPage 1 of 1Next\n\n\n\nNaming corrections \u00b7 0 selectedClose\nPropose a scope and value for each selected group. Values remain separate from NSX tags"
+  }
+}

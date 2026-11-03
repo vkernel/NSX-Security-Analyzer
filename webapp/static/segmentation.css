@@ -34,3 +34,8 @@ body[data-theme] .seg-unknown{background:var(--app-surface-soft);color:var(--mut
 body[data-theme] .proposal-vm-context{background:var(--app-surface-soft);border-color:var(--line)}
 body[data-theme] .proposal-vm-context :is(small,span){color:var(--muted)}
 @media(max-width:700px){.application-heading,.application-details{padding:16px}.application-setup{padding:0 16px 16px}.application-heading .button{white-space:normal}}
+/* The map is optional on narrow screens; lists retain every displayed relationship. */
+.application-map-toggle{margin:0 24px 16px}.application-map-controls{display:flex;align-items:center;gap:8px;padding:12px 24px;border-top:1px solid var(--line);flex-wrap:wrap}.application-map-controls span{font-size:12px;color:var(--muted)}
+.application-map-viewport{overflow:auto;max-height:600px;touch-action:pan-x pan-y;cursor:grab}.application-map-viewport:active{cursor:grabbing}.application-map-viewport svg{width:100%;min-width:0;max-width:none;height:auto;display:block}
+.seg-tools{margin-bottom:24px}.seg-tools .seg-filters{display:flex;align-items:end;gap:12px;flex-wrap:wrap;max-width:none;padding:16px}.seg-tools .seg-filters label{flex:1;min-width:160px}.seg-tools .seg-filters label:has([type=checkbox]){display:flex;align-items:center;gap:8px;align-self:center}.seg-tools>.seg-tabs{display:none}
+@media(max-width:700px){.application-map-toggle{margin-left:16px}.application-map-controls{padding:12px 16px}.application-map-viewport{max-height:380px}.application-details{grid-template-columns:1fr}.application-heading{align-items:start;gap:12px}.application-heading p{margin-bottom:0}.application-meta{padding:0 16px 16px}.seg-tools .seg-filters label{flex-basis:100%}}

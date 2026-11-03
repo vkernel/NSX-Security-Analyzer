@@ -21,7 +21,7 @@
   controls.push({input,hidden,selection,close,cancel(){clearTimeout(timer);controller?.abort();version++;}});
  });
  document.getElementById('pair-swap')?.addEventListener('click',()=>{if(controls.length!==2)return;const [a,b]=controls;controls.forEach(c=>{c.cancel();c.close();});[a.input.value,b.input.value]=[b.input.value,a.input.value];[a.hidden.value,b.hidden.value]=[b.hidden.value,a.hidden.value];[a.selection.textContent,b.selection.textContent]=[b.selection.textContent,a.selection.textContent];});
- document.querySelectorAll('[data-pair-rule]').forEach(row=>row.addEventListener('toggle',()=>{if(!row.open)return;document.querySelectorAll('[data-pair-rule]').forEach(other=>{other.classList.toggle('pair-selected',other===row);});document.getElementById('pair-focus-title').textContent=row.dataset.name;document.getElementById('pair-focus-explanation').textContent=row.dataset.explanation;}));
+ document.querySelectorAll('[data-pair-rule]').forEach(row=>row.addEventListener('toggle',()=>{if(!row.open)return;document.querySelectorAll('[data-pair-rule]').forEach(other=>{other.classList.toggle('pair-selected',other===row);});const flow=document.querySelector('[data-pair-flow]');if(flow)flow.hidden=false;document.getElementById('pair-focus-title').textContent=row.dataset.name;document.getElementById('pair-focus-explanation').textContent=row.dataset.explanation;}));
  const drawer=document.querySelector('[data-rule-drawer]');
  if(drawer&&typeof drawer.showModal==='function'){
   let origin,body,trigger;
@@ -31,7 +31,7 @@
   document.querySelectorAll('[data-pair-rule]').forEach(row=>row.querySelector('summary').addEventListener('click',event=>{
    event.preventDefault();origin=row;trigger=row.querySelector('summary');body=row.querySelector('.pair-rule-body');
    document.getElementById('rule-drawer-title').textContent=row.dataset.name;
-   document.getElementById('pair-focus-title').textContent=row.dataset.name;
+   const flow=document.querySelector('[data-pair-flow]');if(flow)flow.hidden=false;document.getElementById('pair-focus-title').textContent=row.dataset.name;
    document.getElementById('pair-focus-explanation').textContent=row.dataset.explanation;
    document.querySelectorAll('[data-pair-rule]').forEach(other=>other.classList.toggle('pair-selected',other===row));
    if(!body.dataset.tabbed&&window.WorkspaceTabs){

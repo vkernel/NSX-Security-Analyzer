@@ -55,7 +55,7 @@
  }
  document.addEventListener('click',e=>{const summary=e.target.closest('details[data-section-panel] > summary');if(!summary||embedded||typeof dialog.showModal!=='function'||document.querySelector('dialog[open]'))return;e.preventDefault();openSection(summary.parentElement,summary);});
  // Reuse the component panel for its scope/tag picker instead of stacking dialogs.
- window.WorkspacePanels={openPicker(picker){if(!dialog.open||!restore)return null;const nodes=[...body.childNodes],savedTitle=title.textContent;footer.hidden=true;const content=[...picker.childNodes];body.replaceChildren(...content);title.textContent='Choose collected evidence';back.hidden=false;
+ window.WorkspacePanels={openSection,openPicker(picker){if(!dialog.open||!restore)return null;const nodes=[...body.childNodes],savedTitle=title.textContent;footer.hidden=true;const content=[...picker.childNodes];body.replaceChildren(...content);title.textContent='Choose collected evidence';back.hidden=false;
   const resume=()=>{picker.append(...content);body.replaceChildren(...nodes);title.textContent=savedTitle;back.hidden=true;footer.hidden=false;overlayRestore=null;};overlayRestore=resume;return resume;
  }};
  const evidence=document.querySelector('.finding-evidence'),history=document.querySelector('.review-history');

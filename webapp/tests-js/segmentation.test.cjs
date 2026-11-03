@@ -41,3 +41,14 @@ test('failed connection load offers retry and stale evidence offers reopening th
  const retry=d.querySelector('[data-load-connection]');assert.equal(retry.disabled,false);assert.equal(retry.textContent,'Retry loading rules');
  retry.click();await new Promise(r=>setTimeout(r,20));assert.match(d.querySelector('[data-connection-details]').textContent,/Reopen the application map/);assert.equal(count,2);dom.window.close();
 });
+
+test('mobile map is optional and has explicit zoom and fit controls',()=>{
+ const dom=new JSDOM('<button data-map-toggle hidden></button><div id="application-map-canvas"><div class="application-map-controls" hidden><button data-map-zoom="in">+</button><button data-map-zoom="out">-</button><button data-map-fit>Fit</button></div><div class="application-map-viewport"><svg></svg></div></div><div class="application-details">Readable connections</div>',{runScripts:'outside-only',url:'https://example.test/segmentation/'});
+ const w=dom.window;w.matchMedia=()=>({matches:true,addEventListener(){}});w.eval(fs.readFileSync(path.join(__dirname,'../static/segmentation.js'),'utf8'));
+ const canvas=w.document.getElementById('application-map-canvas'),button=w.document.querySelector('[data-map-toggle]');assert.equal(canvas.hidden,true);assert.equal(button.hidden,false);assert.equal(w.document.querySelector('.application-details').textContent,'Readable connections');button.click();assert.equal(canvas.hidden,false);assert.equal(button.getAttribute('aria-expanded'),'true');w.document.querySelector('[data-map-zoom=in]').click();assert.equal(canvas.querySelector('svg').style.width,'1250px');w.document.querySelector('[data-map-fit]').click();assert.equal(canvas.querySelector('svg').style.width,'100%');dom.window.close();
+});
+test('map selection retains the actual activating node as the evidence drawer focus target',()=>{
+ const dom=page('<a href="#application-0" data-application="0">Portal</a><details id="application-0"><summary>Portal</summary><p>Evidence</p></details>'),w=dom.window,d=w.document;let actual;
+ w.WorkspacePanels={openSection:(section,trigger)=>{actual={section,trigger};}};
+ const node=d.querySelector('[data-application]');node.click();assert.equal(actual.section,d.getElementById('application-0'));assert.equal(actual.trigger,node);w.close();
+});

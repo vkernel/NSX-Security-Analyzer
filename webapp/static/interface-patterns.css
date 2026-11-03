@@ -126,6 +126,8 @@ body[data-theme] .naming-results mark {background:var(--info-bg);color:var(--inf
 .naming-toolbar>label {flex:1;min-width:200px}
 .naming-toolbar label {display:grid;gap:4px;font-size:13px;color:var(--muted)}
 .naming-toolbar :is(input,select) {width:100%;min-width:0;box-sizing:border-box}
+.naming-toolbar label.inline-check {display:flex;align-items:center;gap:8px;min-height:40px}
+.naming-toolbar input[type=checkbox] {width:16px;flex-shrink:0}
 .naming-toolbar>details {flex-basis:100%;order:3}
 .naming-toolbar>details>summary {color:var(--muted)}
 .naming-toolbar .form-grid {padding-top:12px;margin-bottom:8px}

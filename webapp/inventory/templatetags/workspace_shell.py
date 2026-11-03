@@ -9,6 +9,40 @@ from .admin_sections import admin_sections
 register = template.Library()
 
 
+@register.inclusion_tag('inventory/snapshot_context.html', takes_context=True)
+def snapshot_context(context):
+    """Metadata only: never load a report to build the evidence selector."""
+    from ..models import Snapshot
+    request = context['request']
+    snapshot = context.get('snapshot')
+    if not snapshot or not getattr(snapshot, 'pk', None):
+        return {}
+    name = request.resolver_match.url_name if request.resolver_match else ''
+    switchable = name in {'snapshot', 'segmentation', 'segmentation-pair'}
+    history = list(Snapshot.objects.filter(environment_id=snapshot.environment_id)
+                   .only('pk', 'environment_id', 'generated_at', 'created_at', 'testing', 'imported', 'needs_review')[:50]) if switchable else []
+    if switchable and all(item.pk != snapshot.pk for item in history):
+        history.append(snapshot)
+    choices = []
+    for item in history:
+        if name == 'snapshot':
+            params = {'browse': '1'} if request.GET.get('browse') == '1' else {}
+            url = reverse('snapshot', args=[item.pk])
+        else:
+            params = request.GET.copy()
+            for key in ('page','selected','rule','export','save'):
+                params.pop(key, None)
+            params['snapshot'] = str(item.pk)
+            url = reverse(name, args=[snapshot.environment_id])
+        if params:
+            url += '?' + (params.urlencode() if hasattr(params, 'urlencode') else urlencode(params, doseq=True))
+        choices.append({'snapshot': item, 'url': url, 'selected': item.pk == snapshot.pk, 'latest': item == history[0]})
+    return {'request': request, 'context_snapshot': snapshot, 'snapshot_choices': choices,
+            'snapshot_is_latest': bool(history and history[0].pk == snapshot.pk),
+            'snapshot_can_switch': switchable,
+            'snapshot_history_url': reverse('environment', args=[snapshot.environment_id])}
+
+
 @register.simple_tag(takes_context=True)
 def relay_sections(context):
     request = context['request']
@@ -83,4 +117,9 @@ def relay_sections(context):
         groups['collections'][0]['links'].append(scoped('Environment history', 'collection-history'))
     titles = {'overview': 'Overview', 'environments': 'Environments', 'inventory': 'Inventory', 'firewall': 'Firewall', 'naming': 'Naming compliance', 'segmentation': 'Segmentation', 'work': 'My work', 'collections': 'Collections', 'administration': 'Administration', 'personal': 'Personal settings', 'help': 'Help & coverage'}
     scope_label = 'All environments' if current in {'dashboard', 'my-work', 'activity', 'all-collections'} and not request.GET.get('environment') else environment.name if environment else 'NSX Security Analyzer'
-    return {'active': active, 'title': titles[active], 'scope_label': scope_label, 'environment': environment, 'groups': groups[active]}
+    canonical = {'naming-compliance':'naming_navigation','findings':'findings_navigation',
+                 'my-work':'work_navigation','activity':'activity_navigation','website-settings':'settings_navigation',
+                 'segmentation':'segmentation_navigation','segmentation-pair':'segmentation_navigation',
+                 'environment':'history_navigation','snapshot-comparison':'history_navigation','collection-coverage':'history_navigation'}
+    return {'active': active, 'title': titles[active], 'scope_label': scope_label, 'environment': environment,
+            'groups': groups[active], 'canonical_template': 'inventory/'+canonical[current]+'.html' if current in canonical else ''}

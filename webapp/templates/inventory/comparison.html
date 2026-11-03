@@ -1,6 +1,6 @@
 {% extends 'base.html' %}{% load static %}{% block content %}
 <a class="breadcrumb" href="{% url 'environment' environment.pk %}">← {{ environment.name }}</a>
-<div class="page-heading"><div><h1>Compare snapshots</h1><p class="lead">See how saved rules, groups, services and membership evidence changed.</p></div></div>
+{% include 'components/page_header.html' with title='Compare snapshots' description='See how saved rules, groups, services and membership evidence changed.' only %}
 {% include 'inventory/history_navigation.html' %}
 <form method="get" class="directory-toolbar comparison-toolbar"><input type="hidden" name="choices_page" value="{{ form.snapshot_page.number }}">{{ form.non_field_errors }}
 <div class="form-field">{{ form.before.label_tag }}{{ form.before }}{{ form.before.errors }}</div><span class="comparison-arrow" aria-hidden="true">→</span><div class="form-field">{{ form.after.label_tag }}{{ form.after }}{{ form.after.errors }}</div><button class="button primary">Compare snapshots</button></form>

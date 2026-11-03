@@ -1,0 +1,18 @@
+{
+  "date": "2026-11-03",
+  "data": "Offline synthetic fixture; no NSX calls",
+  "django_postgresql_tests": 787,
+  "javascript_tests": 56,
+  "page_accessibility_states": 40,
+  "overlay_accessibility_states": 14,
+  "automated_wcag_violations_in_checked_states": 0,
+  "targeted_keyboard_contrast_checks": 6,
+  "new_and_large_inventory_workflows": 10,
+  "existing_workflow_checks": 14,
+  "templates_compiled": 109,
+  "local_image_build": "passed",
+  "acceptance_basis": "Synthetic inventories, explicitly confirmed by the user",
+  "requested_acceptance_status": "complete",
+  "live_data_validation": "not requested or performed",
+  "publication_status_at_validation": "not published"
+}

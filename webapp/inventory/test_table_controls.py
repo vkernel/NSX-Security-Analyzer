@@ -30,14 +30,14 @@ class TableControlTests(SimpleTestCase):
             self.assertIn('q=hello+world',item['url'])
         html=render_to_string('components/table_footer.html',data)
         self.assertIn('Showing 26–50 of 80 matching results',html)
-        self.assertIn('140 total in this view',html)
+        self.assertIn('140 total before filtering',html)
 
     def test_empty_and_single_page_keep_counts_and_size_controls(self):
         for rows,text in [([], '0 matching results'),([1,2], 'Showing 1–2 of 2 matching results')]:
             data=table_footer({'request':self.request()},Paginator(rows,25).page(1))
             html=render_to_string('components/table_footer.html',data)
             self.assertIn(text,html);self.assertIn('Rows per page',html)
-            self.assertNotIn('total in this view',html)
+            self.assertNotIn('total before filtering',html)
 
     def test_secondary_paginator_preserves_primary_page(self):
         request=self.request('?page=2&gap_page=2&days=30')

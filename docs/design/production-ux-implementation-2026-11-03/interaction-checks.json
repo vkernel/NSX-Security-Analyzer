@@ -1,0 +1,58 @@
+[
+  {
+    "name": "Theme switches System dark to light instantly, saves, preserves unsaved values and rolls back on failure",
+    "passed": true
+  },
+  {
+    "name": "Retained report navigation is populated on first load and follows section changes",
+    "passed": true
+  },
+  {
+    "name": "Collection details uses collection-specific sections and Escape restores focus",
+    "passed": true
+  },
+  {
+    "name": "Snapshot history searches, marks selection, retains report section and exposes historical evidence",
+    "passed": true
+  },
+  {
+    "name": "Environment search supports keyboard and uses one navigation without old object identifiers",
+    "passed": true
+  },
+  {
+    "name": "Naming issues filter affected rows and Compliant removes correction noise",
+    "passed": true
+  },
+  {
+    "name": "VM rows use readable power states and inspect stable identity without inner table scrolling",
+    "passed": true
+  },
+  {
+    "name": "VM pair defers flow cards until a rule is inspected and retains pinned URL",
+    "passed": true
+  },
+  {
+    "name": "Saved proposal context is pinned, not a global environment or snapshot selector",
+    "passed": true
+  },
+  {
+    "name": "System remains available in personal settings",
+    "passed": true
+  },
+  {
+    "name": "ux-viewer has role-appropriate naming and administration controls",
+    "passed": true
+  },
+  {
+    "name": "ux-operator has role-appropriate naming and administration controls",
+    "passed": true
+  },
+  {
+    "name": "Mobile segmentation starts with lists and supports explicit map, zoom and fit",
+    "passed": true
+  },
+  {
+    "name": "320px and larger/high-contrast text preserve header controls and mobile keyboard navigation",
+    "passed": true
+  }
+]

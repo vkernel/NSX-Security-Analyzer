@@ -86,7 +86,7 @@ def policies(request, pk=None):
     form = PolicyForm(request.POST if editing else None, initial=initial)
     if policy: form.fields['environment'].disabled = True
     formset = ComponentSet(request.POST if editing else None, initial=components, prefix='components')
-    binding_form = BindingForm(initial={'revision': policy.revision if policy else 0})
+    binding_form = BindingForm(initial={'revision': policy.revision if policy else 0}, auto_id='id_mapping_%s')
     preview = None
     error = ''
     if request.method == 'POST':
@@ -111,7 +111,7 @@ def policies(request, pk=None):
                         messages.success(request, 'Draft saved. Active naming rules are unchanged. Preview the impact before activation.')
                         return redirect('naming-policy-edit', pk=policy.pk)
         elif policy and action == 'binding':
-            binding_form = BindingForm(request.POST)
+            binding_form = BindingForm(request.POST, auto_id='id_mapping_%s')
             if binding_form.is_valid():
                 data = binding_form.cleaned_data
                 with transaction.atomic():
@@ -341,14 +341,43 @@ def compliance(request, pk):
     for row in rows:
         row['next_url'] = reverse('collection-coverage', args=[environment.pk]) if row['status'] == 'Evidence incomplete' else reverse('naming-policies') if row['status'] in ('Ambiguous policy','No applicable policy') else '#naming-work-actions'
         row['conflicting_policies'] = [policy_names[value] for value in row.get('matching_policy_ids', []) if value in policy_names] if row['status']=='Ambiguous policy' else []
-        if row['status'] in ('Ambiguous policy','No applicable policy','Invalid value','Missing required tags','Duplicate proposed name'):
-            key = (row['status'], tuple(row.get('matching_policy_ids', [])))
-            bucket = groups.setdefault(key, {'issue':row['status'],'count':0,'policies':[policy_names[value] for value in key[1] if value in policy_names]})
-            bucket['count'] += 1
     filtered = [r for r in rows if (tab == 'all' or tab == 'attention' and r['needs_attention'] or tab == 'compliant' and r['status'] == 'Compliant' and not r['needs_attention'] or tab == 'exceptions' and r['status'] == 'Reviewed exception') and (not query or query.casefold() in (r['name']+' '+r['identity']+' '+str(r['observed_tags'])).casefold())
                 and (not group_type or r['group_type'] == group_type)
                 and (not status or r['status'] == status) and (not policy_id or policy_id in r.get('matching_policy_ids', []))
                 and (not owner_filter or r['proposal'] and str(r['proposal'].owner_id) == owner_filter)]
+    remedies = {'Ambiguous policy': 'Resolve policy overlap', 'No applicable policy': 'Review policy coverage',
+                'Invalid value': 'Inspect invalid values', 'Missing required tags': 'Review missing components',
+                'Duplicate proposed name': 'Compare colliding groups'}
+    if tab == 'attention':
+        for row in filtered:
+            if row['status'] not in remedies:
+                continue
+            key = row['status']
+            bucket = groups.setdefault(key, {'issue':key,'count':0,'action':remedies[key], 'policy_counts':{}})
+            bucket['count'] += 1
+            applicable = {str(pk) for pk in row.get('matching_policy_ids', [])}
+            if row.get('policy'):
+                applicable.add(str(row['policy'].pk))
+            for pk in applicable & policy_names.keys():
+                bucket['policy_counts'][pk] = bucket['policy_counts'].get(pk, 0) + 1
+        for bucket in groups.values():
+            issue_params = request.GET.copy()
+            issue_params['tab'], issue_params['status'] = 'attention', bucket['issue']
+            issue_params.pop('page', None)
+            bucket['url'] = '?' + issue_params.urlencode()
+            policies = []
+            for pk, count in sorted(bucket.pop('policy_counts').items(), key=lambda item: (policy_names[item[0]].name.casefold(), item[0])):
+                policy_params = issue_params.copy()
+                policy_params['policy'] = pk
+                policies.append({'name':policy_names[pk].name, 'count':count, 'url':'?' + policy_params.urlencode()})
+            bucket['policies'], bucket['more_policies'] = policies[:3], policies[3:]
+    from collections import Counter
+    repeated = Counter(row['name'] for row in filtered)
+    for row in filtered:
+        row['show_identity'] = repeated[row['name']] > 1
+        if not request.user.is_superuser and row['status'] in ('Ambiguous policy','No applicable policy'):
+            row['next_url'] = reverse('collection-coverage', args=[environment.pk])
+            row['next_action'] = 'Review evidence coverage'
     if request.GET.get('export') == 'csv': return csv_response(filtered)
     page = Paginator(filtered, table_page_size(request)).get_page(request.GET.get('page'))
     params = request.GET.copy();params.pop('page', None);params.pop('export', None)

@@ -3067,7 +3067,7 @@ table{min-width:760px}th{line-height:1.5}td{padding:15px 14px}.path{line-height:
     table.closest('.table-wrap').before(summary);
     function update() {
       buttons.forEach((button,index) => {
-        button.textContent = captions[index] + (filters.has(index) ? ' ●' : ' ▾');
+        button.textContent = captions[index] + (filters.has(index) ? ' ●' : '');
         button.classList.toggle('filter-active',filters.has(index));
       });
       summary.replaceChildren();
@@ -3090,7 +3090,7 @@ table{min-width:760px}th{line-height:1.5}td{padding:15px 14px}.path{line-height:
     headers.forEach((header,index) => {
       const button = document.createElement('button');
       button.type='button'; button.className='header-filter';
-      button.textContent=captions[index]+' ▾';
+      button.textContent=captions[index];
       button.title='Filter '+captions[index];
       button.setAttribute('aria-haspopup','dialog');
       header.replaceChildren(button); buttons.push(button);

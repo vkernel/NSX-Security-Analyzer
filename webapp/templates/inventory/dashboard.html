@@ -1,10 +1,10 @@
 {% extends 'base.html' %}{% block content %}
-{% url 'environment-directory' as directory_url %}{% include 'components/page_header.html' with title='Workspace overview' description='Collection health and the areas that need attention.' action_url=directory_url action_label='View environments' only %}
-<div class="operational-metrics">
+{% url 'environment-directory' as directory_url %}{% include 'components/page_header.html' with title='Workspace overview' description='Collection health and the areas that need attention.' only %}
+<div class="operational-metrics operational-summary">
 <a class="{% if failed_count %}metric-error{% endif %}" href="{% url 'all-collections' %}?status=failed"><span>Failed collections</span><strong>{{ failed_count }}</strong><small>Last 24 hours</small></a>
 <a class="{% if stale_count %}metric-warning{% endif %}" href="#environment-health"><span>Stale or uncollected</span><strong>{{ stale_count }}</strong><small>Environment freshness</small></a>
 <a class="{% if running_count %}metric-active{% endif %}" href="{% url 'all-collections' %}?status=running"><span>Running collections</span><strong>{{ running_count }}</strong><small>{{ queued_count }} waiting in queue</small></a>
 <a class="{% if new_issue_count %}metric-warning{% endif %}" href="#environment-health"><span>New coverage issues</span><strong>{{ new_issue_count }}</strong><small>Latest saved snapshots</small></a></div>
-<details class="overview-findings"><summary>Finding qualification summary</summary><p class="muted">Saved qualification counts across findings.</p><dl class="finding-counts">{% for entry in finding_counts %}<div><dt>{{ entry.qualification|capfirst }}</dt><dd>{{ entry.total }}</dd></div>{% empty %}<div><dt>No findings evaluated yet</dt><dd>—</dd></div>{% endfor %}</dl></details>
 <div class="section-heading" id="environment-health"><h2>Environment health</h2><a href="{% url 'environment-directory' %}">Search all environments</a></div>{% include 'inventory/environment_table.html' %}
-<div class="section-heading"><h2>Recent collections</h2><a href="{% url 'all-collections' %}">View all collections</a></div>{% include 'inventory/recent_activity.html' %}{% endblock %}
+<div class="section-heading"><h2>Recent collections</h2><a href="{% url 'all-collections' %}">View all collections</a></div>{% include 'inventory/recent_activity.html' %}<details class="overview-findings" data-dashboard-methodology><summary>Finding qualification summary</summary><p class="muted">Saved qualification counts across findings.</p><dl class="finding-counts">{% for entry in finding_counts %}<div><dt>{{ entry.qualification|capfirst }}</dt><dd>{{ entry.total }}</dd></div>{% empty %}<div><dt>No findings evaluated yet</dt><dd>—</dd></div>{% endfor %}</dl></details>
+{% endblock %}

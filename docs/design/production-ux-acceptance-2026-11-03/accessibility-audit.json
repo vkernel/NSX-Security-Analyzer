@@ -1,0 +1,626 @@
+[
+  {
+    "name": "dashboard",
+    "theme": "light",
+    "violations": [],
+    "incomplete": [
+      {
+        "id": "link-in-text-block",
+        "nodes": 1
+      }
+    ],
+    "passes": 21
+  },
+  {
+    "name": "environment-directory",
+    "theme": "light",
+    "violations": [],
+    "incomplete": [
+      {
+        "id": "link-in-text-block",
+        "nodes": 1
+      }
+    ],
+    "passes": 24
+  },
+  {
+    "name": "snapshot-overview",
+    "theme": "light",
+    "violations": [],
+    "incomplete": [
+      {
+        "id": "aria-prohibited-attr",
+        "nodes": 1
+      },
+      {
+        "id": "aria-valid-attr-value",
+        "nodes": 1
+      },
+      {
+        "id": "color-contrast",
+        "nodes": 1
+      },
+      {
+        "id": "link-in-text-block",
+        "nodes": 1
+      }
+    ],
+    "passes": 26
+  },
+  {
+    "name": "snapshot-all-vms",
+    "theme": "light",
+    "violations": [],
+    "incomplete": [
+      {
+        "id": "aria-valid-attr-value",
+        "nodes": 1
+      },
+      {
+        "id": "color-contrast",
+        "nodes": 3
+      },
+      {
+        "id": "link-in-text-block",
+        "nodes": 1
+      }
+    ],
+    "passes": 24
+  },
+  {
+    "name": "snapshot-dfw-rules",
+    "theme": "light",
+    "violations": [],
+    "incomplete": [
+      {
+        "id": "aria-valid-attr-value",
+        "nodes": 1
+      },
+      {
+        "id": "color-contrast",
+        "nodes": 3
+      },
+      {
+        "id": "link-in-text-block",
+        "nodes": 1
+      }
+    ],
+    "passes": 24
+  },
+  {
+    "name": "naming-compliance",
+    "theme": "light",
+    "violations": [],
+    "incomplete": [
+      {
+        "id": "link-in-text-block",
+        "nodes": 1
+      }
+    ],
+    "passes": 27
+  },
+  {
+    "name": "naming-compliant",
+    "theme": "light",
+    "violations": [],
+    "incomplete": [
+      {
+        "id": "link-in-text-block",
+        "nodes": 1
+      }
+    ],
+    "passes": 25
+  },
+  {
+    "name": "policy-edit",
+    "theme": "light",
+    "violations": [],
+    "incomplete": [
+      {
+        "id": "link-in-text-block",
+        "nodes": 1
+      }
+    ],
+    "passes": 25
+  },
+  {
+    "name": "segmentation",
+    "theme": "light",
+    "violations": [],
+    "incomplete": [
+      {
+        "id": "aria-valid-attr-value",
+        "nodes": 1
+      },
+      {
+        "id": "color-contrast",
+        "nodes": 8
+      },
+      {
+        "id": "link-in-text-block",
+        "nodes": 1
+      }
+    ],
+    "passes": 25
+  },
+  {
+    "name": "segmentation-matrix",
+    "theme": "light",
+    "violations": [],
+    "incomplete": [
+      {
+        "id": "aria-valid-attr-value",
+        "nodes": 1
+      },
+      {
+        "id": "color-contrast",
+        "nodes": 1
+      },
+      {
+        "id": "link-in-text-block",
+        "nodes": 1
+      }
+    ],
+    "passes": 24
+  },
+  {
+    "name": "pair-needs-assessment",
+    "theme": "light",
+    "violations": [],
+    "incomplete": [
+      {
+        "id": "aria-prohibited-attr",
+        "nodes": 1
+      },
+      {
+        "id": "aria-valid-attr-value",
+        "nodes": 1
+      },
+      {
+        "id": "color-contrast",
+        "nodes": 2
+      },
+      {
+        "id": "link-in-text-block",
+        "nodes": 1
+      }
+    ],
+    "passes": 27
+  },
+  {
+    "name": "proposal-saved",
+    "theme": "light",
+    "violations": [],
+    "incomplete": [
+      {
+        "id": "aria-valid-attr-value",
+        "nodes": 3
+      },
+      {
+        "id": "color-contrast",
+        "nodes": 2
+      },
+      {
+        "id": "link-in-text-block",
+        "nodes": 2
+      }
+    ],
+    "passes": 23
+  },
+  {
+    "name": "findings",
+    "theme": "light",
+    "violations": [],
+    "incomplete": [
+      {
+        "id": "link-in-text-block",
+        "nodes": 1
+      }
+    ],
+    "passes": 28
+  },
+  {
+    "name": "finding-detail",
+    "theme": "light",
+    "violations": [],
+    "incomplete": [
+      {
+        "id": "color-contrast",
+        "nodes": 1
+      },
+      {
+        "id": "link-in-text-block",
+        "nodes": 1
+      }
+    ],
+    "passes": 31
+  },
+  {
+    "name": "deletion-detail",
+    "theme": "light",
+    "violations": [],
+    "incomplete": [
+      {
+        "id": "link-in-text-block",
+        "nodes": 1
+      }
+    ],
+    "passes": 24
+  },
+  {
+    "name": "collection-history",
+    "theme": "light",
+    "violations": [],
+    "incomplete": [
+      {
+        "id": "link-in-text-block",
+        "nodes": 1
+      }
+    ],
+    "passes": 25
+  },
+  {
+    "name": "activity",
+    "theme": "light",
+    "violations": [],
+    "incomplete": [
+      {
+        "id": "link-in-text-block",
+        "nodes": 1
+      }
+    ],
+    "passes": 26
+  },
+  {
+    "name": "system-health",
+    "theme": "light",
+    "violations": [],
+    "incomplete": [
+      {
+        "id": "link-in-text-block",
+        "nodes": 1
+      }
+    ],
+    "passes": 25
+  },
+  {
+    "name": "settings-appearance",
+    "theme": "light",
+    "violations": [],
+    "incomplete": [
+      {
+        "id": "link-in-text-block",
+        "nodes": 1
+      }
+    ],
+    "passes": 27
+  },
+  {
+    "name": "admin:auth_user_changelist",
+    "theme": "light",
+    "violations": [],
+    "incomplete": [
+      {
+        "id": "color-contrast",
+        "nodes": 1
+      },
+      {
+        "id": "link-in-text-block",
+        "nodes": 1
+      }
+    ],
+    "passes": 31
+  },
+  {
+    "name": "dashboard",
+    "theme": "dark",
+    "violations": [],
+    "incomplete": [
+      {
+        "id": "link-in-text-block",
+        "nodes": 1
+      }
+    ],
+    "passes": 21
+  },
+  {
+    "name": "environment-directory",
+    "theme": "dark",
+    "violations": [],
+    "incomplete": [
+      {
+        "id": "link-in-text-block",
+        "nodes": 1
+      }
+    ],
+    "passes": 24
+  },
+  {
+    "name": "snapshot-overview",
+    "theme": "dark",
+    "violations": [],
+    "incomplete": [
+      {
+        "id": "aria-prohibited-attr",
+        "nodes": 1
+      },
+      {
+        "id": "aria-valid-attr-value",
+        "nodes": 1
+      },
+      {
+        "id": "color-contrast",
+        "nodes": 1
+      },
+      {
+        "id": "link-in-text-block",
+        "nodes": 1
+      }
+    ],
+    "passes": 26
+  },
+  {
+    "name": "snapshot-all-vms",
+    "theme": "dark",
+    "violations": [],
+    "incomplete": [
+      {
+        "id": "aria-valid-attr-value",
+        "nodes": 1
+      },
+      {
+        "id": "color-contrast",
+        "nodes": 3
+      },
+      {
+        "id": "link-in-text-block",
+        "nodes": 1
+      }
+    ],
+    "passes": 24
+  },
+  {
+    "name": "snapshot-dfw-rules",
+    "theme": "dark",
+    "violations": [],
+    "incomplete": [
+      {
+        "id": "aria-valid-attr-value",
+        "nodes": 1
+      },
+      {
+        "id": "color-contrast",
+        "nodes": 3
+      },
+      {
+        "id": "link-in-text-block",
+        "nodes": 1
+      }
+    ],
+    "passes": 24
+  },
+  {
+    "name": "naming-compliance",
+    "theme": "dark",
+    "violations": [],
+    "incomplete": [
+      {
+        "id": "link-in-text-block",
+        "nodes": 1
+      }
+    ],
+    "passes": 27
+  },
+  {
+    "name": "naming-compliant",
+    "theme": "dark",
+    "violations": [],
+    "incomplete": [
+      {
+        "id": "link-in-text-block",
+        "nodes": 1
+      }
+    ],
+    "passes": 25
+  },
+  {
+    "name": "policy-edit",
+    "theme": "dark",
+    "violations": [],
+    "incomplete": [
+      {
+        "id": "link-in-text-block",
+        "nodes": 1
+      }
+    ],
+    "passes": 25
+  },
+  {
+    "name": "segmentation",
+    "theme": "dark",
+    "violations": [],
+    "incomplete": [
+      {
+        "id": "aria-valid-attr-value",
+        "nodes": 1
+      },
+      {
+        "id": "color-contrast",
+        "nodes": 8
+      },
+      {
+        "id": "link-in-text-block",
+        "nodes": 1
+      }
+    ],
+    "passes": 25
+  },
+  {
+    "name": "segmentation-matrix",
+    "theme": "dark",
+    "violations": [],
+    "incomplete": [
+      {
+        "id": "aria-valid-attr-value",
+        "nodes": 1
+      },
+      {
+        "id": "color-contrast",
+        "nodes": 1
+      },
+      {
+        "id": "link-in-text-block",
+        "nodes": 1
+      }
+    ],
+    "passes": 24
+  },
+  {
+    "name": "pair-needs-assessment",
+    "theme": "dark",
+    "violations": [],
+    "incomplete": [
+      {
+        "id": "aria-prohibited-attr",
+        "nodes": 1
+      },
+      {
+        "id": "aria-valid-attr-value",
+        "nodes": 1
+      },
+      {
+        "id": "color-contrast",
+        "nodes": 2
+      },
+      {
+        "id": "link-in-text-block",
+        "nodes": 1
+      }
+    ],
+    "passes": 27
+  },
+  {
+    "name": "proposal-saved",
+    "theme": "dark",
+    "violations": [],
+    "incomplete": [
+      {
+        "id": "aria-valid-attr-value",
+        "nodes": 3
+      },
+      {
+        "id": "color-contrast",
+        "nodes": 2
+      },
+      {
+        "id": "link-in-text-block",
+        "nodes": 2
+      }
+    ],
+    "passes": 23
+  },
+  {
+    "name": "findings",
+    "theme": "dark",
+    "violations": [],
+    "incomplete": [
+      {
+        "id": "link-in-text-block",
+        "nodes": 1
+      }
+    ],
+    "passes": 28
+  },
+  {
+    "name": "finding-detail",
+    "theme": "dark",
+    "violations": [],
+    "incomplete": [
+      {
+        "id": "color-contrast",
+        "nodes": 2
+      },
+      {
+        "id": "link-in-text-block",
+        "nodes": 1
+      }
+    ],
+    "passes": 31
+  },
+  {
+    "name": "deletion-detail",
+    "theme": "dark",
+    "violations": [],
+    "incomplete": [
+      {
+        "id": "link-in-text-block",
+        "nodes": 1
+      }
+    ],
+    "passes": 24
+  },
+  {
+    "name": "collection-history",
+    "theme": "dark",
+    "violations": [],
+    "incomplete": [
+      {
+        "id": "link-in-text-block",
+        "nodes": 1
+      }
+    ],
+    "passes": 25
+  },
+  {
+    "name": "activity",
+    "theme": "dark",
+    "violations": [],
+    "incomplete": [
+      {
+        "id": "link-in-text-block",
+        "nodes": 1
+      }
+    ],
+    "passes": 26
+  },
+  {
+    "name": "system-health",
+    "theme": "dark",
+    "violations": [],
+    "incomplete": [
+      {
+        "id": "link-in-text-block",
+        "nodes": 1
+      }
+    ],
+    "passes": 25
+  },
+  {
+    "name": "settings-appearance",
+    "theme": "dark",
+    "violations": [],
+    "incomplete": [
+      {
+        "id": "link-in-text-block",
+        "nodes": 1
+      }
+    ],
+    "passes": 27
+  },
+  {
+    "name": "admin:auth_user_changelist",
+    "theme": "dark",
+    "violations": [],
+    "incomplete": [
+      {
+        "id": "color-contrast",
+        "nodes": 1
+      },
+      {
+        "id": "link-in-text-block",
+        "nodes": 1
+      }
+    ],
+    "passes": 31
+  }
+]

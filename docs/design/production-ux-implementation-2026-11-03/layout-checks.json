@@ -1,0 +1,830 @@
+[
+  {
+    "name": "dashboard",
+    "theme": "light",
+    "large": false,
+    "errors": [],
+    "width": 1440,
+    "scrollWidth": 1440,
+    "header": 64,
+    "controls": [
+      {
+        "x": 316,
+        "right": 464.671875,
+        "y": 11.5,
+        "bottom": 51.5
+      },
+      {
+        "x": 1057.734375,
+        "right": 1097.734375,
+        "y": 11.5,
+        "bottom": 51.5
+      }
+    ]
+  },
+  {
+    "name": "snapshot-overview",
+    "theme": "light",
+    "large": false,
+    "errors": [],
+    "width": 1440,
+    "scrollWidth": 1440,
+    "header": 64,
+    "controls": [
+      {
+        "x": 606.171875,
+        "right": 905.90625,
+        "y": 11.296875,
+        "bottom": 51.6875
+      },
+      {
+        "x": 1057.734375,
+        "right": 1097.734375,
+        "y": 11.5,
+        "bottom": 51.5
+      }
+    ]
+  },
+  {
+    "name": "snapshot-all-vms",
+    "theme": "light",
+    "large": false,
+    "errors": [],
+    "width": 1440,
+    "scrollWidth": 1440,
+    "header": 64,
+    "controls": [
+      {
+        "x": 606.171875,
+        "right": 905.90625,
+        "y": 11.296875,
+        "bottom": 51.6875
+      },
+      {
+        "x": 1057.734375,
+        "right": 1097.734375,
+        "y": 11.5,
+        "bottom": 51.5
+      }
+    ]
+  },
+  {
+    "name": "naming-compliance",
+    "theme": "light",
+    "large": false,
+    "errors": [],
+    "width": 1440,
+    "scrollWidth": 1440,
+    "header": 64,
+    "controls": [
+      {
+        "x": 316,
+        "right": 531.28125,
+        "y": 11.5,
+        "bottom": 51.5
+      },
+      {
+        "x": 1057.734375,
+        "right": 1097.734375,
+        "y": 11.5,
+        "bottom": 51.5
+      }
+    ]
+  },
+  {
+    "name": "segmentation",
+    "theme": "light",
+    "large": false,
+    "errors": [],
+    "width": 1440,
+    "scrollWidth": 1440,
+    "header": 64,
+    "controls": [
+      {
+        "x": 316,
+        "right": 531.28125,
+        "y": 11.5,
+        "bottom": 51.5
+      },
+      {
+        "x": 572.28125,
+        "right": 872.015625,
+        "y": 11.296875,
+        "bottom": 51.6875
+      },
+      {
+        "x": 1057.734375,
+        "right": 1097.734375,
+        "y": 11.5,
+        "bottom": 51.5
+      }
+    ]
+  },
+  {
+    "name": "policy-edit",
+    "theme": "light",
+    "large": false,
+    "errors": [],
+    "width": 1440,
+    "scrollWidth": 1440,
+    "header": 64,
+    "controls": [
+      {
+        "x": 1057.734375,
+        "right": 1097.734375,
+        "y": 11.5,
+        "bottom": 51.5
+      }
+    ]
+  },
+  {
+    "name": "dashboard",
+    "theme": "dark",
+    "large": false,
+    "errors": [],
+    "width": 1440,
+    "scrollWidth": 1440,
+    "header": 64,
+    "controls": [
+      {
+        "x": 316,
+        "right": 464.671875,
+        "y": 11.5,
+        "bottom": 51.5
+      },
+      {
+        "x": 1057.734375,
+        "right": 1097.734375,
+        "y": 11.5,
+        "bottom": 51.5
+      }
+    ]
+  },
+  {
+    "name": "snapshot-overview",
+    "theme": "dark",
+    "large": false,
+    "errors": [],
+    "width": 1440,
+    "scrollWidth": 1440,
+    "header": 64,
+    "controls": [
+      {
+        "x": 606.171875,
+        "right": 905.90625,
+        "y": 11.296875,
+        "bottom": 51.6875
+      },
+      {
+        "x": 1057.734375,
+        "right": 1097.734375,
+        "y": 11.5,
+        "bottom": 51.5
+      }
+    ]
+  },
+  {
+    "name": "snapshot-all-vms",
+    "theme": "dark",
+    "large": false,
+    "errors": [],
+    "width": 1440,
+    "scrollWidth": 1440,
+    "header": 64,
+    "controls": [
+      {
+        "x": 606.171875,
+        "right": 905.90625,
+        "y": 11.296875,
+        "bottom": 51.6875
+      },
+      {
+        "x": 1057.734375,
+        "right": 1097.734375,
+        "y": 11.5,
+        "bottom": 51.5
+      }
+    ]
+  },
+  {
+    "name": "naming-compliance",
+    "theme": "dark",
+    "large": false,
+    "errors": [],
+    "width": 1440,
+    "scrollWidth": 1440,
+    "header": 64,
+    "controls": [
+      {
+        "x": 316,
+        "right": 531.28125,
+        "y": 11.5,
+        "bottom": 51.5
+      },
+      {
+        "x": 1057.734375,
+        "right": 1097.734375,
+        "y": 11.5,
+        "bottom": 51.5
+      }
+    ]
+  },
+  {
+    "name": "segmentation",
+    "theme": "dark",
+    "large": false,
+    "errors": [],
+    "width": 1440,
+    "scrollWidth": 1440,
+    "header": 64,
+    "controls": [
+      {
+        "x": 316,
+        "right": 531.28125,
+        "y": 11.5,
+        "bottom": 51.5
+      },
+      {
+        "x": 572.28125,
+        "right": 872.015625,
+        "y": 11.296875,
+        "bottom": 51.6875
+      },
+      {
+        "x": 1057.734375,
+        "right": 1097.734375,
+        "y": 11.5,
+        "bottom": 51.5
+      }
+    ]
+  },
+  {
+    "name": "policy-edit",
+    "theme": "dark",
+    "large": false,
+    "errors": [],
+    "width": 1440,
+    "scrollWidth": 1440,
+    "header": 64,
+    "controls": [
+      {
+        "x": 1057.734375,
+        "right": 1097.734375,
+        "y": 11.5,
+        "bottom": 51.5
+      }
+    ]
+  },
+  {
+    "name": "dashboard",
+    "theme": "light",
+    "large": false,
+    "errors": [],
+    "width": 1920,
+    "scrollWidth": 1920,
+    "header": 64,
+    "controls": [
+      {
+        "x": 316,
+        "right": 464.671875,
+        "y": 11.5,
+        "bottom": 51.5
+      },
+      {
+        "x": 1537.734375,
+        "right": 1577.734375,
+        "y": 11.5,
+        "bottom": 51.5
+      }
+    ]
+  },
+  {
+    "name": "snapshot-overview",
+    "theme": "light",
+    "large": false,
+    "errors": [],
+    "width": 1920,
+    "scrollWidth": 1920,
+    "header": 64,
+    "controls": [
+      {
+        "x": 606.171875,
+        "right": 905.90625,
+        "y": 11.296875,
+        "bottom": 51.6875
+      },
+      {
+        "x": 1537.734375,
+        "right": 1577.734375,
+        "y": 11.5,
+        "bottom": 51.5
+      }
+    ]
+  },
+  {
+    "name": "snapshot-all-vms",
+    "theme": "light",
+    "large": false,
+    "errors": [],
+    "width": 1920,
+    "scrollWidth": 1920,
+    "header": 64,
+    "controls": [
+      {
+        "x": 606.171875,
+        "right": 905.90625,
+        "y": 11.296875,
+        "bottom": 51.6875
+      },
+      {
+        "x": 1537.734375,
+        "right": 1577.734375,
+        "y": 11.5,
+        "bottom": 51.5
+      }
+    ]
+  },
+  {
+    "name": "naming-compliance",
+    "theme": "light",
+    "large": false,
+    "errors": [],
+    "width": 1920,
+    "scrollWidth": 1920,
+    "header": 64,
+    "controls": [
+      {
+        "x": 316,
+        "right": 531.28125,
+        "y": 11.5,
+        "bottom": 51.5
+      },
+      {
+        "x": 1537.734375,
+        "right": 1577.734375,
+        "y": 11.5,
+        "bottom": 51.5
+      }
+    ]
+  },
+  {
+    "name": "segmentation",
+    "theme": "light",
+    "large": false,
+    "errors": [],
+    "width": 1920,
+    "scrollWidth": 1920,
+    "header": 64,
+    "controls": [
+      {
+        "x": 316,
+        "right": 531.28125,
+        "y": 11.5,
+        "bottom": 51.5
+      },
+      {
+        "x": 572.28125,
+        "right": 872.015625,
+        "y": 11.296875,
+        "bottom": 51.6875
+      },
+      {
+        "x": 1537.734375,
+        "right": 1577.734375,
+        "y": 11.5,
+        "bottom": 51.5
+      }
+    ]
+  },
+  {
+    "name": "policy-edit",
+    "theme": "light",
+    "large": false,
+    "errors": [],
+    "width": 1920,
+    "scrollWidth": 1920,
+    "header": 64,
+    "controls": [
+      {
+        "x": 1537.734375,
+        "right": 1577.734375,
+        "y": 11.5,
+        "bottom": 51.5
+      }
+    ]
+  },
+  {
+    "name": "dashboard",
+    "theme": "dark",
+    "large": false,
+    "errors": [],
+    "width": 1920,
+    "scrollWidth": 1920,
+    "header": 64,
+    "controls": [
+      {
+        "x": 316,
+        "right": 464.671875,
+        "y": 11.5,
+        "bottom": 51.5
+      },
+      {
+        "x": 1537.734375,
+        "right": 1577.734375,
+        "y": 11.5,
+        "bottom": 51.5
+      }
+    ]
+  },
+  {
+    "name": "snapshot-overview",
+    "theme": "dark",
+    "large": false,
+    "errors": [],
+    "width": 1920,
+    "scrollWidth": 1920,
+    "header": 64,
+    "controls": [
+      {
+        "x": 606.171875,
+        "right": 905.90625,
+        "y": 11.296875,
+        "bottom": 51.6875
+      },
+      {
+        "x": 1537.734375,
+        "right": 1577.734375,
+        "y": 11.5,
+        "bottom": 51.5
+      }
+    ]
+  },
+  {
+    "name": "snapshot-all-vms",
+    "theme": "dark",
+    "large": false,
+    "errors": [],
+    "width": 1920,
+    "scrollWidth": 1920,
+    "header": 64,
+    "controls": [
+      {
+        "x": 606.171875,
+        "right": 905.90625,
+        "y": 11.296875,
+        "bottom": 51.6875
+      },
+      {
+        "x": 1537.734375,
+        "right": 1577.734375,
+        "y": 11.5,
+        "bottom": 51.5
+      }
+    ]
+  },
+  {
+    "name": "naming-compliance",
+    "theme": "dark",
+    "large": false,
+    "errors": [],
+    "width": 1920,
+    "scrollWidth": 1920,
+    "header": 64,
+    "controls": [
+      {
+        "x": 316,
+        "right": 531.28125,
+        "y": 11.5,
+        "bottom": 51.5
+      },
+      {
+        "x": 1537.734375,
+        "right": 1577.734375,
+        "y": 11.5,
+        "bottom": 51.5
+      }
+    ]
+  },
+  {
+    "name": "segmentation",
+    "theme": "dark",
+    "large": false,
+    "errors": [],
+    "width": 1920,
+    "scrollWidth": 1920,
+    "header": 64,
+    "controls": [
+      {
+        "x": 316,
+        "right": 531.28125,
+        "y": 11.5,
+        "bottom": 51.5
+      },
+      {
+        "x": 572.28125,
+        "right": 872.015625,
+        "y": 11.296875,
+        "bottom": 51.6875
+      },
+      {
+        "x": 1537.734375,
+        "right": 1577.734375,
+        "y": 11.5,
+        "bottom": 51.5
+      }
+    ]
+  },
+  {
+    "name": "policy-edit",
+    "theme": "dark",
+    "large": false,
+    "errors": [],
+    "width": 1920,
+    "scrollWidth": 1920,
+    "header": 64,
+    "controls": [
+      {
+        "x": 1537.734375,
+        "right": 1577.734375,
+        "y": 11.5,
+        "bottom": 51.5
+      }
+    ]
+  },
+  {
+    "name": "dashboard",
+    "theme": "light",
+    "large": true,
+    "errors": [],
+    "width": 320,
+    "scrollWidth": 320,
+    "header": 112,
+    "controls": [
+      {
+        "x": 16,
+        "right": 156,
+        "y": 57,
+        "bottom": 101
+      },
+      {
+        "x": 96.328125,
+        "right": 136.328125,
+        "y": 9,
+        "bottom": 53
+      }
+    ]
+  },
+  {
+    "name": "snapshot-overview",
+    "theme": "light",
+    "large": true,
+    "errors": [],
+    "width": 320,
+    "scrollWidth": 320,
+    "header": 112,
+    "controls": [
+      {
+        "x": 164,
+        "right": 304,
+        "y": 52,
+        "bottom": 106
+      },
+      {
+        "x": 96.328125,
+        "right": 136.328125,
+        "y": 9,
+        "bottom": 53
+      }
+    ]
+  },
+  {
+    "name": "snapshot-all-vms",
+    "theme": "light",
+    "large": true,
+    "errors": [],
+    "width": 320,
+    "scrollWidth": 320,
+    "header": 112,
+    "controls": [
+      {
+        "x": 164,
+        "right": 304,
+        "y": 52,
+        "bottom": 106
+      },
+      {
+        "x": 96.328125,
+        "right": 136.328125,
+        "y": 9,
+        "bottom": 53
+      }
+    ]
+  },
+  {
+    "name": "naming-compliance",
+    "theme": "light",
+    "large": true,
+    "errors": [],
+    "width": 320,
+    "scrollWidth": 320,
+    "header": 112,
+    "controls": [
+      {
+        "x": 16,
+        "right": 156,
+        "y": 57,
+        "bottom": 101
+      },
+      {
+        "x": 96.328125,
+        "right": 136.328125,
+        "y": 9,
+        "bottom": 53
+      }
+    ]
+  },
+  {
+    "name": "segmentation",
+    "theme": "light",
+    "large": true,
+    "errors": [],
+    "width": 320,
+    "scrollWidth": 320,
+    "header": 112,
+    "controls": [
+      {
+        "x": 16,
+        "right": 156,
+        "y": 57,
+        "bottom": 101
+      },
+      {
+        "x": 164,
+        "right": 304,
+        "y": 52,
+        "bottom": 106
+      },
+      {
+        "x": 96.328125,
+        "right": 136.328125,
+        "y": 9,
+        "bottom": 53
+      }
+    ]
+  },
+  {
+    "name": "policy-edit",
+    "theme": "light",
+    "large": true,
+    "errors": [],
+    "width": 320,
+    "scrollWidth": 320,
+    "header": 64,
+    "controls": [
+      {
+        "x": 96.328125,
+        "right": 136.328125,
+        "y": 9,
+        "bottom": 53
+      }
+    ]
+  },
+  {
+    "name": "dashboard",
+    "theme": "dark",
+    "large": true,
+    "errors": [],
+    "width": 320,
+    "scrollWidth": 320,
+    "header": 112,
+    "controls": [
+      {
+        "x": 16,
+        "right": 156,
+        "y": 57,
+        "bottom": 101
+      },
+      {
+        "x": 96.328125,
+        "right": 136.328125,
+        "y": 9,
+        "bottom": 53
+      }
+    ]
+  },
+  {
+    "name": "snapshot-overview",
+    "theme": "dark",
+    "large": true,
+    "errors": [],
+    "width": 320,
+    "scrollWidth": 320,
+    "header": 112,
+    "controls": [
+      {
+        "x": 164,
+        "right": 304,
+        "y": 52,
+        "bottom": 106
+      },
+      {
+        "x": 96.328125,
+        "right": 136.328125,
+        "y": 9,
+        "bottom": 53
+      }
+    ]
+  },
+  {
+    "name": "snapshot-all-vms",
+    "theme": "dark",
+    "large": true,
+    "errors": [],
+    "width": 320,
+    "scrollWidth": 320,
+    "header": 112,
+    "controls": [
+      {
+        "x": 164,
+        "right": 304,
+        "y": 52,
+        "bottom": 106
+      },
+      {
+        "x": 96.328125,
+        "right": 136.328125,
+        "y": 9,
+        "bottom": 53
+      }
+    ]
+  },
+  {
+    "name": "naming-compliance",
+    "theme": "dark",
+    "large": true,
+    "errors": [],
+    "width": 320,
+    "scrollWidth": 320,
+    "header": 112,
+    "controls": [
+      {
+        "x": 16,
+        "right": 156,
+        "y": 57,
+        "bottom": 101
+      },
+      {
+        "x": 96.328125,
+        "right": 136.328125,
+        "y": 9,
+        "bottom": 53
+      }
+    ]
+  },
+  {
+    "name": "segmentation",
+    "theme": "dark",
+    "large": true,
+    "errors": [],
+    "width": 320,
+    "scrollWidth": 320,
+    "header": 112,
+    "controls": [
+      {
+        "x": 16,
+        "right": 156,
+        "y": 57,
+        "bottom": 101
+      },
+      {
+        "x": 164,
+        "right": 304,
+        "y": 52,
+        "bottom": 106
+      },
+      {
+        "x": 96.328125,
+        "right": 136.328125,
+        "y": 9,
+        "bottom": 53
+      }
+    ]
+  },
+  {
+    "name": "policy-edit",
+    "theme": "dark",
+    "large": true,
+    "errors": [],
+    "width": 320,
+    "scrollWidth": 320,
+    "header": 64,
+    "controls": [
+      {
+        "x": 96.328125,
+        "right": 136.328125,
+        "y": 9,
+        "bottom": 53
+      }
+    ]
+  }
+]

@@ -1,0 +1,92 @@
+[
+  {
+    "name": "desktop",
+    "state": "inventory-light",
+    "errors": [],
+    "width": 1600,
+    "scroll": 1600,
+    "theme": "light",
+    "h1": "Inventory overview",
+    "headerHeight": 64
+  },
+  {
+    "name": "desktop",
+    "state": "compliant-dark",
+    "errors": [],
+    "width": 1600,
+    "scroll": 1600,
+    "theme": "dark",
+    "h1": "Group naming",
+    "headerHeight": 64
+  },
+  {
+    "name": "desktop",
+    "state": "vms-light",
+    "errors": [],
+    "width": 1600,
+    "scroll": 1600,
+    "theme": "light",
+    "h1": "Virtual machines",
+    "headerHeight": 64
+  },
+  {
+    "name": "mobile",
+    "state": "inventory-light",
+    "errors": [],
+    "width": 390,
+    "scroll": 390,
+    "theme": "light",
+    "h1": "Inventory overview",
+    "headerHeight": 64
+  },
+  {
+    "name": "mobile",
+    "state": "compliant-dark",
+    "errors": [],
+    "width": 390,
+    "scroll": 390,
+    "theme": "dark",
+    "h1": "Group naming",
+    "headerHeight": 64
+  },
+  {
+    "name": "mobile",
+    "state": "vms-light",
+    "errors": [],
+    "width": 390,
+    "scroll": 390,
+    "theme": "light",
+    "h1": "Virtual machines",
+    "headerHeight": 64
+  },
+  {
+    "name": "narrow",
+    "state": "inventory-light",
+    "errors": [],
+    "width": 320,
+    "scroll": 320,
+    "theme": "light",
+    "h1": "Inventory overview",
+    "headerHeight": 64
+  },
+  {
+    "name": "narrow",
+    "state": "compliant-dark",
+    "errors": [],
+    "width": 320,
+    "scroll": 320,
+    "theme": "dark",
+    "h1": "Group naming",
+    "headerHeight": 64
+  },
+  {
+    "name": "narrow",
+    "state": "vms-light",
+    "errors": [],
+    "width": 320,
+    "scroll": 320,
+    "theme": "light",
+    "h1": "Virtual machines",
+    "headerHeight": 64
+  }
+]
