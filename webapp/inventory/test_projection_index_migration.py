@@ -52,6 +52,32 @@ class ProjectionIndexMigrationTests(TransactionTestCase):
         self.apply()
         self.assertEqual(original, [self.index_state(op.index.name) for op in self.migration.operations])
 
+    def test_another_migration_lock_stops_without_waiting_or_changing_indexes(self):
+        holder = connection.copy(alias='index-migration-lock-holder')
+        lock = ['inventory.0063.projection-index', 'inventory_snapshotrecord']
+        try:
+            with holder.cursor() as cursor:
+                cursor.execute('SELECT pg_advisory_lock(hashtext(%s), hashtext(%s))', lock)
+                cursor.execute('SELECT pg_backend_pid()')
+                holder_pid = cursor.fetchone()[0]
+            with connection.cursor() as cursor:
+                # Bound a regression to the former blocking call, instead of
+                # allowing it to hang the whole test suite.
+                cursor.execute("SET lock_timeout = '500ms'")
+            with self.assertRaisesRegex(RuntimeError, 'Another migration session holds'):
+                self.apply()
+            self.assertIsNone(self.index_state('snapshot_group_projection'))
+            self.assertIsNone(self.index_state('snapshot_rule_projection'))
+            with connection.cursor() as cursor:
+                cursor.execute("SELECT count(*) FROM pg_locks WHERE pid = %s AND locktype = 'advisory' AND granted", [holder_pid])
+                self.assertEqual(cursor.fetchone()[0], 1)
+        finally:
+            with connection.cursor() as cursor:
+                cursor.execute('RESET lock_timeout')
+            holder.close()
+        self.apply()
+        self.assertEqual(self.index_state('snapshot_group_projection')[1:], (True, True))
+
     def test_first_index_survives_second_index_failure_and_rows_are_preserved(self):
         env = Environment.objects.create(name='Migration fixture', slug='index-retry', manager='https://offline.invalid')
         snapshot = Snapshot.objects.create(environment=env, generated_at=timezone.now(), report={})

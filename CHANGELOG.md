@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Stop duplicate projection-index migrations promptly with a clear error instead of waiting silently for another migrator's advisory lock. Log index checks, reuse, concurrent removal and build start/completion. Add database-wait diagnosis steps for Kubernetes deployments.
+
 - Make PostgreSQL projection-index migration 0063 safe to retry after an interrupted deployment: reuse matching valid indexes, rebuild matching invalid indexes concurrently, and preserve snapshot records. Reject conflicting relation definitions without changing them. See recovery instructions in `docs/workspace-performance.md`.
 
 - Finish the UX follow-up: show filtered policy counts in recurring naming issues; add bounded, session-scoped recent-environment shortcuts; fix prose-link distinction, sort/disclosure target sizes, policy form label IDs, map roles and map-node focus restoration. Verify production-sized synthetic inventories and light/dark accessibility states; see `docs/design/production-ux-acceptance-2026-11-03.md`.

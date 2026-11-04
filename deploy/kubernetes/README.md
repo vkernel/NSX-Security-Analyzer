@@ -280,6 +280,7 @@ if it restarted. Replace `POD_NAME` with a name from `get pods`.
 | ImagePullBackOff | Image tag exists, registry credentials if private, outbound registry access |
 | Pending | PVC StorageClass/capacity, cluster resources and scheduling events |
 | Migration failed | Database host, credentials, schema permissions and TLS trust |
+| Migration pod running with no new log lines | Check the actual image revision, concurrent index progress and blocking sessions using [the migration wait guide](../../docs/workspace-performance.md#diagnosing-a-migration-that-appears-stuck); do not start another migration Job while one is building indexes |
 | Argo CD: `field is immutable` on `migrate` | Adopt the [migration hook and recovery steps](#argo-cd-deployment-and-upgrades), then perform a full application sync |
 | Website returns 400 | Browser hostname is included in allowed hosts |
 | CSRF failure | Trusted origin matches the HTTPS URL and proxy configuration |

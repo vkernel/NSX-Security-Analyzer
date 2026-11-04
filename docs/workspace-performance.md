@@ -24,20 +24,6 @@ Snapshot records are published immutably using `bulk_create`. Code that changes 
 
 Run the normal deployment migration step (`python manage.py migrate`) before starting the updated web/worker processes. This adds migrations 0062–0064. Concurrent index creation in 0063 can take time on a large existing database. Migration 0064 adds the assembled-map cache table without scanning existing source records.
 
-### Recovering an interrupted migration 0063
-
-An earlier version of 0063 could fail on retry with `relation "snapshot_group_projection" already exists` (or `snapshot_rule_projection`). Its concurrent index operations run outside a transaction, so an index can remain even when Django has not recorded the migration as applied. A cancelled concurrent build can also leave an invalid index.
-
-Use the corrected development image for the migration job and all application components, then rerun the normal migration step inside the updated image:
-
-```sh
-python manage.py migrate --noinput
-```
-
-The corrected 0063 checks the existing index's table, columns, method and predicate. It reuses a matching valid index and concurrently rebuilds a matching invalid one. Snapshot rows are preserved. A conflicting relation definition stops the migration with an explanatory error and is left untouched. Run one deployment migration job at a time; if another index build is still active, let it finish before retrying. Existing databases that already recorded 0063 as applied need no additional migration.
-
-Do not fake the migration or remove snapshot tables to bypass this error: an existing index may be invalid, or the other required index may still be missing.
-
 Optionally warm the latest full snapshot per environment after migration:
 
 ```sh
@@ -51,6 +37,45 @@ python manage.py prepare_analysis --snapshot <snapshot-uuid>
 ```
 
 These commands prepare derived data only. They do not rebuild the full report or make NSX requests. Archived/unfinished snapshots are skipped. New collections prepare the projection automatically.
+
+### Recovering an interrupted migration 0063
+
+An earlier version of 0063 could fail on retry with `relation "snapshot_group_projection" already exists` (or `snapshot_rule_projection`). Its concurrent index operations run outside a transaction, so an index can remain even when Django has not recorded the migration as applied. A cancelled concurrent build can also leave an invalid index.
+
+Use the corrected development image for the migration job and all application components, then rerun the normal migration step inside the updated image:
+
+```sh
+python manage.py migrate --noinput
+```
+
+The corrected 0063 checks the existing index's table, columns, method and predicate. It reuses a matching valid index and concurrently rebuilds a matching invalid one. Snapshot rows are preserved. A conflicting relation definition stops the migration with an explanatory error and is left untouched. Run one deployment migration job at a time; a second migrator now stops with a clear error instead of waiting for the first migrator's advisory lock. If another index build is still active, let it finish before retrying. Existing databases that already recorded 0063 as applied need no additional migration.
+
+Do not fake the migration or remove snapshot tables to bypass this error: an existing index may be invalid, or the other required index may still be missing.
+
+### Diagnosing a migration that appears stuck
+
+Three minutes of `Running migrations:` output alone does not identify the cause. Django writes its `Applying ...` status without a newline until the operation finishes; a log viewer may not display an unfinished line. Corrected 0063 logs a separate line when checking, reusing, removing or building each index, and another when a build finishes. Confirm the migration pod uses the corrected image revision, rather than relying on a cached mutable `development` tag.
+
+Concurrent index creation scans the source table and can wait for older transactions. A running Kubernetes pod only confirms that its process is alive. Inspect these read-only queries in the application's PostgreSQL database (use its existing database login):
+
+```sql
+SELECT pid, phase, current_locker_pid, blocks_done, blocks_total
+FROM pg_stat_progress_create_index
+WHERE datname = current_database();
+
+SELECT pid, state, wait_event_type, wait_event,
+       clock_timestamp() - query_start AS query_age,
+       clock_timestamp() - xact_start AS transaction_age,
+       pg_blocking_pids(pid) AS blocked_by
+FROM pg_stat_activity
+WHERE datname = current_database()
+  AND pid <> pg_backend_pid()
+  AND state <> 'idle';
+```
+
+Repeat after a short interval to distinguish advancing build work from a wait. `waiting for writers ...` or `waiting for old snapshots` identifies a transaction wait; `current_locker_pid` identifies the session being waited on. An `advisory` wait can indicate another migrator using an earlier image. Investigate the identified session before changing application replicas or cancelling anything. Empty results do not prove the migration finished: also inspect pod logs, restarts, CPU/memory and the actual image revision.
+
+PostgreSQL documents [index-build progress phases](https://www.postgresql.org/docs/17/progress-reporting.html#CREATE-INDEX-PROGRESS-REPORTING) and [concurrent index-build waits](https://www.postgresql.org/docs/17/sql-createindex.html#SQL-CREATEINDEX-CONCURRENTLY). The bundled Kubernetes migration Job has a 900-second deadline; assess the observed build progress and transaction waits before increasing that deployment-specific limit. Repeatedly restarting a healthy large build can prevent it from finishing.
 
 ## Measuring a deployed slowdown
 
@@ -76,6 +101,6 @@ These are development measurements, not a production latency promise. The naming
 
 PostgreSQL 17 migration and query-plan checks used separate disposable data. The group query selected `snapshot_group_projection`; for the single-snapshot rule fixture PostgreSQL preferred a sequential scan. Production plans depend on snapshot count, row sizes and statistics. Normal cache hits avoid the source-record scans entirely.
 
-The migration-retry fix was verified on PostgreSQL 17 with all 794 Django tests, including seven recovery tests. These exercise a fresh install, an unrecorded partial migration, a real cancelled concurrent build leaving an invalid index, conflicting definitions, retained snapshot data, and repeated rollback/retry. Fresh SQLite migrations and both backends' model checks also pass.
+The migration-retry and duplicate-session fixes were verified on PostgreSQL 17 with all 795 Django tests, including eight recovery tests. These exercise a fresh install, an unrecorded partial migration, a real cancelled concurrent build leaving an invalid index, conflicting definitions, retained snapshot data, repeated rollback/retry, and a duplicate migrator stopping without waiting or disturbing the session holding the lock. Fresh SQLite migrations and both backends' model checks also pass.
 
 Chrome checks cover remote group search, retained selections, matrix generation, both appearance modes, paginated membership drawers and automatic fragment refresh. Additional map checks cover no eager connection requests, fetching on expansion, local reuse on reopening, pinned service filters and stale-evidence recovery.
