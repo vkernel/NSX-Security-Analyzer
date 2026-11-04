@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Replace nested VM reference disclosures with shared category tables across VM, tag and scope drawers, and apply the same table surface to retained group/service references. Show configured rule actions and recorded states with labelled theme-aware colors; inspect services and group provenance in tables with Back/page/focus preservation. Keep lazy 25-row loading and fetch compact rule metadata in one bounded page query. No migration required.
+
 - Add automatic static-subnet naming with Exactly one explicit subnet and Explicit single subnet. Canonicalize IPv4/IPv6 CIDRs to network_prefix, keep /32 and /128 under host policies, and exclude ranges, multiple entries and complex definitions. Preserve policy conflicts, collision checks and reviewed values. No migration or manual component proposals required. See `docs/guides/automatic-subnet-naming-policy.html`.
 
 - Keep the original name when opening a duplicate naming-policy draft, without adding a copy suffix. Show Duplicate policy in a separate Actions column instead of beneath the policy name.

@@ -2,6 +2,7 @@
   const make=(tag,text,className)=>{const node=document.createElement(tag);if(text)node.textContent=text;if(className)node.className=className;return node;};
   const evidenceTabs=new Map();
   window.workspaceEvidence=(body,title,row)=> {
+    window.referenceListTables?.(body);
     const nodes=Array.from(body.children), groups=new Map([['Summary',[]],['Members',[]],['References',[]],['History',[]],['Technical details',[]]]);
     const summary=make('dl',null,'evidence-facts');
     if(row){
@@ -54,7 +55,7 @@
       const button=make('button',label), panel=make('div',null,'evidence-panel');button.type='button';
       const id='evidence-'+label.toLowerCase().replaceAll(' ','-');panel.id=id;button.id=id+'-tab';button.setAttribute('role','tab');button.setAttribute('aria-controls',id);button.setAttribute('aria-selected',String(first));button.tabIndex=first?0:-1;
       panel.setAttribute('role','tabpanel');panel.setAttribute('aria-labelledby',button.id);panel.tabIndex=0;panel.hidden=!first;first=false;panel.append(...items);tabs.append(button);body.append(panel);
-      button.addEventListener('click',()=>{tabs.querySelectorAll('button').forEach(b=>{b.setAttribute('aria-selected',String(b===button));b.tabIndex=b===button?0:-1;});body.querySelectorAll(':scope > .evidence-panel').forEach(p=>p.hidden=p!==panel);evidenceTabs.set(type,label);if(label==='Technical details'){const first=panel.querySelector('details');if(first)first.open=true;}});
+      button.addEventListener('click',()=>{tabs.querySelectorAll('button').forEach(b=>{b.setAttribute('aria-selected',String(b===button));b.tabIndex=b===button?0:-1;});body.querySelectorAll(':scope > .evidence-panel').forEach(p=>p.hidden=p!==panel);evidenceTabs.set(type,label);panel.querySelectorAll('[data-evidence-activate]').forEach(node=>node.dispatchEvent(new Event('evidence-visible')));if(label==='Technical details'){const first=panel.querySelector('details');if(first)first.open=true;}});
     });
     const remembered=evidenceTabs.get(type);if(remembered)Array.from(tabs.children).find(b=>b.textContent===remembered)?.click();
     window.enhanceTechnicalEvidence?.(body);

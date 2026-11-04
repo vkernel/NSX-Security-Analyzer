@@ -28,6 +28,34 @@ class VMRelationshipTests(TestCase):
         self.assertFalse(any('"report"' in q['sql'] for q in queries))
         self.assertTrue(any('LIMIT 26' in q['sql'] for q in queries))
 
+    def test_rule_page_includes_bounded_display_metadata_from_shared_definitions(self):
+        from .models import SnapshotVMRule
+        from .storage import share_json
+        definition = SnapshotVMRule(snapshot=self.snapshot, path='/rule/1', data={
+            'action':'DROP', 'disabled':True, 'policy_name':'Application policy',
+            'services':['/service/' + str(i) for i in range(200)]})
+        share_json([definition]); definition.save()
+        other = Snapshot.objects.create(environment=self.env, generated_at=timezone.now(), report={})
+        SnapshotVMRule.objects.create(snapshot=other, path='/rule/2', data={'action':'ALLOW','disabled':False})
+        with CaptureQueriesContext(connection) as queries:
+            result = read(self.snapshot.pk, 1, 'related_rules')
+        rule = next(item for item in result['items'] if item['path']=='/rule/1')
+        self.assertEqual(rule['action'], 'DROP')
+        self.assertIs(rule['disabled'], True)
+        self.assertEqual(rule['policy_name'], 'Application policy')
+        self.assertNotIn('services', rule)
+        self.assertNotIn('via_groups', rule)
+        self.assertEqual(len(queries), 2)
+        missing = next(item for item in result['items'] if item['path']=='/rule/2')
+        self.assertIsNone(missing['action'])
+        self.assertIsNone(missing['disabled'])
+
+    def test_legacy_rule_display_metadata_remains_available_without_shared_rows(self):
+        self.row.data['related_rules'] = [{'path':'/legacy','name':'Legacy','action':'REJECT','disabled':False,'policy_name':'Legacy policy'}]
+        self.row.save()
+        self.assertEqual(read(self.snapshot.pk,1,'related_rules')['items'],[{
+            'path':'/legacy','name':'Legacy','action':'REJECT','disabled':False,'policy_name':'Legacy policy'}])
+
     def test_rule_detail_and_all_group_provenance(self):
         result=read(self.snapshot.pk,1,'rule',path='/rule/1')
         self.assertEqual(result['details']['services'],['/service/1'])

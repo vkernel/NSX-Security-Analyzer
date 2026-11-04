@@ -132,6 +132,30 @@ Subnet rules retain general-fallback precedence, explicit policy ambiguity, cano
 
 Validation: all 834 Django tests passed against disposable PostgreSQL and all 65 JavaScript tests passed. Browser acceptance created and activated a policy over 155 synthetic groups: 150 eligible subnets (149 compliant and one deliberately incorrect name), five excluded definitions and zero manual proposals. Desktop/mobile light/dark views had no captured page errors or document overflow. Duplicate-name preservation and Actions placement were also checked in the browser. The six guide images load and the guide has no desktop/mobile document overflow. No operational database or NSX deployment was accessed. [Illustrated subnet guide](../guides/automatic-subnet-naming-policy.html) · [Browser measurements](../guides/automatic-subnet-naming-images/browser-checks.json).
 
+## Shared inventory reference tables · 4 November 2026
+
+Applied the local Unslop methodology in polish mode, retaining the Relay palette, type and drawer navigation. The user explicitly requested tables in place of nested reference disclosures, so implementation proceeded within that direction.
+
+- Product: let NSX administrators compare saved VM and object references without losing inventory context.
+- Character: calm, exact, accountable.
+- World: a network operations desk with aligned, readable records.
+- Moments: configured rule action and recorded enabled/disabled state, using labelled semantic colors.
+- Signature: saved environment, snapshot context and membership limitations stay alongside the references.
+
+Audit findings: `report-data.js` used three disclosure levels for VM references; actions and services were hidden inside individual rules; tag/scope drawers used loosely aligned paragraphs; retained group/service references used a different list surface; generic report section/header CSS leaked borders and a gradient into new drawer content. These are corrected by shared table components and scoped styles in `evidence.js` and `workspace-panels.css`.
+
+References now offer category tabs with a visible table: VM Tags, Groups, and Rules & services; tag/scope categories use the same renderer, headers, spacing, empty/error states and pagination. Existing group/service reference lists inherit the table surface too. Rule tables expose name/policy, configured action and recorded state. Allow uses a restrained green, Drop/Reject red and Disabled amber; missing state says Not recorded instead of implying Enabled. Color never replaces text or establishes effective connectivity. Paths are quieter metadata, with full identities retained in the DOM and titles.
+
+Inspect replaces the rule table with configured-service and group-provenance tables within the same drawer. Back to rules restores the page, scroll position and triggering control. Related object navigation retains the existing Back behavior. Raw technical definitions remain separate, lazy and paged; their optional JSON disclosures are retained.
+
+Opening VM Summary loads no reference lists. Each selected category fetches at most 25 rows. Rule display metadata is joined from the same snapshot after limiting the deduplicated page; services and provenance are requested only for the inspected rule. Unknown metadata stays unknown. No index rebuild, schema migration or NSX access is required.
+
+Validation: all 836 Django tests passed on isolated PostgreSQL, plus all 9 VM relationship tests after strengthening the cross-snapshot metadata regression. All 72 JavaScript tests passed, including lazy loading, keyboard tabs, pagination, safe text rendering, unknown states, retries, stale responses, inspection/focus restoration and shared tag/scope tables. Browser acceptance used 63 synthetic shared rules, three tags and two groups. Real VM-row selection, page 2 inspection, related group/tag navigation and Back preservation passed. Light/dark desktop and 390px mobile checks recorded no page errors, document overflow or drawer overflow; wide tables scroll locally. This is synthetic acceptance, not a full screen-reader certification.
+
+[Before](reference-drawer-review-2026-11-04/before.png) · [Rule table](reference-drawer-review-2026-11-04/after-rules.png) · [Rule inspection](reference-drawer-review-2026-11-04/after-inspect.png) · [Group references](reference-drawer-review-2026-11-04/after-group.png) · [Tag references](reference-drawer-review-2026-11-04/after-tag.png) · [Dark drawer](reference-drawer-review-2026-11-04/after-dark-1440.png) · [Mobile drawer](reference-drawer-review-2026-11-04/after-light-390.png) · [Browser checks](reference-drawer-review-2026-11-04/browser-checks.json).
+
+Design suggestion for a later pass: if reference navigation needs filtering across thousands of entries, add server-side name/action filters to this shared table API. Avoid filtering only the currently loaded page, which could conceal matches on other pages. Retain full paths and unknown/coverage states when adding denser layouts.
+
 ## Attribution
 
 Design review and implementation use [Unslop by Damir Sokolovsky (@heydamir)](https://github.com/heydamir/unslop), methodology revision `a6f121eee5f29c2f74976b75456feae8b66afb3a`, [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). Applied locally to the repository and synthetic browser views; no external design service or separate Unslop agent was invoked. Existing credit remains in `NOTICE`.

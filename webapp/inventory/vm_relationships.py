@@ -48,11 +48,24 @@ def read(snapshot_id, ordinal, section='summary', page=0, path=''):
             items = [value[0] for value in cursor.fetchall()]
         elif section == 'related_rules':
             # Deduplicate legacy per-group entries before paging; keep provenance on group pages.
-            query = "SELECT jsonb_build_object('path', item->>'path', 'name', min(item->>'name')) FROM entries GROUP BY item->>'path' ORDER BY min(item->>'name'), item->>'path' LIMIT 26 OFFSET %s"
+            # Resolve only small display fields after limiting the deduplicated page.
+            # Services and provenance stay behind their explicit detail requests.
+            query = """SELECT jsonb_build_object('path', page.path, 'name', page.name,
+                'action', COALESCE(to_jsonb(page.action), j.data->'action', r.data->'action'),
+                'disabled', COALESCE(to_jsonb(page.disabled::boolean), j.data->'disabled', r.data->'disabled'),
+                'policy_name', COALESCE(to_jsonb(page.policy_name), j.data->'policy_name', r.data->'policy_name'))
+                FROM (SELECT item->>'path' AS path, min(item->>'name') AS name,
+                    min(item->>'action') AS action, min(item->>'policy_name') AS policy_name,
+                    min(CASE WHEN jsonb_typeof(item->'disabled') = 'boolean' THEN item->>'disabled' END) AS disabled
+                    FROM entries GROUP BY item->>'path'
+                    ORDER BY min(item->>'name'), item->>'path' LIMIT 26 OFFSET %s) page
+                LEFT JOIN inventory_snapshotvmrule r ON r.snapshot_id = %s AND r.path = page.path
+                LEFT JOIN inventory_sharedsnapshotjson j ON j.id = r.payload_id
+                ORDER BY page.name, page.path"""
         else:
             query = 'SELECT item FROM entries LIMIT 26 OFFSET %s'
         if section != 'via_groups':
-            cursor.execute(cte + query, [key, *args, page*25])
+            cursor.execute(cte + query, [key, *args, page*25] + ([snapshot_id] if section == 'related_rules' else []))
             items = [value[0] for value in cursor.fetchall()]
     # psycopg raw JSONB is text with Django's connection configuration.
     import json
