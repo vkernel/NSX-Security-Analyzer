@@ -35,11 +35,11 @@
   // Preserve DOM nodes/listeners so returning retains expanded sections and pagination.
   window.openRelatedEvidence=async(body,query,label)=>{
     const dialog=body.closest('dialog'),heading=dialog.querySelector('h2'),nodes=Array.from(body.childNodes),title=heading.textContent,scroll=dialog.scrollTop;
-    const previousRequest=dialog.reportRequest, previousGeneration=body.evidenceGeneration, previousPending=dialog.tagPending;
+    const previousRequest=dialog.reportRequest, previousGeneration=body.evidenceGeneration, previousPending=dialog.tagPending,previousWide=dialog.classList.contains('evidence-firewall-wide');
     const previousBack=dialog.querySelector('.evidence-back');if(previousBack)previousBack.hidden=true;
     const token={};dialog.reportRequest=token;
     const back=make('button','← Back to '+title.replace(/ —.*$/,''));back.type='button';back.className='evidence-back';
-    const restore=()=>{if(dialog.tagPending!==previousPending)dialog.tagPending?.abort();dialog.tagPending=previousPending;dialog.reportRequest=previousRequest;body.evidenceGeneration=previousGeneration;body.replaceChildren(...nodes);heading.textContent=title;back.remove();if(previousBack)previousBack.hidden=false;dialog.scrollTop=scroll;};
+    const restore=()=>{if(dialog.tagPending!==previousPending)dialog.tagPending?.abort();dialog.tagPending=previousPending;dialog.reportRequest=previousRequest;body.evidenceGeneration=previousGeneration;body.replaceChildren(...nodes);heading.textContent=title;dialog.classList.toggle('evidence-firewall-wide',previousWide);back.remove();if(previousBack)previousBack.hidden=false;dialog.scrollTop=scroll;};
     back.onclick=restore;dialog.querySelector('.dialog-heading').after(back);heading.textContent=label;
     const open=async()=>{window.evidenceState(body,'Loading evidence…');try{
       const record=await window.reportData(null,{op:'resolve',...query});if(!dialog.open||dialog.reportRequest!==token)return;
@@ -67,7 +67,7 @@
     if(value.path&&value.path!==label){const path=make('code',value.path);path.className='evidence-path';path.title=value.path;root.append(path);}
     return root;
   };
-  window.evidenceTable=({title,columns,load,current=()=>true,empty='No relationships recorded in this snapshot.'})=>{
+  window.evidenceTable=({title,columns,load,current=()=>true,wide=false,empty='No relationships recorded in this snapshot.'})=>{
     const root=make('section'),heading=make('h3',title),status=make('p'),content=make('div'),pager=make('nav'),previous=make('button','Previous'),next=make('button','Next');
     root.className='evidence-table-section';status.className='evidence-table-status';status.setAttribute('role','status');content.className='evidence-table-content';pager.className='evidence-pagination';pager.setAttribute('aria-label',title+' pages');previous.type=next.type='button';previous.setAttribute('aria-label','Previous '+title.toLowerCase());next.setAttribute('aria-label','Next '+title.toLowerCase());pager.append(previous,next);pager.hidden=true;root.append(heading,status,content,pager);
     let loaded=false,busy=false,version=0,page=0;
@@ -75,8 +75,8 @@
       if(busy||!current())return;busy=true;const token=++version;root.setAttribute('aria-busy','true');status.textContent='Loading '+title.toLowerCase()+'…';previous.disabled=next.disabled=true;
       try{
         const data=await load(target);if(token!==version||!current())return;page=target;loaded=true;
-        const scroll=make('div'),table=make('table'),caption=make('caption',title),head=make('thead'),labels=make('tr'),rows=make('tbody');scroll.className='evidence-table-scroll';scroll.tabIndex=0;scroll.setAttribute('role','region');scroll.setAttribute('aria-label',title+' table');table.className='evidence-table';
-        for(const column of columns){const th=make('th',column.label);th.scope='col';labels.append(th);}head.append(labels);
+        const scroll=make('div'),table=make('table'),caption=make('caption',title),head=make('thead'),labels=make('tr'),rows=make('tbody');scroll.className='evidence-table-scroll';scroll.tabIndex=0;scroll.setAttribute('role','region');scroll.setAttribute('aria-label',title+' table');table.className='evidence-table'+(wide?' evidence-firewall-table':'');
+        for(const column of columns){const th=make('th',column.label);th.scope='col';if(column.width)th.style.width=column.width;labels.append(th);}head.append(labels);
         for(const item of data.items){const row=make('tr');for(const column of columns){const td=make('td'),value=column.cell(item);if(value?.nodeType)td.append(value);else td.textContent=value==null?'Not recorded':String(value);row.append(td);}rows.append(row);}
         if(!data.items.length){const row=make('tr'),td=make('td',empty);td.colSpan=columns.length;td.className='evidence-table-empty';row.append(td);rows.append(row);}
         table.append(caption,head,rows);scroll.append(table);content.replaceChildren(scroll);status.textContent=data.items.length?`${page*25+1}–${page*25+data.items.length} shown · Page ${page+1}`:'No entries recorded';pager.hidden=!page&&!data.has_next;previous.disabled=!page;next.disabled=!data.has_next;
@@ -84,12 +84,30 @@
       finally{busy=false;root.removeAttribute('aria-busy');}
     }
     previous.onclick=()=>render(page-1);next.onclick=()=>render(page+1);
-    return {panel:root,show:()=>{if(!loaded)render();},reload:()=>render()};
+    return {panel:root,wide,show:()=>{if(!loaded)render();},reload:()=>render()};
   };
   window.evidenceCategories=(entries)=>{
     const root=make('div'),nav=make('nav');root.className='evidence-reference-tables';root.dataset.evidenceSection='relationships';root.dataset.evidenceActivate='';nav.className='evidence-category-tabs';nav.setAttribute('aria-label','Reference categories');root.append(nav,...entries.map(entry=>entry.panel));let visible=false,selected=0;
-    window.WorkspaceTabs(nav,entries,{onSelect:index=>{selected=index;if(visible)entries[index].show();}});
-    root.addEventListener('evidence-visible',()=>{visible=true;entries[selected].show();});return root;
+    const size=()=>root.closest('dialog')?.classList.toggle('evidence-firewall-wide',visible&&!!entries[selected].wide);
+    window.WorkspaceTabs(nav,entries,{onSelect:index=>{selected=index;if(visible){size();entries[index].show();}}});
+    root.addEventListener('evidence-visible',()=>{visible=true;size();entries[selected].show();});return root;
+  };
+  window.firewallReferenceColumns=(body,inspect)=>{
+    const lines=values=>{const root=make('div');root.className='evidence-reference-lines';for(const value of values)root.append(make('span',value));return root;};
+    return [
+      {label:'Type',cell:item=>item.firewall_type},
+      {label:'Category',cell:item=>item.category},
+      {label:'Policy',cell:item=>item.policy_name},
+      {label:'Rule',cell:item=>window.evidenceObject(body,item,{path:item.path})},
+      {label:'ID',cell:item=>item.rule_id},
+      {label:'Seq',cell:item=>item.sequence_number},
+      {label:'Action',cell:item=>window.evidenceBadge(item.action,'action')},
+      {label:'State',cell:item=>window.evidenceBadge(item.disabled===true?'Disabled':item.disabled===false?'Enabled':null)},
+      {label:'Matched fields',cell:item=>lines(item.matched_fields?.length?item.matched_fields:['Not retained'])},
+      {label:'Matched groups',cell:item=>{const root=make('div');root.className='evidence-reference-lines';const matches=item.field_matches||[],groups=item.matched_groups||[];const known=new Set(matches.map(match=>match.group.path)),shown=[...matches,...groups.filter(group=>!known.has(group.path)).map(group=>({field:matches.length?'Field not retained':'',group}))];if(shown.length){for(const match of shown.slice(0,3)){const entry=make('div'),link=make('button',match.group.name||match.group.path);entry.className='evidence-firewall-match';link.type='button';link.className='evidence-object-link';link.title=match.group.path;link.onclick=()=>window.openRelatedEvidence(body,{path:match.group.path},match.group.name||match.group.path);if(match.field)entry.append(make('small',match.field));entry.append(link);root.append(entry);}}if(shown.length>3||item.groups_truncated)root.append(make('small','More groups in rule inspection'));if(!groups.length)root.append(make('span','Not retained'));return root;}},
+      {label:'Reason / limits',cell:item=>lines([item.reference_reason||'Not retained',item.field_note].filter(Boolean))},
+      {label:'Details',cell:item=>{const button=make('button','Inspect');button.type='button';button.setAttribute('aria-label','Inspect references for '+(item.name||item.path));button.onclick=()=>inspect(item,button);return button;}}
+    ].map((column,index)=>({...column,width:[4,7,9,17,4,4,6,7,8,12,16,6][index]+'%'}));
   };
   // Existing group/service snapshots keep their evidence and links, but use the same table surface.
   window.referenceListTables=root=>{

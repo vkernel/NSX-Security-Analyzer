@@ -147,11 +147,11 @@ def snapshot_data(request, pk):
                 result = {'id': row.ordinal, 'view': row.view}
             elif op == 'tag-relationships':
                 from .tag_relationships import read
-                result = read(pk, int(request.GET.get('id', '-1')), request.GET.get('section', 'summary'), int(request.GET.get('page', '0')))
+                result = read(pk, int(request.GET.get('id', '-1')), request.GET.get('section', 'summary'), int(request.GET.get('page', '0')), context=request.GET.get('context') == '1')
             elif op == 'vm-relationships':
                 from .vm_relationships import read
                 result = read(pk, int(request.GET.get('id', '-1')), request.GET.get('section', 'summary'),
-                              int(request.GET.get('page', '0')), request.GET.get('path', ''))
+                              int(request.GET.get('page', '0')), request.GET.get('path', ''), context=request.GET.get('context') == '1')
             elif op == 'section' and request.GET.get('panel') == 'feature-guide':
                 from .collector import feature_guide
                 result = {'html': feature_guide()}

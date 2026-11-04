@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Expand VM/tag firewall-reference drawers automatically and restore their reading width on other views or Back. Add shared Type, Category, Policy, Rule, ID, Seq, Action, State, matched field/group and reason columns using bounded same-snapshot DFW context. Preserve unknown/nested evidence, labelled colors, inspection and pagination. Existing snapshots benefit without migration or reindexing.
+
 - Replace nested VM reference disclosures with shared category tables across VM, tag and scope drawers, and apply the same table surface to retained group/service references. Show configured rule actions and recorded states with labelled theme-aware colors; inspect services and group provenance in tables with Back/page/focus preservation. Keep lazy 25-row loading and fetch compact rule metadata in one bounded page query. No migration required.
 
 - Add automatic static-subnet naming with Exactly one explicit subnet and Explicit single subnet. Canonicalize IPv4/IPv6 CIDRs to network_prefix, keep /32 and /128 under host policies, and exclude ranges, multiple entries and complex definitions. Preserve policy conflicts, collision checks and reviewed values. No migration or manual component proposals required. See `docs/guides/automatic-subnet-naming-policy.html`.

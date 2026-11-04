@@ -5,7 +5,7 @@ from django.http import Http404
 from .models import SnapshotRecord
 
 
-def read(snapshot_id, ordinal, section='summary', page=0, path=''):
+def read(snapshot_id, ordinal, section='summary', page=0, path='', context=False):
     row = SnapshotRecord.objects.filter(snapshot_id=snapshot_id, ordinal=ordinal, view='vms')
     summary = row.values('compact').first()
     if summary is None:
@@ -50,10 +50,14 @@ def read(snapshot_id, ordinal, section='summary', page=0, path=''):
             # Deduplicate legacy per-group entries before paging; keep provenance on group pages.
             # Resolve only small display fields after limiting the deduplicated page.
             # Services and provenance stay behind their explicit detail requests.
-            query = """SELECT jsonb_build_object('path', page.path, 'name', page.name,
+            group_context = """, 'via_groups', (SELECT COALESCE(jsonb_agg(g.value), '[]'::jsonb)
+                FROM (SELECT DISTINCT g.value FROM entries e,
+                    jsonb_array_elements(COALESCE(e.item->'via_groups', jsonb_build_array(e.item->'via_group'))) g
+                    WHERE e.item->>'path' = page.path ORDER BY g.value LIMIT 26) g)""" if context else ''
+            query = f"""SELECT jsonb_build_object('path', page.path, 'name', page.name,
                 'action', COALESCE(to_jsonb(page.action), j.data->'action', r.data->'action'),
                 'disabled', COALESCE(to_jsonb(page.disabled::boolean), j.data->'disabled', r.data->'disabled'),
-                'policy_name', COALESCE(to_jsonb(page.policy_name), j.data->'policy_name', r.data->'policy_name'))
+                'policy_name', COALESCE(to_jsonb(page.policy_name), j.data->'policy_name', r.data->'policy_name'){group_context})
                 FROM (SELECT item->>'path' AS path, min(item->>'name') AS name,
                     min(item->>'action') AS action, min(item->>'policy_name') AS policy_name,
                     min(CASE WHEN jsonb_typeof(item->'disabled') = 'boolean' THEN item->>'disabled' END) AS disabled
@@ -70,7 +74,11 @@ def read(snapshot_id, ordinal, section='summary', page=0, path=''):
     # psycopg raw JSONB is text with Django's connection configuration.
     import json
     items = [json.loads(value) if isinstance(value, str) else value for value in items]
-    return {'items': items[:25], 'page': page, 'has_next': len(items) > 25}
+    page_items = items[:25]
+    if context and section == 'related_rules':
+        from .firewall_reference_context import enrich
+        page_items = enrich(snapshot_id, page_items, vm=True)
+    return {'items': page_items, 'page': page, 'has_next': len(items) > 25}
 
 
 from django.db.models import Func, JSONField, F

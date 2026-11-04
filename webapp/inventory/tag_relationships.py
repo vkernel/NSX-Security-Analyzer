@@ -10,7 +10,7 @@ MAPS = {'vms', 'group_conditions', 'group_assignments', 'other_assignments'}
 CONDITIONS = {'condition_evidence': 'condition_evidence_set', 'review_conditions': 'review_condition_set'}
 
 
-def read(snapshot_id, ordinal, section='summary', page=0):
+def read(snapshot_id, ordinal, section='summary', page=0, context=False):
     if page < 0 or page > 1000000:
         raise ValueError('Invalid evidence page.')
     row = SnapshotRecord.objects.filter(snapshot_id=snapshot_id, ordinal=ordinal, view__in=['tags', 'scopes']).values('pk', 'view', 'compact', 'relationships_ready').first()
@@ -25,7 +25,7 @@ def read(snapshot_id, ordinal, section='summary', page=0):
         from .models import SnapshotRelationship
         start = page * PAGE_SIZE
         items = list(SnapshotRelationship.objects.filter(record_id=row['pk'], section=section, position__gte=start, position__lt=start + PAGE_SIZE + 1).order_by('position').annotate(resolved=Coalesce('payload__data', 'data')).values_list('resolved', flat=True))
-        return {'items': items[:PAGE_SIZE], 'page': page, 'has_next': len(items) > PAGE_SIZE}
+        return page_result(snapshot_id, items, page, section, context)
     base = 'FROM inventory_snapshotrecord r WHERE r.snapshot_id = %s AND r.ordinal = %s'
     args = [snapshot_id, ordinal]
     if section in MAPS:
@@ -47,7 +47,15 @@ def read(snapshot_id, ordinal, section='summary', page=0):
     with connection.cursor() as cursor:
         cursor.execute(sql, params)
         items = [json.loads(item[0]) if isinstance(item[0], str) else item[0] for item in cursor.fetchall()]
-    return {'items': items[:PAGE_SIZE], 'page': page, 'has_next': len(items) > PAGE_SIZE}
+    return page_result(snapshot_id, items, page, section, context)
+
+
+def page_result(snapshot_id, items, page, section, context):
+    page_items = items[:PAGE_SIZE]
+    if context and section == 'firewall_references':
+        from .firewall_reference_context import enrich
+        page_items = enrich(snapshot_id, page_items)
+    return {'items': page_items, 'page': page, 'has_next': len(items) > PAGE_SIZE}
 
 
 def index_record(record, metadata, batch=None):

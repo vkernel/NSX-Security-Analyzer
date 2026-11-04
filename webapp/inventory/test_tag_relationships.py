@@ -56,6 +56,21 @@ class TagRelationshipTests(TestCase):
         self.assertEqual(len(read(self.snapshot.pk,2,'tags',2)['items']),10)
         self.assertFalse(any('SELECT "inventory_snapshotpresentation"."tag_evidence"' in q['sql'] for q in queries))
 
+    def test_firewall_context_enriches_legacy_and_normalized_relationship_pages(self):
+        from .tag_relationships import index_record
+        path = '/infra/policies/p/rules/50'
+        SnapshotRecord.objects.create(snapshot=self.snapshot,ordinal=800,columns=[],sort_values={},view='dfw',name='DNS',compact={'path':path},data={
+            'category':'Infrastructure','policy_name':'AD','rule_id':6121,'action':'ALLOW','disabled':False,
+            'configuration':{'rule':{'sequence_number':10}},'source_groups':['/infra/groups/one'],'scope':['/infra/groups/one']})
+        legacy = read(self.snapshot.pk,1,'firewall_references',2,context=True)
+        item = legacy['items'][0]
+        self.assertEqual((item['policy_name'],item['rule_id'],item['sequence_number']),('AD',6121,10))
+        self.assertEqual(item['matched_fields'],['Source','Applied to'])
+        self.assertEqual(item['reference_reason'],'Group membership condition')
+        index_record(self.row,self.snapshot.presentation.tag_evidence)
+        self.row.relationships_ready=True;self.row.save(update_fields=['relationships_ready'])
+        self.assertEqual(read(self.snapshot.pk,1,'firewall_references',2,context=True),legacy)
+
     def test_sections_and_snapshot_isolation(self):
         for section in ('tags','arbitrary'):
             with self.assertRaises(ValueError):read(self.snapshot.pk,1,section)

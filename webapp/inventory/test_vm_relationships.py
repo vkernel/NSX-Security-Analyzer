@@ -56,6 +56,40 @@ class VMRelationshipTests(TestCase):
         self.assertEqual(read(self.snapshot.pk,1,'related_rules')['items'],[{
             'path':'/legacy','name':'Legacy','action':'REJECT','disabled':False,'policy_name':'Legacy policy'}])
 
+    def test_firewall_context_recovers_saved_metadata_and_direct_fields_in_one_page(self):
+        path = '/rule/1'
+        SnapshotRecord.objects.create(snapshot=self.snapshot,ordinal=800,columns=[],sort_values={},view='dfw',name='Rule one',compact={'path':path},data={
+            'category':'Infrastructure','policy_name':'DNS','rule_id':6121,'action':'ALLOW','disabled':False,
+            'configuration':{'rule':{'sequence_number':0}},'source_groups':['/group/1'],'destination_groups':[],
+            'scope':['/group/1']})
+        SnapshotRecord.objects.create(snapshot=self.snapshot,ordinal=801,columns=[],sort_values={},view='inventory',name='Zwolle',compact={'path':'/group/1'},data={})
+        with CaptureQueriesContext(connection) as queries:
+            data = read(self.snapshot.pk,1,'related_rules',context=True)
+        item = next(row for row in data['items'] if row['path']==path)
+        self.assertEqual(item['firewall_type'],'DFW')
+        self.assertEqual((item['category'],item['policy_name'],item['rule_id'],item['sequence_number']),('Infrastructure','DNS',6121,0))
+        self.assertEqual(item['matched_fields'],['Source','Applied to'])
+        self.assertEqual([(m['field'],m['group']['name']) for m in item['field_matches']],[('Source','Zwolle'),('Applied to','Zwolle')])
+        self.assertNotIn('source_groups',item)
+        self.assertIn('nested group',item['field_note'])
+        self.assertEqual(item['matched_groups'][1]['name'],'Zwolle')
+        self.assertIn('VM membership unverified',item['reference_reason'])
+        self.assertNotIn('services',item)
+        self.assertEqual(len(data['items']),25)
+        self.assertEqual(len(queries),4)
+
+    def test_firewall_context_preserves_unknowns_and_bounds_group_provenance(self):
+        self.row.data['related_rules'] = [{'path':'/rule/1','name':'Legacy','via_groups':[f'/g/{i}' for i in range(50)]}]
+        self.row.save()
+        other = Snapshot.objects.create(environment=self.env,generated_at=timezone.now(),report={})
+        SnapshotRecord.objects.create(snapshot=other,ordinal=100,columns=[],sort_values={},view='dfw',name='Foreign',compact={'path':'/rule/1'},data={'rule_id':999,'action':'REJECT'})
+        item = read(self.snapshot.pk,1,'related_rules',context=True)['items'][0]
+        self.assertEqual(len(item['matched_groups']),25)
+        self.assertTrue(item['groups_truncated'])
+        self.assertEqual(item['matched_fields'],[])
+        self.assertIsNone(item.get('rule_id'))
+        self.assertIn('nested group',item['field_note'])
+
     def test_rule_detail_and_all_group_provenance(self):
         result=read(self.snapshot.pk,1,'rule',path='/rule/1')
         self.assertEqual(result['details']['services'],['/service/1'])

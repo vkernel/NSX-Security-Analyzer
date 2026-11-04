@@ -110,7 +110,7 @@
   const cache = new Map(); let cacheBytes = 0;
   const make = (tag, text) => { const node=document.createElement(tag); if(text!=null)node.textContent=text; return node; };
   async function load(id, section, page=0, path='') {
-    const params={op:'vm-relationships',id,section,page,path}, key=JSON.stringify(params);
+    const params={op:'vm-relationships',id,section,page,path,context:section==='related_rules'?'1':'0'}, key=JSON.stringify(params);
     if(cache.has(key))return cache.get(key).value;
     const value=await window.reportData(null,params), bytes=JSON.stringify(value).length*2;
     if(bytes<500000){while(cache.size && (cache.size>=30 || cacheBytes+bytes>2000000)){const first=cache.keys().next().value;cacheBytes-=cache.get(first).bytes;cache.delete(first);}cache.set(key,{value,bytes});cacheBytes+=bytes;}
@@ -137,7 +137,7 @@
       const query=section==='tags'?{view:'tags',tag:item.tag,scope:item.scope||''}:{path:typeof item==='string'?item:item.path};
       return window.evidenceObject(body,item,query);
     };
-    const table=(section,label,columns,path='')=>window.evidenceTable({title:label,columns,current,load:page=>load(id,section,page,path)});
+    const table=(section,label,columns,path='')=>window.evidenceTable({title:label,columns,current,wide:section==='related_rules',load:page=>load(id,section,page,path)});
     const tags=table('tags','Assigned tags',[{label:'Scope',cell:item=>item.scope||'(empty scope)'},{label:'Value',cell:item=>object(item,'tags')}]);
     const groups=table('related_groups','Groups referencing these tags',[{label:'Group',cell:item=>object(item,'groups')}]);
     const ruleDetail=make('section');ruleDetail.className='evidence-rule-inspection';ruleDetail.hidden=true;ruleDetail.tabIndex=-1;let inspection=0;
@@ -154,12 +154,7 @@
         detail.replaceChildren(facts,link,services.panel,via.panel);services.show();via.show();
       }catch(error){if(current()&&token===inspection)window.evidenceState(detail,error.message,()=>inspect(item,trigger));}
     }
-    const rules=table('related_rules','Related rules and services',[
-      {label:'Rule / policy',cell:item=>{const cell=object(item,'rules');if(item.policy_name)cell.append(make('small',item.policy_name));return cell;}},
-      {label:'Action',cell:item=>window.evidenceBadge(item.action,'action')},
-      {label:'State',cell:item=>window.evidenceBadge(item.disabled===true?'Disabled':item.disabled===false?'Enabled':null)},
-      {label:'References',cell:item=>{const button=make('button','Inspect');button.type='button';button.setAttribute('aria-label','Inspect references for '+(item.name||item.path));button.onclick=()=>inspect(item,button);return button;}}
-    ]);
+    const rules=table('related_rules','Firewall references',window.firewallReferenceColumns(body,inspect));
     rules.panel.append(ruleDetail);
     const caveat=make('p','Configuration relationships only. Group references use tag conditions; resolved membership and effective policy are not verified.');caveat.dataset.evidenceSection='relationships';caveat.className='evidence-note';body.append(caveat);
     body.append(window.evidenceCategories([{...tags,label:'Tags'},{...groups,label:'Groups'},{...rules,label:'Rules & services'}]));
@@ -198,7 +193,7 @@
     if(!dialog.open)dialog.showModal();
     const current=()=>dialog.open && dialog.reportRequest===token && body.evidenceGeneration===token;
     dialog.addEventListener('close',()=>{controller.abort();body.evidenceGeneration=null;button.isConnected&&button.focus({preventScroll:true});},{once:true});
-    const load=(section,page=0)=>window.reportData(null,{op:'tag-relationships',id,section,page},controller.signal);
+    const load=(section,page=0)=>window.reportData(null,{op:'tag-relationships',id,section,page,context:section==='firewall_references'?'1':'0'},controller.signal);
     async function start(){
       window.evidenceState(body,'Loading summary…');
       try{
@@ -223,8 +218,8 @@
           let columns=[{label:section==='notes'?'Collection note':section==='vms'?'VM':'Object',cell:item=>section==='notes'?item:object(item,section)}];
           if(section==='tags')columns=[{label:'Tag',cell:item=>object(item,section)},{label:'VMs',cell:item=>item.vm_count??'Not recorded'},{label:'Groups',cell:item=>item.group_count??'Not recorded'},{label:'Other',cell:item=>item.other_count??'Not recorded'}];
           if(section==='other_assignments')columns.push({label:'Resource type',cell:item=>item.resource_type});
-          if(section==='firewall_references')columns=[{label:'Rule',cell:item=>object(item,section)},{label:'State',cell:item=>window.evidenceBadge(item.disabled===true?'Disabled':item.disabled===false?'Enabled':null)},{label:'Via group',cell:item=>item.via_group?object(item.via_group,'groups'):'Not recorded'},{label:'Relationship',cell:item=>item.tag_use==='condition'?'Membership condition':item.tag_use==='assignment'?'Tag attached to group':item.tag_use||'Not recorded'}];
-          const table=window.evidenceTable({title:label,columns,current,load:page=>load(section,page)});categories.push({...table,label});
+          if(section==='firewall_references')columns=window.firewallReferenceColumns(body,item=>window.openRelatedEvidence(body,{path:item.path},item.name||item.path));
+          const table=window.evidenceTable({title:label,columns,current,wide:section==='firewall_references',load:page=>load(section,page)});categories.push({...table,label});
         }
         if(summary.view==='scopes')paged('tags','Tags in this scope');
         else{
