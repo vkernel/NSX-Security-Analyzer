@@ -24,6 +24,20 @@ Snapshot records are published immutably using `bulk_create`. Code that changes 
 
 Run the normal deployment migration step (`python manage.py migrate`) before starting the updated web/worker processes. This adds migrations 0062–0064. Concurrent index creation in 0063 can take time on a large existing database. Migration 0064 adds the assembled-map cache table without scanning existing source records.
 
+### Recovering an interrupted migration 0063
+
+An earlier version of 0063 could fail on retry with `relation "snapshot_group_projection" already exists` (or `snapshot_rule_projection`). Its concurrent index operations run outside a transaction, so an index can remain even when Django has not recorded the migration as applied. A cancelled concurrent build can also leave an invalid index.
+
+Use the corrected development image for the migration job and all application components, then rerun the normal migration step inside the updated image:
+
+```sh
+python manage.py migrate --noinput
+```
+
+The corrected 0063 checks the existing index's table, columns, method and predicate. It reuses a matching valid index and concurrently rebuilds a matching invalid one. Snapshot rows are preserved. A conflicting relation definition stops the migration with an explanatory error and is left untouched. Run one deployment migration job at a time; if another index build is still active, let it finish before retrying. Existing databases that already recorded 0063 as applied need no additional migration.
+
+Do not fake the migration or remove snapshot tables to bypass this error: an existing index may be invalid, or the other required index may still be missing.
+
 Optionally warm the latest full snapshot per environment after migration:
 
 ```sh
@@ -61,5 +75,7 @@ After assembled-map caching and lazy connection details, a further run of the sa
 These are development measurements, not a production latency promise. The naming fixture has no applicable policy; regression tests separately exercise active policies, proposal changes, simulations and exception expiry. First-use preparation adds work for existing snapshots; the warming command avoids that work on the first user visit.
 
 PostgreSQL 17 migration and query-plan checks used separate disposable data. The group query selected `snapshot_group_projection`; for the single-snapshot rule fixture PostgreSQL preferred a sequential scan. Production plans depend on snapshot count, row sizes and statistics. Normal cache hits avoid the source-record scans entirely.
+
+The migration-retry fix was verified on PostgreSQL 17 with all 794 Django tests, including seven recovery tests. These exercise a fresh install, an unrecorded partial migration, a real cancelled concurrent build leaving an invalid index, conflicting definitions, retained snapshot data, and repeated rollback/retry. Fresh SQLite migrations and both backends' model checks also pass.
 
 Chrome checks cover remote group search, retained selections, matrix generation, both appearance modes, paginated membership drawers and automatic fragment refresh. Additional map checks cover no eager connection requests, fetching on expansion, local reuse on reopening, pinned service filters and stale-evidence recovery.
