@@ -1,0 +1,62 @@
+{
+  "schema": [
+    "Type",
+    "Category",
+    "Policy",
+    "Rule",
+    "ID",
+    "Seq",
+    "Action",
+    "State",
+    "Matched fields",
+    "Matched groups",
+    "Reason / limits",
+    "Details"
+  ],
+  "groupSchema": [
+    "Type",
+    "Category",
+    "Policy",
+    "Rule",
+    "ID",
+    "Seq",
+    "Action",
+    "State",
+    "Matched fields",
+    "Matched groups",
+    "Reason / limits",
+    "Details"
+  ],
+  "originalVmPageRetained": true,
+  "nonFirewallReferencesRetained": true,
+  "directInventorySelection": true,
+  "errors": [],
+  "checks": [
+    {
+      "width": 1440,
+      "theme": "light",
+      "overflow": false,
+      "drawerOverflow": false
+    },
+    {
+      "width": 390,
+      "theme": "light",
+      "overflow": false,
+      "drawerOverflow": false
+    },
+    {
+      "width": 1440,
+      "theme": "dark",
+      "overflow": false,
+      "drawerOverflow": false
+    },
+    {
+      "width": 390,
+      "theme": "dark",
+      "overflow": false,
+      "drawerOverflow": false
+    }
+  ],
+  "django_tests": 845,
+  "javascript_tests": 77
+}

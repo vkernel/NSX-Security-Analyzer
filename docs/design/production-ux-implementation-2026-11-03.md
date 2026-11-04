@@ -172,6 +172,18 @@ Validation: all 839 Django tests passed on disposable PostgreSQL; all 19 focused
 
 [Wide VM firewall table](firewall-reference-review-2026-11-04/firewall-wide.png) · [Tag firewall table](firewall-reference-review-2026-11-04/firewall-tag.png) · [Dark table](firewall-reference-review-2026-11-04/firewall-dark-1440.png) · [Mobile](firewall-reference-review-2026-11-04/firewall-light-390.png) · [Browser checks](firewall-reference-review-2026-11-04/browser-checks.json).
 
+## Consistent references after opening a group · 4 November 2026
+
+The reported VM-firewall-to-group navigation exposed a remaining renderer split. VM/tag references used the rich firewall component, while groups/services used a retained single-column list converted to a table. Group and service drawers now use the same firewall column definitions, semantic badges, width behavior, empty/error states and bounded pagination as VM/tag drawers. This applies to related-object navigation and direct inventory selection. The service variant changes Matched groups to Matched service and labels its reference reason correctly.
+
+A read-only object-reference endpoint verifies the requested object within the saved snapshot, deduplicates and pages its retained references, and reuses the existing same-snapshot firewall-context helper. Non-rule references such as parent groups remain available under Other objects, with the normal reading width. Unknown rule context remains unknown. Group/service metadata is not relabelled as VM membership evidence. No schema migration or snapshot reindex is required; standalone reports without the application data API retain their existing fallback.
+
+Reference loading is deferred by one microtask because retained report renderers may restore a remembered References tab before opening the dialog. This prevents a blank reference table when reopening a group. Related navigation preserves the original drawer's nodes, selected category, page and width through Back; stale responses cannot replace the new object's table.
+
+Validation: all 845 Django tests passed on disposable PostgreSQL, including 25 focused object/VM/tag reference tests. All 77 JavaScript tests passed. Synthetic real-browser acceptance followed VM firewall page 2 → matched group → group References, verified identical twelve-column headers and automatic width, paged the group references, checked its parent group under Other objects, then returned to the original VM page 2. Direct group selection and close/reopen on the remembered References tab also passed. Light/dark layouts at 1440px and 390px recorded no page errors or document/drawer overflow. No operational data or NSX endpoint was accessed.
+
+[Shared group firewall table](object-reference-review-2026-11-04/object-group.png) · [Other referencing objects](object-reference-review-2026-11-04/object-parent.png) · [Dark](object-reference-review-2026-11-04/object-dark-1440.png) · [Mobile](object-reference-review-2026-11-04/object-light-390.png) · [Browser checks](object-reference-review-2026-11-04/browser-checks.json).
+
 ## Attribution
 
 Design review and implementation use [Unslop by Damir Sokolovsky (@heydamir)](https://github.com/heydamir/unslop), methodology revision `a6f121eee5f29c2f74976b75456feae8b66afb3a`, [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). Applied locally to the repository and synthetic browser views; no external design service or separate Unslop agent was invoked. Existing credit remains in `NOTICE`.

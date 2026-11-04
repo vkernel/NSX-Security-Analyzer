@@ -92,7 +92,7 @@
     window.WorkspaceTabs(nav,entries,{onSelect:index=>{selected=index;if(visible){size();entries[index].show();}}});
     root.addEventListener('evidence-visible',()=>{visible=true;size();entries[selected].show();});return root;
   };
-  window.firewallReferenceColumns=(body,inspect)=>{
+  window.firewallReferenceColumns=(body,inspect,{referenceLabel='Matched groups'}={})=>{
     const lines=values=>{const root=make('div');root.className='evidence-reference-lines';for(const value of values)root.append(make('span',value));return root;};
     return [
       {label:'Type',cell:item=>item.firewall_type},
@@ -104,10 +104,27 @@
       {label:'Action',cell:item=>window.evidenceBadge(item.action,'action')},
       {label:'State',cell:item=>window.evidenceBadge(item.disabled===true?'Disabled':item.disabled===false?'Enabled':null)},
       {label:'Matched fields',cell:item=>lines(item.matched_fields?.length?item.matched_fields:['Not retained'])},
-      {label:'Matched groups',cell:item=>{const root=make('div');root.className='evidence-reference-lines';const matches=item.field_matches||[],groups=item.matched_groups||[];const known=new Set(matches.map(match=>match.group.path)),shown=[...matches,...groups.filter(group=>!known.has(group.path)).map(group=>({field:matches.length?'Field not retained':'',group}))];if(shown.length){for(const match of shown.slice(0,3)){const entry=make('div'),link=make('button',match.group.name||match.group.path);entry.className='evidence-firewall-match';link.type='button';link.className='evidence-object-link';link.title=match.group.path;link.onclick=()=>window.openRelatedEvidence(body,{path:match.group.path},match.group.name||match.group.path);if(match.field)entry.append(make('small',match.field));entry.append(link);root.append(entry);}}if(shown.length>3||item.groups_truncated)root.append(make('small','More groups in rule inspection'));if(!groups.length)root.append(make('span','Not retained'));return root;}},
+      {label:referenceLabel,cell:item=>{const root=make('div');root.className='evidence-reference-lines';const matches=item.field_matches||[],groups=item.matched_groups||[];const known=new Set(matches.map(match=>match.group.path)),shown=[...matches,...groups.filter(group=>!known.has(group.path)).map(group=>({field:matches.length?'Field not retained':'',group}))];if(shown.length){for(const match of shown.slice(0,3)){const entry=make('div'),link=make('button',match.group.name||match.group.path);entry.className='evidence-firewall-match';link.type='button';link.className='evidence-object-link';link.title=match.group.path;link.onclick=()=>window.openRelatedEvidence(body,{path:match.group.path},match.group.name||match.group.path);if(match.field)entry.append(make('small',match.field));entry.append(link);root.append(entry);}}if(shown.length>3||item.groups_truncated)root.append(make('small','More groups in rule inspection'));if(!groups.length)root.append(make('span','Not retained'));return root;}},
       {label:'Reason / limits',cell:item=>lines([item.reference_reason||'Not retained',item.field_note].filter(Boolean))},
       {label:'Details',cell:item=>{const button=make('button','Inspect');button.type='button';button.setAttribute('aria-label','Inspect references for '+(item.name||item.path));button.onclick=()=>inspect(item,button);return button;}}
     ].map((column,index)=>({...column,width:[4,7,9,17,4,4,6,7,8,12,16,6][index]+'%'}));
+  };
+  // Both direct inventory selection and related-object navigation use this renderer.
+  window.objectReferenceTables=(body,row)=>{
+    if(!['group','custom_service'].includes(row?.kind)||!row.path||!window.reportData||!document.querySelector('[data-server-table]'))return;
+    const dialog=body.closest('dialog'),generation={};body.evidenceGeneration=generation;
+    const current=()=>body.evidenceGeneration===generation&&dialog?.open;
+    const load=(section,page)=>window.reportData(null,{op:'object-references',path:row.path,section,page});
+    const inspect=item=>window.openRelatedEvidence(body,{path:item.path},item.name||item.path);
+    const firewall=window.evidenceTable({title:'Firewall references',wide:true,current,load:page=>load('firewall',page),
+      columns:window.firewallReferenceColumns(body,inspect,{referenceLabel:row.kind==='custom_service'?'Matched service':'Matched groups'})});
+    const objects=window.evidenceTable({title:'Other referencing objects',current,load:page=>load('objects',page),
+      columns:[{label:'Object',cell:item=>window.evidenceObject(body,item,{path:item.path})}]});
+    body.querySelectorAll('[data-evidence-section="relationships"]').forEach(node=>node.remove());
+    const note=make('p','Saved configuration references only. Collection coverage applies; references do not establish effective policy or observed traffic.');note.className='evidence-note';note.dataset.evidenceSection='relationships';
+    // Saved renderers can restore References just before opening the dialog.
+    const deferred=table=>({...table,show:()=>queueMicrotask(table.show)});
+    body.append(note,window.evidenceCategories([{...deferred(firewall),label:'Firewall rules'},{...deferred(objects),label:'Other objects'}]));
   };
   // Existing group/service snapshots keep their evidence and links, but use the same table surface.
   window.referenceListTables=root=>{

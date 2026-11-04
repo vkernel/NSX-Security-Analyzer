@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Use the same rich firewall-reference table and automatic width for group/service drawers reached from VM/tag references or direct inventory selection. Keep parent/non-rule references under Other objects, preserve Back/page state, and fix loading when a saved renderer reopens a remembered References tab. Add bounded same-snapshot object reference pages without migration or reindexing.
+
 - Expand VM/tag firewall-reference drawers automatically and restore their reading width on other views or Back. Add shared Type, Category, Policy, Rule, ID, Seq, Action, State, matched field/group and reason columns using bounded same-snapshot DFW context. Preserve unknown/nested evidence, labelled colors, inspection and pagination. Existing snapshots benefit without migration or reindexing.
 
 - Replace nested VM reference disclosures with shared category tables across VM, tag and scope drawers, and apply the same table surface to retained group/service references. Show configured rule actions and recorded states with labelled theme-aware colors; inspect services and group provenance in tables with Back/page/focus preservation. Keep lazy 25-row loading and fetch compact rule metadata in one bounded page query. No migration required.

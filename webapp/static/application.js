@@ -3,6 +3,7 @@
   const evidenceTabs=new Map();
   window.workspaceEvidence=(body,title,row)=> {
     body.closest('dialog')?.classList.remove('evidence-firewall-wide');
+    window.objectReferenceTables?.(body,row);
     window.referenceListTables?.(body);
     const nodes=Array.from(body.children), groups=new Map([['Summary',[]],['Members',[]],['References',[]],['History',[]],['Technical details',[]]]);
     const summary=make('dl',null,'evidence-facts');

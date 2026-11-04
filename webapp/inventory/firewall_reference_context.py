@@ -4,14 +4,14 @@ from .models import SnapshotRecord
 FIELDS = (('source_groups', 'Source'), ('destination_groups', 'Destination'), ('scope', 'Applied to'))
 
 
-def enrich(snapshot_id, items, vm=False):
+def enrich(snapshot_id, items, vm=False, object_kind=None):
     if not items:
         return items
     paths = {item.get('path') for item in items if item.get('path')}
     keys = ('category', 'policy_name', 'rule_id', 'action', 'disabled', 'sequence_number',
             'source_groups', 'destination_groups', 'scope')
     records = SnapshotRecord.objects.filter(snapshot_id=snapshot_id, view='dfw', compact__path__in=paths).values(
-        'compact__path', 'data__configuration__rule__sequence_number', *['data__' + key for key in keys])
+        'compact__path', 'data__name', 'data__services', 'data__configuration__rule__sequence_number', *['data__' + key for key in keys])
     rules = {row['compact__path']: row for row in records}
     group_paths = set()
     for item in items:
@@ -27,6 +27,8 @@ def enrich(snapshot_id, items, vm=False):
             value = saved.get('data__' + key)
             if value is not None:
                 row[key] = value
+        if saved.get('data__name'):
+            row['name'] = saved['data__name']
         sequence = saved.get('data__configuration__rule__sequence_number')
         if sequence is not None:
             row['sequence_number'] = sequence
@@ -38,7 +40,8 @@ def enrich(snapshot_id, items, vm=False):
                                  for path in groups[:25] if isinstance(path, str)]
         matched, field_matches = [], []
         valid_groups = row['matched_groups']
-        for key, label in FIELDS:
+        fields = (('services', 'Service'),) if object_kind == 'custom_service' else FIELDS
+        for key, label in fields:
             configured = saved.get('data__' + key)
             if not isinstance(configured, list):
                 continue
@@ -48,7 +51,9 @@ def enrich(snapshot_id, items, vm=False):
                 field_matches.extend({'field': label, 'group': group} for group in direct)
         row['matched_fields'] = matched
         row['field_matches'] = field_matches
-        row['reference_reason'] = ('Tag condition; VM membership unverified' if vm else
+        row['reference_reason'] = ('Saved service reference' if object_kind == 'custom_service' else
+                                   'Saved group reference' if object_kind == 'group' else
+                                   'Tag condition; VM membership unverified' if vm else
                                    'Group membership condition' if row.get('tag_use') == 'condition' else
                                    'Tag attached to group (metadata)' if row.get('tag_use') == 'assignment' else
                                    'Relationship reason not retained')

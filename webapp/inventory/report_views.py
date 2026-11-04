@@ -145,6 +145,9 @@ def snapshot_data(request, pk):
                 if row is None:
                     return JsonResponse({'error': 'This object is not available in this evaluated snapshot. Saved finding evidence remains available in the review.'}, status=404)
                 result = {'id': row.ordinal, 'view': row.view}
+            elif op == 'object-references':
+                from .object_references import read
+                result = read(pk, request.GET.get('path', ''), request.GET.get('section', 'firewall'), int(request.GET.get('page', '0')))
             elif op == 'tag-relationships':
                 from .tag_relationships import read
                 result = read(pk, int(request.GET.get('id', '-1')), request.GET.get('section', 'summary'), int(request.GET.get('page', '0')), context=request.GET.get('context') == '1')
