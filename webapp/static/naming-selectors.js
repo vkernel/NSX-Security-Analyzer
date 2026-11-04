@@ -44,10 +44,10 @@
   if(value&&!options.some(option=>option.value===value))options.push(new Option(`${value} — unavailable; choose a tag component`,value));
   field.replaceChildren(...options);field.value=value;
   selectedComponent=rows.find(row=>row.querySelector('[name$="-field"]').value===value)||null;
-  const mode=document.querySelector('[name=match_mode]')?.value,exists=mode==='exists',singleHost=mode==='single_host_ip',category=document.querySelector('[name=match_value]');
+  const mode=document.querySelector('[name=match_mode]')?.value,exists=mode==='exists',singleIP=['single_host_ip','single_subnet'].includes(mode),category=document.querySelector('[name=match_value]');
   field.required=exists;
-  field.disabled=singleHost;const fieldWrapper=field.closest('.form-field');if(fieldWrapper)fieldWrapper.hidden=singleHost;
-  if(category){category.disabled=exists||singleHost;const wrapper=category.closest('.form-field');if(wrapper)wrapper.hidden=exists||singleHost;}
+  field.disabled=singleIP;const fieldWrapper=field.closest('.form-field');if(fieldWrapper)fieldWrapper.hidden=singleIP;
+  if(category){category.disabled=exists||singleIP;const wrapper=category.closest('.form-field');if(wrapper)wrapper.hidden=exists||singleIP;}
  }
  function enhance(){
   document.querySelectorAll('[name$="-scope"], [name="scope"]').forEach(input=>attach(input,()=>'', 'Choose existing scope'));

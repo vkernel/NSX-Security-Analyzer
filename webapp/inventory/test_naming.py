@@ -65,7 +65,7 @@ class NamingTests(TestCase):
         count=NamingPolicy.objects.count()
         response=self.client.get(url,{'duplicate':self.policy.pk})
         self.assertContains(response,'New policy based on the saved draft')
-        self.assertEqual(response.context['form'].initial['name'],self.policy.name+' (copy)')
+        self.assertEqual(response.context['form'].initial['name'],self.policy.name)
         self.assertFalse(response.context['form'].fields['environment'].disabled)
         self.assertEqual(NamingPolicy.objects.count(),count)
         data=self.payload();data.update(name='VDI copy',environment=self.env.pk,revision=0)

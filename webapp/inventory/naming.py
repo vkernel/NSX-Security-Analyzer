@@ -46,8 +46,8 @@ def in_queue(row, tab):
             or tab == 'exceptions' and row['status'] == 'Reviewed exception' and not row['needs_attention'])
 
 
-def explicit_host_ip(group):
-    """Read the saved definition only; reviewed values cannot override membership."""
+def _explicit_single_ip_value(group):
+    """Read one saved IP entry; reviewed values cannot override membership."""
     definition = group.get('definition')
     if not isinstance(definition, dict) or definition.get('extended_expression'):
         return None
@@ -64,6 +64,13 @@ def explicit_host_ip(group):
     # Scoped IPv6 literals identify an interface, not a portable NSX host address.
     if '%' in value:
         return None
+    return value
+
+
+def explicit_host_ip(group):
+    value = _explicit_single_ip_value(group)
+    if value is None:
+        return None
     try:
         if '/' in value:
             host = ipaddress.ip_interface(value)
@@ -73,6 +80,18 @@ def explicit_host_ip(group):
         return str(ipaddress.ip_address(value))
     except ValueError:
         return None
+
+
+def explicit_subnet(group):
+    """Canonicalize exactly one explicit CIDR; host prefixes belong to host rules."""
+    value = _explicit_single_ip_value(group)
+    if value is None or '/' not in value:
+        return None
+    try:
+        network = ipaddress.ip_network(value, strict=False)
+    except ValueError:
+        return None
+    return str(network) if network.prefixlen < network.max_prefixlen else None
 
 
 def group_evidence(config):
@@ -186,6 +205,7 @@ def scope(component, bindings):
 def evaluate(group, policies, bindings):
     values = tag_values(group['tags'])
     host_ip = explicit_host_ip(group)
+    subnet = explicit_subnet(group)
     candidates = []
     for policy in policies:
         config = policy.configuration
@@ -194,6 +214,9 @@ def evaluate(group, policies, bindings):
         match_field = config.get('match_field')
         if config.get('match_mode') == 'single_host_ip':
             if not host_ip:
+                continue
+        elif config.get('match_mode') == 'single_subnet':
+            if not subnet:
                 continue
         elif match_field:
             component = next((c for c in config['components'] if c['field'] == match_field), None)
@@ -209,9 +232,9 @@ def evaluate(group, policies, bindings):
     candidates = local or candidates
     typed = [p for p in candidates if p.configuration.get('group_type', 'all') != 'all']
     candidates = typed or candidates
-    specific = [p for p in candidates if p.configuration.get('match_field') or p.configuration.get('match_mode') == 'single_host_ip']
+    specific = [p for p in candidates if p.configuration.get('match_field') or p.configuration.get('match_mode') in ('single_host_ip', 'single_subnet')]
     candidates = specific or candidates
-    exact = [p for p in candidates if p.configuration.get('match_mode') == 'single_host_ip' or p.configuration.get('match_field') and p.configuration.get('match_mode', 'exact') == 'exact']
+    exact = [p for p in candidates if p.configuration.get('match_mode') in ('single_host_ip', 'single_subnet') or p.configuration.get('match_field') and p.configuration.get('match_mode', 'exact') == 'exact']
     candidates = exact or candidates
     row = dict(group, proposed='', policy=None, status='No applicable policy', reasons=[], components=[], matching_policy_ids=[str(p.pk) for p in candidates])
     if not candidates:
@@ -231,6 +254,8 @@ def evaluate(group, policies, bindings):
         actual_scope = scope(component, bindings.get(policy.pk, {}))
         if source == 'single_host_ip':
             raw = [host_ip] if host_ip else []
+        elif source == 'single_subnet':
+            raw = [subnet.replace('/', '_')] if subnet else []
         elif source == 'fixed':
             raw = [component.get('literal', '')]
         elif source == 'identity':
@@ -245,7 +270,7 @@ def evaluate(group, policies, bindings):
             reason = 'Ambiguous tags'
         elif not raw or not raw[0]:
             if component['required']:
-                reason = 'Single host IP required' if source == 'single_host_ip' else 'Missing required tags'
+                reason = {'single_host_ip': 'Single host IP required', 'single_subnet': 'Single subnet required'}.get(source, 'Missing required tags')
         else:
             output = raw[0]
             mapping = component.get('mapping', {})
@@ -261,19 +286,25 @@ def evaluate(group, policies, bindings):
                     valid = '%' not in output and str(ipaddress.ip_address(output)) == output
                 except ValueError:
                     valid = False
+            elif component['format'] == 'ip_subnet':
+                try:
+                    network = ipaddress.ip_network(output.replace('_', '/'), strict=True)
+                    valid = '%' not in output and str(network).replace('/', '_') == output and network.prefixlen < network.max_prefixlen
+                except ValueError:
+                    valid = False
             else:
                 pattern = {'alphanumeric': r'[A-Za-z0-9]+', 'digits': r'[0-9]+', 'extended': r'[A-Za-z0-9_.-]+'}[component['format']]
                 valid = bool(re.fullmatch(pattern, output))
             if not valid or len(output) > component['max_length']:
                 reason = 'Invalid value'
-        row['components'].append({'field': component['field'], 'source': 'Explicit IP membership' if source == 'single_host_ip' else group.get('component_source') if source == 'tag' and actual_scope in group.get('proposed_scopes', set()) else 'Definition tag' if source == 'tag' else source, 'scope': actual_scope if source == 'tag' else source, 'observed': ', '.join(raw) or 'Missing', 'output': output, 'issue': reason})
+        row['components'].append({'field': component['field'], 'source': 'Explicit IP membership' if source in ('single_host_ip', 'single_subnet') else group.get('component_source') if source == 'tag' and actual_scope in group.get('proposed_scopes', set()) else 'Definition tag' if source == 'tag' else source, 'scope': actual_scope if source == 'tag' else source, 'observed': ', '.join(raw) or 'Missing', 'output': output, 'issue': reason})
         if reason:
             issues.append(reason)
             row['reasons'].append(component['field'] + ': ' + reason)
         if output:
             parts.append(output)
     if issues:
-        row['status'] = next(label for label in ['Ambiguous tags', 'Single host IP required', 'Missing required tags', 'Invalid value'] if label in issues)
+        row['status'] = next(label for label in ['Ambiguous tags', 'Single host IP required', 'Single subnet required', 'Missing required tags', 'Invalid value'] if label in issues)
         return row
     proposed = config['separator'].join(parts)
     if not proposed or len(proposed) > config['max_length']:
@@ -293,7 +324,7 @@ def assess(environment, replacement=None, simulation=False):
     proposals = {p.group_path: p for p in NamingProposal.objects.filter(environment=environment, object_type='group').select_related('owner', 'reviewed_by')}
     from .models import SnapshotNamingAssessment
     from .analysis_index import VERSION
-    signature = digest(['naming-assessment-v2', VERSION, str(snapshot.pk) if snapshot else None,
+    signature = digest(['naming-assessment-v3', VERSION, str(snapshot.pk) if snapshot else None,
                         snapshot.browsing_status if snapshot else None, bool(snapshot.inventory_warning) if snapshot else False,
                         str(timezone.localdate()), simulation,
                         [(p.pk,p.revision,p.name,p.configuration) for p in policies], bindings,

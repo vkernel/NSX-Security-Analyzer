@@ -82,7 +82,7 @@ def policies(request, pk=None):
     if policy and request.method == 'GET' and request.GET.get('version', '').isdigit():
         version = get_object_or_404(policy.versions, revision=request.GET['version'])
         config = version.configuration['draft']
-    initial = dict(config, name=policy.name if policy else (duplicate.name[:113] + ' (copy)' if duplicate else ''), environment=policy.environment_id if policy else duplicate.environment_id if duplicate else None, revision=policy.revision if policy else 0)
+    initial = dict(config, name=policy.name if policy else duplicate.name if duplicate else '', environment=policy.environment_id if policy else duplicate.environment_id if duplicate else None, revision=policy.revision if policy else 0)
     components = [dict(c, mapping_text='\n'.join(f'{a}={b}' for a,b in c.get('mapping', {}).items())) for c in config.get('components', [])]
     editing = request.method == 'POST' and request.POST.get('action') == 'save'
     form = PolicyForm(request.POST if editing else None, initial=initial)
@@ -465,7 +465,7 @@ def naming_example(request):
     binding = NamingScopeBinding.objects.filter(policy=policy, environment=environment).first() if policy else None
     bindings = {replacement.pk: binding.draft_scopes if binding else {}}
     evaluated = [naming.evaluate(group, [replacement], bindings) for group in groups if config['group_type'] in ('all', group['group_type'])]
-    if config.get('match_mode') == 'single_host_ip':
+    if config.get('match_mode') in ('single_host_ip', 'single_subnet'):
         evaluated = [row for row in evaluated if row['policy'] is not None]
     row = next((r for r in evaluated if r['proposed']), next(iter(evaluated), None))
     if not row: return JsonResponse({'message': warning or 'No matching group in the first 100 saved groups. Save the draft and use the full impact preview.'})

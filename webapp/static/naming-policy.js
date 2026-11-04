@@ -19,7 +19,7 @@
    const removed=row.querySelector('[name$="-DELETE"]')?.checked;row.classList.toggle('component-removed',!!removed);
    const detail=source==='fixed'?`Fixed text: ${value('literal')||'Not set'}`:
     source==='tag'?`Tag scope: ${value('scope')||'Not set'}`:
-    source==='single_host_ip'?'Explicit single host IP':source==='identity'?'Group path suffix':source==='type'?'Group type':'Choose a source';
+    source==='single_host_ip'?'Explicit single host IP':source==='single_subnet'?'Explicit single subnet':source==='identity'?'Group path suffix':source==='type'?'Group type':'Choose a source';
    row.querySelector('summary').textContent=`${removed?'Remove · ':''}${value('field')||'New field'} · ${detail}`;
   }
   const grid=row.querySelector('.form-grid');
@@ -29,9 +29,10 @@
    if(fields.childElementCount){grid.after(advanced);if(advanced.querySelector('.errorlist'))advanced.open=true;}
   }
   row.addEventListener('input',summary);row.addEventListener('change',event=>{
-   if(event.target.matches('[name$="-source"]') && value('source')==='single_host_ip'){
-    row.querySelector('[name$="-case"]').value='keep';row.querySelector('[name$="-format"]').value='ip_address';
-    const length=row.querySelector('[name$="-max_length"]');if(Number(length.value)<45)length.value='45';
+   if(event.target.matches('[name$="-source"]') && ['single_host_ip','single_subnet'].includes(value('source'))){
+    const subnet=value('source')==='single_subnet',minimum=subnet?49:45;
+    row.querySelector('[name$="-case"]').value='keep';row.querySelector('[name$="-format"]').value=subnet?'ip_subnet':'ip_address';
+    const length=row.querySelector('[name$="-max_length"]');if(Number(length.value)<minimum)length.value=String(minimum);
     row.querySelector('[name$="-required"]').checked=true;
    }
    summary();
