@@ -1,0 +1,75 @@
+{
+  "rowHeight": 93,
+  "columns": [
+    {
+      "index": "5",
+      "width": 48,
+      "visible": true
+    },
+    {
+      "index": "0",
+      "width": 312,
+      "visible": true
+    },
+    {
+      "index": "1",
+      "width": 0,
+      "visible": false
+    },
+    {
+      "index": "2",
+      "width": 290,
+      "visible": true
+    },
+    {
+      "index": "3",
+      "width": 0,
+      "visible": false
+    },
+    {
+      "index": "4",
+      "width": 0,
+      "visible": false
+    }
+  ],
+  "context": {
+    "x": 408,
+    "y": 59.296875,
+    "width": 596,
+    "height": 40.390625,
+    "top": 59.296875,
+    "right": 1004,
+    "bottom": 99.6875,
+    "left": 408
+  },
+  "actions": {
+    "x": 746.546875,
+    "y": 10.5,
+    "width": 257.453125,
+    "height": 42,
+    "top": 10.5,
+    "right": 1004,
+    "bottom": 52.5,
+    "left": 746.546875
+  },
+  "search": {
+    "x": 377,
+    "y": 355.09375,
+    "width": 606,
+    "height": 40,
+    "top": 355.09375,
+    "right": 983,
+    "bottom": 395.09375,
+    "left": 377
+  },
+  "evidenceOpened": true,
+  "selectionRetained": true,
+  "filteredRows": 3,
+  "filteredNames": [
+    "AP-EDU-controller",
+    "AP-EDU-controller-5",
+    "AP-EDU-controller-9"
+  ],
+  "themeSwitched": true,
+  "themePopup": 0
+}

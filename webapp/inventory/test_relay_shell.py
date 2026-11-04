@@ -32,6 +32,33 @@ class RelayShellTests(TestCase):
         self.assertContains(response, reverse('snapshot', args=[snapshot.pk]) + '#all-groups')
         self.assertContains(response, 'data-section-module="inventory"')
 
+    def test_section_menu_preference_is_restored_without_changing_other_user(self):
+        key = 'menu:workspace:section-panel'
+        response = self.client.post(reverse('interface-preferences'),
+                                    {'key': key, 'value': False}, content_type='application/json')
+        self.assertEqual(response.json(), {'saved': True})
+        page = self.client.get(reverse('dashboard'))
+        self.assertContains(page, 'data-section-expanded="false"')
+        self.assertContains(page, 'aria-controls="workspace-section-panel" aria-expanded="false"')
+        self.assertContains(page, 'aria-label="Show section menu"')
+        self.assertContains(page, 'id="workspace-section-panel"')
+        other = get_user_model().objects.create_user('navigation-other')
+        self.client.force_login(other)
+        self.assertContains(self.client.get(reverse('dashboard')), 'data-section-expanded="true"')
+
+    def test_disabled_menu_memory_ignores_stored_collapsed_state(self):
+        UserPreferences.objects.create(user=self.user, remember_menus=False,
+                                       interface_state={'menu:workspace:section-panel': False})
+        self.assertContains(self.client.get(reverse('dashboard')), 'data-section-expanded="true"')
+
+    def test_primary_navigation_uses_full_module_names(self):
+        self.user.is_staff = True; self.user.save()
+        response = self.client.get(reverse('dashboard'))
+        for label in ('Environments', 'Naming compliance', 'Segmentation', 'Collections', 'Administration'):
+            self.assertContains(response, f'<span>{label}</span>', html=True)
+        for old in ('Environs', 'Segments', 'Collect', 'Admin'):
+            self.assertNotContains(response, f'<span>{old}</span>', html=True)
+
     def test_record_environment_overrides_remembered_environment(self):
         other = Environment.objects.create(name='West', slug='west', manager='https://west.example')
         session = self.client.session; session['selected_environment'] = other.pk; session.save()

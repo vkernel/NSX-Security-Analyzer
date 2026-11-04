@@ -97,10 +97,10 @@ def relay_sections(context):
     groups = {
         'overview': [{'label': 'Workspace', 'links': [link('Overview', 'dashboard'), link('Activity', 'activity')]}],
         'environments': [{'label': 'Environments', 'links': [link('All environments', 'environment-directory')]}],
-        'inventory': [{'label': 'Snapshot inventory', 'links': [report(label, panel, 'inventory') for label, panel in [('Snapshot overview', 'overview'), ('VMs', 'all-vms'), ('Groups', 'all-groups'), ('Services', 'all-services'), ('Tags', 'tags-all'), ('Scopes', 'tags-scopes')]]}],
+        'inventory': [{'label': 'Snapshot inventory', 'links': [report(label, panel, 'inventory') for label, panel in [('Overview', 'overview'), ('VMs', 'all-vms'), ('Groups', 'all-groups'), ('Services', 'all-services'), ('Tags', 'tags-all'), ('Scopes', 'tags-scopes')]]}],
         'firewall': [{'label': 'Firewall configuration', 'links': [report(label, panel, 'firewall') for label, panel in [('Summary', 'dfw-overview'), ('Policies', 'dfw-policies'), ('Rules', 'dfw-rules')]]}],
         'naming': [{'label': 'Naming work', 'links': [scoped('Naming review', 'naming-compliance')]}],
-        'segmentation': [{'label': 'Segmentation views', 'links': [scoped('Applications overview', 'segmentation'), scoped('VM-to-VM rules', 'segmentation-pair')]}],
+        'segmentation': [{'label': 'Segmentation views', 'links': [scoped('Applications', 'segmentation'), scoped('VM-to-VM rules', 'segmentation-pair')]}],
         'work': [{'label': 'Review work', 'links': [link('My work', 'my-work')]}] if staff else [],
         'collections': [{'label': 'Collections', 'links': [link('All collections', 'all-collections')]}],
         'administration': [{'label': section['label'], 'links': section['links']} for section in admin_sections(context)] if staff else [],
@@ -114,7 +114,7 @@ def relay_sections(context):
         groups['segmentation'][0]['links'].append(matrix)
         if staff:
             groups['work'][0]['links'] += [scoped('Finding reviews', 'findings'), scoped('Deletion history', 'deletion-history')]
-        groups['collections'][0]['links'].append(scoped('Environment history', 'collection-history'))
+        groups['collections'][0]['links'].append(scoped('History', 'collection-history'))
     titles = {'overview': 'Overview', 'environments': 'Environments', 'inventory': 'Inventory', 'firewall': 'Firewall', 'naming': 'Naming compliance', 'segmentation': 'Segmentation', 'work': 'My work', 'collections': 'Collections', 'administration': 'Administration', 'personal': 'Personal settings', 'help': 'Help & coverage'}
     scope_label = 'All environments' if current in {'dashboard', 'my-work', 'activity', 'all-collections'} and not request.GET.get('environment') else environment.name if environment else 'NSX Security Analyzer'
     canonical = {'naming-compliance':'naming_navigation','findings':'findings_navigation',
@@ -122,4 +122,5 @@ def relay_sections(context):
                  'segmentation':'segmentation_navigation','segmentation-pair':'segmentation_navigation',
                  'environment':'history_navigation','snapshot-comparison':'history_navigation','collection-coverage':'history_navigation'}
     return {'active': active, 'title': titles[active], 'scope_label': scope_label, 'environment': environment,
+            'section_expanded': not (getattr(context.get('display_preferences'), 'remember_menus', False) and context.get('interface_state', {}).get('menu:workspace:section-panel') is False),
             'groups': groups[active], 'canonical_template': 'inventory/'+canonical[current]+'.html' if current in canonical else ''}

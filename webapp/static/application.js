@@ -99,8 +99,8 @@
     const inventory=[['VMs','all-vms'],['Groups','all-groups'],['Services','all-services'],['Tags','tags-all'],['Scopes','tags-scopes']];
     const firewall=[['Summary','dfw-overview'],['Policies','dfw-policies'],['Rules','dfw-rules']];
     const filters={
-      groups:[['All groups','all-groups'],['Unused candidates','unused-groups'],['Empty groups','empty-groups'],['Incomplete membership checks','unknown-membership']],
-      services:[['All services','all-services'],['Unused custom services','unused-services']],
+      groups:[['All groups','all-groups'],['Unused groups','unused-groups'],['Empty groups','empty-groups'],['Membership unknown','unknown-membership']],
+      services:[['All services','all-services'],['Unused services','unused-services']],
       tags:[['All tags','tags-all'],['VMs and groups','tags-both'],['VM use','tags-vm_only'],['Group use','tags-group_only'],['Other resource use','tags-other_only'],['Needs review','tags-unknown']],
       policies:[['All policies','dfw-policies'],['Empty policies','empty-policies']],
       rules:[['All rules','dfw-rules'],['Zero recorded hits','zero-hit-rules'],['Disabled rules','disabled-rules'],['Incomplete statistics','unknown-statistics'],['Empty group references','empty-group-rules'],['Applied to DFW','dfw-scope-rules']]
@@ -108,7 +108,7 @@
     function reportNavigation(){
       if(!tabs)return;const id=location.hash.slice(1)||'overview';let kind=Object.keys(filters).find(key=>filters[key].some(([,anchor])=>anchor===id));
       const isFirewall=['rules','policies'].includes(kind)||id==='dfw-overview',isHelp=['feature-guide','coverage','tags-coverage'].includes(id);
-      const items=isHelp?[['User guide','feature-guide'],['Audit coverage','coverage'],['Tag coverage','tags-coverage']]:isFirewall?firewall:[['Snapshot overview','overview'],...inventory];
+      const items=isHelp?[['User guide','feature-guide'],['Audit coverage','coverage'],['Tag coverage','tags-coverage']]:isFirewall?firewall:[['Overview','overview'],...inventory];
       tabs.replaceChildren();for(const [label,anchor] of items){const link=make('a',label);link.href='#'+anchor;if(id===anchor || (kind && filters[kind]?.some(([,value])=>value===id) && filters[kind][0][1]===anchor))link.setAttribute('aria-current','page');tabs.append(link);}
       if(isFirewall){const link=make('a','Historical activity');link.href='/environments/'+document.body.dataset.tableScope+'/rule-history/';tabs.append(link);}
       document.querySelectorAll('[data-primary]').forEach(link=>{if(link.dataset.primary===(isFirewall?'firewall':isHelp?'help':'inventory'))link.setAttribute('aria-current','page');else link.removeAttribute('aria-current');});
@@ -188,6 +188,17 @@
       widget.querySelectorAll('tbody tr').forEach(row=>{
         const cell=row.querySelector('td[data-column-index="0"]')||row.cells[0],trigger=row.querySelector('.detail-button');if(!cell||!trigger)return;
         if(!cell.querySelector('.row-open')){const name=cell.querySelector('strong')||cell.firstChild;if(name){const button=make('button',name.textContent,'row-open');button.type='button';button.setAttribute('aria-label','Inspect '+name.textContent);button.addEventListener('click',()=>trigger.click());name.replaceWith(button);}}
+        // Retained reports emitted qualification paragraphs before the name.
+        // Keep exact evidence, but group it under Usage/Status across old and new snapshots.
+        if(widget.matches('.view-inventory,.view-dfw')){
+          const status=row.querySelector('td[data-column-index="2"]')||row.cells[2];
+          if(status)cell.querySelectorAll(':scope > p').forEach(p=>{
+            if(p.querySelector('.badge') && p.querySelector('small') && /observations/.test(p.textContent)){
+              p.classList.add('row-qualification');status.append(p);
+            }
+          });
+        }
+        const nameButton=cell.querySelector('.row-open');if(nameButton)cell.prepend(nameButton);
         trigger.textContent='Inspect';trigger.classList.add('row-inspect');trigger.setAttribute('aria-label','Inspect '+(cell.querySelector('.row-open')?.textContent||'object'));
         if(vm){const identity=cell.querySelector('code.path');if(identity){identity.classList.toggle('row-identity',(names.get(cell.querySelector('.row-open')?.textContent)||0)<2);cell.querySelector('.row-open')?.setAttribute('title',identity.textContent);}
           [...row.cells].forEach(td=>{const labels={VM_RUNNING:'Running',VM_STOPPED:'Powered off',VM_SUSPENDED:'Suspended',VM_UNKNOWN:'Unknown'};if(labels[td.textContent.trim()]){td.dataset.rawValue=td.textContent.trim();td.textContent=labels[td.dataset.rawValue];}});

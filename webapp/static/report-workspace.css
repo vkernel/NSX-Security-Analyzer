@@ -39,7 +39,7 @@
 .report-content{font:inherit;color:var(--ink)}
 :is(.report-content,#detail-dialog,.column-filter-dialog,#collection-results) :is(.path,.notes,.meta,.chart-caption,.chart-legend,.snapshot-chart .chart-empty){color:var(--muted)}
 :is(.report-content,#detail-dialog,.column-filter-dialog,#collection-results) :is(.inventory-shortcuts a,.empty-state,.snapshot-chart,.guide-start){background:var(--app-surface);border-color:var(--line);box-shadow:none}
-:is(.report-content,#detail-dialog,.column-filter-dialog,#collection-results) :is(.inventory-shortcuts b,.detail-summary span,.guide-topics>details>summary,.table-tools,.snapshot-chart .chart-empty){background:var(--app-surface-soft);color:var(--ink);border-color:var(--line)}
+:where(.report-content,#detail-dialog,.column-filter-dialog,#collection-results) :is(.inventory-shortcuts b,.detail-summary span,.guide-topics>details>summary,.table-tools,.snapshot-chart .chart-empty){background:var(--app-surface-soft);color:var(--ink);border-color:var(--line)}
 :is(.report-content,#detail-dialog,.column-filter-dialog,#collection-results) :is(.inventory-shortcuts a:hover,.guide-topics>details[open]>summary){background:var(--hover);color:var(--ink)}
 :is(.report-content,#detail-dialog) .badge.purple{background:var(--info-bg);color:var(--info-text)}
 :is(.report-content,#detail-dialog) .search-error{color:var(--error-text)}
@@ -48,7 +48,7 @@
 :is(.report-content,#detail-dialog,.column-filter-dialog,#collection-results) :is(.chart-total,.chart-caption){fill:var(--ink)}
 .report-content .chart-legend a:hover{background:var(--hover)}
 .report-content .table-tools :is(input,select):disabled{background:var(--app-surface-soft);color:var(--muted)}
-:is(.report-content,#detail-dialog) .detail-button{background:var(--app-surface);color:var(--ink);border-color:var(--line)}
+:where(.report-content,#detail-dialog) .detail-button{background:var(--app-surface);color:var(--ink);border-color:var(--line)}
 body[data-theme] :is(.code-lines,.technical-viewer,.code-block,.collection-error){background:var(--app-surface-soft);color:var(--ink);border-color:var(--line)}
 body[data-theme] :is(.code-lines li::marker,.code-lines .line-number){color:var(--muted)}
 body[data-theme] .syntax-key{color:var(--app-accent)}

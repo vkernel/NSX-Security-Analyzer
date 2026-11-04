@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Unify retained and new inventory/firewall table styling with Relay: name-first rows, selection first, review history under usage, and optional service Membership. Add a saved collapsible section menu, full module names, shorter work queues and responsive laptop context/columns. Preserve custom table layouts and existing evidence/review behavior. No migrations required; see the 4 November follow-up in `docs/design/production-ux-implementation-2026-11-03.md`.
+
 - Extend the Kubernetes migration Job deadline from 900 to 3600 seconds (one hour) for concurrent index builds over retained snapshots. Update deployment wait commands and guidance; periodic migration logging remains enabled. No Docker image rebuild is required.
 
 - Log PostgreSQL projection-index progress every 15 seconds during migration 0063: phase, elapsed time, tuple/block counters, database waits and blocker IDs, plus approximate source size and completion/failure timing. Use a bounded read-only observer connection; observer errors do not fail migration work.

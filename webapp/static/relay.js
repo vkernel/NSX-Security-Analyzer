@@ -3,6 +3,39 @@
   'use strict';
   function init() {
     const panel=document.querySelector('[data-relay-section]'), main=document.getElementById('main');
+    const sectionToggle=document.querySelector('[data-section-toggle]');
+    if(panel && sectionToggle){
+      const desktop=matchMedia('(min-width:801px)'), stateKey='menu:workspace:section-panel';
+      let expanded=document.body.dataset.sectionExpanded!=='false', saving=false, queued;
+      const sectionStatus=document.querySelector('[data-section-nav-status]');
+      function paintSection(){
+        const visible=!desktop.matches || expanded;
+        document.body.dataset.sectionExpanded=String(expanded);
+        if(!visible && panel.contains(document.activeElement))sectionToggle.focus({preventScroll:true});
+        panel.inert=!visible;
+        sectionToggle.setAttribute('aria-expanded',String(visible));
+        const label=visible?'Hide section menu':'Show section menu';
+        sectionToggle.setAttribute('aria-label',label);sectionToggle.title=label;
+      }
+      async function saveSection(){
+        if(document.body.dataset.rememberMenus!=='true')return;
+        queued=expanded;if(saving)return;saving=true;
+        try{
+          while(typeof queued==='boolean'){
+            const value=queued;queued=undefined;
+            try{
+              const response=await fetch(sectionToggle.dataset.saveUrl,{method:'POST',keepalive:true,
+                headers:{'Content-Type':'application/json','X-CSRFToken':document.querySelector('#interface-csrf input').value},
+                body:JSON.stringify({key:stateKey,value}),signal:AbortSignal.timeout(10000)});
+              if(!response.ok || response.redirected)throw Error();
+              if(sectionStatus)sectionStatus.textContent='';
+            }catch(_){if(sectionStatus)sectionStatus.textContent='Menu preference could not be saved. Try again.';}
+          }
+        }finally{saving=false;}
+      }
+      paintSection();desktop.addEventListener('change',paintSection);
+      sectionToggle.addEventListener('click',()=>{expanded=!expanded;paintSection();saveSection();});
+    }
     function reportNavigation(){
       const source=main?.querySelector('.report-section-tabs');if(!source||!panel)return;
       const target=panel.querySelector('[data-section-links]'),nav=document.createElement('nav');nav.className='section-link-group';nav.setAttribute('aria-label','Report pages');

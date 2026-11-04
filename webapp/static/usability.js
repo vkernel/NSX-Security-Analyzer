@@ -51,7 +51,13 @@
     const controls=Object.fromEntries(Object.entries(selectors).map(([name,selector])=>[name,tools.querySelector(selector)]));
     const headers=Array.from(table.tHead.rows[0].cells);
     headers.forEach((cell,index)=>cell.dataset.columnIndex=index);
-    let columns=headers.map((cell,index)=>({index,visible:true}));
+    const panelId=widget.closest('[data-panel]').id;
+    function defaultColumns(){
+      const service=['all-services','unused-services'].includes(panelId);
+      return headers.map((cell,index)=>({index,visible:!(service && index===3)}))
+        .sort((a,b)=>Number(headers[b.index].classList.contains('inventory-selection-column'))-Number(headers[a.index].classList.contains('inventory-selection-column')));
+    }
+    let columns=defaultColumns();
     const saved=remember ? getState()[key] : null;
     if(saved) {
       Object.entries(saved.controls || {}).forEach(([name,value])=> {
@@ -60,7 +66,10 @@
         else if(control.tagName!=='SELECT' || Array.from(control.options).some(option=>option.value===value)) control.value=value;
       });
       (saved.filters || []).forEach(([index,filter])=> {if(index<headers.length) api.filters.set(index,filter);});
-      if(saved.columns?.length===headers.length && new Set(saved.columns.map(c=>c.index)).size===headers.length && saved.columns.every(c=>Number.isInteger(c.index) && c.index>=0 && c.index<headers.length) && saved.columns.some(c=>c.visible)) columns=saved.columns;
+      if(saved.columns?.length===headers.length && new Set(saved.columns.map(c=>c.index)).size===headers.length && saved.columns.every(c=>Number.isInteger(c.index) && c.index>=0 && c.index<headers.length) && saved.columns.some(c=>c.visible)){
+        // Adopt the new default for untouched old layouts; keep custom column choices.
+        if(!saved.columns.every((c,index)=>c.index===index && c.visible))columns=saved.columns;
+      }
     }
     const panel=document.createElement('details');panel.className='column-layout';
     const summary=document.createElement('summary');summary.textContent='Table columns';panel.append(summary);
@@ -84,7 +93,7 @@
       columns.forEach((column,position)=> {
         const line=document.createElement('div');line.className='column-choice';
         const label=document.createElement('label'), check=document.createElement('input');check.type='checkbox';check.checked=column.visible;
-        const caption=headers[column.index].querySelector('.header-filter')?.textContent.replace(/[●▾]/g,'').trim() || headers[column.index].textContent;
+        const caption=headers[column.index].querySelector('.header-filter')?.textContent.replace(/[●▾]/g,'').trim() || headers[column.index].textContent || headers[column.index].querySelector('input')?.getAttribute('aria-label') || 'Selection';
         check.disabled=column.visible && columns.filter(c=>c.visible).length===1;
         check.addEventListener('change',()=>{column.visible=check.checked;layout();editor();capture();});
         label.append(check,document.createTextNode(caption));line.append(label);
@@ -100,7 +109,7 @@
     reset.addEventListener('click',()=> {
       controls.search.value='';controls.mode.value='contains';controls.syntax.value='text';controls.evidence.checked=true;
       controls.size.value=document.body.dataset.reportPageSize || '25';controls.sort.value='name';controls.order.value='asc';api.filters.clear();
-      columns=headers.map((_,index)=>({index,visible:true}));api.filters.notify();editor();layout();capture();
+      columns=defaultColumns();api.filters.notify();editor();layout();capture();
     });panel.append(reset);
     let ready=false;
     widget.addEventListener('table-render',()=>{layout();if(ready)capture();});

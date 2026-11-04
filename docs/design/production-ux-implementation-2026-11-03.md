@@ -61,6 +61,49 @@ The preview used a new offline synthetic database, test accounts and a loopback-
 
 The original audit/prototype remain historical design evidence; these captures show the integrated application.
 
+## Navigation and inventory follow-up · 4 November 2026
+
+Applied the same Unslop methodology to the user's inventory screenshot, shared shell, report renderer, retained-report adapter, table preferences and representative page families. This follow-up preserves Relay 04, Bridge 06 light and Relay dark. Publishing the source and development image does not roll out these changes to an operational deployment.
+
+### Findings and corrections
+
+| Finding | Correction |
+| --- | --- |
+| Inventory review paragraphs preceded the object name and enlarged every row. | Put identity first and exact qualification/history under Usage or Status. The retained-report adapter handles older saved snapshots; the renderer emits the new structure for future reports. Eligibility remains secondary text rather than another large badge. |
+| Retained report theme selectors included an ID inside `:is()`, unintentionally overpowering shared component styles. | Lower scope specificity for toolbar and evidence-button paint. Apply shared theme surfaces, typography, padding, borders, status colors and density. |
+| Checkboxes appeared last and service Membership repeated “Not applicable.” | Make selection first by default and service Membership optional through Columns. Original filter/sort indices remain stable; custom saved layouts are preserved. Untouched old default layouts adopt the new defaults. |
+| Long work queues clipped inside the section panel. | Style canonical navigation as the same vertical list as report navigation; use Second approval and Ready for cleanup. Keep counts readable and routes/permissions unchanged. |
+| Abbreviated primary labels concealed the page names. | Show Environments, Naming compliance, Segmentation, Collections and Administration. Widen the rail enough to display full words; Naming compliance wraps naturally. |
+| The section menu consumed space permanently. | Add Hide/Show section menu beside environment context. Save the state when Remember menus is enabled. Keep the primary rail available; mobile navigation remains a complete drawer with keyboard focus handling. |
+| Laptop context controls and inventory columns became crowded. | Give snapshot context a separate row at 801–1200px. Let search use a full toolbar row. Keep object and usage visible while secondary Type and duplicate Inspect columns yield; clicking the name still opens evidence. Remove old positional column-width assumptions after reordering. |
+
+Within Inventory, Overview replaces Snapshot overview; the view picker uses Unused services while the full page title remains Unused custom services. Within Segmentation, Applications, Priorities and Settings replace longer redundant labels. These are presentation changes, with no changes to assessment, review or cleanup rules.
+
+### Follow-up validation
+
+- 802 Django tests passed against a disposable PostgreSQL database; system checks and migration checks passed.
+- 63 JavaScript tests passed, including collapse persistence, preference failure handling, mobile restoration, retained-row inspection and saved column-layout compatibility.
+- Collector suite: 112 tests completed, with 9 optional integrations skipped.
+- 18 representative routes × light/dark × 320/390/1024/1680px = 144 browser states. All returned successfully, with no captured page errors, document overflow, sidebar overflow or clipped sidebar links. Laptop context/action rectangles were also checked separately for overlap.
+- Browser workflows verified saved collapse after reload, mobile submenu access, inspection, selection, search and direct theme switching without a popup. The populated synthetic service row measured 93px high at both 1024px and 1680px after correction.
+- JavaScript syntax and `git diff --check` passed.
+
+[Layout measurements](navigation-inventory-review-2026-11-04/layout-checks.json) · [Workflow measurements](navigation-inventory-review-2026-11-04/interaction-checks.json)
+
+The offline fixture includes populated groups, custom services and firewall data; VM and some work queues exercise empty states. This pass is a representative page-family review, not every populated workflow, role combination, accessibility certification or production performance benchmark. No live NSX or production database was accessed.
+
+### Further suggestions
+
+1. Consolidate the retained-report and native-list column definitions into one shared table model. This pass fixes the visible drift; reducing duplicate rendering and CSS ownership would prevent future drift.
+2. Keep navigation labels short within their section, with fuller workflow descriptions in the page heading or introduction. Use the same terms in help and future menus; do not abbreviate product areas to fit the rail.
+3. If more evidence categories are added, keep the list focused on identity, outcome and next action, with detailed qualification available in inspection. Preserve visible unknown/incomplete states so a quieter list does not imply certainty.
+
+### Review captures
+
+- [Inventory, light](navigation-inventory-review-2026-11-04/after-inventory-light-1680.png) · [Inventory, dark](navigation-inventory-review-2026-11-04/after-inventory-dark-1680.png)
+- [Laptop inventory](navigation-inventory-review-2026-11-04/after-inventory-light-1024.png) · [My work navigation](navigation-inventory-review-2026-11-04/after-work-light-1680.png)
+- [Collapsed submenu](navigation-inventory-review-2026-11-04/after-collapsed.png) · [Mobile navigation](navigation-inventory-review-2026-11-04/after-mobile-menu.png)
+
 ## Attribution
 
 Design review and implementation use [Unslop by Damir Sokolovsky (@heydamir)](https://github.com/heydamir/unslop), methodology revision `a6f121eee5f29c2f74976b75456feae8b66afb3a`, [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). Applied locally to the repository and synthetic browser views; no external design service or separate Unslop agent was invoked. Existing credit remains in `NOTICE`.
