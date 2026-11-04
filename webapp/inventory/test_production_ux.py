@@ -59,6 +59,60 @@ class ProductionUXTests(TestCase):
         self.assertIn('Security matrix',panel)
         self.assertIn('data-section-navigation',panel)
 
+    def test_naming_policy_filter_counts_and_queue_links_use_same_scope(self):
+        from urllib.parse import parse_qs, urlparse
+        policies=[NamingPolicy.objects.create(name=name,environment=self.env,enabled=True,configuration={}) for name in ('Hosts','Applications')]
+        rows=[{'id':i,'identity':f'/groups/{i}','name':f'Group {i}','status':status,'needs_attention':status!='Compliant',
+               'group_type':'static','observed_tags':{},'matching_policy_ids':[str(policy.pk)],'next_action':'Review','name_diff':[]}
+              for i,(policy,status) in enumerate([(policies[0],'Compliant'),(policies[0],'Name differs'),(policies[1],'Compliant')],1)]
+        with patch('inventory.naming_views.analyze',return_value=(self.snapshot,rows,'')):
+            response=self.client.get(reverse('naming-compliance',args=[self.env.pk]), {'policy':policies[0].pk,'q':'Group','group_type':'static','tab':'compliant','page':5})
+        self.assertEqual(response.context['tab_counts'],{'all':2,'compliant':1,'attention':1,'exceptions':0})
+        self.assertEqual(response.context['page'].paginator.count,1)
+        for item in response.context['naming_navigation']:
+            params=parse_qs(urlparse(item['url']).query)
+            self.assertEqual(params['policy'],[str(policies[0].pk)])
+            self.assertEqual(params['q'],['Group']);self.assertEqual(params['group_type'],['static'])
+            self.assertNotIn('page',params)
+            with patch('inventory.naming_views.analyze',return_value=(self.snapshot,rows,'')):
+                destination=self.client.get(reverse('naming-compliance',args=[self.env.pk])+item['url'])
+            self.assertEqual(destination.context['page'].paginator.count,item['count'])
+
+    def test_attention_issue_buckets_cover_all_rows_and_counts_link_to_exact_results(self):
+        policy=NamingPolicy.objects.create(name='Groups',enabled=True,configuration={})
+        statuses=['No applicable policy','Invalid value','Missing required tags','Name differs','Definition review required','Evidence incomplete','Compliant','Reviewed exception']
+        rows=[{'id':i,'identity':f'/groups/{i}','name':f'Group {i}','status':status,'needs_attention':True,
+               'group_type':'static','observed_tags':{},'matching_policy_ids':[] if i==0 else [str(policy.pk)],'next_action':'Review','name_diff':[]}
+              for i,status in enumerate(statuses)]
+        url=reverse('naming-compliance',args=[self.env.pk])
+        with patch('inventory.naming_views.analyze',return_value=(self.snapshot,rows,'')):
+            response=self.client.get(url)
+        self.assertEqual(response.context['tab_counts'],{'all':8,'compliant':0,'attention':8,'exceptions':0})
+        self.assertEqual(sum(bucket['count'] for bucket in response.context['issue_groups']),8)
+        for bucket in response.context['issue_groups']:
+            with patch('inventory.naming_views.analyze',return_value=(self.snapshot,rows,'')):
+                destination=self.client.get(url+bucket['url'])
+            self.assertEqual(destination.context['page'].paginator.count,bucket['count'])
+            for entry in bucket['policies']:
+                with patch('inventory.naming_views.analyze',return_value=(self.snapshot,rows,'')):
+                    destination=self.client.get(url+entry['url'])
+                self.assertEqual(destination.context['page'].paginator.count,entry['count'])
+
+    def test_policy_filtered_conflict_issue_links_do_not_expand_to_another_policy(self):
+        policies=[NamingPolicy.objects.create(name=f'Conflict {i}',enabled=True,configuration={}) for i in range(2)]
+        rows=[{'id':i,'identity':f'/groups/{i}','name':f'Group {i}','status':'Ambiguous policy','needs_attention':True,
+               'group_type':'static','observed_tags':{},'matching_policy_ids':ids,'next_action':'Review','name_diff':[]}
+              for i,ids in enumerate([[str(p.pk) for p in policies],[str(policies[1].pk)]])]
+        url=reverse('naming-compliance',args=[self.env.pk])
+        with patch('inventory.naming_views.analyze',return_value=(self.snapshot,rows,'')):
+            response=self.client.get(url,{'policy':policies[0].pk})
+        issue=response.context['issue_groups'][0]
+        self.assertEqual(issue['count'],1)
+        self.assertEqual([p['name'] for p in issue['policies']],[policies[0].name])
+        with patch('inventory.naming_views.analyze',return_value=(self.snapshot,rows,'')):
+            destination=self.client.get(url+issue['policies'][0]['url'])
+        self.assertEqual(destination.context['page'].paginator.count,1)
+
     def test_history_keeps_selected_evidence_beyond_recent_limit(self):
         from datetime import timedelta
         from .templatetags.workspace_shell import snapshot_context

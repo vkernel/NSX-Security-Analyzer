@@ -19,7 +19,7 @@
    const removed=row.querySelector('[name$="-DELETE"]')?.checked;row.classList.toggle('component-removed',!!removed);
    const detail=source==='fixed'?`Fixed text: ${value('literal')||'Not set'}`:
     source==='tag'?`Tag scope: ${value('scope')||'Not set'}`:
-    source==='identity'?'Group path suffix':source==='type'?'Group type':'Choose a source';
+    source==='single_host_ip'?'Explicit single host IP':source==='identity'?'Group path suffix':source==='type'?'Group type':'Choose a source';
    row.querySelector('summary').textContent=`${removed?'Remove · ':''}${value('field')||'New field'} · ${detail}`;
   }
   const grid=row.querySelector('.form-grid');
@@ -28,7 +28,14 @@
    for(const key of ['case','format','max_length','mapping_text','ORDER']){const control=row.querySelector(`[name$="-${key}"]`);const wrapper=control?.closest('.form-field');if(wrapper)fields.append(wrapper);}
    if(fields.childElementCount){grid.after(advanced);if(advanced.querySelector('.errorlist'))advanced.open=true;}
   }
-  row.addEventListener('input',summary);row.addEventListener('change',summary);summary();
+  row.addEventListener('input',summary);row.addEventListener('change',event=>{
+   if(event.target.matches('[name$="-source"]') && value('source')==='single_host_ip'){
+    row.querySelector('[name$="-case"]').value='keep';row.querySelector('[name$="-format"]').value='ip_address';
+    const length=row.querySelector('[name$="-max_length"]');if(Number(length.value)<45)length.value='45';
+    row.querySelector('[name$="-required"]').checked=true;
+   }
+   summary();
+  });summary();
  }
  function enhance(){root.querySelectorAll('.naming-component').forEach(attach);}
  enhance();new MutationObserver(enhance).observe(root,{childList:true});

@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Add automatic static-host naming: Exactly one explicit host IP condition and Explicit single host IP component, canonical IPv4/IPv6 formatting and editor defaults. Read the saved definition directly, accept host /32 and /128 entries, exclude broader subnets/ranges/multiple or nested/dynamic definitions, and retain conflict/collision/coverage checks. No per-group component proposals or new migrations required. See `docs/guides/automatic-host-naming-policy.html`.
+
+- Align naming draft examples with current reviewed static component values, excluding draft/rejected/stale or other-environment proposals. Explain missing custom scope values. Make queue counts follow filters and preserve filters across queues; include every attention outcome in issue counts and separate draft-policy counts from environment totals in impact previews. No migrations required.
+
 - Unify retained and new inventory/firewall table styling with Relay: name-first rows, selection first, review history under usage, and optional service Membership. Add a saved collapsible section menu, full module names, shorter work queues and responsive laptop context/columns. Preserve custom table layouts and existing evidence/review behavior. No migrations required; see the 4 November follow-up in `docs/design/production-ux-implementation-2026-11-03.md`.
 
 - Extend the Kubernetes migration Job deadline from 900 to 3600 seconds (one hour) for concurrent index builds over retained snapshots. Update deployment wait commands and guidance; periodic migration logging remains enabled. No Docker image rebuild is required.

@@ -31,7 +31,7 @@ class NamingTests(TestCase):
         self.assertEqual(''.join(part['new'] for part in row['name_diff']), row['proposed'])
         self.assertTrue(any(part['new'] == 'PRD' for part in row['name_diff']))
         response = self.client.get(reverse('naming-compliance', args=[self.env.pk]), {'q':'no-such-group'})
-        self.assertEqual(response.context['tab_counts']['all'], 1)
+        self.assertEqual(response.context['tab_counts']['all'], 0)
         self.assertEqual(response.context['page'].paginator.count, 0)
 
     @staticmethod
@@ -432,6 +432,71 @@ class NamingTests(TestCase):
 
     def test_live_example_invalid_fields_return_help(self):
         self.assertIn('Complete',self.client.post(reverse('naming-example'),{}).json()['message'])
+
+    def static_example(self):
+        self.config.update(group_type='static', match_mode='exact', match_field='ObjectType', match_value='HST')
+        for component, field, scope in zip(self.config['components'], ['ObjectType', 'Address'], ['naming/object-type', 'naming/address']):
+            component.update(field=field, scope=scope, mapping={}, format='extended')
+        self.policy.configuration=self.config; self.policy.draft=self.config; self.policy.save()
+        self.vm.name='HST-10.128.196.150'
+        self.vm.data['configuration']={'expression':[{'resource_type':'IPAddressExpression','ip_addresses':['10.128.196.150']}]}
+        self.vm.save()
+        row=self.rows()[0]
+        proposal=NamingProposal.objects.create(environment=self.env, group_path=row['identity'], object_type='group',
+            baseline=naming.baseline(row), state='reviewed', tags={'naming/object-type':'HST','naming/address':'10.128.196.150'})
+        data=self.payload(); data.update(environment=self.env.pk, policy_id=self.policy.pk, group_type='static', match_field='ObjectType', match_value='HST', match_mode='exact')
+        return proposal,data
+
+    def test_live_example_and_assessment_use_same_current_reviewed_static_values(self):
+        proposal,data=self.static_example()
+        result=self.client.post(reverse('naming-example'),data).json()
+        row=self.rows()[0]
+        self.assertEqual(result['proposed'],row['proposed'])
+        self.assertEqual(result['proposed'],'HST-10.128.196.150')
+        self.assertTrue(all(c['source']=='Reviewed value' for c in result['components']))
+        proposal.refresh_from_db(); self.assertEqual(proposal.state,'reviewed')
+
+    def test_live_example_excludes_draft_rejected_and_stale_values(self):
+        proposal,data=self.static_example()
+        for state in ('draft','rejected','exception'):
+            with self.subTest(state=state):
+                proposal.state=state;proposal.save()
+                self.assertEqual(self.client.post(reverse('naming-example'),data).json()['proposed'],'')
+        proposal.state='reviewed';proposal.baseline='outdated';proposal.save()
+        self.assertEqual(self.client.post(reverse('naming-example'),data).json()['proposed'],'')
+
+    def test_live_example_cannot_use_another_environments_proposal(self):
+        proposal,data=self.static_example()
+        proposal.environment=Environment.objects.create(name='Other',slug='example-other',manager='https://offline.invalid')
+        proposal.save()
+        result=self.client.post(reverse('naming-example'),data).json()
+        self.assertEqual(result['proposed'],'')
+        self.assertIn('Creating a scope does not supply its value', result['message'])
+
+    def test_static_example_explains_missing_reviewed_scope_values(self):
+        proposal,data=self.static_example();proposal.delete()
+        data.update(match_field='',match_value='')
+        result=self.client.post(reverse('naming-example'),data).json()
+        self.assertEqual(result['status'],'Missing required tags')
+        self.assertIn('naming/address',result['components'][1]['help'])
+        self.assertIn('Prepare component values',result['message'])
+
+    def test_policy_preview_counts_only_groups_matching_that_policy(self):
+        self.vm.name='PRD-RTM';self.vm.save()
+        self.config.update(match_field='Environment',match_value='Production')
+        self.policy.configuration=self.config; self.policy.draft=self.config;self.policy.save()
+        other=copy.deepcopy(self.config);other.update(match_value='Testing')
+        other['components'][0]['mapping']={'Testing':'TST'}
+        NamingPolicy.objects.create(name='Testing policy',enabled=True,configuration=other,draft=other)
+        self.add_vm('test-1','TST-RTM',[{'scope':'Environment','tag':'Testing'},self.tags[1]])
+        from .naming_views import impact
+        summary=impact(self.policy)['summaries'][0]
+        self.assertEqual(summary['total'],2)
+        self.assertEqual(dict(summary['counts']),{'Compliant':2})
+        self.assertEqual(summary['policy_counts'],{'all':1,'compliant':1,'attention':0,'exceptions':0})
+        response=self.client.post(reverse('naming-policy-edit',args=[self.policy.pk]), {'action':'preview'})
+        self.assertContains(response,'This draft policy · 1 matching groups')
+        self.assertContains(response,'Environment totals after this draft · 2 groups')
 
     def test_remove_policy_preserves_history_and_excludes_assessment(self):
         url = reverse('naming-policy-edit', args=[self.policy.pk])

@@ -51,7 +51,9 @@ def impact(policy):
             transitions[(old.get('status', 'New group'), row['status'])] += 1
             if len(examples) < 40 and (old.get('proposed') != row['proposed'] or old.get('status') != row['status'] or row['status'] != 'Compliant'):
                 examples.append({'environment': env.name, 'name': row['name'], 'before': old.get('proposed', ''), 'after': row['proposed'], 'status': row['status'], 'reasons': row['reasons']})
+        policy_rows = [row for row in after if str(policy.pk) in row.get('matching_policy_ids', [])]
         summaries.append({'environment': env, 'counts': naming.counts(after), 'total': len(after), 'warning': warning,
+                          'policy_counts': naming.queue_counts(policy_rows),
                           'new_conflicts': transitions[('Compliant', 'Ambiguous policy')],
                           'transitions': [{'before': a, 'after': b, 'count': count} for (a, b), count in sorted(transitions.items())]})
         stamp.append([env.pk, str(old_snapshot.pk) if old_snapshot else '', str(snapshot.pk) if snapshot else '', warning,
@@ -324,13 +326,6 @@ def compliance(request, pk):
             return redirect('naming-compliance', pk=environment.pk)
         except (ValidationError, UnicodeError, csv.Error) as exc:
             error = '; '.join(exc.messages) if isinstance(exc, ValidationError) else 'Cannot read this UTF-8 CSV file.'
-    totals = naming.counts(rows)
-    tab_counts = {
-        'attention': sum(bool(r['needs_attention']) for r in rows),
-        'compliant': sum(r['status'] == 'Compliant' and not r['needs_attention'] for r in rows),
-        'exceptions': sum(r['status'] == 'Reviewed exception' for r in rows),
-        'all': len(rows),
-    }
     group_type = request.GET.get('group_type', '')
     query, status, policy_id = request.GET.get('q', '').strip(), request.GET.get('status', ''), request.GET.get('policy', '')
     owner_filter = request.GET.get('owner', '')
@@ -341,28 +336,44 @@ def compliance(request, pk):
     for row in rows:
         row['next_url'] = reverse('collection-coverage', args=[environment.pk]) if row['status'] == 'Evidence incomplete' else reverse('naming-policies') if row['status'] in ('Ambiguous policy','No applicable policy') else '#naming-work-actions'
         row['conflicting_policies'] = [policy_names[value] for value in row.get('matching_policy_ids', []) if value in policy_names] if row['status']=='Ambiguous policy' else []
-    filtered = [r for r in rows if (tab == 'all' or tab == 'attention' and r['needs_attention'] or tab == 'compliant' and r['status'] == 'Compliant' and not r['needs_attention'] or tab == 'exceptions' and r['status'] == 'Reviewed exception') and (not query or query.casefold() in (r['name']+' '+r['identity']+' '+str(r['observed_tags'])).casefold())
+    scoped = [r for r in rows if (not query or query.casefold() in (r['name']+' '+r['identity']+' '+str(r['observed_tags'])).casefold())
                 and (not group_type or r['group_type'] == group_type)
-                and (not status or r['status'] == status) and (not policy_id or policy_id in r.get('matching_policy_ids', []))
+                and (not policy_id or policy_id in r.get('matching_policy_ids', []))
                 and (not owner_filter or r['proposal'] and str(r['proposal'].owner_id) == owner_filter)]
+    totals = naming.counts(scoped)
+    scoped = [r for r in scoped if not status or r['status'] == status]
+    tab_counts = naming.queue_counts(scoped)
+    filtered = [r for r in scoped if naming.in_queue(r, tab)]
+    navigation = []
+    for key, label in [('attention', 'Needs attention'), ('compliant', 'Compliant'), ('exceptions', 'Exceptions'), ('all', 'All groups')]:
+        link_params = request.GET.copy()
+        link_params['tab'] = key
+        for transient in ('page', 'export'):
+            link_params.pop(transient, None)
+        navigation.append({'key': key, 'label': label, 'count': tab_counts[key], 'url': '?' + link_params.urlencode()})
     remedies = {'Ambiguous policy': 'Resolve policy overlap', 'No applicable policy': 'Review policy coverage',
                 'Invalid value': 'Inspect invalid values', 'Missing required tags': 'Review missing components',
-                'Duplicate proposed name': 'Compare colliding groups'}
+                'Duplicate proposed name': 'Compare colliding groups', 'Name differs': 'Review name corrections',
+                'Ambiguous tags': 'Review component values', 'Definition review required': 'Review definition evidence',
+                'Evidence incomplete': 'Review collection coverage'}
     if tab == 'attention':
         for row in filtered:
-            if row['status'] not in remedies:
-                continue
-            key = row['status']
-            bucket = groups.setdefault(key, {'issue':key,'count':0,'action':remedies[key], 'policy_counts':{}})
+            changed_review = row['status'] in ('Compliant', 'Reviewed exception')
+            key = row['status'] + ' — review evidence changed' if changed_review else row['status']
+            action = 'Review changed evidence' if changed_review else remedies.get(key, 'Review naming evidence')
+            bucket = groups.setdefault(key, {'issue':key, 'status':row['status'], 'count':0,'action':action, 'policy_counts':{}})
             bucket['count'] += 1
             applicable = {str(pk) for pk in row.get('matching_policy_ids', [])}
             if row.get('policy'):
                 applicable.add(str(row['policy'].pk))
+            if policy_id:
+                applicable &= {policy_id}
             for pk in applicable & policy_names.keys():
                 bucket['policy_counts'][pk] = bucket['policy_counts'].get(pk, 0) + 1
         for bucket in groups.values():
             issue_params = request.GET.copy()
-            issue_params['tab'], issue_params['status'] = 'attention', bucket['issue']
+            issue_params['tab'] = 'attention'
+            issue_params['status'] = bucket['status']
             issue_params.pop('page', None)
             bucket['url'] = '?' + issue_params.urlencode()
             policies = []
@@ -382,7 +393,7 @@ def compliance(request, pk):
     page = Paginator(filtered, table_page_size(request)).get_page(request.GET.get('page'))
     params = request.GET.copy();params.pop('page', None);params.pop('export', None)
     return render(request, 'inventory/naming_compliance.html', {'environment': environment, 'snapshot': snapshot, 'page': page,
-        'tab':tab, 'tab_counts':tab_counts, 'selected_ids':request.POST.getlist('selected'), 'submitted_action':request.POST.get('action', ''), 'issue_groups':list(groups.values()), 'table_total': len(rows), 'group_type': group_type, 'warning': warning, 'totals': totals, 'error': error, 'query': query, 'status': status, 'policy_id': policy_id,
+        'tab':tab, 'tab_counts':tab_counts, 'naming_navigation': navigation, 'counts_filtered':bool(query or group_type or status or policy_id or owner_filter), 'selected_ids':request.POST.getlist('selected'), 'submitted_action':request.POST.get('action', ''), 'issue_groups':list(groups.values()), 'table_total': len(rows), 'group_type': group_type, 'warning': warning, 'totals': totals, 'error': error, 'query': query, 'status': status, 'policy_id': policy_id,
         'proposal_form': proposal_form, 'simulation': simulation, 'owner_filter': owner_filter,
         'owners': get_user_model().objects.filter(is_active=True, is_staff=True).order_by('username'),
         'policies': NamingPolicy.objects.filter(enabled=True, removed_at__isnull=True), 'query_string': params.urlencode()})
@@ -444,13 +455,25 @@ def naming_example(request):
     if not snapshot or snapshot.browsing_status != 'ready':
         return JsonResponse({'message': 'No ready full collection. Manual entry and saving drafts remain available.'})
     warning = 'Collection coverage has warnings; this example is provisional.' if snapshot.summary.get('inventory_warnings') else ''
-    groups = [dict(name=r['name'], identity=r['data__path'] or '', **naming.group_evidence(r['data__configuration']))
-              for r in SnapshotRecord.objects.filter(snapshot=snapshot, view='inventory', data__kind='group').order_by('ordinal').values('name', 'data__path', 'data__configuration')[:100]]
+    groups = [dict(name=r['name'], identity=r['data__path'] or '', definition=r['data__configuration'],
+                   unique_id=r['data__unique_id'], **naming.group_evidence(r['data__configuration']))
+              for r in SnapshotRecord.objects.filter(snapshot=snapshot, view='inventory', data__kind='group').order_by('ordinal').values('name', 'data__path', 'data__configuration', 'data__unique_id')[:100]]
+    proposals = {proposal.group_path: proposal for proposal in NamingProposal.objects.filter(
+        environment=environment, object_type='group', group_path__in=[group['identity'] for group in groups], state='reviewed')}
+    groups = [naming.with_component_values(group, proposals.get(group['identity'])) for group in groups]
     replacement = SimpleNamespace(pk=policy.pk if policy else 0, configuration=config, environment_id=environment.pk, name='Draft example')
     binding = NamingScopeBinding.objects.filter(policy=policy, environment=environment).first() if policy else None
     bindings = {replacement.pk: binding.draft_scopes if binding else {}}
     evaluated = [naming.evaluate(group, [replacement], bindings) for group in groups if config['group_type'] in ('all', group['group_type'])]
+    if config.get('match_mode') == 'single_host_ip':
+        evaluated = [row for row in evaluated if row['policy'] is not None]
     row = next((r for r in evaluated if r['proposed']), next(iter(evaluated), None))
     if not row: return JsonResponse({'message': warning or 'No matching group in the first 100 saved groups. Save the draft and use the full impact preview.'})
+    message = 'Illustrative sample from up to 100 saved groups only. Full impact preview checks all groups, policies and name collisions before activation.'
+    if row['group_type'] == 'static' and not row['proposed'] and any(component['source'] == 'tag' for component in config['components']):
+        message += ' Static groups need reviewed component values for custom scopes. In Naming compliance → All groups, choose Prepare component values, save each scope/value, then Mark proposals reviewed. Creating a scope does not supply its value or extract an IP address.'
+    for component in row['components']:
+        if row['group_type'] == 'static' and component['issue'] == 'Missing required tags':
+            component['help'] = 'Prepare and review a value for ' + component['scope'] + ' in Naming compliance → All groups.'
     return JsonResponse({'name': row['name'], 'environment': environment.name, 'proposed': row['proposed'], 'status': row['status'],
-                         'components': row['components'], 'warning': warning, 'message': 'Illustrative sample from up to 100 saved groups only. Full impact preview checks all groups, policies and name collisions before activation.'})
+                         'components': row['components'], 'warning': warning, 'message': message})

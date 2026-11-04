@@ -9,7 +9,7 @@ class PolicyForm(forms.Form):
     group_type = forms.ChoiceField(choices=[('all', 'All group types'), ('dynamic', 'Dynamic'), ('static', 'Static'), ('mixed', 'Mixed / nested')], initial='all')
     separator = forms.ChoiceField(choices=[('-', 'Hyphen (-)'), ('_', 'Underscore (_)'), ('.', 'Dot (.)'), ('', 'No separator')], required=False)
     max_length = forms.IntegerField(min_value=1, max_value=255, initial=63, label='Maximum name length')
-    match_mode = forms.ChoiceField(choices=[('exact', 'Exact category value'), ('exists', 'Scope exists — any value')], required=False, initial='exact', label='Match condition', help_text='For Scope exists, choose a tag component; no category value is needed. For a general fallback, choose Exact category value and leave both category fields blank.')
+    match_mode = forms.ChoiceField(choices=[('exact', 'Exact category value'), ('exists', 'Scope exists — any value'), ('single_host_ip', 'Exactly one explicit host IP')], required=False, initial='exact', label='Match condition', help_text='Single host IP matches one IPAddressExpression containing one host address (including /32 or /128). Subnets, ranges, multiple members and nested or dynamic definitions are excluded. Category fields are not used. For a general fallback, choose Exact category value and leave both category fields blank.')
     match_field = forms.CharField(max_length=64, required=False, label='Category field', help_text='Choose the tag component whose scope determines which groups match. Required for Scope exists.')
     match_value = forms.CharField(max_length=256, required=False, label='Category tag value', help_text='Exact observed value, before value mapping.')
     revision = forms.IntegerField(widget=forms.HiddenInput, initial=0)
@@ -17,12 +17,12 @@ class PolicyForm(forms.Form):
 
 class ComponentForm(forms.Form):
     field = forms.RegexField(r'^[A-Za-z][A-Za-z0-9 _-]{0,63}$', label='Logical field', max_length=64)
-    source = forms.ChoiceField(choices=[('tag', 'Definition tag / reviewed scope value'), ('fixed', 'Fixed text'), ('identity', 'Group path suffix'), ('type', 'Group type (map to your prefixes)')])
+    source = forms.ChoiceField(choices=[('tag', 'Definition tag / reviewed scope value'), ('fixed', 'Fixed text'), ('identity', 'Group path suffix'), ('type', 'Group type (map to your prefixes)'), ('single_host_ip', 'Explicit single host IP')], help_text='Explicit single host IP reads saved IP membership automatically; no component proposal is needed. Use Static group type and the Exactly one explicit host IP match condition.')
     scope = forms.CharField(max_length=128, required=False, label='Default tag scope')
     literal = forms.CharField(max_length=128, required=False, label='Fixed text')
     required = forms.BooleanField(required=False, initial=True)
     case = forms.ChoiceField(choices=[('upper', 'UPPERCASE'), ('lower', 'lowercase'), ('keep', 'Keep case')])
-    format = forms.ChoiceField(choices=[('alphanumeric', 'Letters and digits'), ('digits', 'Digits only'), ('extended', 'Letters, digits, hyphens, dots and underscores')])
+    format = forms.ChoiceField(choices=[('alphanumeric', 'Letters and digits'), ('digits', 'Digits only'), ('extended', 'Letters, digits, hyphens, dots and underscores'), ('ip_address', 'IP address (IPv4 / IPv6)')])
     max_length = forms.IntegerField(min_value=1, max_value=128, initial=32)
     mapping_text = forms.CharField(required=False, max_length=8000, label='Value mappings', widget=forms.Textarea(attrs={'rows': 3, 'placeholder': 'Production=PRD\nRotterdam=RTM'}), help_text='One observed value=output per line. If mappings are set, unmapped values are invalid.')
 
@@ -40,6 +40,11 @@ class ComponentForm(forms.Form):
                 break
             mappings[before] = after
         data['mapping'] = mappings
+        if data.get('source') == 'single_host_ip':
+            if not data.get('required'): self.add_error('required', 'The explicit host IP must be required.')
+            if data.get('case') != 'keep': self.add_error('case', 'Use Keep case for the canonical host address.')
+            if data.get('format') != 'ip_address': self.add_error('format', 'Select IP address (IPv4 / IPv6).')
+            if mappings: self.add_error('mapping_text', 'Host addresses come directly from membership; leave value mappings empty.')
         return data
 
 
@@ -61,13 +66,20 @@ def configuration(form, formset):
     if field and not any(r['field'] == field and r['source'] == 'tag' for r in rows):
         form.add_error('match_field', 'Choose the logical name of a tag component below.')
     mode = form.cleaned_data.get('match_mode') or 'exact'
+    if mode == 'single_host_ip':
+        if form.cleaned_data['group_type'] != 'static':
+            form.add_error('group_type', 'Select Static for the single host IP condition.')
+        if field or form.cleaned_data.get('match_value'):
+            form.add_error('match_field', 'Leave category fields blank for the single host IP condition.')
+    if any(row['source'] == 'single_host_ip' for row in rows) and mode != 'single_host_ip':
+        form.add_error('match_mode', 'Choose Exactly one explicit host IP for an automatic IP component.')
     if mode == 'exists' and not field:
         form.add_error('match_field', 'Choose a tag component logical field for Scope exists.')
     if mode == 'exists' and form.cleaned_data.get('match_value'):
         form.add_error('match_value', 'Leave category value blank when matching any value in a scope.')
     if mode == 'exact' and bool(field) != bool(form.cleaned_data.get('match_value')):
         form.add_error('match_value', 'Provide both category field and value, or leave both blank.')
-    return {'target': 'group', 'group_type': form.cleaned_data['group_type'], 'separator': form.cleaned_data['separator'], 'max_length': form.cleaned_data['max_length'],
+    return {'target': 'group', 'group_type': form.cleaned_data.get('group_type', ''), 'separator': form.cleaned_data['separator'], 'max_length': form.cleaned_data['max_length'],
             'match_mode': mode, 'match_field': field, 'match_value': form.cleaned_data.get('match_value', ''), 'components': rows}
 
 
