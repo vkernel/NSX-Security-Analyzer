@@ -205,12 +205,15 @@ PVC's `spec` in `database.yaml`, using the class your administrator provides.
 
 ```sh
 kubectl -n nsx-security-analyzer apply -f manifests/migrate.yaml
-kubectl -n nsx-security-analyzer wait --for=condition=complete job/migrate --timeout=900s
+kubectl -n nsx-security-analyzer wait --for=condition=complete job/migrate --timeout=3600s
 kubectl -n nsx-security-analyzer logs job/migrate
 ```
 
 Continue only if the Job completes successfully. A Completed migration pod is normal;
 it initializes the database and then exits. On failure, see troubleshooting below.
+The migration Job allows up to one hour (`activeDeadlineSeconds: 3600`) for
+concurrent index builds over retained snapshots. This budget applies to the
+entire Job, including retries. Follow the progress logs when diagnosing a long run.
 
 ## 5. Start the application
 
@@ -280,7 +283,7 @@ if it restarted. Replace `POD_NAME` with a name from `get pods`.
 | ImagePullBackOff | Image tag exists, registry credentials if private, outbound registry access |
 | Pending | PVC StorageClass/capacity, cluster resources and scheduling events |
 | Migration failed | Database host, credentials, schema permissions and TLS trust |
-| Migration pod running with no new log lines | Updated development images log migration 0063 index progress every 15 seconds; check the actual image revision and use [the migration wait guide](../../docs/workspace-performance.md#diagnosing-a-migration-that-appears-stuck) for counters and blockers. The Job deadline remains 900 seconds; do not start a second migrator |
+| Migration pod running with no new log lines | Updated development images log migration 0063 index progress every 15 seconds; check the actual image revision and use [the migration wait guide](../../docs/workspace-performance.md#diagnosing-a-migration-that-appears-stuck) for counters and blockers. The Job deadline is one hour; do not start a second migrator |
 | Argo CD: `field is immutable` on `migrate` | Adopt the [migration hook and recovery steps](#argo-cd-deployment-and-upgrades), then perform a full application sync |
 | Website returns 400 | Browser hostname is included in allowed hosts |
 | CSRF failure | Trusted origin matches the HTTPS URL and proxy configuration |
@@ -317,6 +320,8 @@ For each version upgrade:
 
 No Docker image rebuild is required to adopt these annotations. They must be in
 the manifests Argo CD actually reads; changing only a local checkout has no effect.
+The same applies to the one-hour migration deadline: sync the updated manifest
+from the branch watched by Argo CD. The next migration hook Job uses that budget.
 
 The manifests support a **full application sync** with this order:
 
@@ -382,7 +387,7 @@ kubectl -n nsx-security-analyzer scale deployment/web deployment/worker deployme
 kubectl -n nsx-security-analyzer delete job migrate --ignore-not-found
 kubectl -n nsx-security-analyzer apply -f manifests/config.yaml
 kubectl -n nsx-security-analyzer apply -f manifests/migrate.yaml
-kubectl -n nsx-security-analyzer wait --for=condition=complete job/migrate --timeout=900s
+kubectl -n nsx-security-analyzer wait --for=condition=complete job/migrate --timeout=3600s
 ```
 
 Only after success:
