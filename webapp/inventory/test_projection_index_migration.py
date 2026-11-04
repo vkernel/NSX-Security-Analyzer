@@ -4,13 +4,14 @@ import threading
 import time
 from unittest.mock import patch
 
-from django.db import connection, connections
+from django.db import connection, connections, DatabaseError
 from django.db.migrations.executor import MigrationExecutor
 from django.db.migrations.recorder import MigrationRecorder
 from django.test import TransactionTestCase
 from django.utils import timezone
 
 from .models import Environment, Snapshot, SnapshotRecord
+from .migration_progress import IndexProgress, logger as progress_logger
 
 migration_module = importlib.import_module('inventory.migrations.0063_snapshot_projection_indexes')
 
@@ -77,6 +78,116 @@ class ProjectionIndexMigrationTests(TransactionTestCase):
             holder.close()
         self.apply()
         self.assertEqual(self.index_state('snapshot_group_projection')[1:], (True, True))
+
+    def test_progress_observer_is_read_only_and_keeps_migration_timeouts_unchanged(self):
+        def settings():
+            with connection.cursor() as cursor:
+                cursor.execute("SELECT current_setting('default_transaction_read_only'), current_setting('statement_timeout'), current_setting('lock_timeout')")
+                return cursor.fetchone()
+        original = settings()
+        progress = IndexProgress(connection, 'snapshot_group_projection', 'inventory_snapshotrecord')
+        observer = progress.observer_connection()
+        try:
+            with observer.cursor() as cursor:
+                cursor.execute("SELECT current_setting('default_transaction_read_only'), current_setting('statement_timeout'), current_setting('lock_timeout')")
+                self.assertEqual(cursor.fetchone(), ('on', '2s', '1s'))
+                self.assertTrue(observer.get_autocommit())
+                with self.assertRaises(DatabaseError):
+                    cursor.execute('CREATE TABLE migration_observer_must_not_write (id integer)')
+        finally:
+            observer.close()
+        self.assertEqual(settings(), original)
+
+    def test_heartbeat_reports_real_writer_wait_and_cancellation_then_retry(self):
+        logs, errors = [], []
+        waiting = threading.Event()
+        writer = connection.copy(alias='progress-writer')
+        writer.ensure_connection()
+        writer.set_autocommit(False)
+        with writer.cursor() as cursor:
+            cursor.execute('LOCK TABLE inventory_snapshotrecord IN ROW EXCLUSIVE MODE')
+            cursor.execute('SELECT pg_backend_pid()')
+            writer_pid = cursor.fetchone()[0]
+
+        def capture(level, message, *args, **kwargs):
+            details = kwargs.get('extra', {}).get('details', {})
+            logs.append(details)
+            matches = [row for row in logs if row.get('event') == 'progress'
+                       and row.get('current_locker_pid') == writer_pid
+                       and 'waiting for writers' in (row.get('phase') or '')]
+            if len(matches) >= 2:
+                waiting.set()
+
+        def migrate():
+            db = connections['default']
+            try:
+                with db.schema_editor(atomic=False) as editor:
+                    self.migration.apply(self.before.clone(), editor)
+            except Exception as error:
+                errors.append(error)
+            finally:
+                db.close()
+
+        thread = threading.Thread(target=migrate, daemon=True)
+        try:
+            with patch('inventory.migration_progress.POLL_INTERVAL_SECONDS', 0.05), patch.object(progress_logger, 'log', side_effect=capture):
+                thread.start()
+                self.assertTrue(waiting.wait(10), 'No repeated progress samples for the real writer wait')
+                samples = [row for row in logs if row.get('current_locker_pid') == writer_pid]
+                sample = samples[-1]
+                self.assertEqual(sample['stage'], 'building')
+                self.assertGreater(sample['elapsed_seconds'], 0)
+                self.assertIn(writer_pid, [row['pid'] for row in sample['blockers']])
+                self.assertIn('tuples_done', sample)
+                self.assertIn('wait_event', sample)
+                self.assertTrue(any(row.get('event') == 'input_size' and 'total_bytes' in row for row in logs))
+                with connection.cursor() as cursor:
+                    cursor.execute('SELECT pg_cancel_backend(%s)', [sample['database_pid']])
+                    self.assertTrue(cursor.fetchone()[0])
+                thread.join(timeout=5)
+                self.assertFalse(thread.is_alive())
+                self.assertTrue(any(row.get('event') == 'failed' and row.get('sqlstate') == '57014' for row in logs))
+        finally:
+            writer.rollback()
+            writer.close()
+            thread.join(timeout=5)
+        self.assertTrue(errors)
+        self.assertFalse(self.index_state('snapshot_group_projection')[1])
+        self.apply()
+        self.assertEqual(self.index_state('snapshot_group_projection')[1:], (True, True))
+        with connection.cursor() as cursor:
+            cursor.execute("SELECT count(*) FROM pg_stat_activity WHERE application_name = 'nsxa-migration-progress'")
+            self.assertEqual(cursor.fetchone()[0], 0)
+
+    def test_observer_failure_does_not_fail_migration_or_log_error_contents(self):
+        logs = []
+        observed = threading.Event()
+        def capture(level, message, *args, **kwargs):
+            details = kwargs.get('extra', {}).get('details', {})
+            logs.append((message, args, details))
+            if details.get('event') == 'observer_unavailable':
+                observed.set()
+        with connection.schema_editor(atomic=False) as editor:
+            add = editor.add_index
+            def add_after_observer_error(model, index, **kwargs):
+                self.assertTrue(observed.wait(3))
+                return add(model, index, **kwargs)
+            with patch.object(progress_logger, 'log', side_effect=capture), \
+                    patch.object(IndexProgress, 'sample', side_effect=RuntimeError('password=observer-canary raw snapshot SQL')), \
+                    patch.object(editor, 'add_index', side_effect=add_after_observer_error):
+                self.migration.apply(self.before.clone(), editor)
+        self.assertNotIn('observer-canary', str(logs))
+        self.assertTrue(any(details.get('event') == 'finished' for _, _, details in logs))
+        self.assertEqual(self.index_state('snapshot_group_projection')[1:], (True, True))
+        self.assertEqual(self.index_state('snapshot_rule_projection')[1:], (True, True))
+
+    def test_sql_plan_does_not_start_progress_observer(self):
+        with patch.object(IndexProgress, '__enter__', side_effect=AssertionError('SQL plans must not monitor')):
+            with connection.schema_editor(atomic=False, collect_sql=True) as editor:
+                self.migration.apply(self.before.clone(), editor)
+                sql = '\n'.join(editor.collected_sql)
+        self.assertEqual(sql.count('CREATE INDEX CONCURRENTLY'), 2)
+        self.assertIsNone(self.index_state('snapshot_group_projection'))
 
     def test_first_index_survives_second_index_failure_and_rows_are_preserved(self):
         env = Environment.objects.create(name='Migration fixture', slug='index-retry', manager='https://offline.invalid')

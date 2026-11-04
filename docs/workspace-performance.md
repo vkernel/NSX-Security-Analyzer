@@ -56,6 +56,20 @@ Do not fake the migration or remove snapshot tables to bypass this error: an exi
 
 Three minutes of `Running migrations:` output alone does not identify the cause. Django writes its `Applying ...` status without a newline until the operation finishes; a log viewer may not display an unfinished line. Corrected 0063 logs a separate line when checking, reusing, removing or building each index, and another when a build finishes. Confirm the migration pod uses the corrected image revision, rather than relying on a cached mutable `development` tag.
 
+Migration 0063 also emits a structured `progress` log every **15 seconds** while an index operation runs. Each line includes the index name, migration backend PID, operation stage, elapsed seconds, PostgreSQL index-build phase, tuple/block/locker counters, wait type/event (for example `IO` / `WalWrite`), and blocking session IDs with their state and transaction age. An `input_size` event reports estimated source rows and heap/total bytes using catalog estimates and relation sizes, without counting or reading snapshot rows. `started`, `finished` and `failed` events bracket each operation; database failures include SQLSTATE.
+
+`phase_observed_seconds` measures time since the observer first saw the current stage/phase. `progress_changed: false` means its phase/counters were unchanged between samples; it is not a verdict that the build is stuck. Counters can be zero or unavailable in some phases, so logs do not invent an overall percentage or completion estimate. A `WalWrite` sample records the current wait, not the cumulative time spent waiting for storage.
+
+The observer uses a separate autocommit, read-only connection, with configured connection/query/lock timeouts capped at 3/2/1 seconds. It cannot hold a long transaction snapshot or change migration connection timeouts. Observation errors produce `observer_unavailable` warnings and leave index work running. No SQL text, snapshot contents or credentials are logged. Normal diagnostics add one activity query per sample, an extra bounded blocker query when needed, and one source-size lookup per index operation. PostgreSQL permissions may limit visible activity; logs expose `activity_visible` and report unavailable diagnostics explicitly.
+
+Follow these logs with:
+
+```sh
+kubectl -n nsx-security-analyzer logs -f job/migrate --timestamps
+```
+
+The logging update leaves the **900-second Kubernetes deadline unchanged**. Logged elapsed time is per index operation; the Job deadline applies to the entire Job. If Kubernetes terminates the pod, it may not emit a final application `failed` event; retain the last progress lines and the Job's `DeadlineExceeded` status. The existing retry recovery still handles matching invalid indexes left by interrupted builds. Recreate a failed migration Job through the normal deployment process using the updated image, after checking that the previous pod has stopped and that no earlier migration backend is still building an index. A running earlier backend must be investigated before retrying.
+
 Concurrent index creation scans the source table and can wait for older transactions. A running Kubernetes pod only confirms that its process is alive. Inspect these read-only queries in the application's PostgreSQL database (use its existing database login):
 
 ```sql
@@ -101,6 +115,6 @@ These are development measurements, not a production latency promise. The naming
 
 PostgreSQL 17 migration and query-plan checks used separate disposable data. The group query selected `snapshot_group_projection`; for the single-snapshot rule fixture PostgreSQL preferred a sequential scan. Production plans depend on snapshot count, row sizes and statistics. Normal cache hits avoid the source-record scans entirely.
 
-The migration-retry and duplicate-session fixes were verified on PostgreSQL 17 with all 795 Django tests, including eight recovery tests. These exercise a fresh install, an unrecorded partial migration, a real cancelled concurrent build leaving an invalid index, conflicting definitions, retained snapshot data, repeated rollback/retry, and a duplicate migrator stopping without waiting or disturbing the session holding the lock. Fresh SQLite migrations and both backends' model checks also pass.
+The migration-retry, duplicate-session and progress-logging fixes were verified on PostgreSQL 17 with all 799 Django tests, including 12 recovery/observation tests. These exercise a fresh install, an unrecorded partial migration, a real cancelled concurrent build leaving an invalid index, conflicting definitions, retained snapshot data, repeated rollback/retry, and a duplicate migrator stopping without waiting or disturbing the session holding the lock. Observer checks cover repeated samples from a real writer-blocked build, blocker IDs, cancellation SQLSTATE, observer session cleanup, read-only/autocommit/timeouts, observation failure isolation and SQL-plan generation without a monitor. Fresh SQLite migrations and both backends' model checks also pass.
 
 Chrome checks cover remote group search, retained selections, matrix generation, both appearance modes, paginated membership drawers and automatic fragment refresh. Additional map checks cover no eager connection requests, fetching on expansion, local reuse on reopening, pinned service filters and stale-evidence recovery.

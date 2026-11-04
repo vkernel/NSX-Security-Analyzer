@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Log PostgreSQL projection-index progress every 15 seconds during migration 0063: phase, elapsed time, tuple/block counters, database waits and blocker IDs, plus approximate source size and completion/failure timing. Use a bounded read-only observer connection; observer errors do not fail migration work. Keep the Kubernetes migration deadline at 900 seconds.
+
 - Stop duplicate projection-index migrations promptly with a clear error instead of waiting silently for another migrator's advisory lock. Log index checks, reuse, concurrent removal and build start/completion. Add database-wait diagnosis steps for Kubernetes deployments.
 
 - Make PostgreSQL projection-index migration 0063 safe to retry after an interrupted deployment: reuse matching valid indexes, rebuild matching invalid indexes concurrently, and preserve snapshot records. Reject conflicting relation definitions without changing them. See recovery instructions in `docs/workspace-performance.md`.

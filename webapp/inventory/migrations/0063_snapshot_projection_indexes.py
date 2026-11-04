@@ -67,6 +67,12 @@ class ProjectionIndex(migrations.AddIndex):
         if schema_editor.collect_sql:
             action = schema_editor.add_index if create else schema_editor.remove_index
             return action(model, self.index, concurrently=True)
+        from inventory.migration_progress import IndexProgress
+
+        with IndexProgress(schema_editor.connection, self.index.name, model._meta.db_table) as progress:
+            self._apply_observed(model, schema_editor, create=create, progress=progress)
+
+    def _apply_observed(self, model, schema_editor, *, create, progress):
         # Session locks survive the commits required by concurrent index DDL.
         # A second migrator must stop, rather than wait silently behind the first.
         lock = ['inventory.0063.projection-index', model._meta.db_table]
@@ -91,9 +97,11 @@ class ProjectionIndex(migrations.AddIndex):
                     if cursor.fetchone()[0]:
                         raise RuntimeError(f'{self.index.name} is still being built; wait for that migration to finish before retrying.')
                     qualified = f'{schema_editor.quote_name(namespace)}.{schema_editor.quote_name(self.index.name)}'
+                    progress.stage = 'removing'
                     logger.info('Migration 0063: removing projection index %s concurrently; this may wait for older transactions', self.index.name)
                     schema_editor.execute(f'DROP INDEX CONCURRENTLY {qualified}')
                 if create:
+                    progress.stage = 'building'
                     logger.info(
                         'Migration 0063: building projection index %s concurrently; '
                         'large tables and older transactions can take time. '
