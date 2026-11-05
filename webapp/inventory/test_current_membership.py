@@ -122,6 +122,18 @@ class CurrentMembershipTests(TestCase):
         self.assertEqual(len(result['items']),25);self.assertTrue(result['has_next']);self.assertTrue(result['stale'])
         self.assertEqual(len(cached(self.snapshot,'vm',self.owner,2)['items']),3)
 
+    def test_firewall_metadata_does_not_count_or_load_member_pages(self):
+        save(self.env,'vm',self.owner,self.four,'complete',[])
+        with self.assertNumQueries(1):
+            metadata=cached(self.snapshot,'vm',self.owner,include_items=False)
+        self.assertEqual(metadata['status'],'complete')
+        self.assertEqual(metadata['items'],[])
+        self.assertEqual(MembershipRelation.objects.filter(present=True).count(),4)
+        save(self.env,'vm',self.owner,[],'unavailable',['Read failed'])
+        metadata=cached(self.snapshot,'vm',self.owner,include_items=False)
+        self.assertEqual(metadata['status'],'unavailable')
+        self.assertTrue(any('earlier checks' in note for note in metadata['notes']))
+
     def test_cache_warmer_skips_fresh_subjects_and_advances_to_unchecked_vms(self):
         save(self.env,'vm',self.owner,self.four,'complete',[])
         SnapshotRecord.objects.create(snapshot=self.snapshot,ordinal=2,view='vms',name='B',compact={'path':'/vm/b'},

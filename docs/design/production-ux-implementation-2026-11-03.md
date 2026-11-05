@@ -241,3 +241,16 @@ Synthetic browser acceptance uses 1,200 VMs, 125 tag-condition candidates, two s
 Screenshots: [Groups](vm-confirmed-references-2026-11-05/groups.png), [Firewall rules](vm-confirmed-references-2026-11-05/firewall.png), [Mobile dark](vm-confirmed-references-2026-11-05/mobile-dark.png).
 
 Verification: all 886 Django inventory tests and 93 JavaScript tests pass. The offline Python 3.12 collector suite passes 112 tests with nine existing skips. Model checks report no changes. Regression cases cover fresh/expired cache reuse, explicit refresh, read-only access, collection priority, partial positives, complete zero, concurrent category activation, late responses, pagination, source selection and related-object navigation.
+
+
+### 5 November — progressive current group membership
+
+Current group VM membership now starts with one 100-member NSX batch and shows 25 rows per UI page. The first four UI pages reuse that batch; requesting another window follows the server-held cursor only when more members are needed. Browser requests carry a scoped refresh-session ID, never an NSX cursor. Member positions are fixed within the session, so another batch cannot move earlier rows. The UI distinguishes loaded members from NSX-reported totals and keeps coverage partial until the traversal is verified complete.
+
+Partial lists add positive relationships without retiring older ones. Complete traversals may retire missing pairs. Direct VM association queries remain independent; a partially loaded group cannot establish a VM's full group list. A changed VM observation invalidates affected group continuations. Snapshot/manager/trust/group/session mismatches, expiry and superseded sessions cannot consume a cursor. Loaded pages remain available, and failed Next requests preserve the previous rows and navigation. Transient errors retry the same cursor; malformed, repeated or inconsistent pages require a new Refresh. Read-only users can browse already-loaded pages, and collection retains priority.
+
+Migration **0066** creates two initially empty paging-cache tables. It does not reindex snapshot data or add browsing requests to collection. Sessions expire after five minutes, with expired sessions pruned on the next group refresh. Each read stays within the existing eight-second deadline; short NSX pages can be followed up to ten times to fill a UI window. A traversal has a 1,000-page limit and remains explicitly incomplete if cut off.
+
+Synthetic acceptance with 10,000 members loaded the initial page in about 180 ms with simulated 40 ms NSX latency: one NSX call for four UI pages, one call at the next batch boundary, and none on Back. All 897 Django inventory tests, 99 JavaScript tests, and the 112-test offline collector suite pass (nine existing collector skips). A final focused rerun covers failed initial checks retaining older positives. PostgreSQL and fresh SQLite migrations and model checks pass. These are synthetic measurements, not a production latency promise.
+
+[Acceptance data](../performance/progressive-group-membership-2026-11-05.json), [desktop](progressive-membership-2026-11-05/desktop.png), [mobile dark](progressive-membership-2026-11-05/mobile-dark.png).

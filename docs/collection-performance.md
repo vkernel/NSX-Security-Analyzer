@@ -1,5 +1,8 @@
 # Collection performance
 
+For the current saved VM membership strategy, its request-cost tradeoffs and
+synthetic measurements, see [Saved VM associations during collection](workspace-performance.md#saved-vm-associations-during-collection--5-november-2026).
+
 For CPU, memory and capacity planning, see [small, medium and large resource sizing](resource-sizing.md).
 
 Development builds from 0.2.2-dev retain fresh inventory and counter checks while reducing transport and fallback overhead.

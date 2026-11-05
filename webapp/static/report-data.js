@@ -147,7 +147,7 @@
     const table=(section,label,columns,path='')=>window.evidenceTable({title:label,columns,current,wide:section==='related_rules',load:page=>load(id,section,page,path)});
     const tags=table('tags','Assigned tags',[{label:'Scope',cell:item=>item.scope||'(empty scope)'},{label:'Value',cell:item=>object(item,'tags')}]);
     const assigned=make('details'),assignedTitle=make('summary','Assigned tags');assigned.dataset.evidenceSection='overview';assigned.dataset.evidenceLazy='true';assigned.append(assignedTitle,tags.panel);assigned.addEventListener('toggle',()=>{if(assigned.open)tags.show();});body.append(assigned);
-    const source=window.membershipSource(body,{kind:'vm',id},{automatic:true});
+    const source=window.membershipSource(body,{kind:'vm',id},{automatic:true,initialSource:summary.resolved_membership_status==='complete'?'saved':null});
     const describe=(data,firewall=false)=>{
       if(!data.items.length)data={...data,empty_message:data.status==='complete'?(firewall?'No saved firewall rules reference this VM’s confirmed groups.':data.source==='saved_snapshot'?'No confirmed group memberships were saved for this VM.':'NSX returned no group associations for this VM.'):
         data.source==='current_nsx'?'VM membership is not established. Refresh to check current NSX.':'Membership was not fully collected in this snapshot. Select Current NSX to check this VM.'};

@@ -149,7 +149,7 @@ class WorkspacePolicyForm(forms.ModelForm):
         from .models import WorkspacePolicy
         model = WorkspacePolicy
         fields = ['stale_hours', 'notify_failed', 'notify_completed', 'notify_coverage']
-        labels = {'stale_hours': 'Stale data after (hours)', 'notify_failed': 'Notify about failed collections', 'notify_completed': 'Notify about completed audits', 'notify_coverage': 'Notify about new coverage issues'}
+        labels = {'stale_hours': 'Stale data after (hours)', 'notify_failed': 'Notify about failed collections', 'notify_completed': 'Notify about completed collections', 'notify_coverage': 'Notify about new coverage issues'}
         help_texts = {'stale_hours': 'Measured from the latest successful full collection. Imported and testing snapshots do not refresh this clock. Paused environments are shown separately.'}
 
 

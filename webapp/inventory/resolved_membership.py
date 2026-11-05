@@ -157,6 +157,12 @@ def vm_links(tags, groups, metadata):
     """Invert only exact, unambiguous saved VM identities; never match by name/tag/IP."""
     if metadata.get('version') != 1:
         return {}, 'not_collected'
+    if metadata.get('method') == 'vm_associations':
+        observations = metadata.get('vms', {})
+        links = {identity: {item['path']: dict(item, status=record['status']) for item in record['items']}
+                 for identity, record in observations.items()}
+        return links, ('complete' if all(record['status'] == 'complete' for record in observations.values())
+                       and tags.get('vm_inventory_complete') is True and not metadata.get('testing') else 'partial')
     aliases = defaultdict(set)
     names = {}
     for vm in tags.get('virtual_machines', []):

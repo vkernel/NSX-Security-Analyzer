@@ -1,0 +1,19 @@
+{
+  "syntheticGroupMembers": 10000,
+  "nsxChunkSize": 100,
+  "uiPageSize": 25,
+  "firstPageMilliseconds": 180,
+  "firstFourUIPagesNSXRequests": 1,
+  "nextChunkNSXRequests": 1,
+  "backNSXRequests": 0,
+  "stableBoundary": true,
+  "reportedTotalVisible": true,
+  "partialCoverageVisible": true,
+  "rawNSXCursorsExposed": false,
+  "errors": [],
+  "mobileOverflow": false,
+  "nsxRequests": [
+    "/policy/api/v1/infra/domains/default/groups/review-000/members/virtual-machines?page_size=100",
+    "/policy/api/v1/infra/domains/default/groups/review-000/members/virtual-machines?page_size=100&cursor=c-100"
+  ]
+}

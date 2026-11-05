@@ -1235,10 +1235,8 @@ def tag_condition_parts(value):
     return (scope, tag) if scope or tag else None
 
 
-def audit_tags(client, groups, testing=False, resources=(), workers=1):
-    """Compare the tag catalog, VM assignments and all inventoried group definitions."""
-    errors, catalog, vms = [], [], []
-    vm_errors, group_errors = [], []
+def read_tag_inventory(client, workers=1):
+    """Retrieve once so association collection and tag analysis share VM identities."""
     paths = ("/infra/tags", "/infra/realized-state/virtual-machines")
     def read_tags(path):
         try:
@@ -1248,8 +1246,16 @@ def audit_tags(client, groups, testing=False, resources=(), workers=1):
             return records, None
         except AuditError as exc:
             return [], str(exc)
-    with ThreadPoolExecutor(max_workers=1 if testing else workers) as pool:
-        inventories = list(pool.map(read_tags, paths))
+    with ThreadPoolExecutor(max_workers=workers) as pool:
+        return list(pool.map(read_tags, paths))
+
+
+def audit_tags(client, groups, testing=False, resources=(), workers=1, inventories=None):
+    """Compare the tag catalog, VM assignments and all inventoried group definitions."""
+    errors, catalog, vms = [], [], []
+    vm_errors, group_errors = [], []
+    if inventories is None:
+        inventories = read_tag_inventory(client, 1 if testing else workers)
     for destination, (records, error) in zip((catalog, vms), inventories):
         destination.extend(records)
         if error:
@@ -1447,7 +1453,9 @@ def audit_tags(client, groups, testing=False, resources=(), workers=1):
     return {"schema_version": 2, "conditions": condition_pool, "condition_sets": condition_sets,
             "unmatched_conditions": unmatched, "objects": sorted(records.values(), key=lambda r: (r["scope"], r["name"])),
             "errors": sorted(set(errors + vm_errors + group_errors)), "unsupported_conditions": unsupported_ids,
-            "vm_inventory_complete": not testing and not vm_errors,
+            "vm_inventory_complete": not testing and not vm_errors and not any(
+                warning.get('endpoint') == '/infra/realized-state/virtual-machines'
+                for warning in (client.inventory_warnings if isinstance(getattr(client, 'inventory_warnings', None), list) else [])),
             "virtual_machines": [{k:v for k,v in vm.items() if k in {"path","id","external_id","display_name","power_state","compute_ids","host_id","source","guest_info","tags"}} for vm in vms if not vm.get("marked_for_delete")],
             "testing": testing, "vms_scanned": len(vms), "groups_scanned": len(groups),
             "note": TAG_NOTE, "statuses": TAG_STATUSES}
@@ -1455,7 +1463,7 @@ def audit_tags(client, groups, testing=False, resources=(), workers=1):
 
 
 def iter_vm_inventory_rows(report):
-    """Relate saved tag assignments to configuration references, not resolved membership."""
+    """Keep tag candidates separate from authoritative saved VM associations."""
     tags = report.get("tags", {})
     by_vm = {}
     for tag in tags.get("objects", []):
@@ -1471,13 +1479,16 @@ def iter_vm_inventory_rows(report):
     from .resolved_membership import vm_links
     resolved, resolved_status = vm_links(tags, report.get('inventory', {}).get('groups', []),
                                          report.get('membership_evidence', {}))
+    association_based = report.get('membership_evidence', {}).get('method') == 'vm_associations'
     for vm in raw:
         identity = vm.get("path") or vm.get("external_id") or vm.get("id")
         if not identity:
             continue
         related = by_vm.get(identity, [])
         groups, refs = {}, {}
-        for tag in related:
+        # New VM reports use actual associations. Avoid materializing the old
+        # tag-candidate group/rule cross-product that this drawer no longer uses.
+        for tag in (() if association_based else related):
             # Group tags are metadata, so exclude assignment-only relationships.
             groups.update(tag.get("group_conditions", {}))
             for ref in tag.get("firewall_references", []):
@@ -1500,9 +1511,15 @@ def iter_vm_inventory_rows(report):
                "group_count":len(groups), "tags":[{"scope":t.get("scope", ""),"tag":t["name"]} for t in related],
                "related_groups":[{"path":path,"name":name} for path,name in sorted(groups.items())],
                "related_rules":list(refs.values()), "vm_details":vm}
-        row.update(membership_evidence_version=1, resolved_membership_status=resolved_status,
+        evidence = report.get('membership_evidence', {})
+        observation = evidence.get('vms', {}).get(identity, {})
+        status = observation.get('status', 'unavailable') if evidence.get('method') == 'vm_associations' else resolved_status
+        row.update(membership_evidence_version=1, resolved_membership_status=status,
                    resolved_groups=sorted(resolved.get(identity, {}).values(), key=lambda item: (item['name'].casefold(), item['path'])),
-                   resolved_group_count=(len(resolved.get(identity, {})) if resolved_status in ('complete', 'partial') or resolved.get(identity) else None))
+                   resolved_group_count=(len(resolved.get(identity, {})) if status in ('complete', 'partial') or resolved.get(identity) else None),
+                   resolved_membership_notes=observation.get('notes', []),
+                   resolved_membership_scope=evidence.get('scope'),
+                   resolved_membership_checked_at=observation.get('checked_at'))
         yield row
 
 def vm_inventory_rows(report):
@@ -1778,15 +1795,17 @@ def audit(client, workers=4, testing=False, progress=None):
     LOG.info("Checking membership for %d groups...", len(groups))
     membership_progress = {"completed": 0, "last_log": time.monotonic()}
     resolved_members = {}
+    tag_inventories, membership_evidence, association_stats = None, {}, {}
+    associated_groups = set()
     from .member_collection_budget import DetailBudget
-    # Browsing enrichment must not add NSX calls to the collection critical path.
-    # Retain identities already returned by mandatory checks, but never page them.
+    # Reuse cleanup probe samples for other categories; never expand their pages.
+    # Authoritative VM browsing edges come from the separate compact association pass.
     detail_budget = DetailBudget(seconds=0, requests=0)
     membership_lock = threading.Lock()
-    membership_diagnostics = {'groups_checked': 0, 'probe_calls': 0, 'calls_per_group': {}, 'outcomes': {}, 'endpoints': {}, 'typed_probe_groups': 0, 'inapplicable_probes_omitted': 0, 'vm_probe_comparison': {}}
+    membership_diagnostics = {'groups_checked': 0, 'probe_calls': 0, 'calls_per_group': {}, 'outcomes': {}, 'endpoints': {}, 'typed_probe_groups': 0, 'inapplicable_probes_omitted': 0, 'vm_probe_comparison': {}, 'positive_association_reuses': 0}
     group_inventory = {g["path"]: g for g in all_groups}
     scope_cache = {}
-    scopes = {g['path']: membership_scope(g, group_inventory, scope_cache) for g in groups}
+    scopes = {}
     fast_paths = set()
     verification_failed = threading.Event()
     # Rotate verification daily; Sunday performs a comprehensive pass.
@@ -1799,23 +1818,28 @@ def audit(client, workers=4, testing=False, progress=None):
         group_budget = detail_budget.group(group['path'])
         probe = MembershipProbe(client)
         eligible = not testing and vm_fast_eligible(group)
-        verify = eligible and (full_verification or int(hashlib.sha256((str(verification_day) + group['path']).encode()).hexdigest(), 16) % 20 == 0)
+        verify = eligible and group['path'] not in associated_groups and (full_verification or int(hashlib.sha256((str(verification_day) + group['path']).encode()).hexdigest(), 16) % 20 == 0)
         fast = eligible and not verify
-        result = membership(probe, group, group_inventory, scopes[group['path']], vm_fast=fast)
+        reused = group['path'] in associated_groups
+        # Fresh positive membership proves nonempty, regardless of expression.
+        # Missing/empty association results NEVER bypass empty-group checks.
+        result = (('nonempty', ['Confirmed VM membership from current VM group associations.']) if reused
+                  else membership(probe, group, group_inventory, scopes[group['path']], vm_fast=fast))
         from .resolved_membership import collect as collect_members
         resolved_members[group['path']] = collect_members(client, group, probe=probe, testing=testing, budget=group_budget)
         used = bool(result[0] == 'empty' and fast and probe.calls == 1)
-        if verify and (probe.results.get('virtual-machines') in ('error', 'incomplete') or (probe.results.get('virtual-machines') == 'negative' and probe.vm_comparison() != 'All three checks empty')):
+        if verify and not reused and (probe.results.get('virtual-machines') in ('error', 'incomplete') or (probe.results.get('virtual-machines') == 'negative' and probe.vm_comparison() != 'All three checks empty')):
             verification_failed.set()
         with membership_lock:
             membership_diagnostics['groups_checked'] += 1
+            membership_diagnostics['positive_association_reuses'] += int(reused)
             fast_stats = membership_diagnostics['vm_fast_path']
             fast_stats['eligible'] += int(eligible)
             fast_stats['verification_groups'] += int(verify)
             fast_stats['used'] += int(used)
             if used:
                 fast_paths.add(group['path'])
-            if membership_endpoints(group) == ('ip-addresses', 'virtual-machines', 'logical-ports'):
+            if not reused and membership_endpoints(group) == ('ip-addresses', 'virtual-machines', 'logical-ports'):
                 comparisons = membership_diagnostics['vm_probe_comparison']
                 outcome = probe.vm_comparison()
                 comparisons[outcome] = comparisons.get(outcome, 0) + 1
@@ -1841,7 +1865,16 @@ def audit(client, workers=4, testing=False, progress=None):
                 membership_progress["last_log"] = now
         return result
     def read_membership():
+        nonlocal tag_inventories, membership_evidence, association_stats
         started = time.perf_counter()
+        tag_inventories = read_tag_inventory(client, workers)
+        from .vm_associations import collect as collect_associations
+        membership_evidence, association_stats = collect_associations(
+            client, tag_inventories[1][0], workers=workers, testing=testing)
+        associated_groups.update(item['path'] for record in membership_evidence['vms'].values()
+                                 for item in record['items'])
+        scopes.update((g['path'], membership_scope(g, group_inventory, scope_cache))
+                      for g in groups if g['path'] not in associated_groups)
         with ThreadPoolExecutor(max_workers=workers) as members_pool:
             result = dict(zip((g["path"] for g in groups), members_pool.map(check_membership, groups)))
             if verification_failed.is_set():
@@ -1878,7 +1911,7 @@ def audit(client, workers=4, testing=False, progress=None):
             progress(2, "Completing firewall rules and counters")
             dfw, dfw_configuration, phases["dfw"] = dfw_future.result()
             phases['search_and_dfw'] = round(time.perf_counter()-combined_started, 2)
-            progress(3, "Checking group membership and references")
+            progress(3, "Collecting VM associations and checking group membership")
             memberships, phases['membership'] = membership_future.result()
         except BaseException:
             search_future.cancel()
@@ -1889,7 +1922,9 @@ def audit(client, workers=4, testing=False, progress=None):
         endpoint: dict(Counter(evidence['endpoints'][endpoint]['status'] for evidence in resolved_members.values()))
         for endpoint in MEMBERSHIP_ENDPOINTS}
     membership_diagnostics['member_details'] = detail_budget.summary()
-    LOG.info('Saved member list coverage: %s', membership_diagnostics['saved_member_lists'])
+    membership_diagnostics['vm_associations'] = association_stats
+    phases['vm_associations'] = association_stats['seconds']
+    LOG.info('Probe sample coverage before VM association projection: %s', membership_diagnostics['saved_member_lists'])
     phases["parallel_retrieval"] = round(time.perf_counter() - combined_started, 2)
     phase = time.perf_counter()
     refs = collect_references(resources + all_groups + services + dfw_configuration, groups + custom)
@@ -1971,14 +2006,16 @@ def audit(client, workers=4, testing=False, progress=None):
     LOG.info("Checking tag inventory, VM assignments and group use...")
     progress(4, "Checking tags and VM assignments")
     tag_started = time.perf_counter()
-    tags = audit_tags(client, all_groups, testing=testing, workers=workers, resources=resources + all_groups + services + dfw_configuration)
+    tags = audit_tags(client, all_groups, testing=testing, workers=workers, inventories=tag_inventories,
+                      resources=resources + all_groups + services + dfw_configuration)
     tags["search_coverage"] = search_coverage
     add_tag_firewall_references(tags, all_groups, resources + all_groups + dfw_configuration)
-    membership_evidence = {'version': 1, 'scope': 'Audited local groups', 'testing': testing,
-                           'excluded_group_count': len(all_groups) - len(groups)}
-    # Bind exact identities once, so group members and inverse VM links agree.
-    from .resolved_membership import vm_links
-    vm_links(tags, inventory['groups'], membership_evidence)
+    from .vm_associations import apply_to_groups
+    apply_to_groups(tags, inventory['groups'], membership_evidence)
+    membership_diagnostics['saved_member_lists']['virtual-machines'] = dict(Counter(
+        group['resolved_membership']['endpoints']['virtual-machines']['status'] for group in inventory['groups']))
+    LOG.info('Saved VM association coverage: %s inverse_status=%s positive_group_probes_avoided=%d',
+             association_stats, membership_evidence['inverse_status'], membership_diagnostics['positive_association_reuses'])
     phases["tags"] = round(time.perf_counter() - tag_started, 2)
     return {"inventory_warnings": getattr(client, "inventory_warnings", []) if isinstance(getattr(client, "inventory_warnings", []), list) else [],
             "inventory": inventory, "tags": tags, "membership_evidence": membership_evidence,
@@ -2015,16 +2052,21 @@ def performance_description(report):
     performance = report.get("performance", {})
     http = performance.get("http", {})
     concurrency = performance.get("concurrency", {})
+    associations = performance.get('membership', {}).get('vm_associations')
+    coverage = (" VM associations: {} of {} VM lookups complete; {} association requests."
+                " Incomplete lookups leave missing groups and firewall references unknown.").format(
+                    display_number(associations.get('statuses', {}).get('complete', 0)),
+                    display_number(associations['vms']), display_number(associations['requests'])) if associations else ''
     if concurrency.get("mode") == "automatic":
         return ("Saved audit retrieval: " if report.get("rendered_from_saved_report") else "Fresh retrieval: ") + (
             "{} HTTP requests, {} retries; {} seconds. Automatic concurrency limits: started at {}, peaked at {}, "
             "finished at {} concurrent requests (maximum {}).").format(
                 display_number(http.get("requests", "—")), display_number(http.get("retries", 0)),
                 display_number(performance.get("elapsed_seconds", "—")), concurrency["initial"],
-                concurrency["peak"], concurrency["final"], concurrency["maximum"])
+                concurrency["peak"], concurrency["final"], concurrency["maximum"]) + coverage
     return ("TESTING SAMPLE — " if report.get("testing") else "") + ("Previously imported snapshot: " if report.get("rendered_from_saved_report") else "Fresh retrieval: ") + "{} HTTP requests, {} retries; {} seconds, {} workers.".format(
         display_number(http.get("requests", "—")), display_number(http.get("retries", 0)),
-        display_number(performance.get("elapsed_seconds", "—")), display_number(performance.get("workers", "—")))
+        display_number(performance.get("elapsed_seconds", "—")), display_number(performance.get("workers", "—"))) + coverage
 
 
 def overview_charts(groups, services, rules, testing=False):

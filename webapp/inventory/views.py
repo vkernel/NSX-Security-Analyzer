@@ -153,7 +153,7 @@ def environment_edit(request, pk=None):
         with transaction.atomic():
             current = Environment.objects.select_for_update().get(pk=pk) if pk else None
             if current and current.jobs.filter(status__in=["queued", "running"]).exists():
-                form.add_error(None, "Wait for the active audit to finish before editing this environment.")
+                form.add_error(None, "Wait for the active collection to finish before editing this environment.")
             elif current and current.manager != form.cleaned_data["manager"] and current.snapshots.exists():
                 form.add_error("manager", "Create a new environment for a different manager to preserve history.")
             else:
@@ -206,7 +206,7 @@ def collect(request, pk):
     environment = get_object_or_404(page_queries.environments(), pk=pk)
     try:
         enqueue(environment, request.user)
-        messages.success(request, "Audit queued. The worker will collect a new snapshot.")
+        messages.success(request, "Collection queued. Your collection is waiting to start. A new snapshot will be available when it completes.")
     except ValidationError as exc:
         from .audit_events import record
         record('collection.request_rejected', 'Environment', pk, outcome='failed')
@@ -226,7 +226,7 @@ def stop_collection(request, pk):
         messages.error(request, "The stop request could not be saved because the database is unavailable or busy. The collection may still be running. Ask an administrator to stop the worker and restore database availability.")
         return redirect('collection-history', pk=job.environment_id)
     if requested:
-        messages.success(request, "Stop requested. The worker will terminate the collection; earlier snapshots remain available.")
+        messages.success(request, "Stop requested. The collection will stop; earlier snapshots remain available.")
     else:
         messages.info(request, "This collection has already finished.")
     return redirect('collection-history', pk=job.environment_id)
@@ -561,9 +561,9 @@ def notifications(request):
     for job in jobs.order_by('-finished_at')[:50]:
         snapshot = getattr(job, 'snapshot', None)
         issues = (job.new_coverage_issues or 0) if snapshot else 0
-        label = 'Collection failed' if job.status == 'failed' else 'Audit completed'
+        label = 'Collection failed' if job.status == 'failed' else 'Collection completed'
         if job.testing:
-            label = 'Testing collection failed' if job.status == 'failed' else 'Testing audit completed'
+            label = 'Testing collection failed' if job.status == 'failed' else 'Testing collection completed'
         if notify_coverage and issues:
             label += f' · {issues} new coverage issue(s)'
         items.append({'id': str(job.pk), 'label': label, 'environment': job.environment.name, 'at': job.finished_at.isoformat(),

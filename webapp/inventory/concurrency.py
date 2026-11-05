@@ -10,6 +10,8 @@ LOG = logging.getLogger('inventory.collector')
 
 
 def request_category(path, params=None):
+    if path.endswith('/virtual-machine-group-associations'):
+        return 'vm_group_associations'
     if path.endswith('/statistics'):
         return 'rule_statistics' if '/rules/' in path else 'policy_statistics'
     if '/members/' in path:

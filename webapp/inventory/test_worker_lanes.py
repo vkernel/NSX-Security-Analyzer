@@ -56,7 +56,7 @@ class LaneClaimsTests(TestCase):
 
     def test_legacy_queued_wording_is_normalized(self):
         job=AuditJob(progress_stage='Waiting for an audit worker')
-        self.assertEqual(job.progress['stage'],'Waiting for a collection worker')
+        self.assertEqual(job.progress['stage'],'Waiting to start')
 
 
 class SupervisorTests(SimpleTestCase):

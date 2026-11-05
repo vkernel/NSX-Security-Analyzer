@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- Save direct VM-to-group associations during collection instead of treating existence-probe samples as full saved membership. Share the exact saved edges across VM counts, group member lists and firewall references, including groups excluded from cleanup. Track completeness per VM; reuse positive associations to skip redundant group probes while retaining existing negative checks. Reuse the VM inventory, remove obsolete per-VM tag-candidate expansion, log association coverage/cost, and open complete saved VM references without a live NSX lookup. Existing snapshots require a fresh collection to obtain missing historical evidence; this collection fix adds no migration. Request savings depend on VM/group distribution.
+
+- Load live group VM members progressively in 100-member NSX batches and 25-row UI pages. Keep stable session positions, reuse loaded pages, display loaded/reported totals, and require a verified complete traversal before retiring old memberships. Scope server-side cursors to the environment, group, snapshot and refresh session; reject expired/superseded/changed continuations and preserve loaded rows on retries. Direct VM association lookups and collection are unchanged. Apply additive cache migration 0066.
+
+- Show cached positive VM memberships immediately while stale/incomplete observations refresh in the background. Retain stale labels, timestamps, partial coverage and failure messages. Reuse the first page returned by explicit group refresh and skip member counts/page loading when returning firewall references. Collection behavior and snapshot evidence are unchanged.
+
+- Use collection wording for queued confirmations, running status, notifications, progress, stop messages and environment history. Display Collecting and Waiting to start consistently, including retained queued jobs, without changing database states or queue behavior.
+
 - Simplify VM References to confirmed Groups and Firewall rules. Move assigned tags into Summary and remove the VM Members, Tag references and Tag-based rules tabs. Lazily refresh missing/stale current membership when an operator opens References, reuse fresh cache, retain explicit Refresh and separate historical snapshot evidence, and distinguish unknown membership from a complete empty result. Main collection adds no requests; no new migration beyond 0065.
 
 - Replace budget-limited browsing scans during collection with explicit, cached VM-to-group association checks. Share current relationships across VM/group drawers with per-owner completeness, timestamps, source-preserving navigation, pagination and separate immutable snapshot evidence. Label partial counts and tag possibilities clearly; use confirmed memberships for VM firewall references. Add a separate collection-aware cache-warming command. Apply additive migration 0065; detailed browsing adds no NSX requests to the main collection.

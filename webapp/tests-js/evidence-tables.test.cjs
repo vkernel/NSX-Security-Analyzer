@@ -63,6 +63,18 @@ function currentResult(items=[],extra={}){return {items,status:'complete',saved_
 function autoVm(dom){dom.window.document.getElementById('detail-dialog').membershipInitialSource=null;}
 const four=Array.from({length:4},(_,i)=>({path:'/infra/groups/'+i,name:'Actual group '+i}));
 
+test('a complete saved VM association list opens without current NSX requests',async()=>{
+ const dom=setup(),w=dom.window,d=w.document,body=d.getElementById('detail-body');autoVm(dom);
+ const calls=[];w.fetch=async()=>{throw Error('Complete saved evidence must not check current NSX automatically');};
+ w.reportData=async(_,q)=>{calls.push(q.section);return {items:q.section==='resolved_groups'?four:[rule],status:'complete',source:'saved_snapshot'};};
+ await w.showVmRelationships(body,null,7,{...summary,resolved_group_count:4,resolved_membership_status:'complete'});
+ tab(d,'References');await tick();assert.equal(d.querySelector('.evidence-membership-source select').value,'saved');
+ assert.equal(d.querySelector('#evidence-references tbody').children.length,4);
+ tab(d,'Firewall rules',d.querySelector('#evidence-references .evidence-category-tabs'));await tick();
+ assert.ok(calls.includes('confirmed_rules'));assert.match(d.querySelector('#evidence-references').textContent,/ALLOW|DROP/);
+ dom.window.close();
+});
+
 test('VM References lazily refreshes missing associations once and keeps snapshot evidence separate',async()=>{
  const dom=setup(),w=dom.window,d=w.document,body=d.getElementById('detail-body'),calls=[],savedCalls=[];autoVm(dom);
  w.reportData=async(_,q)=>{savedCalls.push(q.section);return q.section==='resolved_groups'?{items:four.slice(0,2),status:'partial'}:responses[q.section];};
@@ -128,4 +140,59 @@ test('switching reference categories during initial lookup shares one automatic 
 test('leaving a VM before cache metadata returns prevents the automatic NSX check',async()=>{
  const dom=setup(),w=dom.window,d=w.document,body=d.getElementById('detail-body'),methods=[];autoVm(dom);let resolveCache;
  w.fetch=async(url,opts)=>{methods.push(opts.method);return new Promise(r=>resolveCache=r);};await w.showVmRelationships(body,null,7,summary);tab(d,'References');body.evidenceGeneration={};body.replaceChildren();resolveCache({ok:true,json:async()=>currentResult([],{status:'not_collected',stale:true})});await tick();assert.deepEqual(methods,['GET']);assert.equal(body.textContent,'');dom.window.close();
+});
+
+test('stale positive groups display before NSX responds, then update groups and firewall coverage',async()=>{
+ const dom=setup(),w=dom.window,d=w.document,body=d.getElementById('detail-body');autoVm(dom);let finishRefresh,posts=0;
+ w.fetch=async(url,opts)=>{
+  if(opts.method==='POST'){posts++;return new Promise(resolve=>finishRefresh=resolve);}
+  return {ok:true,json:async()=>String(url).includes('section=firewall')?currentResult([rule],{stale:true}):currentResult(four,{stale:true})};
+ };
+ await w.showVmRelationships(body,null,7,summary);tab(d,'References');await tick();
+ assert.equal(d.querySelector('#evidence-references tbody').children.length,4);assert.match(body.textContent,/Stale observation/);assert.match(body.textContent,/Checking current NSX membership/);assert.equal(posts,1);
+ tab(d,'Firewall rules',d.querySelector('#evidence-references .evidence-category-tabs'));await tick();assert.match(d.querySelector('.evidence-firewall-table').textContent,/DROP/);
+ finishRefresh({ok:true,json:async()=>currentResult(four.slice(0,3))});await tick();await tick();
+ tab(d,'Groups',d.querySelector('#evidence-references .evidence-category-tabs'));await tick();assert.equal(d.querySelector('#evidence-references tbody').children.length,3);assert.doesNotMatch(d.querySelector('#evidence-references .evidence-table-section:not([hidden])').textContent,/Stale observation/);assert.equal(posts,1);dom.window.close();
+});
+
+test('background refresh failure keeps stale groups visible and a late result cannot touch another drawer',async()=>{
+ const dom=setup(),w=dom.window,d=w.document,body=d.getElementById('detail-body');autoVm(dom);let finishRefresh;
+ w.fetch=async(url,opts)=>opts.method==='POST'?new Promise(resolve=>finishRefresh=resolve):{ok:true,json:async()=>currentResult(four,{stale:true})};
+ await w.showVmRelationships(body,null,7,summary);tab(d,'References');await tick();
+ finishRefresh({ok:false,json:async()=>({error:'NSX unavailable; cached evidence retained.'})});await tick();assert.equal(d.querySelector('#evidence-references tbody').children.length,4);assert.match(body.textContent,/NSX unavailable/);assert.match(body.textContent,/Stale observation/);
+ body.querySelector('.evidence-membership-source button').click();body.evidenceGeneration={};body.replaceChildren();finishRefresh({ok:true,json:async()=>currentResult([])});await tick();assert.equal(body.textContent,'');dom.window.close();
+});
+
+test('group refresh uses the returned first page without an extra app request',async()=>{
+ const dom=setup(),w=dom.window,d=w.document,body=d.getElementById('detail-body'),calls=[];
+ body.evidenceGeneration={};const source=w.membershipSource(body,{kind:'group',path:'/infra/domains/default/groups/web'});body.append(source.panel);w.fetch=async(url,opts)=>{calls.push(opts.method);return {ok:true,json:async()=>currentResult(four)};};
+ body.querySelector('button').click();await tick();const result=await source.load('',0,()=>{throw Error('Wrong evidence source');});assert.equal(result.items.length,4);assert.deepEqual(calls,['POST']);dom.window.close();
+});
+
+function groupChunk(page=0,extra={}){const loaded=extra.loaded_count??100;return {items:Array.from({length:25},(_,i)=>({external_id:'vm-'+String(page*25+i).padStart(4,'0'),name:'VM '+(page*25+i)})),page,status:'partial',source:'current_nsx',stale:false,loaded_count:loaded,saved_count:loaded,reported_count:4075,paging_session:'session-one',can_continue:true,can_refresh:true,has_next:true,...extra};}
+
+test('group paging loads 100 once, renders 25, fetches another chunk only at its boundary and keeps Back stable',async()=>{
+ const dom=setup(),w=dom.window,d=w.document,body=d.getElementById('detail-body'),calls=[];body.evidenceGeneration={};
+ const source=w.membershipSource(body,{kind:'group',path:'/infra/domains/default/groups/web'});body.append(source.panel);
+ w.fetch=async(url,opts)=>{const query=new URL(url).searchParams,page=Number(opts.method==='POST'?opts.body.get('page'):query.get('page'));calls.push({method:opts.method,page,session:query.get('paging_session'),mode:opts.body?.get('refresh_mode')});return {ok:true,json:async()=>opts.method==='POST'?(opts.body.get('refresh_mode')==='continue'?groupChunk(page,{loaded_count:200}):groupChunk()):groupChunk(page,{items:page===4?[]:groupChunk(page).items,needs_more:page===4})};};
+ const table=w.evidenceTable({title:'Group VMs',columns:[{label:'VM',cell:i=>i.name}],load:page=>source.load('',page,()=>({items:[]}))});source.register(table);body.append(table.panel);
+ source.panel.querySelector('button').click();await tick();await tick();assert.equal(table.panel.querySelectorAll('tbody tr').length,25);assert.match(table.panel.textContent,/100 loaded · 4075 reported by NSX/);assert.deepEqual(calls.map(c=>c.method),['POST']);
+ for(let page=1;page<=4;page++){table.panel.querySelector('[aria-label="Next group vms"]').click();await tick();await tick();assert.equal(table.panel.querySelector('tbody tr').textContent,'VM '+page*25);}
+ assert.equal(calls.filter(c=>c.method==='POST').length,2);const continuation=calls.find(c=>c.mode==='continue');assert.equal(continuation.page,4);assert.equal(continuation.session,'session-one');
+ table.panel.querySelector('[aria-label="Previous group vms"]').click();await tick();assert.equal(table.panel.querySelector('tbody tr').textContent,'VM 75');assert.equal(calls.filter(c=>c.method==='POST').length,2);dom.window.close();
+});
+
+test('failed next chunk keeps current rows and navigation available, Retry reuses the session',async()=>{
+ const dom=setup(),w=dom.window,d=w.document,body=d.getElementById('detail-body');body.evidenceGeneration={};let failed=true,posts=0;
+ const source=w.membershipSource(body,{kind:'group',path:'/infra/domains/default/groups/web'});body.append(source.panel);
+ w.fetch=async(url,opts)=>{const page=Number(opts.method==='POST'?opts.body.get('page'):new URL(url).searchParams.get('page'));if(opts.method==='POST'&&opts.body.get('refresh_mode')==='continue'){posts++;if(failed)return {ok:false,json:async()=>({error:'NSX next page unavailable; retry.'})};return {ok:true,json:async()=>groupChunk(page,{loaded_count:200})};}return {ok:true,json:async()=>groupChunk(page,{items:page===4?[]:groupChunk(page).items,needs_more:page===4})};};
+ const table=w.evidenceTable({title:'Group VMs',columns:[{label:'VM',cell:i=>i.name}],load:page=>source.load('',page,()=>({items:[]}))});source.register(table);body.append(table.panel);source.panel.querySelector('button').click();await tick();
+ for(let i=0;i<4;i++){table.panel.querySelector('[aria-label="Next group vms"]').click();await tick();await tick();}
+ assert.equal(table.panel.querySelector('tbody tr').textContent,'VM 75');assert.match(table.panel.textContent,/showing the previous loaded page/);assert.equal(table.panel.querySelector('[aria-label="Previous group vms"]').disabled,false);
+ failed=false;[...table.panel.querySelectorAll('button')].find(b=>b.textContent==='Retry').click();await tick();await tick();assert.equal(table.panel.querySelector('tbody tr').textContent,'VM 100');assert.equal(posts,2);dom.window.close();
+});
+
+test('read-only group paging cannot silently start an NSX continuation',async()=>{
+ const dom=setup(),w=dom.window,d=w.document,body=d.getElementById('detail-body'),methods=[];body.evidenceGeneration={};const source=w.membershipSource(body,{kind:'group',path:'/infra/domains/default/groups/web'});body.append(source.panel);source.panel.querySelector('select').value='current';w.fetch=async(url,opts)=>{methods.push(opts.method);return {ok:true,json:async()=>groupChunk(4,{items:[],needs_more:true,can_refresh:false})};};
+ await assert.rejects(source.load('',4,()=>{}),/An operator must load more/);assert.deepEqual(methods,['GET']);dom.window.close();
 });

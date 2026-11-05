@@ -18,17 +18,79 @@ Segmentation, VM-to-VM investigations and naming reviews reuse derived snapshot 
 
 The caches are disposable. Archiving/rebuilding the browsing index deletes them; restoring it prepares a fresh projection. Deleting the snapshot cascades to its derived rows, including assembled maps. A projection version change discards dependent maps/membership/naming caches. Saving changed record data also invalidates them; changes to unrelated index metadata do not. Grouping-scope changes select a different map-cache key.
 
-## Targeted membership observations · 5 November 2026
+## Saved VM associations during collection · 5 November 2026
 
-The main collection performs its mandatory cleanup membership checks only. It retains identities already returned by those probes and explicit configured IP entries, but does not expand member pages for browsing. This supersedes release `3d91255`'s 300-second/2,000-request detail budget: that cap bounded work but could save two of a VM's four memberships. The four `NSX_MEMBERSHIP_DETAIL_*` settings are removed and no longer change collection behavior. Existing cleanup classification, live execution verification, request pacing, adaptive concurrency and the overall deadline are retained.
+The prior probe-only collection saved at most the first identity returned by an
+existence check. Positive IP checks could skip the VM endpoint entirely. A clean
+collection therefore did not imply complete saved VM membership. Inverting those
+samples produced zero confirmed groups with unknown totals, and could omit saved
+firewall references. Live checks used a different direct association API and never
+repaired historical snapshot rows. The earlier live-browsing optimizations did not
+address this collection defect.
+
+Collection now reads the existing VM inventory once, then requests
+`/infra/virtual-machine-group-associations` for each unique VM external ID, using
+1,000-reference pages and validating continuations. The same collection client,
+request pacing, adaptive concurrency and overall deadline apply. There are no
+per-group full IP/port/segment downloads or per-edge HTTP requests. A positive
+association replaces that group's nonempty probe; absent associations do not
+bypass existing cleanup checks. Search and DFW retrieval still overlap this work.
+Permission/unsupported responses suppress fan-out for that scope. Missing external
+IDs, duplicate identities, malformed/changing pages and failed reads remain
+explicitly incomplete. Collection-deadline errors still fail the collection.
+
+Saved VM counts, Groups references, inverse group VM lists and saved firewall
+references use the same edges. Completeness is per VM, so a failed lookup does not
+downgrade another VM's verified list. Inverse group lists are complete only within
+the collected visible VM inventory and default enforcement point, and require all
+its lookups and inventory to be complete. System/default cleanup exclusions do not
+exclude a returned VM association. RBAC-hidden objects and other enforcement points
+remain outside scope, and NSX reads are not atomic. No tag/name/IP membership
+inference or effective-policy assertion is made.
+
+New association-based VM rows omit obsolete tag-candidate group/rule expansion;
+assigned tags and independent tag reports remain available. Complete saved VM
+references default to Saved snapshot without an automatic live request. Partial
+older snapshots retain the separate Current NSX option. Existing snapshots are
+unchanged: reindexing or a current check cannot reconstruct missing historical
+membership; a fresh collection on the updated worker is needed. No additional
+schema migration is required by this collection change.
+
+`VM association progress` logs and Collection diagnostics report logical reads,
+per-status VM totals, elapsed time and reused positive group evidence. HTTP retries
+are separate. The collection summary also shows complete VM lookups versus total.
+
+The [synthetic comparison](performance/saved-vm-associations-2026-11-05.json) uses
+1,200 VMs and 4,493 groups. Distributed memberships required 1,693 membership reads
+instead of 4,493 existence probes, while saving all four memberships per VM. With
+all VMs sharing four groups, complete associations required 5,689 reads instead of
+4,493 sampled probes. Thus this does **not** promise every collection will be
+faster than the incomplete probe-only design. It avoids repeated positive probes
+and full endpoint expansion, but exact per-VM evidence can add reads. Real latency,
+counter/search work, retries and persistence determine total collection time.
+Preparing 250 synthetic VM rows with 500 tag-candidate groups each removed 125,000
+obsolete candidate edges and reduced VM row JSON from 10,134,200 to 216,200 bytes.
+These are synthetic request/payload measurements, not production runtime claims.
+
+An [isolated Chromium acceptance check](performance/saved-vm-associations-browser-2026-11-05.json)
+opens a newly collected/indexed synthetic snapshot with four actual memberships and
+25 unrelated tag candidates. It verifies the VM table count, four saved groups,
+the matching saved firewall rule and two inverse group VM rows, with zero current
+membership endpoint requests and no browser errors.
+
+API contract: [NSX groups for a VM](https://developer.broadcom.com/xapis/nsx-t-data-center-rest-api/latest/method_GetGroupsForVM.html).
+
+## Earlier targeted membership observations · 5 November 2026
+
+The earlier implementation performed mandatory cleanup membership checks only. It retained identities already returned by those probes and explicit configured IP entries, but did not expand member pages for browsing. This superseded release `3d91255`'s 300-second/2,000-request detail budget, but still left saved VM memberships incomplete. The direct collection strategy above replaces that sampling behavior. The four `NSX_MEMBERSHIP_DETAIL_*` settings remain removed. Live execution verification, request pacing, adaptive concurrency and the overall deadline are retained.
 
 VM References offers Groups and Firewall rules, with Current NSX selected by default. Assigned tags remain in Summary; the VM Members section, Tag references and Tag-based rules tabs are removed. Saved membership remains available through Saved snapshot and is immutable; incomplete counts say “2 confirmed; total unknown.” When an operator first opens References, a missing, stale or incomplete cache triggers a bounded lookup using `/infra/virtual-machine-group-associations?vm_external_id=...`. It follows opaque cursors and stores compact group references, rather than scanning every group's complete member lists. Group drawers can separately request their VM members using the same cache. Related navigation retains the selected evidence source. IP/port/segment categories remain saved, separate evidence and are not used to infer VM membership.
 
 Current observations are stored in `MembershipLookup` with per-subject coverage and in `MembershipRelation` with one shared VM/group pair. Both directions read the same relations. A complete owner response can retire missing pairs; a partial response retains earlier positive evidence with its individual timestamps. Changes invalidate the opposite owner's completeness. One unrelated incomplete group cannot invalidate a complete direct VM lookup. System/default groups returned by NSX remain visible even though cleanup assessment excludes them. Names, shared tags and IP similarity never establish identity.
 
-Cache reads are authenticated, database-only GETs. POST refreshes require staff access and CSRF. Automatic refreshes use `refresh_mode=if_needed` to reuse a newly completed cache; explicit Refresh always checks again. Current labels include the check time and stale state; observations become stale after five minutes. The namespace changes with manager, credentials or TLS trust, preventing accidental reuse after environment changes. Opening the inventory or a VM Summary makes no membership requests to NSX. The first activation of VM References checks cache freshness and may perform one bounded lookup. Category switches and cached paging do not repeat that lookup. A newly opened VM drawer checks freshness again; related group drawers retain explicit refresh. Failed automatic checks keep available positive evidence and offer Refresh without retrying on each category switch. Read-only users receive cached evidence and an operator-access explanation instead of forbidden refresh calls. Missing external identity is an explicit error, not a name-based fallback.
+Cache reads are authenticated, database-only GETs. POST refreshes require staff access and CSRF. Automatic refreshes use `refresh_mode=if_needed` to reuse a newly completed cache; explicit Refresh always checks again. Current labels include the check time and stale state; observations become stale after five minutes. The namespace changes with manager, credentials or TLS trust, preventing accidental reuse after environment changes. Opening the inventory or a VM Summary makes no membership requests to NSX. The first activation of VM References checks cache freshness and may perform one bounded lookup. Cached positive memberships render immediately with their stale/partial status while this lookup runs in the background; successful checks replace them and failures retain labelled cached evidence. Empty/cold caches still wait for the bounded check, so missing evidence cannot appear as a complete zero. Category switches and cached paging do not repeat that lookup. A newly opened VM drawer checks freshness again; related group drawers retain explicit refresh. Failed automatic checks keep available positive evidence and offer Refresh without retrying on each category switch. Read-only users receive cached evidence and an operator-access explanation instead of forbidden refresh calls. Missing external identity is an explicit error, not a name-based fallback.
 
-Each refresh is sequential, has an eight-second transport/queue deadline and at most ten 1,000-row pages. Missing totals, changed totals, duplicates, cursor loops, failures and cutoffs cannot establish complete membership. Positive partial evidence is retained. The response pages at most 25 relationships. One manager lease serializes enrichment for an environment. New refreshes yield to queued/running collections; already in-flight bounded requests may finish. No cache result authorizes cleanup.
+VM association refreshes are sequential, with an eight-second transport/queue deadline and at most ten 1,000-row pages. Group-member checks use the progressive paging described below. Missing totals, changed totals, duplicates, cursor loops, failures and cutoffs cannot establish complete membership. Positive partial evidence is retained. The response pages at most 25 relationships. One manager lease serializes enrichment for an environment. New refreshes yield to queued/running collections; already in-flight bounded requests may finish. No cache result authorizes cleanup.
 
 Optional cache warming runs as a separate process, not inside the collection worker:
 
@@ -43,6 +105,30 @@ VM References excludes tag-condition candidates entirely. Its Firewall rules tab
 Apply additive migration **0065** to create the two initially empty cache tables. Existing snapshots need no reindex or new collection for targeted current checks, provided they retain a VM external ID. The old saved membership lists are not repaired by live checks. This UI follow-up adds no further migration. Uncollected/partial evidence is never presented as a complete zero; an empty complete NSX response is labelled distinctly.
 
 Validation uses synthetic data only. The four-membership/25-tag-reference test now gets four groups from one targeted request, verifies the inverse group view and preserves the original two-member snapshot. Browser acceptance uses 1,200 VMs and verifies cached round trips, historical isolation and desktop/mobile light/dark layouts. The [10,861-group benchmark](performance/membership-v2-2026-11-05.json) performs 5,430 membership requests, equal to mandatory checks alone, compared with 6,430 for the bounded detail design and 46,702 for the original full-list design. The modeled membership-only time is 135.88 seconds versus 226.26; these are not production runtime predictions. All other inventory, statistics, indexing and NSX latency costs still apply.
+
+### Membership browsing latency follow-up
+
+The browser no longer hides an existing membership page while refreshing it. The first page returned by an explicit group refresh is reused directly, removing a duplicate GET. Firewall responses request coverage metadata without counting, sorting or retrieving a member page that the rule page would immediately replace. Complete coverage metadata uses one database query instead of three. No NSX calls were added to collection and no schema migration is required.
+
+Synthetic checks with a 20 ms application read and 600 ms simulated refresh reduced the wait for cached rows from 624 ms to 23 ms. An actual Chromium check over the isolated 1,200-VM fixture, with an intentionally delayed 1,200 ms synthetic NSX endpoint, displayed stale-labelled groups in 72 ms and completed their refresh in 1,380 ms. Explicit group refresh used one POST without a follow-up GET. All 96 JavaScript tests and 42 membership/reference Django tests pass. These timings describe synthetic cached-first rendering, not production NSX latency.
+
+A separate synthetic 3,239-rule query took 32–52 ms. This does not establish the cause of a production database delay. Before progressive paging, a cold group check could fetch ten 1,000-member pages before displaying the first 25 members. A 10,000-member synthetic group required all ten pages before returning. Progressive paging now fetches a 100-member batch, supplies four 25-row UI pages from it, and follows the server-side NSX cursor only when another batch is needed. Do not truncate a list and label it complete, infer memberships from tags, or move full browsing scans back into collection.
+
+Measurements are in [membership browsing latency](performance/membership-browsing-latency-2026-11-05.json).
+
+### Progressive live group member pages (migration 0066)
+
+An explicit group member refresh starts a `GroupMembershipSession`. The first request normally fetches 100 members and returns 25 rows. Subsequent cached UI pages are database-only GETs; a staff/CSRF-protected continuation POST fetches another batch when the requested window is not yet loaded. The NSX cursor remains on the server. The browser receives a random session ID scoped to the environment/credential/trust namespace, group and saved snapshot. A fresh check supersedes the old traversal; loaded old pages remain readable but cannot consume its cursor.
+
+Each session stores immutable member positions in `GroupMembershipItem`, so appending another batch cannot reorder earlier pages. The UI shows **100 loaded · 4,075 reported by NSX**, or **100 loaded · more available** when NSX omits its total. Reported totals are not a claim that all identities were retrieved. Coverage stays partial until the full traversal passes validation. Partial checks publish positive relationships in both directions without removing older positives; only a complete verified traversal can retire missing pairs. A direct VM observation that changes a group relationship invalidates that group's existing sessions. VM References continues to use its direct association API for complete per-VM coverage, rather than inferring it from partially loaded groups.
+
+Sessions expire after five minutes. Expired, superseded, changed, cross-group/snapshot/namespace and malformed cursors cannot continue. Transport failures retain the unconsumed cursor for Retry; malformed/duplicate/changed-total pages require Refresh. Failed next-page reads leave the prior rows and Previous control usable. Failed initial reads retain earlier positive cache observations with stale/unavailable labels. Read-only users can browse loaded pages but cannot trigger continuation reads. Collection keeps priority.
+
+NSX may return fewer than 100 entries. A request can follow up to ten short pages within the existing eight-second deadline to fill a 25-row display window; it does not skip identities or turn a cutoff into a complete result. A session is capped at 1,000 NSX pages (at most 100,000 entries). Reaching that cap is incomplete and requires Refresh. No work is moved into collection. Pagination detects observable inconsistencies; NSX does not provide an atomic point-in-time snapshot across these calls.
+
+Apply additive migration **0066** before starting the updated application. It creates two initially empty cache tables and their identity/position constraints. It does not rewrite or reindex historical snapshot rows. Cache rows cascade with their lookup/snapshot, and expired sessions are pruned when a new group check starts.
+
+The synthetic 10,000-member browser fixture loaded its initial page in about 180 ms, made one NSX request for the first four UI pages, one additional request at the next batch boundary, and none on Back. These are development measurements with simulated 40 ms NSX latency, not production latency guarantees. See [acceptance measurements](performance/progressive-group-membership-2026-11-05.json). PostgreSQL/SQLite migration checks, all 897 Django tests and 99 JavaScript tests pass, including cursor isolation, stable order, changing totals, short pages, transient failures, partial positives, permissions and direct VM associations.
 
 ## Applying the update
 

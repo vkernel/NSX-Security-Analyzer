@@ -31,7 +31,7 @@ def enqueue(environment, user, testing=False, debug_until=None):
         if not environment.enabled:
             raise ValidationError("This environment is paused. Enable it before collecting.")
         if environment.jobs.filter(status__in=["queued", "running"]).exists():
-            raise ValidationError("An audit is already queued or running for this environment.")
+            raise ValidationError("A collection is already queued or running for this environment.")
         return AuditJob.objects.create(environment=environment, requested_by=user,
                                        testing=testing, debug_until=debug_until, config=environment.collection_config())
 
@@ -360,7 +360,7 @@ def execute_job(job_id):
     except Exception as exc:
         failure = log_failure(job.pk, exc)
         detail = failure['chain'][0]['message'] if failure['chain'] else 'Collection failed.'
-        fail_job(job.pk, redact(detail) or "Audit failed. Check the worker configuration.",
+        fail_job(job.pk, redact(detail) or "Collection could not be completed. Check the collection diagnostics.",
                  {'timeline': diagnostic_log.TIMELINE, 'error': failure})
     finally:
         observability.PROCESS_CONTEXT.clear()

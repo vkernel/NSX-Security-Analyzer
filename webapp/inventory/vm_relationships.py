@@ -87,7 +87,12 @@ def read(snapshot_id, ordinal, section='summary', page=0, path='', context=False
         from .resolved_membership import vm_summary
         result['source'] = 'saved_snapshot'
         result['status'] = vm_summary(summary['compact']).get('resolved_membership_status', 'not_collected')
+        result['checked_at'] = summary['compact'].get('resolved_membership_checked_at')
         result['notes'] = ['Resolved VM identities returned by NSX at collection time. Partial coverage can omit groups; no tag, name or IP inference is included.']
+        if summary['compact'].get('resolved_membership_scope'):
+            result['notes'].append('Scope: ' + summary['compact']['resolved_membership_scope'] + '.')
+        evidence = row.values('data__resolved_membership_notes').first()
+        result['notes'].extend(evidence['data__resolved_membership_notes'] or [])
         if result['status'] == 'not_collected':
             result['notes'] = ['VM membership was not saved in this snapshot. Select Current NSX to check this VM separately; current checks do not repair historical evidence.']
     return result

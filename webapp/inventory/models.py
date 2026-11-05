@@ -90,12 +90,19 @@ class AuditJob(models.Model):
     progress_completed = models.PositiveSmallIntegerField(default=0, validators=[MaxValueValidator(7)])
     progress_stage = models.CharField(max_length=150, default="Waiting for a collection worker")
 
+    def get_status_display(self):
+        # Collection labels also reach polling responses and bulk exports.
+        if self.status == self.Status.RUNNING:
+            return "Collecting"
+        return dict(self.Status.choices).get(self.status, self.status)
+
     @property
     def progress(self):
         completed = 7 if self.status == "succeeded" else min(self.progress_completed, 6)
         stage = (("Completed with coverage warnings" if self.progress_stage == "Completed with coverage warnings" else "Completed") if self.status == "succeeded" else
                  "Stopped · " + self.progress_stage if self.status == "failed" else self.progress_stage)
-        stage = stage.replace("Waiting for an audit worker", "Waiting for a collection worker")
+        if stage in ("Waiting for an audit worker", "Waiting for a collection worker"):
+            stage = "Waiting to start"
         return {"completed": completed, "total": 7, "percent": completed * 100 // 7, "stage": stage}
 
     class Meta:
@@ -411,6 +418,35 @@ class MembershipRelation(models.Model):
     class Meta:
         constraints = [models.UniqueConstraint(fields=['environment', 'namespace', 'vm_key', 'group_key'], name='membership_relation_pair')]
         indexes = [models.Index(fields=['environment', 'namespace', 'group_key'], name='membership_relation_group')]
+
+
+class GroupMembershipSession(models.Model):
+    """One bounded live paging traversal, separate from shared positive edges."""
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    lookup = models.ForeignKey(MembershipLookup, on_delete=models.CASCADE, related_name='group_sessions')
+    snapshot = models.ForeignKey(Snapshot, on_delete=models.CASCADE)
+    started_at = models.DateTimeField(auto_now_add=True)
+    checked_at = models.DateTimeField(null=True)
+    expires_at = models.DateTimeField()
+    invalidated = models.BooleanField(default=False)
+    cursor = models.TextField(blank=True)
+    cursor_history = models.JSONField(default=list)
+    loaded_count = models.PositiveIntegerField(default=0)
+    reported_count = models.PositiveIntegerField(null=True)
+    status = models.CharField(max_length=20, default='partial')
+    notes = models.JSONField(default=list)
+
+
+class GroupMembershipItem(models.Model):
+    session = models.ForeignKey(GroupMembershipSession, on_delete=models.CASCADE, related_name='items')
+    key = models.CharField(max_length=64)
+    position = models.PositiveIntegerField()
+    member = models.JSONField(default=dict)
+    checked_at = models.DateTimeField()
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=['session', 'key'], name='group_page_member_identity'),
+                       models.UniqueConstraint(fields=['session', 'position'], name='group_page_member_position')]
 
 
 class SnapshotVMMembership(models.Model):

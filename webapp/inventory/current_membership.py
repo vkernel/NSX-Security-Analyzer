@@ -15,6 +15,7 @@ from django.views.decorators.http import require_http_methods
 from .models import AuditJob, Snapshot, SnapshotRecord, MembershipLookup, MembershipRelation
 from .collector import AuditError
 from .member_collection_budget import request_deadline
+from .vm_associations import external_id
 
 GROUP = re.compile(r'/(?:infra|global-infra|orgs/[^/]+/projects/[^/]+/infra)/domains/[^/]+/groups/[^/]+$')
 TTL = timedelta(minutes=5)
@@ -27,18 +28,6 @@ def digest(value):
 def namespace(env):
     # Invalidate cached observations when the manager, credentials or trust changes.
     return digest(json.dumps([env.manager, env.username, env.password_ciphertext, env.ca_certificate, env.ca_bundle, env.insecure]))
-
-
-def external_id(value, *, allow_id=False):
-    if not isinstance(value, dict): raise ValueError('Saved VM identity is unavailable.')
-    ids = {value['external_id']} if isinstance(value.get('external_id'), str) and value['external_id'] else set()
-    ids.update(item[len('externalId:'):] for item in (value.get('compute_ids') or [])
-               if isinstance(item, str) and item.startswith('externalId:') and item[len('externalId:'):])
-    if len(ids) == 1:
-        return next(iter(ids))
-    if not ids and allow_id and isinstance(value.get('id'), str):
-        return value['id']
-    raise ValueError('A unique VM external ID is required; names and IPs cannot identify membership.')
 
 
 def subject(snapshot, kind, identity):
@@ -126,7 +115,9 @@ def save(env, kind, owner, items, status, notes):
         lookup, _ = MembershipLookup.objects.select_for_update().get_or_create(
             environment=env, namespace=ns, kind=kind, key=key)
         existing = MembershipRelation.objects.filter(environment=env, namespace=ns, **{kind+'_key':key})
-        previous = {getattr(edge, ('group' if kind == 'vm' else 'vm')+'_key'):edge for edge in existing}
+        other_field = ('group' if kind == 'vm' else 'vm')+'_key'
+        compared = existing if status == 'complete' else existing.filter(**{other_field+'__in':[digest(item['identity']) for item in items]})
+        previous = {getattr(edge, other_field):edge for edge in compared}
         seen, changed = set(), set()
         pending = []
         for item in items:
@@ -144,8 +135,11 @@ def save(env, kind, owner, items, status, notes):
             changed.update(other for other in missing if previous[other].present)
             existing.exclude(**{('group' if kind == 'vm' else 'vm')+'_key__in':seen}).update(present=False, checked_at=stamp)
         # An observation in the opposite direction may now be older/incomplete.
-        MembershipLookup.objects.filter(environment=env, namespace=ns, kind='group' if kind == 'vm' else 'vm',
-            key__in=changed).update(status='partial', expires_at=stamp,
+        invalidated = MembershipLookup.objects.filter(environment=env, namespace=ns, kind='group' if kind == 'vm' else 'vm', key__in=changed)
+        if kind == 'vm' and changed:
+            from .models import GroupMembershipSession
+            GroupMembershipSession.objects.filter(lookup__in=invalidated, invalidated=False).update(invalidated=True)
+        invalidated.update(status='partial', expires_at=stamp,
                 notes=['Membership changed in a newer related-object check; refresh to establish the full list.'])
         lookup.subject, lookup.status, lookup.checked_at = owner, status, stamp
         lookup.expires_at, lookup.notes = stamp+TTL, notes
@@ -153,15 +147,26 @@ def save(env, kind, owner, items, status, notes):
     return lookup
 
 
-def cached(snapshot, kind, owner, page=0):
+def cached(snapshot, kind, owner, page=0, *, include_items=True, paging_session=None):
     env, key = snapshot.environment, digest(owner['identity'])
     ns = namespace(env)
     lookup = MembershipLookup.objects.filter(environment=env, namespace=ns, kind=kind, key=key).first()
+    if kind == 'group' and include_items:
+        from .group_membership_paging import cached_page
+        result = cached_page(snapshot, owner, lookup, page, paging_session)
+        if result is not None:
+            return result
     edges = MembershipRelation.objects.filter(environment=env, namespace=ns, present=True, **{kind+'_key':key})
-    count = edges.count()
-    status = lookup.status if lookup else 'partial' if count else 'not_collected'
+    if include_items:
+        count = edges.count()
+        positive = bool(count)
+    else:
+        count = None
+        positive = edges.exists() if not lookup or lookup.status != 'complete' else False
+    status = lookup.status if lookup else 'partial' if positive else 'not_collected'
     field = 'group' if kind == 'vm' else 'vm'
-    items = [{**value, 'observed_at':stamp.isoformat()} for value,stamp in edges.order_by(field+'__name', field+'__identity').values_list(field,'checked_at')[page*25:page*25+26]]
+    items = ([{**value, 'observed_at':stamp.isoformat()} for value,stamp in edges.order_by(field+'__name', field+'__identity').values_list(field,'checked_at')[page*25:page*25+26]]
+             if include_items else [])
     if kind == 'group' and items:
         identities = [item.get('external_id') for item in items]
         records = SnapshotRecord.objects.filter(snapshot=snapshot, view='vms', data__vm_details__external_id__in=identities).values('name','compact__path','data__vm_details__external_id')
@@ -172,13 +177,16 @@ def cached(snapshot, kind, owner, page=0):
     notes = list(lookup.notes) if lookup else ['Observed through related-object checks; this subject has not had a complete check.']
     fresh = bool(lookup and lookup.expires_at and lookup.expires_at > timezone.now())
     if not fresh and lookup: notes.append('Cached observation is stale; check current NSX to refresh.')
-    if lookup and status != 'complete' and count: notes.append('Positive observations may come from earlier checks; their individual observation times are retained.')
+    if lookup and status != 'complete' and positive: notes.append('Positive observations may come from earlier checks; their individual observation times are retained.')
     return {'items':items[:25], 'page':page, 'has_next':len(items)>25, 'status':status,
         'saved_count':count, 'checked_at':lookup.checked_at.isoformat() if lookup and lookup.checked_at else None,
         'source':'current_nsx', 'stale':not fresh, 'notes':['Current NSX observation; saved snapshot membership is unchanged.']+notes}
 
 
 def refresh(snapshot, kind, owner, *, force=False):
+    if kind == 'group':
+        from .group_membership_paging import start
+        return start(snapshot, owner, force=force)
     env = snapshot.environment
     lookup = MembershipLookup.objects.filter(environment=env, namespace=namespace(env), kind=kind, key=digest(owner['identity'])).first()
     if not force and lookup and lookup.status == 'complete' and lookup.expires_at and lookup.expires_at > timezone.now():
@@ -203,24 +211,41 @@ def endpoint(request, pk):
         if not 0 <= page <= 100000: raise ValueError('Invalid page.')
         owner = subject(snapshot, kind, params.get('id' if kind == 'vm' else 'path', ''))
         env = snapshot.environment
+        paging_session = params.get('paging_session') or None
+        if paging_session and kind != 'group':
+            raise ValueError('Paging sessions are only available for group members.')
         if request.method == 'POST':
             if not request.user.is_staff: return JsonResponse({'error':'Operator access required for current NSX reads.'},status=403)
             # Concurrent drawer openings may already have refreshed this subject.
             # Explicit Refresh still bypasses the freshness cache.
-            lookup = refresh(snapshot, kind, owner, force=params.get('refresh_mode') != 'if_needed')
+            if params.get('refresh_mode') == 'continue':
+                if kind != 'group' or not paging_session:
+                    raise ValueError('A group paging session is required.')
+                from .group_membership_paging import advance
+                lookup = advance(snapshot, owner, paging_session, page)
+            else:
+                lookup = refresh(snapshot, kind, owner, force=params.get('refresh_mode') != 'if_needed')
+                # An explicit refresh starts a new traversal and returns its first page.
+                paging_session = None
+                page = 0
             from .audit_events import record
             record('inventory.membership_checked', 'Environment', env.pk, actor=request.user.pk,
                    details={'kind':kind,'status':lookup.status})
-        result = cached(snapshot, kind, owner, page)
+        firewall = params.get('section') == 'firewall' and kind == 'vm'
+        result = cached(snapshot, kind, owner, page, include_items=not firewall, paging_session=paging_session)
         result['can_refresh'] = request.user.is_staff
-        if params.get('section') == 'firewall' and kind == 'vm':
+        if kind == 'group' and result.get('can_continue') and not request.user.is_staff:
+            result['has_next'] = result['loaded_count'] > (page+1)*25
+            result['can_continue'] = result['needs_more'] = False
+            result['notes'].append('An operator must load further NSX pages; the available pages can be browsed without a live read.')
+        if firewall:
             from .confirmed_references import read
             groups = list(MembershipRelation.objects.filter(environment=env, namespace=namespace(env), vm_key=digest(owner['identity']), present=True).values_list('group__path',flat=True))
             result = {**result, **read(snapshot.pk, groups, page), 'notes':result['notes']+['Current VM memberships matched against saved firewall configuration; not live rule state or observed traffic.']}
             result.pop('saved_count',None)
         response = JsonResponse(result); response['Cache-Control']='private, no-store'; return response
     except ValidationError as exc:
-        return JsonResponse({'error':' '.join(exc.messages)},status=409 if exc.code == 'collection_busy' else 400)
+        return JsonResponse({'error':' '.join(exc.messages), 'code':exc.code},status=409 if exc.code in ('collection_busy','paging_changed','paging_expired','paging_incomplete') else 400)
     except ValueError as exc:
         return JsonResponse({'error':str(exc)},status=400)
     except AuditError:

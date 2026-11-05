@@ -71,13 +71,14 @@
     return root;
   };
   window.evidenceTable=({title,columns,load,current=()=>true,wide=false,empty='No relationships recorded in this snapshot.'})=>{
-    const root=make('section'),heading=make('h3',title),status=make('p'),coverage=make('p'),content=make('div'),pager=make('nav'),previous=make('button','Previous'),next=make('button','Next');
+    const root=make('section'),heading=make('h3',title),status=make('p'),coverage=make('p'),content=make('div'),failure=make('div'),pager=make('nav'),previous=make('button','Previous'),next=make('button','Next');
     coverage.className='evidence-note';coverage.hidden=true;
     root.className='evidence-table-section';status.className='evidence-table-status';status.setAttribute('role','status');content.className='evidence-table-content';pager.className='evidence-pagination';pager.setAttribute('aria-label',title+' pages');previous.type=next.type='button';previous.setAttribute('aria-label','Previous '+title.toLowerCase());next.setAttribute('aria-label','Next '+title.toLowerCase());pager.append(previous,next);pager.hidden=true;root.append(heading,status,content,pager);
     root.insertBefore(coverage,content);
-    let loaded=false,busy=false,version=0,page=0,reloadPending=false;
+    failure.hidden=true;root.insertBefore(failure,content);
+    let loaded=false,busy=false,version=0,page=0,reloadPending=false,hasNext=false;
     async function render(target=page){
-      if(busy||!current())return;busy=true;const token=++version;root.setAttribute('aria-busy','true');status.textContent='Loading '+title.toLowerCase()+'…';previous.disabled=next.disabled=true;
+      if(busy||!current())return;busy=true;const token=++version;root.setAttribute('aria-busy','true');failure.hidden=true;status.textContent='Loading '+title.toLowerCase()+'…';previous.disabled=next.disabled=true;
       try{
         const data=await load(target);if(token!==version||!current())return;page=target;loaded=true;
         const scroll=make('div'),table=make('table'),caption=make('caption',title),head=make('thead'),labels=make('tr'),rows=make('tbody');scroll.className='evidence-table-scroll';scroll.tabIndex=0;scroll.setAttribute('role','region');scroll.setAttribute('aria-label',title+' table');table.className='evidence-table'+(wide?' evidence-firewall-table':'');
@@ -86,47 +87,69 @@
         const states={complete:'Complete',partial:'Partial',configured:'Configured',not_applicable:'Not applicable',unavailable:'Unavailable',not_collected:'Not collected',not_supported:'Not supported'};
         const missing=data.status&&data.status!=='complete';
         if(!data.items.length){const row=make('tr'),td=make('td',data.empty_message||(data.status==='not_applicable'?'This member category does not apply to the saved definition.':missing?(data.source==='current_nsx'?'Membership is not established. Refresh to check current NSX.':data.status==='not_collected'?(data.notes?.length?'Member list was not collected; see the collection notes.':'Member identities were not collected in this snapshot. Run a new collection.'):'No member identities saved for this category; membership is not established.'):empty));td.colSpan=columns.length;td.className='evidence-table-empty';row.append(td);rows.append(row);}
-        table.append(caption,head,rows);scroll.append(table);content.replaceChildren(scroll);status.textContent=data.items.length?`${page*25+1}–${page*25+data.items.length} shown · Page ${page+1}`:'No entries recorded';pager.hidden=!page&&!data.has_next;previous.disabled=!page;next.disabled=!data.has_next;
-        if(data.status){status.textContent=(data.status==='partial'?'Partial · '+(data.saved_count??data.items.length)+' confirmed; total unknown':states[data.status]||data.status)+' · '+status.textContent;status.dataset.membershipStatus=data.status;}
+        table.append(caption,head,rows);scroll.append(table);content.replaceChildren(scroll);status.textContent=data.items.length?`${page*25+1}–${page*25+data.items.length} shown · Page ${page+1}`:'No entries recorded';hasNext=!!data.has_next;pager.hidden=!page&&!hasNext;previous.disabled=!page;next.disabled=!hasNext;
+        if(data.status){const count=data.loaded_count!=null?`${data.loaded_count} loaded${data.reported_count!=null?' · '+data.reported_count+' reported by NSX':data.can_continue?' · more available':''}`:data.status==='partial'?(data.saved_count??data.items.length)+' confirmed; total unknown':'';status.textContent=(states[data.status]||data.status)+(count?' · '+count:'')+' · '+status.textContent;status.dataset.membershipStatus=data.status;}
         coverage.textContent=[data.source==='current_nsx'?'Current NSX':data.source==='saved_snapshot'?'Saved snapshot':'',data.stale?'Stale observation':'',data.saved_count!=null?`${data.saved_count} ${data.source==='current_nsx'?'confirmed':'saved'}${data.reported_count!=null?' · '+data.reported_count+' reported by NSX':''}`:'',data.checked_at?(data.source==='current_nsx'?'Checked ':'Collected ')+(window.workspaceTimeText?window.workspaceTimeText(data.checked_at):data.checked_at):'',...(data.notes||[])].filter(Boolean).join(' · ');coverage.hidden=!coverage.textContent;
-      }catch(error){if(current()){status.textContent='Unable to load '+title.toLowerCase();window.evidenceState(content,error.message,()=>render(target));}}
-      finally{busy=false;root.removeAttribute('aria-busy');if(reloadPending){reloadPending=false;if(!root.closest('[hidden]'))render(0);}}
+      }catch(error){if(current()){status.textContent='Unable to load '+title.toLowerCase()+(loaded?'; showing the previous loaded page.':'');const targetNode=loaded?failure:content;targetNode.hidden=false;window.evidenceState(targetNode,error.message,()=>render(target));}}
+      finally{busy=false;root.removeAttribute('aria-busy');previous.disabled=!page;next.disabled=!hasNext;if(reloadPending){reloadPending=false;if(!root.closest('[hidden]'))render(0);}}
     }
     previous.onclick=()=>render(page-1);next.onclick=()=>render(page+1);
     return {panel:root,wide,show:()=>{if(!loaded)render();},reload:()=>{version++;loaded=false;if(busy)reloadPending=true;else if(!root.closest('[hidden]'))render(0);}};
   };
-  window.membershipSource=(body,subject,{automatic=false}={})=>{
+  window.membershipSource=(body,subject,{automatic=false,initialSource=null}={})=>{
     const panel=make('div'),label=make('label','Membership evidence '),select=make('select'),check=make('button','Check current NSX'),note=make('p');
     panel.className='evidence-membership-source';note.className='evidence-note';note.hidden=true;note.setAttribute('role','status');select.setAttribute('aria-label','Membership evidence');check.type='button';if(automatic)check.textContent='Refresh';
     for(const [value,text] of [['saved','Saved snapshot'],['current','Current NSX']]){const option=make('option',text);option.value=value;select.append(option);}label.append(select);panel.append(label,check,note);
-    select.value=body.closest('dialog')?.membershipInitialSource||(automatic?'current':'saved');
+    select.value=body.closest('dialog')?.membershipInitialSource||initialSource||(automatic?'current':'saved');
     const tables=[],changes=[],generation=body.evidenceGeneration;
     let prepared=null,cache=null,reading=null;
     const current=()=>body.evidenceGeneration===generation&&body.closest('dialog')?.open;
     const url=()=>{const value=new URL('memberships/',location.href.split('#')[0].split('?')[0]);value.search=new URLSearchParams(subject);return value;};
-    const request=async(section,page,refresh=false,ifNeeded=false)=>{
+    const request=async(section,page,refresh=false,ifNeeded=false,pagingSession=null)=>{
       const target=url();target.searchParams.set('page',page);if(section)target.searchParams.set('section',section);
-      const response=await fetch(target,{method:refresh?'POST':'GET',credentials:'same-origin',headers:refresh?{'X-CSRFToken':document.querySelector('#interface-csrf input')?.value||''}:{Accept:'application/json'},...(refresh?{body:new URLSearchParams({...subject,page,section,...(ifNeeded?{refresh_mode:'if_needed'}:{})})}:{})});
+      if(pagingSession)target.searchParams.set('paging_session',pagingSession);
+      const response=await fetch(target,{method:refresh?'POST':'GET',credentials:'same-origin',headers:refresh?{'X-CSRFToken':document.querySelector('#interface-csrf input')?.value||''}:{Accept:'application/json'},...(refresh?{body:new URLSearchParams({...subject,page,section,...(ifNeeded?{refresh_mode:'if_needed'}:{}),...(pagingSession?{paging_session:pagingSession,...(refresh?{refresh_mode:'continue'}:{})}:{})})}:{})});
       if(response.redirected)throw Error('Your session has expired. Reload to sign in.');const result=await response.json();if(!response.ok)throw Error(result.error||'Membership lookup failed.');return result;
     };
     select.onchange=()=>{note.textContent=select.value==='current'?'Cached current observations are separate from this saved snapshot. Use '+(automatic?'Refresh':'Check current NSX')+' to check again.':'';note.hidden=!note.textContent;changes.forEach(fn=>fn());tables.forEach(table=>table.reload());};
-    const observe=result=>{cache=result;if(current()){check.disabled=result.can_refresh===false;check.title=result.can_refresh===false?'Operator access is required to refresh NSX membership.':'';}};
+    const observe=result=>{cache=result.page>0&&cache?{...result,page:0,items:cache.items,has_next:result.loaded_count>25||result.can_continue}:result;if(current()){check.disabled=result.can_refresh===false;check.title=result.can_refresh===false?'Operator access is required to refresh NSX membership.':'';}};
+    const completedMessage=result=>result.paging_session&&result.can_continue?'More members will load as you browse.':result.status==='complete'?'Membership check completed.':'Current check is incomplete; missing memberships remain unknown.';
     const prepare=()=>prepared||(prepared=(async()=>{
       const result=await request('',0);observe(result);
       if(!current())return;
       if((result.stale||result.status!=='complete')&&result.can_refresh){
         check.disabled=true;note.hidden=false;note.textContent='Checking current NSX membership…';
         reading=request('',0,true,true);
-        try{observe(await reading);if(current())note.textContent=cache.status==='complete'?'Membership check completed.':'Current check is incomplete; missing memberships remain unknown.';}
-        catch(error){if(current())note.textContent=error.message;}
-        finally{reading=null;if(current())check.disabled=cache?.can_refresh===false;}
+        // Existing positive evidence is useful immediately, even while stale.
+        // A cold/empty cache still waits so unknown membership cannot look empty.
+        const background=result.items.length>0;
+        const refreshed=(async()=>{
+          try{observe(await reading);if(current()&&select.value==='current'){
+            note.hidden=false;note.textContent=completedMessage(cache);
+            if(background){changes.forEach(fn=>fn());tables.forEach(table=>table.reload());}
+          }}catch(error){if(current()&&select.value==='current'){note.hidden=false;note.textContent=error.message;}}
+          finally{reading=null;if(current())check.disabled=cache?.can_refresh===false;}
+        })();
+        if(!background)await refreshed;
       }else if(result.can_refresh===false&&(result.stale||result.status!=='complete')){note.hidden=false;note.textContent='An operator must refresh membership. Cached results may be incomplete or unavailable.';}
     })().catch(error=>{prepared=null;throw error;}));
-    check.onclick=async()=>{if(reading)return;check.disabled=true;note.hidden=false;note.textContent='Checking current NSX membership…';reading=request('',0,true);try{const result=await reading;if(!current())return;observe(result);prepared=Promise.resolve();select.value='current';note.textContent=result.status==='complete'?'Membership check completed.':'Current check is incomplete; missing memberships remain unknown.';changes.forEach(fn=>fn());tables.forEach(table=>table.reload());}catch(error){if(current())note.textContent=error.message;}finally{reading=null;if(current())check.disabled=cache?.can_refresh===false;}};
+    check.onclick=async()=>{if(reading)return;check.disabled=true;note.hidden=false;note.textContent='Checking current NSX membership…';reading=request('',0,true);try{const result=await reading;if(!current())return;observe(result);prepared=Promise.resolve();select.value='current';note.textContent=completedMessage(result);changes.forEach(fn=>fn());tables.forEach(table=>table.reload());}catch(error){if(current())note.textContent=error.message;}finally{reading=null;if(current())check.disabled=cache?.can_refresh===false;}};
     return {panel,register:table=>tables.push(table),onChange:fn=>changes.push(fn),load:async(section,page,saved)=>{
       if(select.value!=='current')return saved();
-      if(automatic){await prepare();if(!section&&page===0&&cache)return cache;}
-      return request(section,page);
+      if(automatic)await prepare();
+      // Refresh already returned this page; do not download it a second time.
+      if(!section&&page===0&&cache)return cache;
+      let result=await request(section,page,false,false,subject.kind==='group'?cache?.paging_session:null);
+      if(subject.kind==='group'&&!section){
+        if(result.needs_more){
+          if(!result.can_refresh)throw Error('An operator must load more group members. Previously loaded pages remain available.');
+          result=await request(section,page,true,false,result.paging_session);
+          if(result.needs_more)throw Error('More NSX pages are required. Retry to continue; previously loaded pages remain available.');
+        }
+        observe(result);
+        if(result.paging_session&&current()&&select.value==='current'){note.hidden=false;note.textContent=completedMessage(result);}
+      }
+      return result;
     },isCurrent:()=>select.value==='current'};
   };
   window.evidenceCategories=(entries)=>{
@@ -182,7 +205,7 @@
       if(section==='virtual-machines'){table.panel.prepend(source.panel);source.register(table);}
       return {...table,label,show:()=>queueMicrotask(table.show)};
     });
-    const note=make('p','Resolved members saved at collection time. Categories are separate; IP or port membership does not establish VM membership. Excluded groups and older snapshots may have no member list.');note.className='evidence-note';note.dataset.evidenceSection='members';
+    const note=make('p','VM members can use saved snapshot or current NSX evidence. IP, port and segment lists use saved evidence and do not establish VM membership.');note.className='evidence-note';note.dataset.evidenceSection='members';
     const categories=window.evidenceCategories(entries);categories.dataset.evidenceSection='members';categories.querySelector('nav').setAttribute('aria-label','Member categories');
     body.append(note,categories);
   };
