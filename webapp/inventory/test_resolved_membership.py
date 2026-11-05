@@ -152,7 +152,7 @@ class MemberReadTests(TestCase):
 
     def test_legacy_missing_and_unsupported_are_distinct_from_zero(self):
         self.assertEqual(read(self.snapshot.pk, self.path, 'ip-addresses')['status'], 'not_collected')
-        for status in ('complete', 'unavailable', 'not_supported'):
+        for status in ('complete', 'unavailable', 'not_supported', 'configured', 'not_applicable'):
             self.group.data['resolved_membership']['endpoints']['ip-addresses'] = {'status': status, 'items': []}
             self.group.save()
             result = read(self.snapshot.pk, self.path, 'ip-addresses')

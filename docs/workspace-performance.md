@@ -18,6 +18,29 @@ Segmentation, VM-to-VM investigations and naming reviews reuse derived snapshot 
 
 The caches are disposable. Archiving/rebuilding the browsing index deletes them; restoring it prepares a fresh projection. Deleting the snapshot cascades to its derived rows, including assembled maps. A projection version change discards dependent maps/membership/naming caches. Saving changed record data also invalidates them; changes to unrelated index metadata do not. Grouping-scope changes select a different map-cache key.
 
+## Bounded collection of member identities · 5 November 2026
+
+Release `8196992` added saved member lists by calling four member endpoints after the existing membership checks. This repeated initial requests and bypassed the typed/empty-VM shortcuts. Full pages and one-record probes also shared a latency baseline, so normal larger responses could reduce adaptive concurrency without HTTP errors.
+
+The collector now shares a 1,000-record first page between the mandatory membership check and optional browsing evidence. Continuations reuse its cursor instead of restarting page one. If the optional page fails or its budget is exhausted, a fresh one-record mandatory check runs with its normal retry policy. Detailed reads do not retry. No saved partial list approves cleanup or replaces live execution verification.
+
+Only simple known definitions prune endpoint categories; mixed, nested, extended and unknown definitions stay conservative. A simple valid explicit-IP definition supplies configured IP/CIDR entries without expanded member reads. These entries are labelled Configured, not resolved VM membership. The existing empty-VM fast path remains; omitted supplementary lists remain Not collected.
+
+| Environment variable | Default | Scope |
+| --- | ---: | --- |
+| `NSX_MEMBERSHIP_DETAIL_SECONDS` | 300 | Shared wall-clock window from the start of group membership checks |
+| `NSX_MEMBERSHIP_DETAIL_REQUESTS` | 2000 | Shared optional request attempts, including shared first pages |
+| `NSX_MEMBERSHIP_DETAIL_GROUP_SECONDS` | 5 | Per-group window, also capped by the shared deadline |
+| `NSX_MEMBERSHIP_DETAIL_GROUP_REQUESTS` | 8 | Optional request attempts per group |
+
+Zero disables the corresponding optional allowance. The first reached limit stops optional reads, including time spent waiting for concurrency/pacing or transport. Mandatory membership checks continue independently. These limits are not additional runtime guarantees: shared pages replace some mandatory calls, and mandatory checks, other inventory phases and indexing still take time. The overall `NSX_AUDIT_TIMEOUT` remains 3,600 seconds by default. No schema migration is required.
+
+Collected positive identities survive a detail cutoff. A partial list remains Partial; an unrequested list stays Not collected with a budget note. Inverse VM counts remain lower bounds when coverage is partial. A new deployment/new collection is needed to use these limits; an already running old worker does not acquire them.
+
+Probe and full-page latencies now have separate endpoint buckets. Page timeouts alone do not imply manager-wide overload; explicit HTTP 429/502/503/504 backpressure still reduces concurrency. Every 30 seconds during activity, logs expose detail request usage, remaining seconds, pages, returned identities, reused pages, failures and budget stops, plus current/max concurrency, active/waiting calls and per-category p95/max duration. Limit changes and reads taking at least two seconds are logged individually. Final `membership_diagnostics.member_details` retains the detail summary. Durations and pacing waits aggregate across threads and must not be added to wall-clock elapsed time.
+
+Run `python3 benchmarks/membership_collection.py` from the Git checkout for an offline comparison with `8196992`. The [saved synthetic result](performance/membership-2026-11-05.json) uses 10,861 groups, eight workers, 40 requests/second and assumed response latency. Membership requests drop from 46,702 to 6,430 (86.2% fewer), with identical mandatory membership outcomes; the former baseline without browsing details uses 5,430. The optimized run claims exactly 2,000 optional attempts, some replacing baseline calls. Modeled membership-only time drops from 2,442.84 to 226.26 seconds. This is not a production ETA or a promise to restore the earlier 22-minute total: the model excludes inventory, counters, tags, indexing, failures, backpressure and real NSX latency. Time-budget expiry is covered separately with an advancing test clock.
+
 Snapshot records are published immutably using `bulk_create`. Code that changes record configuration with raw SQL or `QuerySet.update` must call `inventory.analysis_index.invalidate(snapshot_id)` in the same transaction. The normal browsing-index rebuild already does this. Request-specific URLs and review models are never stored in the shared configuration projection.
 
 ## Applying the update

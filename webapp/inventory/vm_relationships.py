@@ -84,6 +84,8 @@ def read(snapshot_id, ordinal, section='summary', page=0, path='', context=False
         from .resolved_membership import vm_summary
         result['status'] = vm_summary(summary['compact']).get('resolved_membership_status', 'not_collected')
         result['notes'] = ['Resolved VM identities returned by NSX at collection time. Partial coverage can omit groups; no tag, name or IP inference is included.']
+        if result['status'] == 'not_collected':
+            result['notes'] = ['Resolved VM membership was not saved in this snapshot. A new collection is required; rebuilding a historical index does not retrieve members.']
     return result
 
 

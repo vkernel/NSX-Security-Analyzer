@@ -43,3 +43,17 @@ test('a group member VM link opens the current paged VM renderer and Back restor
 test('member timestamps use shared plain-text formatting without exposing time markup',async()=>{
  const dom=setup(),w=dom.window,d=w.document;w.workspaceTime=()=>'<time>formatted</time>';w.workspaceTimeText=()=> '05 Nov 2026 08:00 CET';const table=w.evidenceTable({title:'Members',columns:[{label:'Member',cell:i=>i.name}],load:async()=>({items:[],status:'partial',checked_at:'2026-11-05T07:00:00Z'})});d.getElementById('detail-body').append(table.panel);table.show();await tick();assert.match(table.panel.textContent,/Collected 05 Nov 2026 08:00 CET/);assert.doesNotMatch(table.panel.textContent,/<time/);assert.equal(w.evidenceBadge('partial').dataset.tone,'warning');dom.window.close();
 });
+test('member tables distinguish configured IPs, inapplicable categories and budget-limited evidence',async()=>{
+ const dom=setup(),w=dom.window,d=w.document,body=d.getElementById('detail-body');
+ for(const data of [
+  {status:'configured',items:[{name:'192.0.2.0/24'}],notes:['Configured IP entries; not an expanded resolved list.']},
+  {status:'not_applicable',items:[],notes:['Simple explicit IP definition.']},
+  {status:'not_collected',items:[],notes:['Detailed member collection budget reached; missing members remain unknown.']}
+ ]){
+  const table=w.evidenceTable({title:'IP members',columns:[{label:'Member',cell:i=>i.name}],load:async()=>data});body.append(table.panel);table.show();await tick();
+  if(data.status==='configured'){assert.match(table.panel.textContent,/Configured/);assert.match(table.panel.textContent,/192.0.2.0\/24/);assert.match(table.panel.textContent,/not an expanded resolved list/);}
+  if(data.status==='not_applicable'){assert.match(table.panel.textContent,/Not applicable/);assert.match(table.panel.textContent,/does not apply/);assert.doesNotMatch(table.panel.textContent,/membership is not established/);}
+  if(data.status==='not_collected'){assert.match(table.panel.textContent,/budget reached/);assert.match(table.panel.textContent,/see the collection notes/);assert.doesNotMatch(table.panel.textContent,/Run a new collection/);}
+ }
+ dom.window.close();
+});

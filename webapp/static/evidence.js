@@ -80,9 +80,9 @@
         const scroll=make('div'),table=make('table'),caption=make('caption',title),head=make('thead'),labels=make('tr'),rows=make('tbody');scroll.className='evidence-table-scroll';scroll.tabIndex=0;scroll.setAttribute('role','region');scroll.setAttribute('aria-label',title+' table');table.className='evidence-table'+(wide?' evidence-firewall-table':'');
         for(const column of columns){const th=make('th',column.label);th.scope='col';if(column.width)th.style.width=column.width;labels.append(th);}head.append(labels);
         for(const item of data.items){const row=make('tr');for(const column of columns){const td=make('td'),value=column.cell(item);if(value?.nodeType)td.append(value);else td.textContent=value==null?'Not recorded':String(value);row.append(td);}rows.append(row);}
-        const states={complete:'Complete',partial:'Partial',unavailable:'Unavailable',not_collected:'Not collected',not_supported:'Not supported'};
+        const states={complete:'Complete',partial:'Partial',configured:'Configured',not_applicable:'Not applicable',unavailable:'Unavailable',not_collected:'Not collected',not_supported:'Not supported'};
         const missing=data.status&&data.status!=='complete';
-        if(!data.items.length){const row=make('tr'),td=make('td',missing?(data.status==='not_collected'?'Member identities were not collected in this snapshot. Run a new collection.':'No member identities saved for this category; membership is not established.'):empty);td.colSpan=columns.length;td.className='evidence-table-empty';row.append(td);rows.append(row);}
+        if(!data.items.length){const row=make('tr'),td=make('td',data.status==='not_applicable'?'This member category does not apply to the saved definition.':missing?(data.status==='not_collected'?(data.notes?.length?'Member list was not collected; see the collection notes.':'Member identities were not collected in this snapshot. Run a new collection.'):'No member identities saved for this category; membership is not established.'):empty);td.colSpan=columns.length;td.className='evidence-table-empty';row.append(td);rows.append(row);}
         table.append(caption,head,rows);scroll.append(table);content.replaceChildren(scroll);status.textContent=data.items.length?`${page*25+1}–${page*25+data.items.length} shown · Page ${page+1}`:'No entries recorded';pager.hidden=!page&&!data.has_next;previous.disabled=!page;next.disabled=!data.has_next;
         if(data.status){status.textContent=(states[data.status]||data.status)+' · '+status.textContent;status.dataset.membershipStatus=data.status;}
         coverage.textContent=[data.saved_count!=null?`${data.saved_count} saved${data.reported_count!=null?' · '+data.reported_count+' reported by NSX':''}`:'',data.checked_at?'Collected '+(window.workspaceTimeText?window.workspaceTimeText(data.checked_at):data.checked_at):'',...(data.notes||[])].filter(Boolean).join(' · ');coverage.hidden=!coverage.textContent;
@@ -138,7 +138,7 @@
     const current=()=>body.evidenceGeneration===generation&&dialog?.open;
     const columns=[{label:'Member',cell:item=>window.evidenceObject(body,{...item,path:item.vm_path||item.path},item.vm_path?{path:item.vm_path,view:'vms'}:null)},
       {label:'Identity',cell:item=>item.external_id||item.id||item.identity}];
-    const entries=[['virtual-machines','VMs','Resolved VM members'],['ip-addresses','IP addresses','Resolved IP members'],['logical-ports','Ports','Resolved port members'],['logical-switches','Segments','Resolved segment members']].map(([section,label,title])=>{
+    const entries=[['virtual-machines','VMs','Resolved VM members'],['ip-addresses','IP addresses','IP members'],['logical-ports','Ports','Resolved port members'],['logical-switches','Segments','Resolved segment members']].map(([section,label,title])=>{
       const table=window.evidenceTable({title,columns,current,empty:'NSX returned no members for this category.',load:page=>window.reportData(null,{op:'group-members',path:row.path,section,page})});
       return {...table,label,show:()=>queueMicrotask(table.show)};
     });

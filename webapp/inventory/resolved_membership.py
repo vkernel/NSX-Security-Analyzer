@@ -23,28 +23,67 @@ def member_record(value, endpoint):
     return dict(row, identity=identity, name=name if isinstance(name, str) and name else identity)
 
 
-def collect(client, group, *, probe=None, testing=False, limit=MEMBER_LIMIT):
-    # Import here so the offline collector remains usable without Django.
-    from .collector import AuditError
+def endpoint_plan(group):
+    """Prune only simple documented types; mixed/nested definitions remain broad."""
+    from .collector import membership_endpoints
+    import ipaddress
+    expressions = group.get('expression')
+    if (not group.get('extended_expression') and group.get('group_type') in (None, [], '', 'IPAddress', ['IPAddress'])
+            and isinstance(expressions, list) and len(expressions) == 1
+            and isinstance(expressions[0], dict)
+            and expressions[0].get('resource_type') == 'IPAddressExpression'):
+        values = expressions[0].get('ip_addresses')
+        if isinstance(values, list) and values and all(isinstance(value, str) for value in values):
+            try:
+                for value in values:
+                    ipaddress.ip_network(value, strict=False)
+            except (ValueError, TypeError):
+                pass
+            else:
+                return ('ip-addresses',), values
+    return membership_endpoints(group), None
+
+
+def collect(client, group, *, probe=None, testing=False, limit=MEMBER_LIMIT, budget=None):
+    from .collector import AuditError, vm_fast_eligible
+    from .member_collection_budget import DetailBudget, DetailBudgetExceeded
+    from .request_pacing import CollectionDeadlineExceeded
+    budget = budget or DetailBudget().group(group['path'])
+    planned, configured = endpoint_plan(group)
     evidence = {'version': 1, 'checked_at': datetime.now(timezone.utc).isoformat(), 'endpoints': {}}
     for endpoint in ENDPOINTS:
         result = {'status': 'unavailable', 'items': [], 'reported_count': None, 'notes': []}
         evidence['endpoints'][endpoint] = result
-        seen, cursors, expected, raw_count = {}, set(), None, 0
-        cached = (probe.pages.get(endpoint) if probe else None)
-        # A complete tiny probe can be reused; a positive sample is not a list.
-        reuse = (isinstance(cached, dict) and type(cached.get('result_count')) is int
-                 and isinstance(cached.get('results'), list)
-                 and cached['result_count'] == len(cached.get('results', [])) <= 1
-                 and not cached.get('cursor'))
+        if endpoint not in planned:
+            result.update(status='not_applicable', notes=['This member category does not apply to the saved simple definition.'])
+            continue
+        if configured is not None:
+            result.update(status='configured', items=[member_record(value, endpoint) for value in dict.fromkeys(configured)],
+                          notes=['Configured IP entries from the saved definition; this is not an expanded resolved IP list.'])
+            continue
+        cached = probe.pages.get(endpoint) if probe else None
+        # Preserve the VM-only fast path. Missing supplementary lists stay unknown.
+        if (cached is None and probe and vm_fast_eligible(group)
+                and probe.results.get('virtual-machines') == 'negative'):
+            result.update(status='not_collected', notes=['No resolved VM members returned; supplementary member list was not requested.'])
+            continue
+        seen, cursors, expected, raw_count, pages = {}, set(), None, 0, 0
+        reuse = isinstance(cached, dict) and isinstance(cached.get('results'), list)
         params = {'page_size': 1 if testing else PAGE_SIZE}
         try:
             failure = probe.failures.get(endpoint) if probe else None
             if isinstance(failure, AuditError) and failure.status_code in (400, 401, 403, 404, 405, 501):
                 raise failure
             for _ in range(1 if testing else 100):
-                page = cached if reuse else client.get(group['path'] + '/members/' + endpoint, params)
+                if reuse:
+                    page = cached
+                    requested_size = probe.page_sizes.get(endpoint, 1)
+                    budget.owner.record(endpoint, reused_pages=1)
+                else:
+                    page = budget.fetch(client, group['path'] + '/members/' + endpoint, params)
+                    requested_size = params['page_size']
                 reuse = False
+                pages += 1
                 if not isinstance(page, dict) or not isinstance(page.get('results'), list):
                     raise ValueError('Missing member results array')
                 count = page.get('result_count')
@@ -73,8 +112,8 @@ def collect(client, group, *, probe=None, testing=False, limit=MEMBER_LIMIT):
                     break
                 if not cursor:
                     if expected is not None and expected != len(seen):
-                        result['notes'].append('Returned identities do not match the reported member total.')
-                    elif expected is None and len(values) >= params['page_size']:
+                        result['notes'].append('Returned identities do not match the reported member total; no continuation was supplied.')
+                    elif expected is None and len(values) >= requested_size:
                         result['notes'].append('Full page without a total or continuation; completeness is unknown.')
                     result['status'] = 'partial' if result['notes'] else 'complete'
                     break
@@ -84,6 +123,11 @@ def collect(client, group, *, probe=None, testing=False, limit=MEMBER_LIMIT):
                 params = dict(params, cursor=cursor)
             else:
                 result['notes'].append('Member page limit reached.')
+        except CollectionDeadlineExceeded:
+            raise
+        except DetailBudgetExceeded as exc:
+            result['status'] = 'partial' if pages else 'not_collected'
+            result['notes'].append(str(exc) + '. Collected identities are retained; missing members remain unknown.')
         except (AuditError, ValueError) as exc:
             code = getattr(exc, 'status_code', None)
             result['notes'].append('Membership read failed' + (f' (HTTP {code}).' if code else ': ' + str(exc)))
@@ -139,10 +183,10 @@ def vm_links(tags, groups, metadata):
                                              'status': endpoint.get('status', 'partial')}
             else:
                 unlinked = True
-    if states and not any(state in ('complete', 'partial') for state in states):
+    if states and not any(state in ('complete', 'partial', 'not_applicable') for state in states):
         status = 'unavailable'
     else:
-        status = ('complete' if all(state == 'complete' for state in states)
+        status = ('complete' if all(state in ('complete', 'not_applicable') for state in states)
                   and not metadata.get('excluded_group_count') and tags.get('vm_inventory_complete') is True
                   and not metadata.get('testing') and not ambiguous and not unlinked else 'partial')
     return links, status

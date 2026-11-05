@@ -157,7 +157,8 @@ class NSXClient:
 
     def get(self, path, params=None):
         bulk = path.endswith("/statistics") and "/rules/" not in path
-        retries = 0 if bulk else getattr(self, "retries", 0)
+        optional_members = getattr(getattr(self, 'request_context', None), 'member_detail', False) is True
+        retries = 0 if bulk or optional_members else getattr(self, "retries", 0)
         retry_deadline = min(time.monotonic() + 60, getattr(self, "request_deadline", float("inf")))
         phase_deadline = getattr(getattr(self, 'request_context', None), 'phase_deadline', float('inf'))
         retry_deadline = min(retry_deadline, phase_deadline)
@@ -522,14 +523,16 @@ MEMBERSHIP_ENDPOINTS = ("ip-addresses", "virtual-machines", "logical-ports", "lo
 
 
 class MembershipProbe:
-    """Count probes and transiently retain their tiny pages for member collection."""
-    def __init__(self, client):
+    """Count mandatory checks and share their first pages with member collection."""
+    def __init__(self, client, detail_budget=None):
         self.client = client
         self.calls = 0
         self.endpoints = {}
         self.results = {}
         self.pages = {}
         self.failures = {}
+        self.detail_budget = detail_budget
+        self.page_sizes = {}
 
     def __getattr__(self, name):
         return getattr(self.client, name)
@@ -540,7 +543,22 @@ class MembershipProbe:
         counts = self.endpoints.setdefault(endpoint, {'calls': 0, 'positive': 0, 'no_members_returned': 0, 'errors': 0})
         counts['calls'] += 1
         try:
-            page = self.client.get(path, params)
+            if self.detail_budget is not None:
+                from .member_collection_budget import DetailBudgetExceeded
+                from .request_pacing import CollectionDeadlineExceeded
+                from .resolved_membership import PAGE_SIZE
+                try:
+                    page = self.detail_budget.fetch(self.client, path, dict(params or {}, page_size=PAGE_SIZE), shared=True)
+                    self.page_sizes[endpoint] = PAGE_SIZE
+                except CollectionDeadlineExceeded:
+                    raise
+                except (DetailBudgetExceeded, AuditError):
+                    # Optional detail failure never suppresses the mandatory probe.
+                    page = self.client.get(path, params)
+                    self.page_sizes[endpoint] = (params or {}).get('page_size', 1)
+            else:
+                page = self.client.get(path, params)
+                self.page_sizes[endpoint] = (params or {}).get('page_size', 1)
         except Exception as exc:
             self.failures[endpoint] = exc
             counts['errors'] += 1
@@ -1760,6 +1778,9 @@ def audit(client, workers=4, testing=False, progress=None):
     LOG.info("Checking membership for %d groups...", len(groups))
     membership_progress = {"completed": 0, "last_log": time.monotonic()}
     resolved_members = {}
+    from .member_collection_budget import DetailBudget
+    member_options = getattr(client, 'member_options', {})
+    detail_budget = DetailBudget(**(member_options if isinstance(member_options, dict) else {}))
     membership_lock = threading.Lock()
     membership_diagnostics = {'groups_checked': 0, 'probe_calls': 0, 'calls_per_group': {}, 'outcomes': {}, 'endpoints': {}, 'typed_probe_groups': 0, 'inapplicable_probes_omitted': 0, 'vm_probe_comparison': {}}
     group_inventory = {g["path"]: g for g in all_groups}
@@ -1774,13 +1795,14 @@ def audit(client, workers=4, testing=False, progress=None):
     membership_diagnostics['vm_fast_path'] = {'eligible':0, 'used':0, 'verification_groups':0,
                                              'rechecked':0, 'disabled':fast_disabled, 'full_verification':full_verification}
     def check_membership(group):
-        probe = MembershipProbe(client)
+        group_budget = detail_budget.group(group['path'])
+        probe = MembershipProbe(client, detail_budget=None if testing else group_budget)
         eligible = not testing and vm_fast_eligible(group)
         verify = eligible and (full_verification or int(hashlib.sha256((str(verification_day) + group['path']).encode()).hexdigest(), 16) % 20 == 0)
         fast = eligible and not verify
         result = membership(probe, group, group_inventory, scopes[group['path']], vm_fast=fast)
         from .resolved_membership import collect as collect_members
-        resolved_members[group['path']] = collect_members(client, group, probe=probe, testing=testing)
+        resolved_members[group['path']] = collect_members(client, group, probe=probe, testing=testing, budget=group_budget)
         used = bool(result[0] == 'empty' and fast and probe.calls == 1)
         if verify and (probe.results.get('virtual-machines') in ('error', 'incomplete') or (probe.results.get('virtual-machines') == 'negative' and probe.vm_comparison() != 'All three checks empty')):
             verification_failed.set()
@@ -1865,6 +1887,7 @@ def audit(client, workers=4, testing=False, progress=None):
     membership_diagnostics['saved_member_lists'] = {
         endpoint: dict(Counter(evidence['endpoints'][endpoint]['status'] for evidence in resolved_members.values()))
         for endpoint in MEMBERSHIP_ENDPOINTS}
+    membership_diagnostics['member_details'] = detail_budget.summary()
     LOG.info('Saved member list coverage: %s', membership_diagnostics['saved_member_lists'])
     phases["parallel_retrieval"] = round(time.perf_counter() - combined_started, 2)
     phase = time.perf_counter()

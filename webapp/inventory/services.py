@@ -282,6 +282,10 @@ def execute_job(job_id):
                     if note.startswith(prefix) and note[len(prefix):] in audit.MEMBERSHIP_ENDPOINTS:
                         client.membership_hints[row["path"]] = note[len(prefix):]
         client.request_deadline = time.monotonic() + max(0, settings.AUDIT_TIMEOUT - (timezone.now()-job.started_at).total_seconds() - 10) if job.started_at else time.monotonic() + settings.AUDIT_TIMEOUT - 10
+        client.member_options = {'seconds': settings.MEMBERSHIP_DETAIL_SECONDS,
+            'requests': settings.MEMBERSHIP_DETAIL_REQUESTS,
+            'group_seconds': settings.MEMBERSHIP_DETAIL_GROUP_SECONDS,
+            'group_requests': settings.MEMBERSHIP_DETAIL_GROUP_REQUESTS}
         maximum_requests = config.get("max_concurrent_requests", 8)
         concurrency = None if job.testing else adapt_requests(client, maximum=maximum_requests)
         try:

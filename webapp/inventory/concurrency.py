@@ -1,9 +1,23 @@
 """Bound concurrent NSX requests using observed latency and backpressure."""
 from collections import Counter, deque
 import math
+import logging
 import threading
 import time
 import urllib3
+
+LOG = logging.getLogger('inventory.collector')
+
+
+def request_category(path, params=None):
+    if path.endswith('/statistics'):
+        return 'rule_statistics' if '/rules/' in path else 'policy_statistics'
+    if '/members/' in path:
+        params = params or {}
+        size = params.get('page_size', 1)
+        shape = 'page' if params.get('cursor') or isinstance(size, int) and size > 1 else 'probe'
+        return 'membership/' + path.rsplit('/', 1)[-1] + '/' + shape
+    return 'search' if path.startswith('/search/') else 'inventory'
 
 
 class AdaptiveRequests:
@@ -24,6 +38,7 @@ class AdaptiveRequests:
         self.latencies = {}
         self.waiters = deque()
         self.queue_seconds = Counter()
+        self.last_report = clock()
 
     def acquire(self, deadline=None, endpoint='other'):
         queued = self.clock()
@@ -50,12 +65,13 @@ class AdaptiveRequests:
     def release(self, started, error=None, endpoint="other"):
         elapsed = self.clock() - started
         with self.condition:
+            previous_limit = self.limit
             self.active -= 1
             # An optional bulk endpoint's read timeout is not by itself evidence
             # of manager-wide overload. Explicit backpressure still applies.
             cause = getattr(error, "__cause__", None)
-            optional_timeout = (endpoint == "policy_statistics" and
-                                isinstance(cause, (TimeoutError, urllib3.exceptions.ReadTimeoutError)))
+            optional_timeout = ((endpoint == "policy_statistics" or endpoint.startswith('membership/') and endpoint.endswith('/page'))
+                                and (isinstance(error, TimeoutError) or isinstance(cause, (TimeoutError, urllib3.exceptions.ReadTimeoutError))))
             overloaded = (error is not None and not optional_timeout and
                           getattr(error, 'status_code', None) in (None, 429, 502, 503, 504))
             # Compare like endpoints. Statistics can be naturally slow without
@@ -96,6 +112,17 @@ class AdaptiveRequests:
                     self.contended = False
             elif not optional_timeout:
                 self.successes = 0
+            if self.limit != previous_limit:
+                LOG.info('NSX concurrency changed: previous=%d current=%d maximum=%d category=%s response_seconds=%.3f backpressure=%s latency_degraded=%s',
+                         previous_limit, self.limit, self.maximum, endpoint, elapsed, overloaded, degraded)
+            if self.clock()-self.last_report >= 30:
+                self.last_report = self.clock()
+                LOG.info('NSX concurrency progress: limit=%d maximum=%d active=%d waiting=%d endpoints=%s',
+                    self.limit, self.maximum, self.active, len(self.waiters),
+                    {key: {'requests': value['samples']+sum(value['failures'].values()),
+                           'failures': sum(value['failures'].values()),
+                           'p95_seconds': round(sorted(value['durations'])[math.ceil(len(value['durations'])*.95)-1], 3),
+                           'max_seconds': round(value['maximum'], 3)} for key, value in self.latencies.items()})
             self.condition.notify_all()
 
     def summary(self):
@@ -123,8 +150,7 @@ def adapt_requests(client, maximum=8):
     original = client._get
 
     def request(path, params=None):
-        endpoint = ("rule_statistics" if "/rules/" in path else "policy_statistics") if path.endswith("/statistics") else (
-            "membership/" + path.rsplit("/", 1)[-1] if "/members/" in path else "search" if path.startswith("/search/") else "inventory")
+        endpoint = request_category(path, params)
         queued_at = time.monotonic()
         phase_deadline = getattr(client.request_context, 'phase_deadline', None)
         started = controller.acquire(deadline=phase_deadline, endpoint=endpoint)

@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Reduce collection overhead from saved member lists: share initial pages with mandatory membership checks, reuse continuations, prune only simple known member types, and bound optional detail reads independently. Label explicit IP definitions as configured entries. Separate probe/page latency baselines and log member detail budgets, endpoint timings and concurrency changes. Default detail limits are 300 seconds/2,000 requests per collection and 5 seconds/8 requests per group; mandatory checks and the overall deadline remain unchanged. No migration required.
+
 - Save paginated resolved group member identities and use the same evidence for VM → Groups and Group → Members. Separate resolved membership from tag-condition references, show partial/unavailable/not-collected coverage, retain IP/port/segment categories, and use shared lazy member tables. Keep group detail responses small and support current VM drawers when following member links. Older snapshots need a new collection for member evidence; no schema migration is required.
 
 - Use the same rich firewall-reference table and automatic width for group/service drawers reached from VM/tag references or direct inventory selection. Keep parent/non-rule references under Other objects, preserve Back/page state, and fix loading when a saved renderer reopens a remembered References tab. Add bounded same-snapshot object reference pages without migration or reindexing.
