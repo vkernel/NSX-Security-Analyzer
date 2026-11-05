@@ -11,12 +11,13 @@
     if(row){
       if(!row.inventory_type && row.kind)summary.append(make('dt','Type'),make('dd',row.kind.replaceAll('_',' ')));
       for(const [key,label] of [['inventory_type','Type'],['scope','Scope'],['status','Assessment'],['other_count','Other resources'],['tagged_objects','NSX catalog assignments'],['usage','Usage'],['membership','Membership'],['hit_status','Activity'],['power_state','Power state'],['tag_count','Tags'],['group_count','Groups referencing tags'],['action','Action'],['disabled','Disabled'],['hit_count','Recorded hits'],['rule_count','Rules'],['category','Category']]){
+        if(key==='group_count'&&row.inventory_type==='Virtual machine')continue;
         if(row[key]!==undefined && row[key]!==null && row[key]!=='')summary.append(make('dt',label),make('dd',String(row[key]).replaceAll('_',' ')));
       }
       if(row.referenced_by)summary.append(make('dt','Configuration references'),make('dd',String(row.referenced_by.length)));
       if(row.resolved_membership_status){
         const state=row.resolved_membership_status.replaceAll('_',' '),count=row.resolved_group_count;
-        summary.append(make('dt','Resolved VM groups'),make('dd',count==null?state:(row.resolved_membership_status==='partial'?count+' confirmed; total unknown':count)),make('dt','Membership coverage'),make('dd',state));
+        summary.append(make('dt','Saved VM groups'),make('dd',count==null?state:(row.resolved_membership_status==='partial'?count+' confirmed; total unknown':count)),make('dt','Saved membership coverage'),make('dd',state));
       }
       if(row.membership_definition?.methods?.length)groups.get('Technical details').push(make('p','Membership method: '+row.membership_definition.methods.join(', ')));
       if(row.path){const identity=make('div',null,'evidence-identity');identity.append(make('code',row.path));const copy=make('button','Copy path');copy.type='button';copy.dataset.copyPath=row.path;identity.append(copy);groups.get('Technical details').push(identity);}
@@ -39,7 +40,7 @@
       if(section==='members'||/^(resolved |explicit |group )?members\b/i.test(caption))key='Members';
       if(section==='history'||/observation history|review history|changes since/i.test(caption))key='History';
       if(node.matches('.code-block,pre'))key='Technical details';
-      if(node.tagName==='DETAILS')node.open=key==='Summary';
+      if(node.tagName==='DETAILS')node.open=key==='Summary'&&node.dataset.evidenceLazy!== 'true';
       groups.get(key).push(node);
     }
     if(row && !row.evidence_summary_only && !groups.get('Technical details').some(node=>node.matches('details,pre,.code-block')) && row.power_state===undefined){

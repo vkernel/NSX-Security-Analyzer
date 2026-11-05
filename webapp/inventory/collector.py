@@ -2532,7 +2532,7 @@ def _render_report(report, *, fragments, indexed=False, row_sink=None):
                "Older snapshot: only VMs present in saved tag assignments are available. Run a new collection for full VM inventory.")
     if not tags.get("vm_inventory_complete"):
         vm_note += " VM inventory is incomplete or sampled; missing VMs do not indicate deletion."
-    vm_note += " Resolved groups use saved NSX VM member identities. Partial coverage is a lower bound; older snapshots require a new collection. Tag references remain separate. Services follow tag-related firewall rules, not observed VM traffic."
+    vm_note += " Saved group counts use retained NSX VM member identities and may be incomplete. Open References to check current VM groups separately. Firewall references use confirmed groups and saved configuration, not observed VM traffic."
     sections += '<section data-panel id="all-vms" tabindex="-1"><h2>VMs <span class="count">'+display_number(vm_count)+'</span></h2><p class="muted">'+safe(vm_note)+'</p>'+vm_table+'</section>'
     menu += menu_link("all-vms", "VMs", vm_count)
     sections += feature_guide()

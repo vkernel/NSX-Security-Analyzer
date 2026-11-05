@@ -205,11 +205,14 @@ def endpoint(request, pk):
         env = snapshot.environment
         if request.method == 'POST':
             if not request.user.is_staff: return JsonResponse({'error':'Operator access required for current NSX reads.'},status=403)
-            lookup = refresh(snapshot, kind, owner, force=True)
+            # Concurrent drawer openings may already have refreshed this subject.
+            # Explicit Refresh still bypasses the freshness cache.
+            lookup = refresh(snapshot, kind, owner, force=params.get('refresh_mode') != 'if_needed')
             from .audit_events import record
             record('inventory.membership_checked', 'Environment', env.pk, actor=request.user.pk,
                    details={'kind':kind,'status':lookup.status})
         result = cached(snapshot, kind, owner, page)
+        result['can_refresh'] = request.user.is_staff
         if params.get('section') == 'firewall' and kind == 'vm':
             from .confirmed_references import read
             groups = list(MembershipRelation.objects.filter(environment=env, namespace=namespace(env), vm_key=digest(owner['identity']), present=True).values_list('group__path',flat=True))

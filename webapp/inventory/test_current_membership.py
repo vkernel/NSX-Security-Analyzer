@@ -59,12 +59,44 @@ class CurrentMembershipTests(TestCase):
 
     def test_get_is_cache_only_and_environment_and_manager_are_isolated(self):
         with patch('inventory.deletion.connection') as connect:
-            self.assertEqual(self.client.get(self.url,{'kind':'vm','id':1}).json()['status'],'not_collected')
+            result = self.client.get(self.url,{'kind':'vm','id':1}).json()
+            self.assertEqual(result['status'],'not_collected')
+            self.assertTrue(result['can_refresh'])
             connect.assert_not_called()
         save(self.env,'vm',self.owner,self.four,'complete',[])
         self.env.manager='https://new-manager.invalid';self.env.save()
         self.assertEqual(self.client.get(self.url,{'kind':'vm','id':1}).json()['saved_count'],0)
         self.assertEqual(MembershipRelation.objects.count(),4)
+
+    def test_lazy_refresh_reuses_fresh_cache_but_explicit_refresh_checks_nsx(self):
+        save(self.env,'vm',self.owner,self.four,'complete',[])
+        with patch('inventory.deletion.connection') as connect:
+            result=self.client.post(self.url,{'kind':'vm','id':1,'refresh_mode':'if_needed'})
+            self.assertEqual(result.status_code,200)
+            self.assertEqual(result.json()['saved_count'],4)
+            connect.assert_not_called()
+        self.nsx=Mock();self.nsx.get.return_value={'results':[],'result_count':0}
+        with patch('inventory.deletion.connection',self.connection):
+            result=self.client.post(self.url,{'kind':'vm','id':1})
+            self.assertEqual(result.json()['status'],'complete')
+            self.assertEqual(result.json()['saved_count'],0)
+            self.nsx.get.assert_called_once()
+
+    def test_lazy_refresh_checks_expired_cache_and_readers_only_receive_cache(self):
+        lookup=save(self.env,'vm',self.owner,self.four,'complete',[])
+        lookup.expires_at=timezone.now()-timedelta(seconds=1);lookup.save()
+        self.nsx=Mock();self.nsx.get.return_value={'results':[{'path':self.four[0]['path']}],'result_count':1}
+        with patch('inventory.deletion.connection',self.connection):
+            result=self.client.post(self.url,{'kind':'vm','id':1,'refresh_mode':'if_needed'})
+            self.assertEqual(result.json()['saved_count'],1)
+            self.nsx.get.assert_called_once()
+        self.user.is_staff=False;self.user.save()
+        with patch('inventory.deletion.connection') as connect:
+            result=self.client.get(self.url,{'kind':'vm','id':1}).json()
+            self.assertFalse(result['can_refresh'])
+            self.assertEqual(result['saved_count'],1)
+            self.assertEqual(self.client.post(self.url,{'kind':'vm','id':1,'refresh_mode':'if_needed'}).status_code,403)
+            connect.assert_not_called()
 
     def test_partial_refresh_preserves_positives_complete_refresh_removes_and_invalidates_inverse(self):
         save(self.env,'vm',self.owner,self.four,'complete',[])

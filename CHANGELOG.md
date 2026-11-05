@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Simplify VM References to confirmed Groups and Firewall rules. Move assigned tags into Summary and remove the VM Members, Tag references and Tag-based rules tabs. Lazily refresh missing/stale current membership when an operator opens References, reuse fresh cache, retain explicit Refresh and separate historical snapshot evidence, and distinguish unknown membership from a complete empty result. Main collection adds no requests; no new migration beyond 0065.
+
 - Replace budget-limited browsing scans during collection with explicit, cached VM-to-group association checks. Share current relationships across VM/group drawers with per-owner completeness, timestamps, source-preserving navigation, pagination and separate immutable snapshot evidence. Label partial counts and tag possibilities clearly; use confirmed memberships for VM firewall references. Add a separate collection-aware cache-warming command. Apply additive migration 0065; detailed browsing adds no NSX requests to the main collection.
 
 - Reduce collection overhead from saved member lists: share initial pages with mandatory membership checks, reuse continuations, prune only simple known member types, and bound optional detail reads independently. Label explicit IP definitions as configured entries. Separate probe/page latency baselines and log member detail budgets, endpoint timings and concurrency changes. Default detail limits are 300 seconds/2,000 requests per collection and 5 seconds/8 requests per group; mandatory checks and the overall deadline remain unchanged. No migration required.
