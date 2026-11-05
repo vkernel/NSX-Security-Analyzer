@@ -1,0 +1,36 @@
+{
+  "syntheticVMs": 1200,
+  "savedMemberships": 2,
+  "currentMemberships": 4,
+  "sharedInverse": true,
+  "sourcePreservedOnNavigation": true,
+  "snapshotUnchanged": true,
+  "targetedNSXRequests": 1,
+  "errors": [],
+  "checks": [
+    {
+      "width": 1440,
+      "theme": "light",
+      "overflow": false,
+      "drawerOverflow": false
+    },
+    {
+      "width": 390,
+      "theme": "light",
+      "overflow": false,
+      "drawerOverflow": false
+    },
+    {
+      "width": 1440,
+      "theme": "dark",
+      "overflow": false,
+      "drawerOverflow": false
+    },
+    {
+      "width": 390,
+      "theme": "dark",
+      "overflow": false,
+      "drawerOverflow": false
+    }
+  ]
+}

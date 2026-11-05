@@ -1,8 +1,10 @@
 from django.urls import path
 from . import deletion_plan, approval_evidence, naming_views, segmentation_views, workload_views
+from . import current_membership
 from . import storage_views, activity_views, authentication_settings, keycloak_settings, system_health, views, history_views, diagnostic_views, report_views, impact, transient, deletion, task_cancellation, bulk_actions
 
 urlpatterns = [
+    path('snapshots/<uuid:pk>/memberships/', current_membership.endpoint, name='current-membership'),
     path('environments/<int:pk>/segmentation/workloads/', workload_views.pair_view, name='segmentation-pair'),
     path('environments/<int:pk>/segmentation/vms/', workload_views.vm_search, name='segmentation-vms'),
     path('environments/<int:pk>/segmentation/groups/', segmentation_views.group_search, name='segmentation-groups'),

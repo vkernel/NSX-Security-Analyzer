@@ -1,0 +1,32 @@
+{
+  "baseline_checks": {
+    "requests": 5430,
+    "modeled_membership_seconds": 135.88
+  },
+  "published_8196992": {
+    "requests": 46702,
+    "modeled_membership_seconds": 2442.84
+  },
+  "optimized": {
+    "requests": 6430,
+    "modeled_membership_seconds": 226.26,
+    "detail_requests": 2000
+  },
+  "fast_collection": {
+    "requests": 5430,
+    "modeled_membership_seconds": 135.88,
+    "additional_collection_requests": 0
+  },
+  "assumptions": {
+    "groups": 10861,
+    "workers": 8,
+    "max_requests_per_second": 40,
+    "mix": "50% explicit IP, 30% empty VM, 15% 10-member VM, 5% 2500-member VM",
+    "latency_seconds": {
+      "probe": 0.15,
+      "page": ".45 + .00005 per returned member"
+    },
+    "budget": "2000 optional requests; time cap separately tested",
+    "scope": "Membership branch only; excludes inventory, counters, tags, indexing, transport errors and NSX backpressure. Not a production ETA."
+  }
+}

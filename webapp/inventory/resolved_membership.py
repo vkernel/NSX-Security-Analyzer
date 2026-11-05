@@ -127,7 +127,8 @@ def collect(client, group, *, probe=None, testing=False, limit=MEMBER_LIMIT, bud
             raise
         except DetailBudgetExceeded as exc:
             result['status'] = 'partial' if pages else 'not_collected'
-            result['notes'].append(str(exc) + '. Collected identities are retained; missing members remain unknown.')
+            result['notes'].append(('Detailed lists are retrieved separately from collection' if budget.owner.request_limit == 0 else str(exc))
+                                   + '. Collected identities are retained; missing members remain unknown.')
         except (AuditError, ValueError) as exc:
             code = getattr(exc, 'status_code', None)
             result['notes'].append('Membership read failed' + (f' (HTTP {code}).' if code else ': ' + str(exc)))

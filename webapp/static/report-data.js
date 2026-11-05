@@ -77,7 +77,7 @@
         if(panel==='all-vms') [...tbody.rows].forEach((tr,index)=>{
           const data=result.rows[index].data,cell=tr.cells[3];if(!cell)return;
           const state=data.resolved_membership_status==='unavailable'?'Unavailable':'Not collected';
-          cell.textContent=data.resolved_group_count==null?state:(data.resolved_membership_status==='partial'?'≥ ':'')+data.resolved_group_count;
+          cell.textContent=data.resolved_group_count==null?state:data.resolved_membership_status==='partial'?data.resolved_group_count+' confirmed; total unknown':data.resolved_group_count;
           cell.title='Resolved VM memberships saved during collection; '+(data.resolved_membership_status||'not collected').replaceAll('_',' ');
         });
         if (inventory && document.getElementById(bulkId)) {
@@ -146,27 +146,31 @@
     };
     const table=(section,label,columns,path='')=>window.evidenceTable({title:label,columns,current,wide:section==='related_rules',load:page=>load(id,section,page,path)});
     const tags=table('tags','Assigned tags',[{label:'Scope',cell:item=>item.scope||'(empty scope)'},{label:'Value',cell:item=>object(item,'tags')}]);
-    const groups=table('related_groups','Groups referencing these tags',[{label:'Group',cell:item=>object(item,'groups')}]);
-    const resolved=table('resolved_groups','Resolved VM groups',[{label:'Group',cell:item=>object(item,'groups')},{label:'Group VM-list coverage',cell:item=>window.evidenceBadge(item.status||'partial')}]);
+    const groups=table('related_groups','Tag references',[{label:'Group',cell:item=>object(item,'groups')}]);
+    const source=window.membershipSource(body,{kind:'vm',id});
+    const resolved=window.evidenceTable({title:'Resolved VM groups',current,columns:[{label:'Group',cell:item=>object(item,'groups')},{label:'Membership',cell:()=>window.evidenceBadge('Confirmed')}],load:page=>source.load('',page,()=>load(id,'resolved_groups',page))});
+    source.register(resolved);source.panel.dataset.evidenceSection='members';body.append(source.panel);
     const memberCategories=window.evidenceCategories([{...resolved,label:'Groups'}]);memberCategories.dataset.evidenceSection='members';memberCategories.querySelector('nav').setAttribute('aria-label','Membership categories');body.append(memberCategories);
     const ruleDetail=make('section');ruleDetail.className='evidence-rule-inspection';ruleDetail.hidden=true;ruleDetail.tabIndex=-1;let inspection=0;
     async function inspect(item,trigger){
       const token=++inspection,scroll=body.closest('dialog').scrollTop;ruleDetail.hidden=false;rules.panel.dataset.inspecting='true';
       const header=make('header'),heading=make('h3',item.name||item.path),close=make('button','Back to rules'),detail=make('div');close.type='button';close.onclick=()=>{++inspection;ruleDetail.hidden=true;delete rules.panel.dataset.inspecting;body.closest('dialog').scrollTop=scroll;trigger?.focus({preventScroll:true});};header.append(heading,close);ruleDetail.replaceChildren(header,detail);window.evidenceState(detail,'Loading rule references…');ruleDetail.focus({preventScroll:true});
       try{
-        const response=await load(id,'rule',0,item.path);if(!current()||token!==inspection)return;
+        const response=source.isCurrent()?await window.reportData(null,{op:'current-member-rule',id,path:item.path}):await load(id,'confirmed_rule',0,item.path);if(!current()||token!==inspection)return;
         const data=response.details;
         const facts=make('p');facts.className='evidence-rule-facts';facts.append(window.evidenceBadge(data.action,'action'),window.evidenceBadge(data.disabled===true?'Disabled':data.disabled===false?'Enabled':null));
         const link=relationLink(item,'rules');link.textContent='Open rule record';
         const services=window.evidenceTable({title:'Configured services',current:()=>current()&&token===inspection,columns:[{label:'Service',cell:service=>service==='ANY'||service.path==='ANY'?'Any service':object(service,'services')}],load:async page=>({items:(data.services||[]).slice(page*25,(page+1)*25),has_next:(page+1)*25<(data.services||[]).length})});
-        const via=table('via_groups','Related groups for this rule',[{label:'Group',cell:group=>object(group,'groups')}],item.path);
+        const via=source.isCurrent()?window.evidenceTable({title:'Related groups for this rule',current,columns:[{label:'Group',cell:group=>object(group,'groups')}],load:async page=>({items:(data.via_groups||[]).slice(page*25,page*25+25),has_next:(data.via_groups||[]).length>(page+1)*25})}):table('confirmed_via_groups','Related groups for this rule',[{label:'Group',cell:group=>object(group,'groups')}],item.path);
         detail.replaceChildren(facts,link,services.panel,via.panel);services.show();via.show();
       }catch(error){if(current()&&token===inspection)window.evidenceState(detail,error.message,()=>inspect(item,trigger));}
     }
-    const rules=table('related_rules','Firewall references',window.firewallReferenceColumns(body,inspect));
+    const rules=window.evidenceTable({title:'Firewall references',current,wide:true,columns:window.firewallReferenceColumns(body,inspect),load:page=>source.load('firewall',page,()=>load(id,'confirmed_rules',page))});source.register(rules);
+    source.onChange(()=>{inspection++;ruleDetail.hidden=true;delete rules.panel.dataset.inspecting;});
     rules.panel.append(ruleDetail);
-    const caveat=make('p','Tag-condition references are configuration relationships. They do not establish VM membership or effective policy. Use Members for saved resolved VM identities.');caveat.dataset.evidenceSection='relationships';caveat.className='evidence-note';body.append(caveat);
-    body.append(window.evidenceCategories([{...tags,label:'Tags'},{...groups,label:'Groups'},{...rules,label:'Rules & services'}]));
+    const candidates=table('related_rules','Tag-based rule possibilities',window.firewallReferenceColumns(body,item=>window.openRelatedEvidence(body,{path:item.path},item.name)));
+    const caveat=make('p','Tag references and tag-based rule possibilities do not establish VM membership. Firewall references use confirmed memberships; saved and current evidence are labelled separately.');caveat.dataset.evidenceSection='relationships';caveat.className='evidence-note';body.append(caveat);
+    body.append(window.evidenceCategories([{...tags,label:'Tags'},{...groups,label:'Tag references'},{...rules,label:'Rules & services'},{...candidates,label:'Tag-based rules'}]));
     const advanced=make('details'), title=make('summary','VM inventory details'), content=make('div');advanced.dataset.evidenceSection='technical';advanced.append(title,content);body.append(advanced);
     let ready=false,busy=false;
     const technical=async()=>{if(ready||busy)return;busy=true;window.evidenceState(content,'Loading technical details…');try{const response=await load(id,'vm');if(body.evidenceGeneration!==generation)return;content.replaceChildren(window.technicalEvidence(response.details));ready=true;}catch(error){window.evidenceState(content,error.message,technical);}finally{busy=false;}};

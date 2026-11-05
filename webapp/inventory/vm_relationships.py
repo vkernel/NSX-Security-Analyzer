@@ -13,6 +13,9 @@ def read(snapshot_id, ordinal, section='summary', page=0, path='', context=False
     if section == 'summary':
         from .resolved_membership import vm_summary
         return {'data': vm_summary(summary['compact'])}
+    if section in ('confirmed_rules', 'confirmed_rule', 'confirmed_via_groups'):
+        from .confirmed_references import saved
+        return saved(snapshot_id, ordinal, section, page, path)
     page = max(0, page)
     # Values remain bound parameters. Only fixed JSON keys enter SQL text.
     base = 'FROM inventory_snapshotrecord WHERE snapshot_id = %s AND ordinal = %s AND view = %s'

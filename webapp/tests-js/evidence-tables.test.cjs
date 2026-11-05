@@ -5,6 +5,7 @@ function tab(d,label,root=d.querySelector('#detail-body > .evidence-tabs')){[...
 const summary={name:'VM',power_state:'VM_RUNNING',tag_count:1,group_count:1};
 const rule={name:'HTTPS <script>unsafe</script>',path:'/infra/rules/https',policy_name:'Portal',action:'DROP',disabled:true};
 const responses={summary:{data:summary},tags:{items:[{scope:'Application',tag:'Portal'}]},related_groups:{items:[{name:'Web',path:'/infra/groups/web'}]},related_rules:{items:[rule,{name:'Legacy',path:'/infra/rules/legacy'}],has_next:true},rule:{details:{action:'ALLOW',disabled:false,services:['ANY',{name:'HTTPS',path:'/infra/services/https'}]}},via_groups:{items:['/infra/groups/web']}};
+responses.confirmed_rules=responses.related_rules;responses.confirmed_rule=responses.rule;responses.confirmed_via_groups=responses.via_groups;
 test('VM reference tables are lazy, paged, labelled and do not fetch every rule',async()=>{const dom=setup(),w=dom.window,d=w.document,calls=[];w.reportData=async(_,query)=>{calls.push(query);return responses[query.section];};await w.showVmRelationships(d.getElementById('detail-body'),null,7,null);assert.deepEqual(calls.map(c=>c.section),['summary']);tab(d,'References');await tick();assert.equal(d.querySelector('#evidence-references details'),null);assert.equal(d.querySelector('.evidence-table caption').textContent,'Assigned tags');tab(d,'Rules & services',d.querySelector('#evidence-references .evidence-category-tabs'));await tick();const table=[...d.querySelectorAll('table')].find(t=>t.caption.textContent==='Firewall references');assert.deepEqual([...table.querySelectorAll('th')].map(th=>th.textContent),['Type','Category','Policy','Rule','ID','Seq','Action','State','Matched fields','Matched groups','Reason / limits','Details']);assert.equal(table.querySelector('[data-tone=negative]').textContent,'DROP');assert.equal(table.querySelector('[data-tone=warning]').textContent,'Disabled');assert.equal(table.querySelectorAll('script').length,0);assert.match(table.textContent,/<script>unsafe<\/script>/);assert.ok(table.rows[2].textContent.includes('Not recorded'));assert.equal(calls.some(c=>c.section==='rule'),false);const section=table.closest('section');section.querySelector('[aria-label="Next firewall references"]').click();await tick();assert.equal(calls.at(-1).page,1);assert.match(section.querySelector('[role=status]').textContent,/26–27/);dom.window.close();});
 test('rule inspection uses service and provenance tables and returns focus to the same row',async()=>{const dom=setup(),w=dom.window,d=w.document;w.reportData=async(_,query)=>responses[query.section];w.openRelatedEvidence=async()=>{};await w.showVmRelationships(d.getElementById('detail-body'),null,7,summary);tab(d,'References');tab(d,'Rules & services',d.querySelector('#evidence-references .evidence-category-tabs'));await tick();const inspect=d.querySelector('[aria-label^="Inspect references"]');inspect.focus();inspect.click();await tick();await tick();const detail=d.querySelector('.evidence-rule-inspection');assert.equal(detail.hidden,false);assert.equal(detail.querySelectorAll('details').length,0);assert.match(detail.textContent,/Any service/);assert.deepEqual([...detail.querySelectorAll('caption')].map(c=>c.textContent),['Configured services','Related groups for this rule']);assert.equal(detail.parentElement.dataset.inspecting,'true');detail.querySelector('header button').click();assert.equal(detail.hidden,true);assert.equal(detail.parentElement.dataset.inspecting,undefined);assert.equal(d.activeElement,inspect);dom.window.close();});
 test('reference errors offer retry and closed drawers reject late responses',async()=>{const dom=setup(),w=dom.window,d=w.document;let fail=true,resolve;w.reportData=async(_,q)=>{if(q.section==='tags'){if(fail)throw Error('Unavailable');return new Promise(r=>resolve=r);}return responses[q.section];};await w.showVmRelationships(d.getElementById('detail-body'),null,7,summary);tab(d,'References');await tick();const content=d.querySelector('#evidence-references .evidence-table-content');assert.match(content.textContent,/Unavailable/);fail=false;content.querySelector('button').click();d.getElementById('detail-body').evidenceGeneration=null;resolve({items:[{scope:'Late',tag:'Should not appear'}]});await tick();assert.doesNotMatch(content.textContent,/Should not appear/);dom.window.close();});
@@ -28,7 +29,7 @@ test('VM Members separates resolved identities from broad tag references and pag
  tab(d,'References');await tick();assert.equal(calls.at(-1).section,'tags');dom.window.close();
 });
 test('older VM membership is not relabelled from tag-reference counts',async()=>{
- const dom=setup(),w=dom.window,d=w.document;w.reportData=async()=>({items:[],status:'not_collected',has_next:false});await w.showVmRelationships(d.getElementById('detail-body'),null,7,{...summary,group_count:999,resolved_group_count:null,resolved_membership_status:'not_collected'});tab(d,'Members');await tick();assert.match(d.querySelector('#evidence-members').textContent,/not collected in this snapshot/);assert.match(d.querySelector('#evidence-members [role=status]').textContent,/Not collected/);dom.window.close();
+ const dom=setup(),w=dom.window,d=w.document;w.reportData=async()=>({items:[],status:'not_collected',has_next:false});await w.showVmRelationships(d.getElementById('detail-body'),null,7,{...summary,group_count:999,resolved_group_count:null,resolved_membership_status:'not_collected'});tab(d,'Members');await tick();assert.match(d.querySelector('#evidence-members').textContent,/not collected in this snapshot/);assert.match(d.querySelector('#evidence-members .evidence-table-status').textContent,/Not collected/);dom.window.close();
 });
 test('group Members uses shared tables, exact VM links, independent categories and partial totals',async()=>{
  const dom=setup(),w=dom.window,d=w.document,body=d.getElementById('detail-body'),calls=[];d.querySelector('main').innerHTML='<div data-server-table="all-groups"></div>';w.reportData=async(_,q)=>{calls.push(q);return {status:q.section==='virtual-machines'?'partial':'unavailable',saved_count:1,reported_count:200,notes:['Second page failed'],items:q.section==='virtual-machines'?[{name:'VM one',external_id:'one',identity:'one',vm_path:'/vm/one'}]:[],has_next:false};};let query;w.openRelatedEvidence=async(_,value)=>query=value;
@@ -56,4 +57,36 @@ test('member tables distinguish configured IPs, inapplicable categories and budg
   if(data.status==='not_collected'){assert.match(table.panel.textContent,/budget reached/);assert.match(table.panel.textContent,/see the collection notes/);assert.doesNotMatch(table.panel.textContent,/Run a new collection/);}
  }
  dom.window.close();
+});
+
+test('explicit current VM lookup shows four groups separately from two saved memberships and tag references',async()=>{
+ const dom=setup(),w=dom.window,d=w.document,body=d.getElementById('detail-body'),calls=[];
+ const four=Array.from({length:4},(_,i)=>({path:'/infra/groups/'+i,name:'Actual group '+i}));
+ w.reportData=async(_,q)=>q.section==='resolved_groups'?{items:four.slice(0,2),status:'partial'}:q.section==='related_groups'?{items:Array.from({length:25},(_,i)=>({name:'Tag candidate '+i}))}:responses[q.section];
+ w.fetch=async(url,options)=>{calls.push({url:String(url),method:options.method});return {ok:true,json:async()=>({items:four,status:'complete',saved_count:4,source:'current_nsx',checked_at:'2026-11-05T12:00:00Z',notes:['Saved snapshot unchanged.']})};};
+ await w.showVmRelationships(body,null,7,{...summary,resolved_group_count:2,resolved_membership_status:'partial'});tab(d,'Members');await tick();
+ assert.equal(calls.length,0);assert.match(d.querySelector('#evidence-members').textContent,/2 confirmed; total unknown/);
+ d.querySelector('.evidence-membership-source button').click();await tick();await tick();
+ assert.deepEqual(calls.map(c=>c.method),['POST','GET']);assert.match(calls[0].url,/memberships/);
+ assert.equal(d.querySelector('#evidence-members tbody').children.length,4);assert.match(d.querySelector('#evidence-members').textContent,/Current NSX/);
+ const select=d.querySelector('.evidence-membership-source select');select.value='saved';select.dispatchEvent(new w.Event('change'));await tick();
+ assert.equal(d.querySelector('#evidence-members tbody').children.length,2);
+ tab(d,'References');tab(d,'Tag references',d.querySelector('#evidence-references .evidence-category-tabs'));await tick();
+ assert.match(d.querySelector('#evidence-references').textContent,/Tag candidate 24/);dom.window.close();
+});
+
+test('confirmed firewall references are independent of tag-based possibilities',async()=>{
+ const dom=setup(),w=dom.window,d=w.document,calls=[];w.reportData=async(_,q)=>{calls.push(q.section);return {items:[{name:q.section==='confirmed_rules'?'Confirmed rule':'Tag possibility',path:'/rule'}]};};
+ await w.showVmRelationships(d.getElementById('detail-body'),null,7,summary);tab(d,'References');tab(d,'Rules & services',d.querySelector('#evidence-references .evidence-category-tabs'));await tick();
+ assert.ok(calls.includes('confirmed_rules'));assert.equal(calls.includes('related_rules'),false);assert.match(d.querySelector('.evidence-firewall-table').textContent,/Confirmed rule/);
+ tab(d,'Tag-based rules',d.querySelector('#evidence-references .evidence-category-tabs'));await tick();assert.ok(calls.includes('related_rules'));dom.window.close();
+});
+
+test('current membership errors preserve saved results and late responses cannot replace another object',async()=>{
+ const dom=setup(),w=dom.window,d=w.document,body=d.getElementById('detail-body');w.reportData=async()=>({items:[{name:'Saved group'}],status:'partial'});
+ await w.showVmRelationships(body,null,7,summary);tab(d,'Members');await tick();
+ w.fetch=async()=>({ok:false,json:async()=>({error:'Collection has priority.'})});body.querySelector('.evidence-membership-source button').click();await tick();
+ assert.match(body.textContent,/Collection has priority/);assert.match(body.textContent,/Saved group/);
+ let resolve;w.fetch=async()=>new Promise(r=>resolve=r);body.querySelector('.evidence-membership-source button').click();
+ body.evidenceGeneration={};body.replaceChildren();resolve({ok:true,json:async()=>({items:[],status:'complete'})});await tick();assert.equal(body.textContent,'');dom.window.close();
 });

@@ -35,6 +35,7 @@
   // Preserve DOM nodes/listeners so returning retains expanded sections and pagination.
   window.openRelatedEvidence=async(body,query,label)=>{
     const dialog=body.closest('dialog'),heading=dialog.querySelector('h2'),nodes=Array.from(body.childNodes),title=heading.textContent,scroll=dialog.scrollTop;
+    const membershipSource=body.querySelector('.evidence-membership-source select')?.value||'saved';
     const previousRequest=dialog.reportRequest, previousGeneration=body.evidenceGeneration, previousPending=dialog.tagPending,previousWide=dialog.classList.contains('evidence-firewall-wide');
     const previousBack=dialog.querySelector('.evidence-back');if(previousBack)previousBack.hidden=true;
     const token={};dialog.reportRequest=token;
@@ -44,11 +45,13 @@
     const open=async()=>{window.evidenceState(body,'Loading evidence…');try{
       const record=await window.reportData(null,{op:'resolve',...query});if(!dialog.open||dialog.reportRequest!==token)return;
       const button=make('button');button.className='detail-button';button.dataset.title=label;button.dataset.evidenceView=record.view;
+      button.dataset.membershipSource=membershipSource;
       button.dataset[record.view==='tags'?'tagRow':'evidenceRow']=record.id;
       button.hidden=true;document.querySelector('main').append(button);button.click();dialog.addEventListener('close',()=>button.remove(),{once:true});back.addEventListener('click',()=>button.remove(),{once:true});
     }catch(error){if(dialog.open&&dialog.reportRequest===token)window.evidenceState(body,error.message,open);}};
     dialog.addEventListener('close',()=>back.remove(),{once:true});await open();
   };
+  document.addEventListener('click',event=>{const button=event.target.closest('.detail-button');if(button){const dialog=document.getElementById('detail-dialog');if(dialog)dialog.membershipInitialSource=button.dataset.membershipSource||'saved';}},true);
 })();
 
 /* One table vocabulary for reference drawers: names first, quiet identities, explicit states. */
@@ -72,7 +75,7 @@
     coverage.className='evidence-note';coverage.hidden=true;
     root.className='evidence-table-section';status.className='evidence-table-status';status.setAttribute('role','status');content.className='evidence-table-content';pager.className='evidence-pagination';pager.setAttribute('aria-label',title+' pages');previous.type=next.type='button';previous.setAttribute('aria-label','Previous '+title.toLowerCase());next.setAttribute('aria-label','Next '+title.toLowerCase());pager.append(previous,next);pager.hidden=true;root.append(heading,status,content,pager);
     root.insertBefore(coverage,content);
-    let loaded=false,busy=false,version=0,page=0;
+    let loaded=false,busy=false,version=0,page=0,reloadPending=false;
     async function render(target=page){
       if(busy||!current())return;busy=true;const token=++version;root.setAttribute('aria-busy','true');status.textContent='Loading '+title.toLowerCase()+'…';previous.disabled=next.disabled=true;
       try{
@@ -84,13 +87,30 @@
         const missing=data.status&&data.status!=='complete';
         if(!data.items.length){const row=make('tr'),td=make('td',data.status==='not_applicable'?'This member category does not apply to the saved definition.':missing?(data.status==='not_collected'?(data.notes?.length?'Member list was not collected; see the collection notes.':'Member identities were not collected in this snapshot. Run a new collection.'):'No member identities saved for this category; membership is not established.'):empty);td.colSpan=columns.length;td.className='evidence-table-empty';row.append(td);rows.append(row);}
         table.append(caption,head,rows);scroll.append(table);content.replaceChildren(scroll);status.textContent=data.items.length?`${page*25+1}–${page*25+data.items.length} shown · Page ${page+1}`:'No entries recorded';pager.hidden=!page&&!data.has_next;previous.disabled=!page;next.disabled=!data.has_next;
-        if(data.status){status.textContent=(states[data.status]||data.status)+' · '+status.textContent;status.dataset.membershipStatus=data.status;}
-        coverage.textContent=[data.saved_count!=null?`${data.saved_count} saved${data.reported_count!=null?' · '+data.reported_count+' reported by NSX':''}`:'',data.checked_at?'Collected '+(window.workspaceTimeText?window.workspaceTimeText(data.checked_at):data.checked_at):'',...(data.notes||[])].filter(Boolean).join(' · ');coverage.hidden=!coverage.textContent;
+        if(data.status){status.textContent=(data.status==='partial'?'Partial · '+(data.saved_count??data.items.length)+' confirmed; total unknown':states[data.status]||data.status)+' · '+status.textContent;status.dataset.membershipStatus=data.status;}
+        coverage.textContent=[data.source==='current_nsx'?'Current NSX':data.source==='saved_snapshot'?'Saved snapshot':'',data.stale?'Stale observation':'',data.saved_count!=null?`${data.saved_count} saved${data.reported_count!=null?' · '+data.reported_count+' reported by NSX':''}`:'',data.checked_at?(data.source==='current_nsx'?'Checked ':'Collected ')+(window.workspaceTimeText?window.workspaceTimeText(data.checked_at):data.checked_at):'',...(data.notes||[])].filter(Boolean).join(' · ');coverage.hidden=!coverage.textContent;
       }catch(error){if(current()){status.textContent='Unable to load '+title.toLowerCase();window.evidenceState(content,error.message,()=>render(target));}}
-      finally{busy=false;root.removeAttribute('aria-busy');}
+      finally{busy=false;root.removeAttribute('aria-busy');if(reloadPending){reloadPending=false;if(!root.closest('[hidden]'))render(0);}}
     }
     previous.onclick=()=>render(page-1);next.onclick=()=>render(page+1);
-    return {panel:root,wide,show:()=>{if(!loaded)render();},reload:()=>render()};
+    return {panel:root,wide,show:()=>{if(!loaded)render();},reload:()=>{version++;loaded=false;if(busy)reloadPending=true;else if(!root.closest('[hidden]'))render(0);}};
+  };
+  window.membershipSource=(body,subject)=>{
+    const panel=make('div'),label=make('label','Membership evidence '),select=make('select'),check=make('button','Check current NSX'),note=make('p');
+    panel.className='evidence-membership-source';note.className='evidence-note';note.hidden=true;note.setAttribute('role','status');select.setAttribute('aria-label','Membership evidence');check.type='button';
+    for(const [value,text] of [['saved','Saved snapshot'],['current','Current NSX']]){const option=make('option',text);option.value=value;select.append(option);}label.append(select);panel.append(label,check,note);
+    select.value=body.closest('dialog')?.membershipInitialSource||'saved';
+    const tables=[],changes=[],generation=body.evidenceGeneration;
+    const current=()=>body.evidenceGeneration===generation&&body.closest('dialog')?.open;
+    const url=()=>{const value=new URL('memberships/',location.href.split('#')[0].split('?')[0]);value.search=new URLSearchParams(subject);return value;};
+    const request=async(section,page,refresh=false)=>{
+      const target=url();target.searchParams.set('page',page);if(section)target.searchParams.set('section',section);
+      const response=await fetch(target,{method:refresh?'POST':'GET',credentials:'same-origin',headers:refresh?{'X-CSRFToken':document.querySelector('#interface-csrf input')?.value||''}:{Accept:'application/json'},...(refresh?{body:new URLSearchParams({...subject,page,section})}:{})});
+      if(response.redirected)throw Error('Your session has expired. Reload to sign in.');const result=await response.json();if(!response.ok)throw Error(result.error||'Membership lookup failed.');return result;
+    };
+    select.onchange=()=>{note.textContent=select.value==='current'?'Cached current observations are separate from this saved snapshot. Use Check current NSX to refresh.':'';note.hidden=!note.textContent;changes.forEach(fn=>fn());tables.forEach(table=>table.reload());};
+    check.onclick=async()=>{check.disabled=true;note.hidden=false;note.textContent='Checking current NSX membership…';try{const result=await request('',0,true);if(!current())return;select.value='current';note.textContent=result.status==='complete'?'Membership check completed.':'Current check is incomplete; missing memberships remain unknown.';changes.forEach(fn=>fn());tables.forEach(table=>table.reload());}catch(error){if(current())note.textContent=error.message;}finally{check.disabled=false;}};
+    return {panel,register:table=>tables.push(table),onChange:fn=>changes.push(fn),load:async(section,page,saved)=>select.value==='current'?request(section,page):saved(),isCurrent:()=>select.value==='current'};
   };
   window.evidenceCategories=(entries)=>{
     const root=make('div'),nav=make('nav');root.className='evidence-reference-tables';root.dataset.evidenceSection='relationships';root.dataset.evidenceActivate='';nav.className='evidence-category-tabs';nav.setAttribute('aria-label','Reference categories');root.append(nav,...entries.map(entry=>entry.panel));let visible=false,selected=0;
@@ -136,10 +156,13 @@
     if(row?.kind!=='group'||!row.path||!window.reportData||!document.querySelector('[data-server-table]'))return;
     const generation=body.evidenceGeneration,dialog=body.closest('dialog');
     const current=()=>body.evidenceGeneration===generation&&dialog?.open;
+    const source=window.membershipSource(body,{kind:'group',path:row.path});
     const columns=[{label:'Member',cell:item=>window.evidenceObject(body,{...item,path:item.vm_path||item.path},item.vm_path?{path:item.vm_path,view:'vms'}:null)},
       {label:'Identity',cell:item=>item.external_id||item.id||item.identity}];
     const entries=[['virtual-machines','VMs','Resolved VM members'],['ip-addresses','IP addresses','IP members'],['logical-ports','Ports','Resolved port members'],['logical-switches','Segments','Resolved segment members']].map(([section,label,title])=>{
-      const table=window.evidenceTable({title,columns,current,empty:'NSX returned no members for this category.',load:page=>window.reportData(null,{op:'group-members',path:row.path,section,page})});
+      const saved=page=>window.reportData(null,{op:'group-members',path:row.path,section,page});
+      const table=window.evidenceTable({title,columns,current,empty:'NSX returned no members for this category.',load:page=>section==='virtual-machines'?source.load('',page,()=>saved(page)):saved(page)});
+      if(section==='virtual-machines'){table.panel.prepend(source.panel);source.register(table);}
       return {...table,label,show:()=>queueMicrotask(table.show)};
     });
     const note=make('p','Resolved members saved at collection time. Categories are separate; IP or port membership does not establish VM membership. Excluded groups and older snapshots may have no member list.');note.className='evidence-note';note.dataset.evidenceSection='members';

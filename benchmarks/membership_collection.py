@@ -69,7 +69,7 @@ def run():
     source=subprocess.run(['git','show','8196992:webapp/inventory/resolved_membership.py'],check=True,capture_output=True,text=True).stdout
     previous=types.ModuleType('previous_resolved_membership'); previous.__package__='webapp.inventory';exec(source,previous.__dict__)
     output={}
-    for mode in ('baseline_checks','published_8196992','optimized'):
+    for mode in ('baseline_checks','published_8196992','optimized','fast_collection'):
         traces=[]; requests=0; outcomes=[]
         # Hold the budget clock fixed to isolate its strict 2,000-request cap.
         # Time cutoff behavior is tested independently with an advancing clock.
@@ -81,6 +81,7 @@ def run():
             result=membership(probe,group,vm_fast=True); outcomes.append(result[0])
             if mode=='published_8196992':previous.collect(client,group,probe=probe)
             elif mode=='optimized':collect(client,group,probe=probe,budget=group_budget)
+            elif mode=='fast_collection':collect(client,group,probe=probe,budget=DetailBudget(seconds=0,requests=0).group(group['path']))
             traces.append(client.trace); requests+=len(client.trace)
         output[mode]={'requests':requests,'modeled_membership_seconds':estimate(traces)}
         if mode=='baseline_checks':baseline=outcomes
@@ -88,6 +89,8 @@ def run():
         if mode=='optimized':
             assert requests <= output['baseline_checks']['requests'] + 2000
             output[mode]['detail_requests']=budget.summary()['requests']
+    assert output['fast_collection']['requests']==output['baseline_checks']['requests'], 'Browsing enrichment added collection requests'
+    output['fast_collection']['additional_collection_requests']=0
     output['assumptions']={'groups':GROUPS,'workers':WORKERS,'max_requests_per_second':RATE,
         'mix':'50% explicit IP, 30% empty VM, 15% 10-member VM, 5% 2500-member VM',
         'latency_seconds':{'probe':.15,'page':'.45 + .00005 per returned member'},

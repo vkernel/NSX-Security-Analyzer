@@ -158,6 +158,20 @@ def snapshot_data(request, pk):
                 if row is None:
                     return JsonResponse({'error': 'This object is not available in this evaluated snapshot. Saved finding evidence remains available in the review.'}, status=404)
                 result = {'id': row.ordinal, 'view': row.view}
+            elif op == 'current-member-rule':
+                from .current_membership import subject, namespace, digest
+                from .models import MembershipRelation
+                from .confirmed_references import read
+                owner_snapshot = Snapshot.objects.select_related('environment').defer('report','html','summary').get(pk=pk)
+                owner = subject(owner_snapshot, 'vm', request.GET.get('id', '-1'))
+                groups = list(MembershipRelation.objects.filter(environment=owner_snapshot.environment,
+                    namespace=namespace(owner_snapshot.environment), vm_key=digest(owner['identity']), present=True).values_list('group__path', flat=True))
+                path = request.GET.get('path', '')
+                if not path: raise ValueError('A rule path is required.')
+                detail = read(pk, groups, path=path, detail=True)
+                if detail is None: raise Http404('Rule is not referenced through cached current memberships.')
+                detail['via_groups'] = sorted(set(groups).intersection(detail.get('source_groups',[])+detail.get('destination_groups',[])+detail.get('scope',[])))
+                result = {'details':detail}
             elif op == 'object-references':
                 from .object_references import read
                 result = read(pk, request.GET.get('path', ''), request.GET.get('section', 'firewall'), int(request.GET.get('page', '0')))

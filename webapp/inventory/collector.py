@@ -1779,8 +1779,9 @@ def audit(client, workers=4, testing=False, progress=None):
     membership_progress = {"completed": 0, "last_log": time.monotonic()}
     resolved_members = {}
     from .member_collection_budget import DetailBudget
-    member_options = getattr(client, 'member_options', {})
-    detail_budget = DetailBudget(**(member_options if isinstance(member_options, dict) else {}))
+    # Browsing enrichment must not add NSX calls to the collection critical path.
+    # Retain identities already returned by mandatory checks, but never page them.
+    detail_budget = DetailBudget(seconds=0, requests=0)
     membership_lock = threading.Lock()
     membership_diagnostics = {'groups_checked': 0, 'probe_calls': 0, 'calls_per_group': {}, 'outcomes': {}, 'endpoints': {}, 'typed_probe_groups': 0, 'inapplicable_probes_omitted': 0, 'vm_probe_comparison': {}}
     group_inventory = {g["path"]: g for g in all_groups}
@@ -1796,7 +1797,7 @@ def audit(client, workers=4, testing=False, progress=None):
                                              'rechecked':0, 'disabled':fast_disabled, 'full_verification':full_verification}
     def check_membership(group):
         group_budget = detail_budget.group(group['path'])
-        probe = MembershipProbe(client, detail_budget=None if testing else group_budget)
+        probe = MembershipProbe(client)
         eligible = not testing and vm_fast_eligible(group)
         verify = eligible and (full_verification or int(hashlib.sha256((str(verification_day) + group['path']).encode()).hexdigest(), 16) % 20 == 0)
         fast = eligible and not verify
@@ -2921,7 +2922,7 @@ table{min-width:760px}th{line-height:1.5}td{padding:15px 14px}.path{line-height:
     if (view === 'vms') {
       const links = (items,anchor) => '<ul>'+(items || []).map(item=>'<li><a href="#'+anchor+'">'+esc(item.name || item.tag || item.path)+'</a>'+code(item.path || item.scope || '')+'</li>').join('')+'</ul>';
       const detail = !includeEvidence ? '' : '<h3>Assigned tags</h3>'+links(r.tags,'tags-all')+'<h3>Groups referencing these tags</h3>'+links(r.related_groups,'all-groups')+'<p>Configuration relationships only; resolved membership and effective policy are not verified.</p><h3>Related rules and configured services</h3>'+(r.related_rules || []).map(rule=>'<details><summary>'+esc(rule.name)+(rule.disabled?' (disabled)':'')+'</summary>'+ruleIdentity(rule)+code(rule.path)+'<p>Via group: '+esc(rule.via_group)+' · Action: '+esc(rule.action)+'</p>'+links(rule.services,'all-services')+'<a href="#dfw-rules">Browse firewall rules</a></details>').join('')+'<details><summary>VM inventory details</summary><pre>'+esc(JSON.stringify(r.vm_details,null,2))+'</pre></details>';
-      cells=[object,esc(r.power_state),esc(number(r.tag_count)),esc(r.resolved_group_count==null?(r.resolved_membership_status==='unavailable'?'Unavailable':'Not collected'):(r.resolved_membership_status==='partial'?'≥ ':'')+number(r.resolved_group_count)),rowPopup(r.name+' — VM relationships',detail)];
+      cells=[object,esc(r.power_state),esc(number(r.tag_count)),esc(r.resolved_group_count==null?(r.resolved_membership_status==='unavailable'?'Unavailable':'Not collected'):(r.resolved_membership_status==='partial'?number(r.resolved_group_count)+' confirmed; total unknown':number(r.resolved_group_count))),rowPopup(r.name+' — VM relationships',detail)];
     } else if (view === 'scopes') {
       const detail = !includeEvidence ? '' : '<p>Scope: '+esc(r.scope || '(empty scope)')+'</p><div class="detail-scroll"><table class="detail-table"><thead><tr><th>Tag</th><th>Usage</th><th>VMs</th><th>Groups</th><th>Other resources</th></tr></thead><tbody>'+r.tags.map(tag=>'<tr><td>'+esc(tag.name)+'</td><td>'+esc(({both:'VMs and groups',vm_only:'VM use',group_only:'Group use',other_only:'Other resource use',unknown:'Needs review'})[tag.status] || tag.status)+'</td><td>'+esc(number(tag.vm_count))+'</td><td>'+esc(number(tag.group_count))+'</td><td>'+esc(number(tag.other_count ?? 0))+'</td></tr>').join('')+'</tbody></table></div>';
       cells = [esc(r.name),esc(number(r.tag_count)),esc(number(r.vm_count)),esc(number(r.group_count)),esc(number(r.other_count ?? 0)),rowPopup(r.name+' — Tags in scope',detail,'View tags')];

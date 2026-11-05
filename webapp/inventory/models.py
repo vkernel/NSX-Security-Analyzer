@@ -382,6 +382,37 @@ class SnapshotApplicationMap(models.Model):
         constraints = [models.UniqueConstraint(fields=['projection','cache_key'], name='snapshot_application_map_key')]
 
 
+class MembershipLookup(models.Model):
+    """Current NSX observation; never modifies immutable snapshot evidence."""
+    environment = models.ForeignKey(Environment, on_delete=models.CASCADE)
+    namespace = models.CharField(max_length=64)
+    kind = models.CharField(max_length=8)
+    key = models.CharField(max_length=64)
+    subject = models.JSONField(default=dict)
+    status = models.CharField(max_length=20, default='not_collected')
+    checked_at = models.DateTimeField(null=True)
+    expires_at = models.DateTimeField(null=True)
+    notes = models.JSONField(default=list)
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=['environment', 'namespace', 'kind', 'key'], name='membership_lookup_identity')]
+
+
+class MembershipRelation(models.Model):
+    environment = models.ForeignKey(Environment, on_delete=models.CASCADE)
+    namespace = models.CharField(max_length=64)
+    vm_key = models.CharField(max_length=64)
+    group_key = models.CharField(max_length=64)
+    vm = models.JSONField(default=dict)
+    group = models.JSONField(default=dict)
+    checked_at = models.DateTimeField()
+    present = models.BooleanField(default=True)
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=['environment', 'namespace', 'vm_key', 'group_key'], name='membership_relation_pair')]
+        indexes = [models.Index(fields=['environment', 'namespace', 'group_key'], name='membership_relation_group')]
+
+
 class SnapshotVMMembership(models.Model):
     snapshot = models.ForeignKey(Snapshot, on_delete=models.CASCADE)
     record_id = models.PositiveBigIntegerField()
