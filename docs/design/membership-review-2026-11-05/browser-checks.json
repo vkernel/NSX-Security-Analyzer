@@ -1,0 +1,37 @@
+{
+  "syntheticVMs": 1200,
+  "tagRelatedGroups": 125,
+  "vmResolvedGroups": 1,
+  "groupSavedVMs": 1200,
+  "pagination": true,
+  "roundTrip": true,
+  "backPreservesGroupPage": true,
+  "legacyNotCollected": true,
+  "errors": [],
+  "checks": [
+    {
+      "width": 1440,
+      "theme": "light",
+      "overflow": false,
+      "drawerOverflow": false
+    },
+    {
+      "width": 390,
+      "theme": "light",
+      "overflow": false,
+      "drawerOverflow": false
+    },
+    {
+      "width": 1440,
+      "theme": "dark",
+      "overflow": false,
+      "drawerOverflow": false
+    },
+    {
+      "width": 390,
+      "theme": "dark",
+      "overflow": false,
+      "drawerOverflow": false
+    }
+  ]
+}

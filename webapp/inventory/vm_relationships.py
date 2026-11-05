@@ -11,7 +11,8 @@ def read(snapshot_id, ordinal, section='summary', page=0, path='', context=False
     if summary is None:
         raise Http404
     if section == 'summary':
-        return {'data': summary['compact']}
+        from .resolved_membership import vm_summary
+        return {'data': vm_summary(summary['compact'])}
     page = max(0, page)
     # Values remain bound parameters. Only fixed JSON keys enter SQL text.
     base = 'FROM inventory_snapshotrecord WHERE snapshot_id = %s AND ordinal = %s AND view = %s'
@@ -22,7 +23,7 @@ def read(snapshot_id, ordinal, section='summary', page=0, path='', context=False
             import json
             value = cursor.fetchone()[0]
             return {'details': json.loads(value) if isinstance(value, str) else value}
-    if section not in ('tags', 'related_groups', 'related_rules', 'rule', 'via_groups'):
+    if section not in ('tags', 'related_groups', 'resolved_groups', 'related_rules', 'rule', 'via_groups'):
         raise ValueError('Unknown relationship section')
     key = 'related_rules' if section in ('rule', 'via_groups') else section
     cte = "WITH source AS (SELECT data->%s AS items " + base + "), entries AS (SELECT value AS item FROM source, jsonb_array_elements(COALESCE(items, '[]'::jsonb))) "
@@ -78,7 +79,12 @@ def read(snapshot_id, ordinal, section='summary', page=0, path='', context=False
     if context and section == 'related_rules':
         from .firewall_reference_context import enrich
         page_items = enrich(snapshot_id, page_items, vm=True)
-    return {'items': page_items, 'page': page, 'has_next': len(items) > 25}
+    result = {'items': page_items, 'page': page, 'has_next': len(items) > 25}
+    if section == 'resolved_groups':
+        from .resolved_membership import vm_summary
+        result['status'] = vm_summary(summary['compact']).get('resolved_membership_status', 'not_collected')
+        result['notes'] = ['Resolved VM identities returned by NSX at collection time. Partial coverage can omit groups; no tag, name or IP inference is included.']
+    return result
 
 
 from django.db.models import Func, JSONField, F

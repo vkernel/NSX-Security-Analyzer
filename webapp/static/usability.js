@@ -37,6 +37,7 @@
     const day=({'iso':`${p.year}-${p.month}-${p.day}`,'day-first':`${p.day}/${p.month}/${p.year}`,'month-first':`${p.month}/${p.day}/${p.year}`})[body.dataset.dateFormat] || readable;
     return `${day} ${p.hour}:${p.minute} ${p.timeZoneName}`;
   }
+  window.workspaceTimeText = formatTime;
   window.workspaceTime = value => {
     const time=document.createElement('time'); time.dateTime=value;
     const stamp=new Date(value);

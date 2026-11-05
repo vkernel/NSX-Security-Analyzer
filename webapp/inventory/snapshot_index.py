@@ -36,7 +36,7 @@ def flatten(value):
 def columns(view, row, include_evidence=True):
     identity = row.get('name', '') + '\n' + row.get('path', '')
     if view == 'vms':
-        values = [identity, row.get('power_state'), row.get('tag_count'), row.get('group_count')]
+        values = [identity, row.get('power_state'), row.get('tag_count'), row.get('resolved_group_count')]
     elif view in ('tags', 'scopes'):
         second = row.get('tag_count') if view == 'scopes' else LABELS.get(row.get('status'), row.get('status', ''))
         values = [identity, second, row.get('vm_count'), row.get('group_count'), row.get('other_count', 0)]
@@ -179,7 +179,7 @@ def build(snapshot, rendered=None):
         if row.get('membership_definition'):
             compact['membership_definition'] = {'methods': row['membership_definition']['methods']}
         if row.get('last_positive_observation'): compact['last_positive_observation'] = row['last_positive_observation']
-        sorts = {key: row.get(key) for key in ['power_state','name','path','scope','category','policy_name','rule_count','hit_count','rule_id','policy_rule_id','vm_count','group_count','other_count','tag_count']}
+        sorts = {key: row.get(key) for key in ['resolved_group_count','power_state','name','path','scope','category','policy_name','rule_count','hit_count','rule_id','policy_rule_id','vm_count','group_count','other_count','tag_count']}
         for key in ['usage','membership','hit_status','status']: sorts[key] = LABELS.get(row.get(key), row.get(key))
         sorts.update(kind=row.get('inventory_type', row.get('kind', '')), method=flatten(row.get('membership_definition', {}).get('methods', [])), references=len(row.get('referenced_by', [])))
         extra = tag_context(row, metadata) if view == 'tags' else {}

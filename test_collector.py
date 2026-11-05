@@ -970,7 +970,7 @@ examples.forEach((_,index) => {
             self.assertEqual(row["membership"], "not_supported")
             self.assertEqual(row["audit_exclusions"], [])
         self.assertEqual(report["objects"][0]["referenced_by"], [antrea["path"]])
-        self.assertEqual(client.get.call_count, 12)
+        self.assertEqual(client.get.call_count, 24)  # Existence probes plus saved member pages.
         html = rendered_document(report)
         self.assertNotIn('Antrea / container groups excluded', html)
         self.assertIn('class="sort-key"', html)
@@ -1001,7 +1001,7 @@ examples.forEach((_,index) => {
         self.assertEqual(report["performance"]["workers"], 1)
         self.assertEqual(client.retries, 0)
         # Empty search results try all five compatible query variants, once each.
-        self.assertEqual(client.get.call_count, 17)
+        self.assertEqual(client.get.call_count, 21)  # Four sampled member categories; no cursor following.
         searches = [call for call in client.get.call_args_list if call.args[0] == "/search/query"]
         self.assertEqual(len(searches), 5)
         self.assertEqual(len({call.args[1]["query"] for call in searches}), 5)

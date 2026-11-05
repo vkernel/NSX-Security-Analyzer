@@ -24,7 +24,7 @@
     if (['25','50','100'].includes(document.body.dataset.reportPageSize)) size.value=document.body.dataset.reportPageSize;
     const policy=['dfw-policies','empty-policies'].includes(panel), tags=panel.startsWith('tags-'), scopes=panel==='tags-scopes';
     const dfw=policy || ['dfw-rules','zero-hit-rules','disabled-rules','unknown-statistics','empty-group-rules','dfw-scope-rules'].includes(panel);
-    const keys = panel==='all-vms' ? ['name','power_state','tag_count','group_count',null] : scopes ? ['name','tag_count','vm_count','group_count','other_count',null] : tags ? ['name','status','vm_count','group_count','other_count',null]
+    const keys = panel==='all-vms' ? ['name','power_state','tag_count','resolved_group_count',null] : scopes ? ['name','tag_count','vm_count','group_count','other_count',null] : tags ? ['name','status','vm_count','group_count','other_count',null]
       : dfw ? ['name',policy?'category':'policy_name',policy?'status':'hit_status',policy?'rule_count':'hit_count',null]
       : ['name','kind','usage','membership',null];
     const permitted = [...new Set([...keys.filter(Boolean),'path',...(dfw && !policy?['category','rule_id','policy_rule_id']:[]),...(tags&&!scopes?['scope']:[]),...(!dfw&&!tags&&panel!=='all-vms'?['method','references']:[])])];
@@ -33,6 +33,7 @@
     function params(op='rows') { return {op,panel,count_token:countToken,q:search.value,mode:mode.value,syntax:syntax.value,evidence:evidence.checked?'1':'0',size:size.value,sort:sort.value,order:order.value,page,filters:JSON.stringify([...filters])}; }
     const getValues=async (index,text,signal)=> {const result=await window.reportData(payload,{...params('values'),column:index,value:text},signal);getValues.message=result.message || '';return result.values;};
     getValues.remote=true;
+    if(panel==='all-vms'){const header=widget.querySelectorAll('thead th')[3];if(header?.firstChild?.nodeType===3)header.firstChild.textContent='Resolved groups ';}
     const filters=columnFilters(widget.querySelector('table'),()=>{page=0;lastParams=null;refresh();},getValues);
     const headers=[];
     widget.querySelectorAll('thead th').forEach((header,index)=>{
@@ -73,6 +74,12 @@
         countToken=result.count_token || '';page=result.page;lastParams=JSON.stringify(params());
         result.rows.forEach(row=>{rowPool[row.id]=row;shown.push(row.id);});
         tbody.innerHTML=shown.map(id=>renderRow(id)).join('');
+        if(panel==='all-vms') [...tbody.rows].forEach((tr,index)=>{
+          const data=result.rows[index].data,cell=tr.cells[3];if(!cell)return;
+          const state=data.resolved_membership_status==='unavailable'?'Unavailable':'Not collected';
+          cell.textContent=data.resolved_group_count==null?state:(data.resolved_membership_status==='partial'?'≥ ':'')+data.resolved_group_count;
+          cell.title='Resolved VM memberships saved during collection; '+(data.resolved_membership_status||'not collected').replaceAll('_',' ');
+        });
         if (inventory && document.getElementById(bulkId)) {
           [...tbody.rows].forEach((tr,index)=>{
             const row=result.rows[index], cell=document.createElement('td'), box=document.createElement('input');
@@ -140,6 +147,8 @@
     const table=(section,label,columns,path='')=>window.evidenceTable({title:label,columns,current,wide:section==='related_rules',load:page=>load(id,section,page,path)});
     const tags=table('tags','Assigned tags',[{label:'Scope',cell:item=>item.scope||'(empty scope)'},{label:'Value',cell:item=>object(item,'tags')}]);
     const groups=table('related_groups','Groups referencing these tags',[{label:'Group',cell:item=>object(item,'groups')}]);
+    const resolved=table('resolved_groups','Resolved VM groups',[{label:'Group',cell:item=>object(item,'groups')},{label:'Group VM-list coverage',cell:item=>window.evidenceBadge(item.status||'partial')}]);
+    const memberCategories=window.evidenceCategories([{...resolved,label:'Groups'}]);memberCategories.dataset.evidenceSection='members';memberCategories.querySelector('nav').setAttribute('aria-label','Membership categories');body.append(memberCategories);
     const ruleDetail=make('section');ruleDetail.className='evidence-rule-inspection';ruleDetail.hidden=true;ruleDetail.tabIndex=-1;let inspection=0;
     async function inspect(item,trigger){
       const token=++inspection,scroll=body.closest('dialog').scrollTop;ruleDetail.hidden=false;rules.panel.dataset.inspecting='true';
@@ -156,7 +165,7 @@
     }
     const rules=table('related_rules','Firewall references',window.firewallReferenceColumns(body,inspect));
     rules.panel.append(ruleDetail);
-    const caveat=make('p','Configuration relationships only. Group references use tag conditions; resolved membership and effective policy are not verified.');caveat.dataset.evidenceSection='relationships';caveat.className='evidence-note';body.append(caveat);
+    const caveat=make('p','Tag-condition references are configuration relationships. They do not establish VM membership or effective policy. Use Members for saved resolved VM identities.');caveat.dataset.evidenceSection='relationships';caveat.className='evidence-note';body.append(caveat);
     body.append(window.evidenceCategories([{...tags,label:'Tags'},{...groups,label:'Groups'},{...rules,label:'Rules & services'}]));
     const advanced=make('details'), title=make('summary','VM inventory details'), content=make('div');advanced.dataset.evidenceSection='technical';advanced.append(title,content);body.append(advanced);
     let ready=false,busy=false;
@@ -166,7 +175,7 @@
   };
   document.addEventListener('click',event=>{
     const button=event.target.closest('.detail-button[data-evidence-row]');
-    if(!button?.closest('[data-server-table="all-vms"]'))return;
+    if(!button || !(button.closest('[data-server-table="all-vms"]')||button.dataset.evidenceView==='vms'))return;
     event.preventDefault();event.stopImmediatePropagation();
     const dialog=document.getElementById('detail-dialog'),body=document.getElementById('detail-body');
     document.getElementById('detail-title').textContent=button.dataset.title;

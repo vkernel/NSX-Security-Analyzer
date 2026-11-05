@@ -12,7 +12,7 @@ from operator import and_, or_
 
 from django.contrib.auth.decorators import login_required
 from django.db import connection, transaction, DatabaseError
-from django.db.models import F, Q, Count, Case, When, Value, JSONField, TextField
+from django.db.models import F, Q, Count, Case, When, Value, JSONField, TextField, Func
 from django.db.models.functions import Cast, Coalesce
 from django.db.models.fields.json import KeyTextTransform
 from django.http import Http404, JsonResponse, StreamingHttpResponse
@@ -25,9 +25,15 @@ from .vm_relationships import ExpandedVMData
 
 LOG = logging.getLogger('inventory.web')
 
-SORTS = {'power_state','name','path','scope','category','policy_name','rule_count','hit_count','rule_id',
+SORTS = {'resolved_group_count','power_state','name','path','scope','category','policy_name','rule_count','hit_count','rule_id',
          'policy_rule_id','vm_count','group_count','other_count','tag_count','usage',
          'membership','hit_status','status','kind','method','references'}
+
+
+def vm_count_text():
+    return Coalesce(KeyTextTransform('resolved_group_count', 'compact'),
+        Case(When(compact__resolved_membership_status='unavailable', then=Value('Unavailable')),
+             default=Value('Not collected'), output_field=TextField()))
 
 
 def search_condition(term, field, regex=False):
@@ -73,10 +79,12 @@ def filtered(request, pk):
         if not isinstance(text, str) or len(text) > 1000: raise ValueError('Invalid column filter text.')
         if text:
             evidence_index = Case(When(view__in=['tags', 'scopes'], then=Value(5)), default=Value(4))
+            cases = [When(_evidence_index=index,
+                then=Coalesce(KeyTextTransform(str(index), 'columns'), Cast(ExpandedVMData(), TextField())))]
+            if index == 3:
+                cases.append(When(view='vms', then=vm_count_text()))
             rows = rows.annotate(_evidence_index=evidence_index,
-                _column_text=Case(When(_evidence_index=index,
-                    then=Coalesce(KeyTextTransform(str(index), 'columns'), Cast(ExpandedVMData(), TextField()))),
-                    default=KeyTextTransform(str(index), 'columns'), output_field=TextField()))
+                _column_text=Case(*cases, default=KeyTextTransform(str(index), 'columns'), output_field=TextField()))
             condition = Q(_column_text__icontains=text)
             rows = rows.filter(~condition if value.get('mode') == 'excludes' else condition)
     key = request.GET.get('sort', 'name')
@@ -112,6 +120,11 @@ def csv_stream(rows, headers):
                 if data.get('path') in assessments:
                     data['finding_assessments'] = assessments[data['path']]
                 if values:
+                    if 'power_state' in data:
+                        from .resolved_membership import vm_summary
+                        data = vm_summary(data)
+                        count = data.get('resolved_group_count')
+                        values[3] = ('At least ' if data.get('resolved_membership_status') == 'partial' else '') + str(count) if count is not None else data.get('resolved_membership_status', 'not_collected').replace('_', ' ').title()
                     values[-1] = json.dumps(data, ensure_ascii=False, sort_keys=True)
                 writer.writerow(["'"+str(v) if re.match(r'^\s*[=+@-]', str(v)) else v for v in values])
                 yield buffer.getvalue()
@@ -148,6 +161,9 @@ def snapshot_data(request, pk):
             elif op == 'object-references':
                 from .object_references import read
                 result = read(pk, request.GET.get('path', ''), request.GET.get('section', 'firewall'), int(request.GET.get('page', '0')))
+            elif op == 'group-members':
+                from .group_memberships import read
+                result = read(pk, request.GET.get('path', ''), request.GET.get('section', 'virtual-machines'), int(request.GET.get('page', '0')))
             elif op == 'tag-relationships':
                 from .tag_relationships import read
                 result = read(pk, int(request.GET.get('id', '-1')), request.GET.get('section', 'summary'), int(request.GET.get('page', '0')), context=request.GET.get('context') == '1')
@@ -163,14 +179,16 @@ def snapshot_data(request, pk):
                 result = {'html':panel.html}
             elif op in ('detail', 'tag-coverage'):
                 if op == 'detail':
-                    row = get_object_or_404(SnapshotRecord.objects.only('data','view','ordinal'), snapshot_id=pk, ordinal=int(request.GET.get('id', '-1')))
-                    data = row.data
+                    row = get_object_or_404(SnapshotRecord.objects.only('view','ordinal').annotate(
+                        detail_data=Func(F('data'), template="(%(expressions)s - 'resolved_membership')", output_field=JSONField())),
+                        snapshot_id=pk, ordinal=int(request.GET.get('id', '-1')))
+                    data = row.detail_data
                     if data.get('_shared_vm_rules') or data.get('_shared_tag_evidence'):
                         data = SnapshotRecord.objects.filter(pk=row.pk).annotate(_expanded=ExpandedVMData()).values_list('_expanded', flat=True).get()
                     data['finding_assessments'] = list(SnapshotFindingAssessment.objects.filter(snapshot_id=pk, path=data.get('path', '')).values_list('assessment', flat=True))
                     result = {'id':row.ordinal,'data':data,'view':row.view}
                     if row.view == 'tags':
-                        result['tag_evidence'] = tag_evidence.for_tag(pk, row.data)
+                        result['tag_evidence'] = tag_evidence.for_tag(pk, data)
                 else:
                     get_object_or_404(SnapshotPresentation.objects.only('snapshot_id'), snapshot_id=pk)
                     result = {'tag_evidence':tag_evidence.coverage(pk)}
@@ -186,6 +204,9 @@ def snapshot_data(request, pk):
                         response['Cache-Control'] = 'private, no-store'
                         return response
                     field = 'columns__'+str(index)
+                    if view == 'vms' and index == 3:
+                        rows = rows.annotate(_vm_count_text=vm_count_text())
+                        field = '_vm_count_text'
                     text = request.GET.get('value', '')[:1000]
                     values = rows.filter(**{field+'__icontains':text}).order_by().values(value=F(field)).annotate(count=Count('pk')).order_by('value')[:100]
                     response = JsonResponse({'values':list(values)})
@@ -195,7 +216,7 @@ def snapshot_data(request, pk):
                     # Validate the search before starting a streamed download.
                     rows.exists()
                     view = rows.values_list('view', flat=True).first()
-                    headers = ['VM / identity','Power state','Tags','Related groups','Relationships & details'] if view == 'vms' else ['Object / path','Type','Usage','Membership','Evidence'] if view == 'inventory' else ['Tag / scope','Usage','VMs','Groups','Other resources','Evidence'] if view == 'tags' else ['Scope','Tags','VMs','Groups','Other resources','Evidence'] if view == 'scopes' else ['Object / path','Policy / category','Status','Count','Evidence']
+                    headers = ['VM / identity','Power state','Tags','Resolved groups','Relationships & details'] if view == 'vms' else ['Object / path','Type','Usage','Membership','Evidence'] if view == 'inventory' else ['Tag / scope','Usage','VMs','Groups','Other resources','Evidence'] if view == 'tags' else ['Scope','Tags','VMs','Groups','Other resources','Evidence'] if view == 'scopes' else ['Object / path','Policy / category','Status','Count','Evidence']
                     response = StreamingHttpResponse(csv_stream(rows, headers), content_type='text/csv; charset=utf-8')
                     response['Content-Disposition'] = 'attachment; filename="snapshot-'+str(pk)+'.csv"'
                     response['Cache-Control'] = 'private, no-store'
@@ -228,6 +249,9 @@ def snapshot_data(request, pk):
                 for path, assessment in SnapshotFindingAssessment.objects.filter(snapshot_id=pk, path__in=[r['data'].get('path', '') for r in result['rows']]).values_list('path', 'assessment'):
                     assessments.setdefault(path, []).append(assessment)
                 for row in result['rows']:
+                    if row['view'] == 'vms':
+                        from .resolved_membership import vm_summary
+                        row['data'] = vm_summary(row['data'])
                     row['data']['finding_assessments'] = assessments.get(row['data'].get('path'), [])
                 LOG.info('Snapshot table snapshot=%s panel=%s count_reused=%s count_seconds=%.3f rows_seconds=%.3f returned=%d',
                          pk, request.GET.get('panel','overview'), reused, count_seconds,

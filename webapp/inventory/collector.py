@@ -522,12 +522,14 @@ MEMBERSHIP_ENDPOINTS = ("ip-addresses", "virtual-machines", "logical-ports", "lo
 
 
 class MembershipProbe:
-    """Count logical probes without storing object paths, payloads or identities."""
+    """Count probes and transiently retain their tiny pages for member collection."""
     def __init__(self, client):
         self.client = client
         self.calls = 0
         self.endpoints = {}
         self.results = {}
+        self.pages = {}
+        self.failures = {}
 
     def __getattr__(self, name):
         return getattr(self.client, name)
@@ -539,10 +541,12 @@ class MembershipProbe:
         counts['calls'] += 1
         try:
             page = self.client.get(path, params)
-        except Exception:
+        except Exception as exc:
+            self.failures[endpoint] = exc
             counts['errors'] += 1
             self.results[endpoint] = 'error'
             raise
+        self.pages[endpoint] = page
         if isinstance(page.get('results'), list):
             count = page.get('result_count', 0)
             positive = bool(page['results']) or (type(count) is int and count > 0)
@@ -1446,6 +1450,9 @@ def iter_vm_inventory_rows(report):
     rules = {r["path"]:r for r in report.get("dfw", {}).get("rules", [])}
     services = {r["path"]:r.get("name",r["path"]) for r in report.get("inventory", {}).get("services", [])}
     pool = tags.get("firewall_rules", [])
+    from .resolved_membership import vm_links
+    resolved, resolved_status = vm_links(tags, report.get('inventory', {}).get('groups', []),
+                                         report.get('membership_evidence', {}))
     for vm in raw:
         identity = vm.get("path") or vm.get("external_id") or vm.get("id")
         if not identity:
@@ -1475,6 +1482,9 @@ def iter_vm_inventory_rows(report):
                "group_count":len(groups), "tags":[{"scope":t.get("scope", ""),"tag":t["name"]} for t in related],
                "related_groups":[{"path":path,"name":name} for path,name in sorted(groups.items())],
                "related_rules":list(refs.values()), "vm_details":vm}
+        row.update(membership_evidence_version=1, resolved_membership_status=resolved_status,
+                   resolved_groups=sorted(resolved.get(identity, {}).values(), key=lambda item: (item['name'].casefold(), item['path'])),
+                   resolved_group_count=(len(resolved.get(identity, {})) if resolved_status in ('complete', 'partial') or resolved.get(identity) else None))
         yield row
 
 def vm_inventory_rows(report):
@@ -1749,6 +1759,7 @@ def audit(client, workers=4, testing=False, progress=None):
     membership_started = time.perf_counter()
     LOG.info("Checking membership for %d groups...", len(groups))
     membership_progress = {"completed": 0, "last_log": time.monotonic()}
+    resolved_members = {}
     membership_lock = threading.Lock()
     membership_diagnostics = {'groups_checked': 0, 'probe_calls': 0, 'calls_per_group': {}, 'outcomes': {}, 'endpoints': {}, 'typed_probe_groups': 0, 'inapplicable_probes_omitted': 0, 'vm_probe_comparison': {}}
     group_inventory = {g["path"]: g for g in all_groups}
@@ -1768,6 +1779,8 @@ def audit(client, workers=4, testing=False, progress=None):
         verify = eligible and (full_verification or int(hashlib.sha256((str(verification_day) + group['path']).encode()).hexdigest(), 16) % 20 == 0)
         fast = eligible and not verify
         result = membership(probe, group, group_inventory, scopes[group['path']], vm_fast=fast)
+        from .resolved_membership import collect as collect_members
+        resolved_members[group['path']] = collect_members(client, group, probe=probe, testing=testing)
         used = bool(result[0] == 'empty' and fast and probe.calls == 1)
         if verify and (probe.results.get('virtual-machines') in ('error', 'incomplete') or (probe.results.get('virtual-machines') == 'negative' and probe.vm_comparison() != 'All three checks empty')):
             verification_failed.set()
@@ -1849,6 +1862,10 @@ def audit(client, workers=4, testing=False, progress=None):
             dfw_future.cancel()
             membership_future.cancel()
             raise
+    membership_diagnostics['saved_member_lists'] = {
+        endpoint: dict(Counter(evidence['endpoints'][endpoint]['status'] for evidence in resolved_members.values()))
+        for endpoint in MEMBERSHIP_ENDPOINTS}
+    LOG.info('Saved member list coverage: %s', membership_diagnostics['saved_member_lists'])
     phases["parallel_retrieval"] = round(time.perf_counter() - combined_started, 2)
     phase = time.perf_counter()
     refs = collect_references(resources + all_groups + services + dfw_configuration, groups + custom)
@@ -1877,6 +1894,7 @@ def audit(client, workers=4, testing=False, progress=None):
                      obj["path"], memberships[obj["path"]][0])
             row["membership"], row["notes"] = memberships[obj["path"]]
             row["membership_definition"] = definitions[obj["path"]]
+            row['resolved_membership'] = resolved_members[obj['path']]
             row["tags"] = obj.get("tags", [])
         rows.append(row)
     # Full inventory is separate from findings: exclusions remain visible without
@@ -1932,9 +1950,15 @@ def audit(client, workers=4, testing=False, progress=None):
     tags = audit_tags(client, all_groups, testing=testing, workers=workers, resources=resources + all_groups + services + dfw_configuration)
     tags["search_coverage"] = search_coverage
     add_tag_firewall_references(tags, all_groups, resources + all_groups + dfw_configuration)
+    membership_evidence = {'version': 1, 'scope': 'Audited local groups', 'testing': testing,
+                           'excluded_group_count': len(all_groups) - len(groups)}
+    # Bind exact identities once, so group members and inverse VM links agree.
+    from .resolved_membership import vm_links
+    vm_links(tags, inventory['groups'], membership_evidence)
     phases["tags"] = round(time.perf_counter() - tag_started, 2)
     return {"inventory_warnings": getattr(client, "inventory_warnings", []) if isinstance(getattr(client, "inventory_warnings", []), list) else [],
-            "inventory": inventory, "tags": tags, "testing": testing, "generated_at": datetime.now(timezone.utc).isoformat(),
+            "inventory": inventory, "tags": tags, "membership_evidence": membership_evidence,
+            "testing": testing, "generated_at": datetime.now(timezone.utc).isoformat(),
             "performance": {"workers": workers, "elapsed_seconds": round(time.perf_counter() - started, 2),
                             "phases_seconds": phases, "membership": membership_diagnostics, "collection_scope": scope_diagnostics,
                             "access_failures": client.access_failures if isinstance(getattr(client, "access_failures", None), list) else [],
@@ -2478,13 +2502,13 @@ def _render_report(report, *, fragments, indexed=False, row_sink=None):
         '<a href="#coverage">Audit scope &amp; exclusions</a>'
         '<a href="#tags-coverage">Tag coverage</a>')
     vm_rows = iter_vm_inventory_rows(report) if row_sink else vm_inventory_rows(report)
-    vm_table = table_shell(["VM / identity", "Power state", "Tags", "Related groups", "Relationships & details"],vm_rows,"vms")
+    vm_table = table_shell(["VM / identity", "Power state", "Tags", "Resolved groups", "Relationships & details"],vm_rows,"vms")
     vm_count = sum(view == "vms" for view, path in row_ids)
     vm_note = ("VM inventory retrieved from NSX." if "virtual_machines" in tags else
                "Older snapshot: only VMs present in saved tag assignments are available. Run a new collection for full VM inventory.")
     if not tags.get("vm_inventory_complete"):
         vm_note += " VM inventory is incomplete or sampled; missing VMs do not indicate deletion."
-    vm_note += " Related groups reference assigned tags; membership is not verified. Services come from related firewall rules, not observed VM traffic."
+    vm_note += " Resolved groups use saved NSX VM member identities. Partial coverage is a lower bound; older snapshots require a new collection. Tag references remain separate. Services follow tag-related firewall rules, not observed VM traffic."
     sections += '<section data-panel id="all-vms" tabindex="-1"><h2>VMs <span class="count">'+display_number(vm_count)+'</span></h2><p class="muted">'+safe(vm_note)+'</p>'+vm_table+'</section>'
     menu += menu_link("all-vms", "VMs", vm_count)
     sections += feature_guide()
@@ -2874,7 +2898,7 @@ table{min-width:760px}th{line-height:1.5}td{padding:15px 14px}.path{line-height:
     if (view === 'vms') {
       const links = (items,anchor) => '<ul>'+(items || []).map(item=>'<li><a href="#'+anchor+'">'+esc(item.name || item.tag || item.path)+'</a>'+code(item.path || item.scope || '')+'</li>').join('')+'</ul>';
       const detail = !includeEvidence ? '' : '<h3>Assigned tags</h3>'+links(r.tags,'tags-all')+'<h3>Groups referencing these tags</h3>'+links(r.related_groups,'all-groups')+'<p>Configuration relationships only; resolved membership and effective policy are not verified.</p><h3>Related rules and configured services</h3>'+(r.related_rules || []).map(rule=>'<details><summary>'+esc(rule.name)+(rule.disabled?' (disabled)':'')+'</summary>'+ruleIdentity(rule)+code(rule.path)+'<p>Via group: '+esc(rule.via_group)+' · Action: '+esc(rule.action)+'</p>'+links(rule.services,'all-services')+'<a href="#dfw-rules">Browse firewall rules</a></details>').join('')+'<details><summary>VM inventory details</summary><pre>'+esc(JSON.stringify(r.vm_details,null,2))+'</pre></details>';
-      cells=[object,esc(r.power_state),esc(number(r.tag_count)),esc(number(r.group_count)),rowPopup(r.name+' — VM relationships',detail)];
+      cells=[object,esc(r.power_state),esc(number(r.tag_count)),esc(r.resolved_group_count==null?(r.resolved_membership_status==='unavailable'?'Unavailable':'Not collected'):(r.resolved_membership_status==='partial'?'≥ ':'')+number(r.resolved_group_count)),rowPopup(r.name+' — VM relationships',detail)];
     } else if (view === 'scopes') {
       const detail = !includeEvidence ? '' : '<p>Scope: '+esc(r.scope || '(empty scope)')+'</p><div class="detail-scroll"><table class="detail-table"><thead><tr><th>Tag</th><th>Usage</th><th>VMs</th><th>Groups</th><th>Other resources</th></tr></thead><tbody>'+r.tags.map(tag=>'<tr><td>'+esc(tag.name)+'</td><td>'+esc(({both:'VMs and groups',vm_only:'VM use',group_only:'Group use',other_only:'Other resource use',unknown:'Needs review'})[tag.status] || tag.status)+'</td><td>'+esc(number(tag.vm_count))+'</td><td>'+esc(number(tag.group_count))+'</td><td>'+esc(number(tag.other_count ?? 0))+'</td></tr>').join('')+'</tbody></table></div>';
       cells = [esc(r.name),esc(number(r.tag_count)),esc(number(r.vm_count)),esc(number(r.group_count)),esc(number(r.other_count ?? 0)),rowPopup(r.name+' — Tags in scope',detail,'View tags')];
@@ -3212,10 +3236,10 @@ table{min-width:760px}th{line-height:1.5}td{padding:15px 14px}.path{line-height:
     const panelId = widget.closest('[data-panel]').id;
     const view = rowPool[ids[0]]?.view || 'inventory';
     const policyTable = view === 'dfw' && 'rule_count' in (rowPool[ids[0]]?.data || {});
-    const headerKeys = view === 'vms' ? ['name','power_state','tag_count','group_count',null] : view === 'scopes' ? ['name','tag_count','vm_count','group_count','other_count',null] : view === 'tags' ? ['name','status','vm_count','group_count','other_count',null]
+    const headerKeys = view === 'vms' ? ['name','power_state','tag_count','resolved_group_count',null] : view === 'scopes' ? ['name','tag_count','vm_count','group_count','other_count',null] : view === 'tags' ? ['name','status','vm_count','group_count','other_count',null]
       : view === 'inventory' ? ['name','kind','usage','membership',null]
       : ['name',policyTable ? 'category' : 'policy_name',policyTable ? 'status' : 'hit_status',policyTable ? 'rule_count' : 'hit_count',null];
-    const permitted = view === 'vms' ? ['name','path','power_state','tag_count','group_count'] : view === 'scopes' ? ['name','tag_count','vm_count','group_count','other_count'] : view === 'tags' ? ['name','scope','status','vm_count','group_count','other_count'] : view === 'inventory' ? ['name','path','kind','membership','method','references','usage']
+    const permitted = view === 'vms' ? ['name','path','power_state','tag_count','resolved_group_count'] : view === 'scopes' ? ['name','tag_count','vm_count','group_count','other_count'] : view === 'tags' ? ['name','scope','status','vm_count','group_count','other_count'] : view === 'inventory' ? ['name','path','kind','membership','method','references','usage']
       : (policyTable ? ['name','path','category','status','rule_count']
         : ['name','path','category','policy_name','hit_status','hit_count','rule_id','policy_rule_id']);
     const extraLabels = {other_count:'Other resource count',tag_count:'Tag count',kind:'Type',category:'Category',policy_name:'Policy',status:'Status',hit_status:'Activity status'};

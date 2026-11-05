@@ -57,7 +57,7 @@
   window.evidenceBadge=(value,kind='state')=>{
     const text=value==null?'Not recorded':String(value).replaceAll('_',' '),badge=make('span',text);badge.className='evidence-status';
     const key=text.toUpperCase();
-    badge.dataset.tone=kind==='action'&&key==='ALLOW'?'positive':kind==='action'&&['DROP','REJECT'].includes(key)?'negative':key==='DISABLED'?'warning':'neutral';
+    badge.dataset.tone=kind==='action'&&key==='ALLOW'?'positive':kind==='action'&&['DROP','REJECT'].includes(key)?'negative':['DISABLED','PARTIAL','UNAVAILABLE','NOT COLLECTED'].includes(key)?'warning':'neutral';
     return badge;
   };
   window.evidenceObject=(body,item,query)=>{
@@ -68,8 +68,10 @@
     return root;
   };
   window.evidenceTable=({title,columns,load,current=()=>true,wide=false,empty='No relationships recorded in this snapshot.'})=>{
-    const root=make('section'),heading=make('h3',title),status=make('p'),content=make('div'),pager=make('nav'),previous=make('button','Previous'),next=make('button','Next');
+    const root=make('section'),heading=make('h3',title),status=make('p'),coverage=make('p'),content=make('div'),pager=make('nav'),previous=make('button','Previous'),next=make('button','Next');
+    coverage.className='evidence-note';coverage.hidden=true;
     root.className='evidence-table-section';status.className='evidence-table-status';status.setAttribute('role','status');content.className='evidence-table-content';pager.className='evidence-pagination';pager.setAttribute('aria-label',title+' pages');previous.type=next.type='button';previous.setAttribute('aria-label','Previous '+title.toLowerCase());next.setAttribute('aria-label','Next '+title.toLowerCase());pager.append(previous,next);pager.hidden=true;root.append(heading,status,content,pager);
+    root.insertBefore(coverage,content);
     let loaded=false,busy=false,version=0,page=0;
     async function render(target=page){
       if(busy||!current())return;busy=true;const token=++version;root.setAttribute('aria-busy','true');status.textContent='Loading '+title.toLowerCase()+'…';previous.disabled=next.disabled=true;
@@ -78,8 +80,12 @@
         const scroll=make('div'),table=make('table'),caption=make('caption',title),head=make('thead'),labels=make('tr'),rows=make('tbody');scroll.className='evidence-table-scroll';scroll.tabIndex=0;scroll.setAttribute('role','region');scroll.setAttribute('aria-label',title+' table');table.className='evidence-table'+(wide?' evidence-firewall-table':'');
         for(const column of columns){const th=make('th',column.label);th.scope='col';if(column.width)th.style.width=column.width;labels.append(th);}head.append(labels);
         for(const item of data.items){const row=make('tr');for(const column of columns){const td=make('td'),value=column.cell(item);if(value?.nodeType)td.append(value);else td.textContent=value==null?'Not recorded':String(value);row.append(td);}rows.append(row);}
-        if(!data.items.length){const row=make('tr'),td=make('td',empty);td.colSpan=columns.length;td.className='evidence-table-empty';row.append(td);rows.append(row);}
+        const states={complete:'Complete',partial:'Partial',unavailable:'Unavailable',not_collected:'Not collected',not_supported:'Not supported'};
+        const missing=data.status&&data.status!=='complete';
+        if(!data.items.length){const row=make('tr'),td=make('td',missing?(data.status==='not_collected'?'Member identities were not collected in this snapshot. Run a new collection.':'No member identities saved for this category; membership is not established.'):empty);td.colSpan=columns.length;td.className='evidence-table-empty';row.append(td);rows.append(row);}
         table.append(caption,head,rows);scroll.append(table);content.replaceChildren(scroll);status.textContent=data.items.length?`${page*25+1}–${page*25+data.items.length} shown · Page ${page+1}`:'No entries recorded';pager.hidden=!page&&!data.has_next;previous.disabled=!page;next.disabled=!data.has_next;
+        if(data.status){status.textContent=(states[data.status]||data.status)+' · '+status.textContent;status.dataset.membershipStatus=data.status;}
+        coverage.textContent=[data.saved_count!=null?`${data.saved_count} saved${data.reported_count!=null?' · '+data.reported_count+' reported by NSX':''}`:'',data.checked_at?'Collected '+(window.workspaceTimeText?window.workspaceTimeText(data.checked_at):data.checked_at):'',...(data.notes||[])].filter(Boolean).join(' · ');coverage.hidden=!coverage.textContent;
       }catch(error){if(current()){status.textContent='Unable to load '+title.toLowerCase();window.evidenceState(content,error.message,()=>render(target));}}
       finally{busy=false;root.removeAttribute('aria-busy');}
     }
@@ -125,6 +131,20 @@
     // Saved renderers can restore References just before opening the dialog.
     const deferred=table=>({...table,show:()=>queueMicrotask(table.show)});
     body.append(note,window.evidenceCategories([{...deferred(firewall),label:'Firewall rules'},{...deferred(objects),label:'Other objects'}]));
+  };
+  window.objectMembershipTables=(body,row)=>{
+    if(row?.kind!=='group'||!row.path||!window.reportData||!document.querySelector('[data-server-table]'))return;
+    const generation=body.evidenceGeneration,dialog=body.closest('dialog');
+    const current=()=>body.evidenceGeneration===generation&&dialog?.open;
+    const columns=[{label:'Member',cell:item=>window.evidenceObject(body,{...item,path:item.vm_path||item.path},item.vm_path?{path:item.vm_path,view:'vms'}:null)},
+      {label:'Identity',cell:item=>item.external_id||item.id||item.identity}];
+    const entries=[['virtual-machines','VMs','Resolved VM members'],['ip-addresses','IP addresses','Resolved IP members'],['logical-ports','Ports','Resolved port members'],['logical-switches','Segments','Resolved segment members']].map(([section,label,title])=>{
+      const table=window.evidenceTable({title,columns,current,empty:'NSX returned no members for this category.',load:page=>window.reportData(null,{op:'group-members',path:row.path,section,page})});
+      return {...table,label,show:()=>queueMicrotask(table.show)};
+    });
+    const note=make('p','Resolved members saved at collection time. Categories are separate; IP or port membership does not establish VM membership. Excluded groups and older snapshots may have no member list.');note.className='evidence-note';note.dataset.evidenceSection='members';
+    const categories=window.evidenceCategories(entries);categories.dataset.evidenceSection='members';categories.querySelector('nav').setAttribute('aria-label','Member categories');
+    body.append(note,categories);
   };
   // Existing group/service snapshots keep their evidence and links, but use the same table surface.
   window.referenceListTables=root=>{

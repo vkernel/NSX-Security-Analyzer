@@ -4,6 +4,7 @@
   window.workspaceEvidence=(body,title,row)=> {
     body.closest('dialog')?.classList.remove('evidence-firewall-wide');
     window.objectReferenceTables?.(body,row);
+    window.objectMembershipTables?.(body,row);
     window.referenceListTables?.(body);
     const nodes=Array.from(body.children), groups=new Map([['Summary',[]],['Members',[]],['References',[]],['History',[]],['Technical details',[]]]);
     const summary=make('dl',null,'evidence-facts');
@@ -13,6 +14,10 @@
         if(row[key]!==undefined && row[key]!==null && row[key]!=='')summary.append(make('dt',label),make('dd',String(row[key]).replaceAll('_',' ')));
       }
       if(row.referenced_by)summary.append(make('dt','Configuration references'),make('dd',String(row.referenced_by.length)));
+      if(row.resolved_membership_status){
+        const state=row.resolved_membership_status.replaceAll('_',' '),count=row.resolved_group_count;
+        summary.append(make('dt','Resolved VM groups'),make('dd',count==null?state:(row.resolved_membership_status==='partial'?'At least ':'')+count),make('dt','Membership coverage'),make('dd',state));
+      }
       if(row.membership_definition?.methods?.length)groups.get('Technical details').push(make('p','Membership method: '+row.membership_definition.methods.join(', ')));
       if(row.path){const identity=make('div',null,'evidence-identity');identity.append(make('code',row.path));const copy=make('button','Copy path');copy.type='button';copy.dataset.copyPath=row.path;identity.append(copy);groups.get('Technical details').push(identity);}
     }

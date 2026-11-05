@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Save paginated resolved group member identities and use the same evidence for VM → Groups and Group → Members. Separate resolved membership from tag-condition references, show partial/unavailable/not-collected coverage, retain IP/port/segment categories, and use shared lazy member tables. Keep group detail responses small and support current VM drawers when following member links. Older snapshots need a new collection for member evidence; no schema migration is required.
+
 - Use the same rich firewall-reference table and automatic width for group/service drawers reached from VM/tag references or direct inventory selection. Keep parent/non-rule references under Other objects, preserve Back/page state, and fix loading when a saved renderer reopens a remembered References tab. Add bounded same-snapshot object reference pages without migration or reindexing.
 
 - Expand VM/tag firewall-reference drawers automatically and restore their reading width on other views or Back. Add shared Type, Category, Policy, Rule, ID, Seq, Action, State, matched field/group and reason columns using bounded same-snapshot DFW context. Preserve unknown/nested evidence, labelled colors, inspection and pagination. Existing snapshots benefit without migration or reindexing.
