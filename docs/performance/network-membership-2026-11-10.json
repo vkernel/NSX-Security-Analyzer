@@ -1,0 +1,33 @@
+{
+  "synthetic": true,
+  "groups": 2,
+  "segments": 44,
+  "ports": 605,
+  "ip_addresses": 844,
+  "vms": 3,
+  "scope": "Actual synthetic call counts, not a production runtime prediction. Both modes retain full member lists and identical attachment links.",
+  "direct_segment_inventories": {
+    "network_reads": 49,
+    "segment_inventories": 44,
+    "reused_segment_inventories": 0,
+    "reused_probe_pages": 2,
+    "all_collection_get_calls": 54,
+    "vm_related_group_counts": [
+      2,
+      2,
+      0
+    ]
+  },
+  "reused_search_configuration": {
+    "network_reads": 5,
+    "segment_inventories": 0,
+    "reused_segment_inventories": 44,
+    "reused_probe_pages": 2,
+    "all_collection_get_calls": 10,
+    "vm_related_group_counts": [
+      2,
+      2,
+      0
+    ]
+  }
+}

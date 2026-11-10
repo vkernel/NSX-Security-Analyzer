@@ -70,6 +70,13 @@
     if(value.path&&value.path!==label){const path=make('code',value.path);path.className='evidence-path';path.title=value.path;root.append(path);}
     return root;
   };
+  window.networkAttachmentCell=item=>{
+    const root=make('div');root.className='evidence-reference-lines';
+    for(const via of item.via||[]){const entry=make('div');entry.append(make('span','Interface '+via.interface_id));
+      for(const path of [via.port_path,via.segment_path]){const code=make('code',path);code.className='evidence-path';entry.append(code);}root.append(entry);}
+    if(!root.children.length)root.append(make('span','Direct VM association'));
+    return root;
+  };
   window.evidenceTable=({title,columns,load,current=()=>true,wide=false,empty='No relationships recorded in this snapshot.'})=>{
     const root=make('section'),heading=make('h3',title),status=make('p'),coverage=make('p'),content=make('div'),failure=make('div'),pager=make('nav'),previous=make('button','Previous'),next=make('button','Next');
     coverage.className='evidence-note';coverage.hidden=true;
@@ -199,13 +206,16 @@
     const source=window.membershipSource(body,{kind:'group',path:row.path});
     const columns=[{label:'Member',cell:item=>window.evidenceObject(body,{...item,path:item.vm_path||item.path},item.vm_path?{path:item.vm_path,view:'vms'}:null)},
       {label:'Identity',cell:item=>item.external_id||item.id||item.identity}];
-    const entries=[['virtual-machines','VMs','Resolved VM members'],['ip-addresses','IP addresses','IP members'],['logical-ports','Ports','Resolved port members'],['logical-switches','Segments','Resolved segment members']].map(([section,label,title])=>{
+    const categoriesList=[['virtual-machines','VMs',row.network_membership_version===1?'Direct VM members':'Resolved VM members'],
+      ...(row.network_membership_version===1?[['network-virtual-machines','Attached VMs','VMs through member ports']]:[]),
+      ['ip-addresses','IP addresses','IP members'],['logical-ports','Ports','Resolved port members'],['logical-switches','Segments','Resolved segment members']];
+    const entries=categoriesList.map(([section,label,title])=>{
       const saved=page=>window.reportData(null,{op:'group-members',path:row.path,section,page});
-      const table=window.evidenceTable({title,columns,current,empty:'NSX returned no members for this category.',load:page=>section==='virtual-machines'?source.load('',page,()=>saved(page)):saved(page)});
+      const table=window.evidenceTable({title,columns:section==='network-virtual-machines'?[...columns,{label:'Interface attachment',cell:window.networkAttachmentCell}]:columns,current,empty:section==='network-virtual-machines'?'No verified VM attachment links were saved.':'NSX returned no members for this category.',load:page=>section==='virtual-machines'?source.load('',page,()=>saved(page)):saved(page)});
       if(section==='virtual-machines'){table.panel.prepend(source.panel);source.register(table);}
       return {...table,label,show:()=>queueMicrotask(table.show)};
     });
-    const note=make('p','VM members can use saved snapshot or current NSX evidence. IP, port and segment lists use saved evidence and do not establish VM membership.');note.className='evidence-note';note.dataset.evidenceSection='members';
+    const note=make('p',row.network_membership_version===1?'VMs lists direct VM membership. Attached VMs lists saved VM interfaces linked to effective member ports. A segment-based group can have attached VMs while its direct VM count is zero.':'VM members can use saved snapshot or current NSX evidence. IP, port and segment lists use saved evidence and do not establish VM membership.');note.className='evidence-note';note.dataset.evidenceSection='members';
     const categories=window.evidenceCategories(entries);categories.dataset.evidenceSection='members';categories.querySelector('nav').setAttribute('aria-label','Member categories');
     body.append(note,categories);
   };

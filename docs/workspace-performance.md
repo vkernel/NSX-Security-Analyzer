@@ -20,6 +20,11 @@ The caches are disposable. Archiving/rebuilding the browsing index deletes them;
 
 ## Saved VM associations during collection · 5 November 2026
 
+The [network attachment correction](collection-performance.md#network-member-lists-and-vm-attachments--10-november-2026)
+extends this direct-VM strategy with separate saved segment/port evidence and exact
+VM interface ownership. Related-group counts and saved firewall references now use
+both verified relationship types, while direct VM member lists remain distinct.
+
 The prior probe-only collection saved at most the first identity returned by an
 existence check. Positive IP checks could skip the VM endpoint entirely. A clean
 collection therefore did not imply complete saved VM membership. Inverting those

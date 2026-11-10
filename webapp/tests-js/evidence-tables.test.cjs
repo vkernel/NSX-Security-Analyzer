@@ -63,6 +63,33 @@ function currentResult(items=[],extra={}){return {items,status:'complete',saved_
 function autoVm(dom){dom.window.document.getElementById('detail-dialog').membershipInitialSource=null;}
 const four=Array.from({length:4},(_,i)=>({path:'/infra/groups/'+i,name:'Actual group '+i}));
 
+test('network-aware VM references retain saved attachment provenance and keep direct counts separate',async()=>{
+ const dom=setup(),w=dom.window,d=w.document,body=d.getElementById('detail-body'),calls=[];autoVm(dom);
+ const edge={path:'/infra/groups/network',name:'Network group',membership_basis:'network_attachment',via:[{interface_id:'vif-1',port_path:'/infra/segments/s/ports/p',segment_path:'/infra/segments/s'}]};
+ w.fetch=async()=>{throw Error('Saved network evidence must not call current NSX');};
+ w.reportData=async(_,q)=>{calls.push(q.section);return {items:q.section==='resolved_groups'||q.section==='network_groups'?[edge]:[{...rule,reference_reason:'Verified VM interface attachment'}],status:'complete',source:'saved_snapshot'};};
+ await w.showVmRelationships(body,null,7,{...summary,network_membership_version:1,direct_group_count:0,network_group_count:1,network_membership_status:'complete',resolved_membership_status:'complete'});
+ assert.match(d.querySelector('#evidence-summary').textContent,/0 direct VM groups · 1 network groups/);
+ tab(d,'References');await tick();assert.match(d.querySelector('#evidence-references').textContent,/Interface attachment/);
+ assert.match(d.querySelector('#evidence-references').textContent,/vif-1/);
+ tab(d,'Network links (saved)',d.querySelector('#evidence-references .evidence-category-tabs'));await tick();
+ assert.ok(calls.includes('network_groups'));assert.match(d.querySelector('#evidence-references').textContent,/\/infra\/segments\/s\/ports\/p/);
+ tab(d,'Firewall rules',d.querySelector('#evidence-references .evidence-category-tabs'));await tick();
+ assert.match(d.querySelector('.evidence-firewall-table').textContent,/Verified VM interface attachment/);
+ dom.window.close();
+});
+
+test('network groups show direct VMs and attached VMs as separate saved categories',async()=>{
+ const dom=setup(),w=dom.window,d=w.document,body=d.getElementById('detail-body'),calls=[];
+ d.querySelector('main').innerHTML='<div data-server-table="all-groups"></div>';
+ w.reportData=async(_,q)=>{calls.push(q.section);return {items:q.section==='network-virtual-machines'?[{name:'Attached VM',identity:'vm',vm_path:'/vm',via:[{interface_id:'vif',port_path:'/infra/segments/s/ports/p',segment_path:'/infra/segments/s'}]}]:[],status:'complete',saved_count:q.section==='network-virtual-machines'?1:0};};
+ w.workspaceEvidence(body,'Network group',{kind:'group',path:'/infra/groups/network',network_membership_version:1});
+ tab(d,'Members');await tick();assert.match(d.querySelector('#evidence-members').textContent,/Direct VM members/);
+ tab(d,'Attached VMs',d.querySelector('#evidence-members .evidence-category-tabs'));await tick();
+ assert.ok(calls.includes('network-virtual-machines'));assert.match(d.querySelector('#evidence-members').textContent,/Attached VM/);
+ assert.match(d.querySelector('#evidence-members').textContent,/Interface vif/);dom.window.close();
+});
+
 test('a complete saved VM association list opens without current NSX requests',async()=>{
  const dom=setup(),w=dom.window,d=w.document,body=d.getElementById('detail-body');autoVm(dom);
  const calls=[];w.fetch=async()=>{throw Error('Complete saved evidence must not check current NSX automatically');};

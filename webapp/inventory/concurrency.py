@@ -10,6 +10,8 @@ LOG = logging.getLogger('inventory.collector')
 
 
 def request_category(path, params=None):
+    if path in ('/api/v1/fabric/vifs','/api/v1/fabric/virtual-machines') or '/segments/' in path and path.endswith('/ports'):
+        return 'network_attachment_inventory'
     if path.endswith('/virtual-machine-group-associations'):
         return 'vm_group_associations'
     if path.endswith('/statistics'):

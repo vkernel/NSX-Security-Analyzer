@@ -200,7 +200,10 @@ class NSXClient:
                 time.sleep(delay)
 
     def _get(self, path, params=None):
-        url = self.base_url + quote(path, safe="/")
+        # The one Management Plane inventory needed for attachment ownership uses
+        # the same validated manager, TLS pool, credentials and request limiter.
+        url = (self.base_url.removesuffix('/policy/api/v1') if path in ('/api/v1/fabric/vifs','/api/v1/fabric/virtual-machines')
+               else self.base_url) + quote(path, safe="/")
         if params:
             url += "?" + urlencode(params)
         timeout = self.bulk_timeout if path.endswith("/statistics") and "/rules/" not in path else self.timeout
@@ -524,7 +527,7 @@ MEMBERSHIP_ENDPOINTS = ("ip-addresses", "virtual-machines", "logical-ports", "lo
 
 class MembershipProbe:
     """Count mandatory checks and share their first pages with member collection."""
-    def __init__(self, client, detail_budget=None):
+    def __init__(self, client, detail_budget=None, initial_page_size=None):
         self.client = client
         self.calls = 0
         self.endpoints = {}
@@ -533,6 +536,7 @@ class MembershipProbe:
         self.failures = {}
         self.detail_budget = detail_budget
         self.page_sizes = {}
+        self.initial_page_size = initial_page_size
 
     def __getattr__(self, name):
         return getattr(self.client, name)
@@ -557,8 +561,11 @@ class MembershipProbe:
                     page = self.client.get(path, params)
                     self.page_sizes[endpoint] = (params or {}).get('page_size', 1)
             else:
-                page = self.client.get(path, params)
-                self.page_sizes[endpoint] = (params or {}).get('page_size', 1)
+                request_params = dict(params or {})
+                if self.initial_page_size is not None:
+                    request_params['page_size'] = self.initial_page_size
+                page = self.client.get(path, request_params)
+                self.page_sizes[endpoint] = request_params.get('page_size', 1)
         except Exception as exc:
             self.failures[endpoint] = exc
             counts['errors'] += 1
@@ -1520,6 +1527,8 @@ def iter_vm_inventory_rows(report):
                    resolved_membership_notes=observation.get('notes', []),
                    resolved_membership_scope=evidence.get('scope'),
                    resolved_membership_checked_at=observation.get('checked_at'))
+        from .network_membership import enrich_vm
+        enrich_vm(row, evidence.get('network',{}))
         yield row
 
 def vm_inventory_rows(report):
@@ -1596,6 +1605,8 @@ def add_tag_firewall_references(tags, groups, resources):
 def needs_review(report):
     dfw = report.get("dfw", {})
     return (bool(report.get("inventory_warnings")) or any(r["membership"] == "unknown" for r in report["objects"])
+            or report.get('membership_evidence',{}).get('network',{}).get('status') in ('partial','unavailable')
+            or report.get('membership_evidence',{}).get('network',{}).get('member_list_status')=='partial'
             or bool(report.get("tags", {}).get("errors"))
             or bool(report.get("tags", {}).get("unsupported_conditions"))
             or any(r["status"] == "unknown" for r in report.get("tags", {}).get("objects", []))
@@ -1804,6 +1815,9 @@ def audit(client, workers=4, testing=False, progress=None):
     membership_lock = threading.Lock()
     membership_diagnostics = {'groups_checked': 0, 'probe_calls': 0, 'calls_per_group': {}, 'outcomes': {}, 'endpoints': {}, 'typed_probe_groups': 0, 'inapplicable_probes_omitted': 0, 'vm_probe_comparison': {}, 'positive_association_reuses': 0}
     group_inventory = {g["path"]: g for g in all_groups}
+    from .network_membership import requires_network
+    network_targets = {g['path'] for g in all_groups if requires_network(g, group_inventory)}
+    network_probes = {}
     scope_cache = {}
     scopes = {}
     fast_paths = set()
@@ -1816,7 +1830,7 @@ def audit(client, workers=4, testing=False, progress=None):
                                              'rechecked':0, 'disabled':fast_disabled, 'full_verification':full_verification}
     def check_membership(group):
         group_budget = detail_budget.group(group['path'])
-        probe = MembershipProbe(client)
+        probe = MembershipProbe(client, initial_page_size=1000 if group['path'] in network_targets and not testing else None)
         eligible = not testing and vm_fast_eligible(group)
         verify = eligible and group['path'] not in associated_groups and (full_verification or int(hashlib.sha256((str(verification_day) + group['path']).encode()).hexdigest(), 16) % 20 == 0)
         fast = eligible and not verify
@@ -1827,6 +1841,8 @@ def audit(client, workers=4, testing=False, progress=None):
                   else membership(probe, group, group_inventory, scopes[group['path']], vm_fast=fast))
         from .resolved_membership import collect as collect_members
         resolved_members[group['path']] = collect_members(client, group, probe=probe, testing=testing, budget=group_budget)
+        if group['path'] in network_targets:
+            network_probes[group['path']] = probe
         used = bool(result[0] == 'empty' and fast and probe.calls == 1)
         if verify and not reused and (probe.results.get('virtual-machines') in ('error', 'incomplete') or (probe.results.get('virtual-machines') == 'negative' and probe.vm_comparison() != 'All three checks empty')):
             verification_failed.set()
@@ -2012,11 +2028,21 @@ def audit(client, workers=4, testing=False, progress=None):
     add_tag_firewall_references(tags, all_groups, resources + all_groups + dfw_configuration)
     from .vm_associations import apply_to_groups
     apply_to_groups(tags, inventory['groups'], membership_evidence)
+    from .network_membership import collect as collect_network, apply as apply_network
+    phases['tags'] = round(time.perf_counter()-tag_started,2)
+    network_started = time.perf_counter()
+    progress(4, 'Collecting network members and linking VM interface attachments')
+    network_evidence, network_stats = collect_network(client, all_groups, tags.get('virtual_machines', []),
+        probes=network_probes, workers=workers, testing=testing, resources=resources)
+    apply_network(inventory['groups'], network_evidence, tags.get('virtual_machines', []))
+    network_evidence.pop('groups',None)  # Member arrays already live in the group records; avoid a third report copy.
+    membership_evidence['network'] = network_evidence
+    membership_diagnostics['network'] = network_stats
+    phases['network_membership'] = round(time.perf_counter()-network_started,2)
     membership_diagnostics['saved_member_lists']['virtual-machines'] = dict(Counter(
         group['resolved_membership']['endpoints']['virtual-machines']['status'] for group in inventory['groups']))
     LOG.info('Saved VM association coverage: %s inverse_status=%s positive_group_probes_avoided=%d',
              association_stats, membership_evidence['inverse_status'], membership_diagnostics['positive_association_reuses'])
-    phases["tags"] = round(time.perf_counter() - tag_started, 2)
     return {"inventory_warnings": getattr(client, "inventory_warnings", []) if isinstance(getattr(client, "inventory_warnings", []), list) else [],
             "inventory": inventory, "tags": tags, "membership_evidence": membership_evidence,
             "testing": testing, "generated_at": datetime.now(timezone.utc).isoformat(),
@@ -2057,6 +2083,10 @@ def performance_description(report):
                 " Incomplete lookups leave missing groups and firewall references unknown.").format(
                     display_number(associations.get('statuses', {}).get('complete', 0)),
                     display_number(associations['vms']), display_number(associations['requests'])) if associations else ''
+    network = performance.get('membership',{}).get('network',{})
+    if network.get('groups'):
+        coverage += ' Network evidence: {} groups, {} reads, {} segment inventories; {} coverage.'.format(
+            network['groups'],network['requests'],network['segment_inventories'],network['status'])
     if concurrency.get("mode") == "automatic":
         return ("Saved audit retrieval: " if report.get("rendered_from_saved_report") else "Fresh retrieval: ") + (
             "{} HTTP requests, {} retries; {} seconds. Automatic concurrency limits: started at {}, peaked at {}, "
@@ -2568,7 +2598,7 @@ def _render_report(report, *, fragments, indexed=False, row_sink=None):
         '<a href="#coverage">Audit scope &amp; exclusions</a>'
         '<a href="#tags-coverage">Tag coverage</a>')
     vm_rows = iter_vm_inventory_rows(report) if row_sink else vm_inventory_rows(report)
-    vm_table = table_shell(["VM / identity", "Power state", "Tags", "Resolved groups", "Relationships & details"],vm_rows,"vms")
+    vm_table = table_shell(["VM / identity", "Power state", "Tags", "Related groups", "Relationships & details"],vm_rows,"vms")
     vm_count = sum(view == "vms" for view, path in row_ids)
     vm_note = ("VM inventory retrieved from NSX." if "virtual_machines" in tags else
                "Older snapshot: only VMs present in saved tag assignments are available. Run a new collection for full VM inventory.")

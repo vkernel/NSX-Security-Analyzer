@@ -7,7 +7,7 @@ from .resolved_membership import ENDPOINTS
 
 
 def read(snapshot_id, path, section='virtual-machines', page=0):
-    if section not in ENDPOINTS or page < 0 or page > 1000000:
+    if section not in ENDPOINTS + ('network-virtual-machines',) or page < 0 or page > 1000000:
         raise ValueError('Invalid member category or page')
     owner = SnapshotRecord.objects.filter(snapshot_id=snapshot_id, view='inventory',
         compact__path=path, data__kind='group').values_list('pk', flat=True).first()

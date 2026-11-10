@@ -3,7 +3,7 @@ from django.db import connection
 from .firewall_reference_context import enrich
 
 
-def read(snapshot_id, groups, page=0, path='', detail=False):
+def read(snapshot_id, groups, page=0, path='', detail=False, evidence=None):
     if not groups:
         return {'items':[], 'page':page, 'has_next':False}
     # JSON array overlap stays in PostgreSQL; only one bounded rule page is read.
@@ -23,7 +23,11 @@ def read(snapshot_id, groups, page=0, path='', detail=False):
         return rows[0][0] if rows else None
     items = [{**{key:row[key] for key in ('name','path','action','disabled','policy_name') if key in row}, 'via_groups':via} for row,via in rows[:25]]
     items = enrich(snapshot_id, items, vm=True)
-    for item in items: item['reference_reason']='Confirmed VM membership; saved group reference'
+    for item in items:
+        bases = {(evidence or {}).get(group,{}).get('membership_basis','direct_vm') for group in item['via_groups']}
+        item['reference_reason'] = ('Verified VM interface attachment; saved parent-group port reference' if bases=={'network_attachment'}
+            else 'Direct VM membership and verified interface attachment; saved group references' if bases & {'network_attachment','direct_and_network'}
+            else 'Confirmed VM membership; saved group reference')
     return {'items':items,'page':page,'has_next':len(rows)>25}
 
 
@@ -31,6 +35,7 @@ def saved(snapshot_id, ordinal, section, page=0, path=''):
     from .models import SnapshotRecord
     row = SnapshotRecord.objects.filter(snapshot_id=snapshot_id, view='vms', ordinal=ordinal).values('data__resolved_groups','compact__resolved_membership_status').get()
     groups = [group['path'] for group in row['data__resolved_groups'] or [] if isinstance(group,dict) and isinstance(group.get('path'),str)]
+    evidence = {group['path']:group for group in row['data__resolved_groups'] or [] if isinstance(group,dict) and isinstance(group.get('path'),str)}
     if section == 'confirmed_rule':
         from django.http import Http404
         detail = read(snapshot_id,groups,path=path,detail=True)
@@ -42,7 +47,7 @@ def saved(snapshot_id, ordinal, section, page=0, path=''):
         if detail is None: raise Http404
         values = sorted(set(groups).intersection(detail.get('source_groups',[])+detail.get('destination_groups',[])+detail.get('scope',[])))
         return {'items':values[page*25:page*25+25],'has_next':len(values)>(page+1)*25,'page':page}
-    result = read(snapshot_id, groups, page)
+    result = read(snapshot_id, groups, page, evidence=evidence)
     result.update(status=row['compact__resolved_membership_status'] or 'not_collected',
-        source='saved_snapshot', notes=['Saved firewall configuration references through confirmed VM memberships. Incomplete membership coverage can omit rules; references do not establish effective policy.'])
+        source='saved_snapshot', notes=['Saved firewall configuration references through direct VM membership and verified network attachments where collected. Incomplete coverage can omit rules; references do not establish effective policy or observed traffic.'])
     return result

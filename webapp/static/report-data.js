@@ -147,13 +147,14 @@
     const table=(section,label,columns,path='')=>window.evidenceTable({title:label,columns,current,wide:section==='related_rules',load:page=>load(id,section,page,path)});
     const tags=table('tags','Assigned tags',[{label:'Scope',cell:item=>item.scope||'(empty scope)'},{label:'Value',cell:item=>object(item,'tags')}]);
     const assigned=make('details'),assignedTitle=make('summary','Assigned tags');assigned.dataset.evidenceSection='overview';assigned.dataset.evidenceLazy='true';assigned.append(assignedTitle,tags.panel);assigned.addEventListener('toggle',()=>{if(assigned.open)tags.show();});body.append(assigned);
-    const source=window.membershipSource(body,{kind:'vm',id},{automatic:true,initialSource:summary.resolved_membership_status==='complete'?'saved':null});
+    if(summary.network_membership_version===1){const counts=make('p',(summary.direct_group_count??'Unknown')+' direct VM groups · '+(summary.network_group_count??'Unknown')+' network groups. Related groups count each group once.');counts.className='evidence-note';counts.dataset.evidenceSection='overview';body.append(counts);}
+    const source=window.membershipSource(body,{kind:'vm',id},{automatic:true,initialSource:summary.network_membership_version===1||summary.resolved_membership_status==='complete'?'saved':null});
     const describe=(data,firewall=false)=>{
       if(!data.items.length)data={...data,empty_message:data.status==='complete'?(firewall?'No saved firewall rules reference this VM’s confirmed groups.':data.source==='saved_snapshot'?'No confirmed group memberships were saved for this VM.':'NSX returned no group associations for this VM.'):
         data.source==='current_nsx'?'VM membership is not established. Refresh to check current NSX.':'Membership was not fully collected in this snapshot. Select Current NSX to check this VM.'};
       return data;
     };
-    const resolved=window.evidenceTable({title:'Confirmed groups',current,columns:[{label:'Group',cell:item=>object(item,'groups')},{label:'Membership',cell:()=>window.evidenceBadge('Confirmed')}],load:async page=>describe(await source.load('',page,()=>load(id,'resolved_groups',page)))});
+    const resolved=window.evidenceTable({title:summary.network_membership_version===1?'Related groups':'Confirmed groups',current,columns:[{label:'Group',cell:item=>object(item,'groups')},{label:'Membership',cell:item=>window.evidenceBadge(item.membership_basis==='network_attachment'?'Interface attachment':item.membership_basis==='direct_and_network'?'Direct VM + interface':'Direct VM')},...(summary.network_membership_version===1?[{label:'Via',cell:window.networkAttachmentCell}]:[])],load:async page=>describe(await source.load('',page,()=>load(id,'resolved_groups',page)))});
     source.register(resolved);source.panel.dataset.evidenceSection='relationships';body.append(source.panel);
     const ruleDetail=make('section');ruleDetail.className='evidence-rule-inspection';ruleDetail.hidden=true;ruleDetail.tabIndex=-1;let inspection=0;
     async function inspect(item,trigger){
@@ -172,8 +173,9 @@
     const rules=window.evidenceTable({title:'Firewall references',current,wide:true,columns:window.firewallReferenceColumns(body,inspect),load:async page=>describe(await source.load('firewall',page,()=>load(id,'confirmed_rules',page)),true)});source.register(rules);
     source.onChange(()=>{inspection++;ruleDetail.hidden=true;delete rules.panel.dataset.inspecting;});
     rules.panel.append(ruleDetail);
-    const caveat=make('p','Saved firewall configuration through confirmed VM groups. These references do not establish effective policy or observed traffic.');caveat.className='evidence-note';rules.panel.insertBefore(caveat,rules.panel.querySelector('.evidence-table-content'));
-    body.append(window.evidenceCategories([{...resolved,label:'Groups'},{...rules,label:'Firewall rules'}]));
+    const caveat=make('p','Saved firewall configuration through direct VM membership and verified network attachments where collected. Current NSX checks cover direct VM associations only. These references do not establish effective policy or observed traffic.');caveat.className='evidence-note';rules.panel.insertBefore(caveat,rules.panel.querySelector('.evidence-table-content'));
+    const network=table('network_groups','Saved network links',[{label:'Group',cell:item=>object(item,'groups')},{label:'Interface → port → segment',cell:window.networkAttachmentCell}]);
+    body.append(window.evidenceCategories([{...resolved,label:'Groups'},...(summary.network_membership_version===1&&summary.network_membership_status!=='not_applicable'?[{...network,label:'Network links (saved)'}]:[]),{...rules,label:'Firewall rules'}]));
     const advanced=make('details'), title=make('summary','VM inventory details'), content=make('div');advanced.dataset.evidenceSection='technical';advanced.append(title,content);body.append(advanced);
     let ready=false,busy=false;
     const technical=async()=>{if(ready||busy)return;busy=true;window.evidenceState(content,'Loading technical details…');try{const response=await load(id,'vm');if(body.evidenceGeneration!==generation)return;content.replaceChildren(window.technicalEvidence(response.details));ready=true;}catch(error){window.evidenceState(content,error.message,technical);}finally{busy=false;}};

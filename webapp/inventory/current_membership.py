@@ -175,6 +175,8 @@ def cached(snapshot, kind, owner, page=0, *, include_items=True, paging_session=
             row = mapping.get(item.get('external_id'))
             if row: item.update(name=row['name'], vm_path=row['compact__path'])
     notes = list(lookup.notes) if lookup else ['Observed through related-object checks; this subject has not had a complete check.']
+    if kind == 'vm':
+        notes.append('Current checks cover direct VM associations only. Select Saved snapshot for collected port/segment attachment references.')
     fresh = bool(lookup and lookup.expires_at and lookup.expires_at > timezone.now())
     if not fresh and lookup: notes.append('Cached observation is stale; check current NSX to refresh.')
     if lookup and status != 'complete' and positive: notes.append('Positive observations may come from earlier checks; their individual observation times are retained.')

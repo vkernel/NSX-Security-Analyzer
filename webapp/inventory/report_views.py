@@ -230,7 +230,7 @@ def snapshot_data(request, pk):
                     # Validate the search before starting a streamed download.
                     rows.exists()
                     view = rows.values_list('view', flat=True).first()
-                    headers = ['VM / identity','Power state','Tags','Resolved groups','Relationships & details'] if view == 'vms' else ['Object / path','Type','Usage','Membership','Evidence'] if view == 'inventory' else ['Tag / scope','Usage','VMs','Groups','Other resources','Evidence'] if view == 'tags' else ['Scope','Tags','VMs','Groups','Other resources','Evidence'] if view == 'scopes' else ['Object / path','Policy / category','Status','Count','Evidence']
+                    headers = ['VM / identity','Power state','Tags','Related groups','Relationships & details'] if view == 'vms' else ['Object / path','Type','Usage','Membership','Evidence'] if view == 'inventory' else ['Tag / scope','Usage','VMs','Groups','Other resources','Evidence'] if view == 'tags' else ['Scope','Tags','VMs','Groups','Other resources','Evidence'] if view == 'scopes' else ['Object / path','Policy / category','Status','Count','Evidence']
                     response = StreamingHttpResponse(csv_stream(rows, headers), content_type='text/csv; charset=utf-8')
                     response['Content-Disposition'] = 'attachment; filename="snapshot-'+str(pk)+'.csv"'
                     response['Cache-Control'] = 'private, no-store'

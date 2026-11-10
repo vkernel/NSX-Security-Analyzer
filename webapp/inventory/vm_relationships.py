@@ -26,7 +26,7 @@ def read(snapshot_id, ordinal, section='summary', page=0, path='', context=False
             import json
             value = cursor.fetchone()[0]
             return {'details': json.loads(value) if isinstance(value, str) else value}
-    if section not in ('tags', 'related_groups', 'resolved_groups', 'related_rules', 'rule', 'via_groups'):
+    if section not in ('tags', 'related_groups', 'resolved_groups', 'network_groups', 'related_rules', 'rule', 'via_groups'):
         raise ValueError('Unknown relationship section')
     key = 'related_rules' if section in ('rule', 'via_groups') else section
     cte = "WITH source AS (SELECT data->%s AS items " + base + "), entries AS (SELECT value AS item FROM source, jsonb_array_elements(COALESCE(items, '[]'::jsonb))) "
@@ -83,16 +83,18 @@ def read(snapshot_id, ordinal, section='summary', page=0, path='', context=False
         from .firewall_reference_context import enrich
         page_items = enrich(snapshot_id, page_items, vm=True)
     result = {'items': page_items, 'page': page, 'has_next': len(items) > 25}
-    if section == 'resolved_groups':
+    if section in ('resolved_groups','network_groups'):
         from .resolved_membership import vm_summary
         result['source'] = 'saved_snapshot'
-        result['status'] = vm_summary(summary['compact']).get('resolved_membership_status', 'not_collected')
-        result['checked_at'] = summary['compact'].get('resolved_membership_checked_at')
-        result['notes'] = ['Resolved VM identities returned by NSX at collection time. Partial coverage can omit groups; no tag, name or IP inference is included.']
+        result['status'] = (summary['compact'].get('network_membership_status','not_collected') if section=='network_groups'
+                            else vm_summary(summary['compact']).get('resolved_membership_status', 'not_collected'))
+        result['checked_at'] = summary['compact'].get('network_membership_checked_at' if section=='network_groups' else 'resolved_membership_checked_at')
+        result['notes'] = ['Direct VM associations and verified interface attachment links are distinct. Partial coverage can omit groups; no tag, name or IP inference is included.']
         if summary['compact'].get('resolved_membership_scope'):
             result['notes'].append('Scope: ' + summary['compact']['resolved_membership_scope'] + '.')
-        evidence = row.values('data__resolved_membership_notes').first()
-        result['notes'].extend(evidence['data__resolved_membership_notes'] or [])
+        field = 'data__network_membership_notes' if section=='network_groups' else 'data__resolved_membership_notes'
+        evidence = row.values(field).first()
+        result['notes'].extend(evidence[field] or [])
         if result['status'] == 'not_collected':
             result['notes'] = ['VM membership was not saved in this snapshot. Select Current NSX to check this VM separately; current checks do not repair historical evidence.']
     return result

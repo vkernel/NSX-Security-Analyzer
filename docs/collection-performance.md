@@ -1,5 +1,66 @@
 # Collection performance
 
+## Network member lists and VM attachments · 10 November 2026
+
+Network-based groups now save paginated effective segment, port and IP lists.
+Selection follows Segment, SegmentPort and interface criteria, including referenced
+parent groups. VM-only groups retain the existing direct association path and add
+no network requests. Parent effective ports, rather than child group or tag
+matches, determine network references.
+
+Collection joins those ports to VM interfaces using exact `owner_vm_id`,
+`lport_attachment_id`, Policy `attachment.id` and canonical port paths. One
+Management Plane VIF inventory is retrieved through the same HTTPS pool, request
+pacer, adaptive concurrency limiter and overall deadline. If owners use fabric VM
+IDs, one fabric VM inventory bridges exact identities to the Policy VM inventory.
+Names, MAC addresses and IP addresses are not identity fallbacks. Ambiguous owners,
+attachments, conflicting interface records and unresolvable legacy port IDs remain
+unknown. No per-VM/group cross-product or realized-state scan is introduced.
+
+Initial cleanup probes for selected network groups request up to 1,000 members,
+and their pages are reused. Other necessary category pages use 1,000 records and
+verified cursors. Modern segment/port endpoints fall back to legacy endpoints on
+compatibility failures. Group-category reads stop at 100 pages and explicitly
+retain partial coverage at that limit. Permission failures and failed pages retain
+positive evidence without establishing a complete zero. Additional reads are
+limited to selected network groups. Negative attachment results never establish
+cleanup or deletion eligibility.
+
+Port configuration already returned by collection search is reused when it covers
+the selected effective ports. Remaining relevant segment inventories are fetched
+once and shared by every group/VM. The [synthetic request comparison](performance/network-membership-2026-11-10.json)
+uses two groups sharing 44 segments, 605 ports and 844 IP entries, with three VMs.
+Full network evidence requires 49 reads when 44 segment inventories must be fetched,
+or five reads when their configuration is already available. Both modes reuse two
+mandatory segment-member pages and produce identical VM relationships. These are
+actual mock call counts, not a promise of production collection duration. Exact
+network evidence requires reads that the previous one-member sampling omitted.
+
+The VM inventory shows unique **Related groups** across direct and network
+relationships. Drawers identify their basis and retain interface → port → segment
+provenance. Network groups show **VMs** for direct membership and **Attached VMs**
+for attachment links; a zero direct count can coexist with attached VMs. Saved
+firewall references use the same unique relationships and state their reason.
+These references do not establish effective firewall policy or observed traffic.
+
+New snapshots default to their saved evidence, including partial network evidence.
+Explicit Current NSX checks remain separate direct VM association checks and say
+so; they do not repair or silently mix historical network links. Coverage is limited
+to visible inventory and the default enforcement point, excludes IP-only inference,
+and is not an atomic NSX snapshot. Endpoint and attachment completeness are tracked
+separately. Missing network evidence is shown in coverage and collection diagnostics.
+Noncanonical legacy port identities stay unresolved rather than being guessed.
+
+No schema migration is added. Update the collection worker as well as the web app,
+then run a fresh full collection. Existing snapshots remain immutable. The
+[synthetic browser acceptance](performance/network-membership-browser-2026-11-10.json)
+verifies zero direct VM members, two attached VMs, all member totals, segment paging,
+VM counts and saved firewall references without any live membership request.
+
+API reference: [NSX group member categories](https://developer.broadcom.com/xapis/nsx-t-data-center-rest-api/latest/inventory_group_members.html).
+
+## Earlier collection optimizations
+
 For the current saved VM membership strategy, its request-cost tradeoffs and
 synthetic measurements, see [Saved VM associations during collection](workspace-performance.md#saved-vm-associations-during-collection--5-november-2026).
 

@@ -1,0 +1,15 @@
+{
+  "synthetic": true,
+  "directVMs": 0,
+  "attachedVMs": 2,
+  "segments": 44,
+  "ports": 605,
+  "ipAddresses": 844,
+  "vmRelatedGroups": 2,
+  "networkProvenanceVisible": true,
+  "savedFirewallRuleVisible": true,
+  "segmentsSecondPage": "26–44",
+  "liveMembershipRequests": 0,
+  "mobilePageOverflow": false,
+  "browserErrors": []
+}

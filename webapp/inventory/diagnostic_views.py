@@ -62,6 +62,7 @@ def collection_diagnostics(request, pk):
     endpoints = (performance.get('concurrency') or {}).get('endpoints') or {}
     phase_labels = {'inventory': 'Base inventory', 'search': 'Reference search', 'dfw': 'Firewall rules and counters',
                     'vm_associations': 'VM associations (within membership phase)',
+                    'network_membership': 'Network members and VM interface attachments',
                     'membership': 'Group membership', 'tags': 'Tags and VM inventory'}
     retrieval_phases = [{'label': phase_labels.get(key, key.replace('_', ' ').capitalize()), 'seconds': value}
                         for key, value in performance.get('phases_seconds', {}).items()]

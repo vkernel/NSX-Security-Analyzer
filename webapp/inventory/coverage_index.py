@@ -5,6 +5,11 @@ from .models import SnapshotCoverage, SnapshotCoverageIssue
 
 def report_issues(report, needs_review=False):
     found = False
+    network = report.get('membership_evidence',{}).get('network',{})
+    if network.get('status') in ('partial','unavailable') or network.get('member_list_status')=='partial':
+        found = True
+        yield {'area':'Network references','name':'Incomplete attachment evidence',
+               'detail':'Some network member lists or VM/interface attachments could not be verified. Missing network references remain unknown; direct VM membership is assessed separately.'}
     for warning in report.get("inventory_warnings", []):
         found = True
         yield {"area": "Inventory verification", "name": warning["endpoint"],

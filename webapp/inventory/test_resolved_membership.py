@@ -218,5 +218,5 @@ class MemberReadTests(TestCase):
         self.assertEqual(suggestions['values'], [{'value': '2', 'count': 1}, {'value': 'Not collected', 'count': 1}, {'value': 'Unavailable', 'count': 1}])
         response = self.client.get(url, dict(params, op='export'))
         exported = list(csv.reader(io.StringIO(b''.join(response.streaming_content).decode('utf-8-sig'))))
-        self.assertEqual(exported[0][3], 'Resolved groups')
+        self.assertEqual(exported[0][3], 'Related groups')
         self.assertEqual([r[3] for r in exported[1:]], ['2', 'Not Collected', 'Unavailable'])
