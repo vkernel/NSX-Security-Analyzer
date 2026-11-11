@@ -126,7 +126,7 @@ class WorkspacePerformanceTests(TestCase):
         self.assertEqual(analysis_index.load(self.snapshot,'groups')['groups'],[])
 
     def test_automatic_updates_are_fragments_and_preserve_authentication(self):
-        for route,args,region in [('findings',[self.env.pk],'finding-list-results'),('activity',[],'activity-results'),('my-work',[],'cleanup-task-results'),('finding-policy',[],'recalculation-results'),('snapshot-comparison',[self.env.pk],'comparison-results')]:
+        for route,args,region in [('findings',[self.env.pk],'review-results'),('activity',[],'activity-results'),('my-work',[],'review-results'),('finding-policy',[],'recalculation-results'),('snapshot-comparison',[self.env.pk],'comparison-results')]:
             with self.subTest(route=route):
                 response=self.client.get(reverse(route,args=args),HTTP_X_REQUESTED_WITH='task-status')
                 self.assertContains(response,'id="'+region+'"')

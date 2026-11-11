@@ -18,8 +18,6 @@ def return_url(request, environment_id):
         return fallback
     if parts.scheme or parts.netloc or parts.path not in (fallback, reverse('my-work')):
         return fallback
-    if parts.path == reverse('my-work') and not request.user.is_staff:
-        return fallback
     return parts.path + ('?' + parts.query if parts.query else '')
 
 
@@ -31,15 +29,28 @@ def navigation(request, environment, finding, return_to):
     # Reuse the exact list filters/order. Only fetch the originating page and
     # its immediate neighbours, never materialize the entire finding inventory.
     parts = urlsplit(return_to)
-    if parts.path != reverse('findings', args=[environment.pk]):
+    if parts.path not in (reverse('findings', args=[environment.pk]), reverse('my-work')):
         return {}
-    from .history_views import filtered_findings
-    params = QueryDict(parts.query)
-    rows, _, _ = filtered_findings(request, environment, params)
+    from .reviews import listing, queue_for
+    from .cleanup_tasks import tasks
+    from .models import Environment
+    params = QueryDict(parts.query).copy()
+    legacy = parts.path != reverse('my-work')
+    params.setdefault('sort','name' if legacy else 'oldest')
+    params.setdefault('direction','desc' if params['sort']=='updated' else 'asc')
+    selected = str(environment.pk) if legacy else params.get('environment','')
+    if selected and (not selected.isdecimal() or len(selected)>18): return {'changed':True}
+    scoped = Environment.objects.filter(pk=selected).first() if selected else None
+    if selected and scoped is None: return {'changed':True}
+    # Parse the originating queue without changing the detail request's params.
+    from types import SimpleNamespace
+    queue = queue_for(SimpleNamespace(GET=params,user=request.user), legacy=legacy)
+    cleanup = tasks(request.user,environment=selected or None,queue='all')
+    rows, _, _ = listing(request,scoped,params,queue,cleanup)
     paginator = Paginator(rows, table_page_size(request, params))
     page = paginator.get_page(params.get('page'))
     entries = list(page.object_list)
-    index = next((i for i, item in enumerate(entries) if item.pk == finding.pk), None)
+    index = next((i for i, item in enumerate(entries) if item['task_kind']=='finding' and item['task_id'] == finding.pk), None)
     if index is None:
         return {'changed': True}
     result = {}
@@ -56,5 +67,11 @@ def navigation(request, environment, finding, return_to):
         else:
             continue
         query = params.copy(); query['page'] = number
-        result[name] = navigation_url(target, parts.path + '?' + query.urlencode())
+        back = parts.path + '?' + query.urlencode()
+        if target['task_kind']=='cleanup':
+            result[name] = reverse('deletion-reference-cleanup',args=[target['task_id']])+'?'+urlencode({'return_to':back})
+        else:
+            from .models import Finding
+            record = Finding.objects.only('pk','environment_id').filter(pk=target['task_id']).first()
+            if record: result[name] = navigation_url(record, back)
     return result

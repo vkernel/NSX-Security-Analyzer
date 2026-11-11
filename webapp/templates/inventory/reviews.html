@@ -1,0 +1,35 @@
+{% extends 'base.html' %}{% load static %}
+{% block title %}Reviews · {{ scope_label }}{% endblock %}
+{% block content %}
+{% include 'components/page_header.html' with title='Reviews' description='Choose a task, review its evidence and record the next decision.' only %}
+<p class="page-context"><strong>{{ queue_label }}</strong> · {{ scope_label }}</p>
+{% include 'inventory/work_navigation.html' %}
+{% if recalculation %}{% include 'inventory/finding_recalculation_region.html' %}{% endif %}
+<form method="get" action="{% url 'my-work' %}" class="directory-toolbar" data-filter-toolbar>
+<input type="hidden" name="queue" value="{{ queue }}">
+{% if work_environment %}<input type="hidden" name="environment" value="{{ work_environment }}">{% endif %}
+<div class="filter-search">{% include 'inventory/settings_field.html' with field=filter_form.q %}</div>
+<details class="filter-control"><summary>Filters</summary><div class="filter-fields">
+{% include 'inventory/settings_field.html' with field=filter_form.task_type %}
+{% include 'inventory/settings_field.html' with field=filter_form.kind %}
+{% if queue == 'all' %}{% include 'inventory/settings_field.html' with field=filter_form.review %}{% include 'inventory/settings_field.html' with field=filter_form.owner %}{% endif %}
+</div></details>
+<details class="filter-control"><summary>Sort</summary><div class="filter-fields">{% include 'inventory/settings_field.html' with field=filter_form.sort %}{% include 'inventory/settings_field.html' with field=filter_form.direction %}</div></details>
+<button class="button">Apply</button><a class="button" href="{% url 'my-work' %}?queue={{ queue }}{% if work_environment %}&amp;environment={{ work_environment }}{% endif %}">Clear filters</a>
+</form>
+{% if cleanup_limited %}<p class="notice">Cleanup tasks are limited to the latest 500 active plans. Select one environment to narrow the list.</p>{% endif %}
+<p id="review-selection-status" role="status" aria-live="polite"></p>
+{% include 'components/bulk_toolbar.html' with bulk_kind='findings' bulk_id='bulk-work' %}
+{% if user.is_superuser %}{% include 'components/bulk_toolbar.html' with bulk_kind='cleanup' bulk_id='bulk-cleanup' %}{% endif %}
+{% include 'inventory/reviews_region.html' %}
+{% if not page.paginator.count and not filters_active %}
+<details class="overview-findings"><summary>Why some findings are not listed</summary>
+<p>Findings enter review when they meet the configured observation criteria. Assigned work is retained when evidence changes; completed and rejected reviews are available under All findings.</p>
+<p>2 days requires 48 hours between qualifying snapshots; time after the latest snapshot does not count.</p>
+{% if historical_finding_count %}<p>{{ historical_finding_count }} historical findings are no longer currently observed. This does not mean their objects were deleted.</p>{% endif %}
+<dl class="finding-counts">{% for entry in qualification_counts %}<div><dt>{{ entry.qualification|capfirst }}</dt><dd>{{ entry.total }}</dd></div>{% endfor %}</dl>
+{% if environment %}<a href="{% url 'collection-coverage' environment.pk %}">Review collection coverage</a>{% endif %}
+</details>{% endif %}
+{% if environment and user.is_superuser %}<p><a href="{% url 'deletion-history' environment.pk %}">Deletion history · {{ environment.name }} →</a></p>{% endif %}
+{% endblock %}
+{% block scripts %}<script src="{% static 'reviews.js' %}" defer></script>{% endblock %}

@@ -1,6 +1,6 @@
 # Finding review approvals
 
-Finding reviews authorize a proposed decommissioning decision. Approval alone does
+Reviews authorize a proposed decommissioning decision. Approval alone does
 not modify NSX. A separate administrator preview and explicit confirmation can delete
 supported approved objects. Operators and administrators can perform review workflow
 actions; viewers can read the results. The same rules apply to local, Keycloak
@@ -136,8 +136,8 @@ blocks final approval and completion until a fresh full collection is available.
 
 ## Queues, notifications and audit
 
-Use **My reviews**, **Unassigned**, **Awaiting second approval**, **Ready for decommissioning**,
-**Rejected** and **Decommissioned** above the filters. Status sorting uses workflow
+Use **Assigned to me**, **Second approval**, **Unassigned**, **Ready** and **All findings**.
+Use the Stage filter in All findings for rejected, decommissioned or suppressed records. Status sorting uses workflow
 stage. Assigned findings remain visible if their evidence stops qualifying, so the
 owner can see why a new collection or review is needed. Rejected and completed decisions remain available even if the condition
 later disappears. Direct finding URLs retain the full history.
@@ -175,7 +175,7 @@ the identity-provider profile/claims and sign in again to refresh the profile.
 
 ### 1. Assign the finding
 
-1. Open **Environments**, select your environment, then click **Finding reviews**.
+1. Open **Environments**, select your environment, then click **Findings**.
 2. Click the finding's name to open its detail page.
 3. Choose **Assign owner** directly when it is the only available action; otherwise
    use **Actions → Assign owner** (or **Reassign owner**).
@@ -188,7 +188,7 @@ the identity-provider profile/claims and sign in again to refresh the profile.
 
 ### 2. Owner performs the first review
 
-1. The assigned owner signs in and opens **Finding reviews → My reviews**, or uses
+1. The assigned owner signs in and opens **Reviews → Assigned to me**, or uses
    the assignment notification in the notification bell.
 2. Open the finding. Use **Open latest evaluated snapshot** and **Technical evidence
    → Load saved technical evidence** to inspect the relevant information.
@@ -203,7 +203,7 @@ the identity-provider profile/claims and sign in again to refresh the profile.
 ### 3. Another person performs the independent review
 
 1. A different Operator or Administrator signs in.
-2. Open the environment's **Finding reviews → Awaiting second approval**, or open
+2. Open the environment's **Reviews → Second approval**, or open
    its review notification. Select the finding.
 3. Read the owner approval and inspect the evidence independently.
 4. Enter a reason and, where required, your own independent verification details.
@@ -214,7 +214,7 @@ the identity-provider profile/claims and sign in again to refresh the profile.
 
 ### 4. Perform and record the change
 
-1. Open **Finding reviews → Ready for decommissioning** and select the finding.
+1. Open **Reviews → Ready** and select the finding.
 2. Execute the actual change using your normal change-management process.
 3. The decision panel now shows **Change-ticket reference**. Enter your ticket identifier and describe what was done in
    **Reason / manual checks performed**.
@@ -261,20 +261,57 @@ Owner and second approvals show their reasons and independent verification
 records. Review history is a chronological activity list with actor names and
 timestamps; use the JSON export for the complete retained decision records.
 
-## Daily review queue
+## Shared Reviews workspace
 
-Open **My work** in the main menu to see tasks across environments:
+Open **Reviews** in the main menu for daily work. An environment's **Findings**
+link opens the same workspace with that environment selected. Existing `/my-work/`
+and environment findings bookmarks remain supported. They share the table,
+queue definitions, counts, filters, permissions and review detail.
 
-- **Assigned to me** contains your owner reviews.
-- **Available for second approval** excludes your own first approvals.
-- **Ready for decommissioning** contains approved findings awaiting a recorded change.
+- **Assigned to me**: your owner reviews and firewall cleanup plans you requested.
+- **Second approval**: tasks you can independently review; your own first approvals
+  are excluded, even after owner reassignment.
+- **Unassigned**: currently eligible findings available for assignment.
+- **Ready**: owned, approved findings awaiting cleanup, plus cleanup plans you are
+  authorized to execute. Preview/confirmation still rechecks live safeguards.
+- **All findings**: team oversight, including retained reviews. Use Stage to find
+  rejected, decommissioned or suppressed records; these are not actionable queues.
 
-The findings list shows whether each review requires one or two approvals. To assign
-an owner, choose **Assign owner**, search by name or email and select a result.
-No reason is required for assigning unassigned work. Search returns up to 20 active operators/administrators; refine your
-search for more specific matches. External users still need to sign in once before
-they can be selected. A second approval remains available to another eligible reviewer;
-it does not require reassigning the owner.
+The heading identifies the queue and environment scope. Queue badges describe the
+whole selected environment scope before table filters; the table footer shows
+matching tasks. Queue changes preserve environment, search, kind and task type,
+while clearing incompatible owner/stage filters and resetting the page. Environment
+switches preserve applicable filters and reset pagination. The hourly collection
+schedule and saved snapshot evidence are unrelated to these views.
+
+Findings and firewall reference cleanup plans use one database-paginated table:
+Finding/task, Environment, Owner, Stage, Next action and Updated. Cleanup plans are
+labelled by task type and use the requesting administrator as owner. Task type can
+limit the list to findings or cleanup. Cleanup discovery retains the existing
+500-active-plan bound, with an explicit notice and environment filtering when
+reached. Findings use database pagination; the queue does not load snapshot reports
+or compute full evidence readiness for every row. Open an item for authoritative
+readiness checks, evidence, decisions and history.
+
+Finding selections support Assign to me, Assign owner, reassignment, release,
+evidence export and authorized deletion preview. Cleanup selections support plan
+export and cancellation. Selecting one task type clears the other selection;
+confirmation endpoints still validate type, role, revision and current state.
+Second approvals cannot be supplied by the original first approver. Read-only
+users can inspect the All findings workspace without assignment or mutation controls.
+
+Finding and cleanup links preserve the originating queue, environment, search,
+filters and page. Previous/Next on findings follows the shared sorted task list,
+including adjacent pages and cleanup tasks. Browser refresh updates task rows and
+queue totals together. Recording decisions, approving cleanup or previewing deletion
+continues to use the existing guarded workflows; no NSX writes occur on queue pages.
+
+Verification for this consolidation passed 971 Django tests, 105 JavaScript tests
+and the collector suite (112 tests, 9 skipped). The [synthetic browser acceptance](performance/reviews-workspace-2026-11-11.json)
+covers 3,000 findings, mixed finding/cleanup rows, scope-preserving navigation,
+independent second approval, selection isolation, confirmation screens and
+read-only access. Desktop and mobile layouts keep horizontal scrolling within the
+table. Existing database records are reused; no migration or new collection is needed.
 
 Administration uses fixed category tabs: Access, Finding reviews, Collections, and
 Operations. A second row shows the pages in the selected category. Open Finding reviews to change criteria or approval settings.
@@ -311,7 +348,7 @@ administrators can release anyone's assignment. A reason is required and the
 history records the actor, previous owner and reason. The **Unassigned** queue
 filters by owner, independently of the preserved review stage. Ownerless findings
 are excluded from Awaiting second approval and Ready for decommissioning queues,
-including My work. They show “Awaiting assignment · owner approval preserved” or
+including Reviews. They show “Awaiting assignment · owner approval preserved” or
 “Awaiting assignment · approvals preserved” in Unassigned and on the detail page.
 Assigning an owner restores the finding to its saved stage's queue. Existing approvals, comments
 and collected evidence remain intact. Assigning a released review resumes its
@@ -319,7 +356,7 @@ saved stage; another approval or completion requires an owner, and the original
 reviewer still cannot provide the second approval. Evidence and policy changes
 continue to invalidate approvals normally.
 
-On the Finding reviews page, select eligible rows to reveal a compact selection
+On the Reviews page, select eligible rows to reveal a compact selection
 bar showing the selected count. Choose **Return to unassigned**, enter a shared
 required reason in the dialog, then submit. **Clear selection** deselects all rows.
 Only the displayed page is selected, with a maximum of 100 per submission.
@@ -347,7 +384,7 @@ Choose **View object in evaluated snapshot** to open the exact NSX path in the s
 
 The active queue is highlighted. Assignment and review progress are separate: an unassigned finding may retain its first or final approvals, but needs an owner before approval or completion can continue. The decision panel explains the next step and any evidence blocker beside the action.
 
-Open a finding from Finding reviews or My work to retain the originating search, filters and page in its back link. Finding reviews also offers Previous/Next within the filtered order, including adjacent pages. If a decision removes the finding from those results, return to the list to continue. Returning in the same browser tab restores the saved list scroll position for up to one hour. The evaluated-snapshot round trip preserves this return link.
+Open a finding from Reviews to retain the originating search, filters and page in its back link. Reviews also offers Previous/Next within the filtered order, including adjacent pages. If a decision removes the finding from those results, return to the list to continue. Returning in the same browser tab restores the saved list scroll position for up to one hour. The evaluated-snapshot round trip preserves this return link.
 
 
 ## Recover a first approval after a collection gap
@@ -424,7 +461,7 @@ scope in the group's membership conditions, not a metadata tag attached to the g
 
 In **Always suppress** mode, saving suppresses matching **empty-group** findings and queues recalculation from retained
 history. Inventory, collected membership evidence and separate unused-object findings remain
-unchanged. Suppressed findings are available under **Finding reviews → Suppressed**, with the
+unchanged. Suppressed findings are available under **Reviews → All findings**, filtered to **Suppressed**, with the
 policy and reason in their details; they cannot receive cleanup approval. Existing ownership
 and review history remain, but active cleanup approvals are invalidated.
 
@@ -434,16 +471,16 @@ behavior; it does not prove traffic use or guarantee that continuously sampled e
 observed. The external membership-management script does not need changing.
 
 
-## Custom services in Finding reviews
+## Custom services in Reviews
 
 Custom services use their own **Unused custom services (days)** criterion, independently of **Unused groups (days)**.
-In Finding reviews, choose **Unused custom service** in the finding-type filter.
+In Reviews, choose **Unused custom service** in the finding-type filter.
 Services and groups have separate finding types. Existing service reviews retain their ownership, history and approvals during upgrade; the service waiting period initially copies the previous shared setting.
 A custom service appears when no configuration reference is found and its observation period,
 minimum observations and evidence requirements are satisfied. Built-in/system-owned services,
 referenced services and audit-excluded services do not become unused-service findings.
 If a service is missing, check its usage in the evaluated snapshot and expand **Why some
-findings are not listed** in Finding reviews. Empty-group criteria and transient-emptiness
+findings are not listed** in Reviews. Empty-group criteria and transient-emptiness
 policies do not apply to services.
 
 
@@ -538,7 +575,7 @@ API references: [Group deletion](https://developer.broadcom.com/xapis/nsx-t-data
 ### Using the deletion preview
 
 1. Open a ready finding and choose **Delete from NSX — preview**, or open the
-   deletion selection page from Finding reviews to select multiple ready objects.
+   deletion selection page from Reviews to select multiple ready objects.
 2. Wait for the preview worker, then use **Refresh results**. Opening a preview
    does not delete anything. Review each result and its saved-snapshot impact link.
 3. When verified objects are available, open **Review permanent deletion**, check
@@ -585,7 +622,7 @@ guidance appears beside the saved JSON.
 
 ### Selection actions and blocked previews
 
-On Finding reviews, select rows to reveal **Actions**. Choose **Return to unassigned**
+On Reviews, select rows to reveal **Actions**. Choose **Return to unassigned**
 or, as an administrator, **Delete from NSX** to preview those exact selections.
 Deletion requires all selected rows to be assigned, ready and of a supported type;
 changed revisions are rejected. No DELETE occurs when opening a preview.
@@ -747,7 +784,7 @@ Search by object name, path or change ticket, and filter by object outcome and t
 Filters must match the same object; matching requests still display their full object
 list and original totals. Pagination preserves the selected filters.
 
-Administrators can also select supported objects directly in **My work → Ready for
+Administrators can also select supported objects directly in **Reviews → Ready for
 decommissioning**, then choose **Actions → Preview deletion from NSX**. Select up to
 100 findings from one environment per request; use the Environment filter to narrow a
 cross-environment queue. The same revision checks, deduplication, read-only preview,
@@ -789,7 +826,7 @@ and its `node_modules` directory supplied through `NODE_PATH`.
 
 ### Link labels and saved evidence
 
-Object names in review queues, My work and deletion lists open the finding when it
+Object names in review queues, Reviews and deletion lists open the finding when it
 still exists. Deletion evidence links appear together: **View finding**, **View saved
 configuration**, and (on request details) **View saved impact preview**. Missing findings,
 configurations or source snapshots are explained instead of offering unavailable links.
@@ -813,7 +850,7 @@ current/proposed values. The plan needs separate administrator approval using th
 strictest of the finding's existing requirement and current group/firewall-rule
 settings under **Administration → Review approvals**. Four-eyes requires two distinct,
 currently authorized administrators. After the first approval, eligible second reviewers
-find the linked task in **My work → Available for second approval**, finding reviews,
+find the linked task in **Reviews → Second approval**, finding reviews,
 and review notifications. The first approver cannot provide the second approval.
 The task lists the environment, group, first approver, proposed rule changes and
 links to the original finding and deletion request. Reviewers can approve or reject
@@ -887,7 +924,7 @@ the recorded outcomes, and create a fresh preview. Writes are not retried automa
 Cleanup task states are Awaiting cleanup approval / Awaiting second approval,
 Revalidating, Ready to confirm, Executing, and Completed / Needs attention. Rejected
 plans retain the rejection reason and cannot be executed. These states are exposed
-through My work, finding reviews, Activity and deletion history. Notification review
+through Reviews, finding reviews, Activity and deletion history. Notification review
 preferences are respected. Approval and revalidation requests are read-only with
 respect to NSX; writes require a separate final confirmation by an eligible executor.
 
@@ -981,7 +1018,7 @@ automatically. The new preview and approvals must reflect the remaining configur
 
 ### Reading and navigating workflow pages
 
-The top environment control changes only list scope. Overview, My work, Activity and
+The top environment control changes only list scope. Overview, Reviews, Activity and
 Collections offer All environments or one environment. Review lists keep the selected
 review tab, search and sorting when switching; pagination and object selection reset.
 Inventory and Firewall browsing keep the current report panel and load the chosen
@@ -1033,8 +1070,8 @@ exports download JSON without changing NSX.
 
 | Page | Available actions |
 | --- | --- |
-| My work | Assign unassigned findings to yourself; reassign or release owned work; export evidence; administrators can preview deletion of ready findings from one environment. |
-| Finding reviews | Assign unassigned findings; reassign owned findings with a reason; release findings; export evidence; preview approved deletion. |
+| Reviews | Assign unassigned findings to yourself; reassign or release owned work; export evidence; administrators can preview deletion of ready findings from one environment. |
+| Reviews | Assign unassigned findings; reassign owned findings with a reason; release findings; export evidence; preview approved deletion. |
 | Firewall reference cleanup tasks | Cancel pending plans with a reason or export their plans and outcomes. The complete-plan page can record approvals together; each plan retains its own distinct-approver requirement. |
 | Deletion history | Select requests to export all their object outcomes or download saved configurations and cleanup plans. Missing configurations are explicitly marked. |
 | Inventory groups and services | Export selected saved objects, compare their details side by side, or view links to their related finding reviews. No deletion is offered here. |

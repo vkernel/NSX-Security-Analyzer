@@ -44,3 +44,6 @@ body #detail-dialog .evidence-member-metadata{padding:0;border:0;margin:0 0 12px
 .evidence-membership-source label { display: flex; flex-wrap: wrap; gap: .5rem; align-items: center; }
 .evidence-membership-source select { max-width: 100%; width: auto; }
 .evidence-membership-source .evidence-note { flex-basis: 100%; margin: 0; }
+
+/* Review queues share the workspace table and keep long records inside its scroll region. */
+.review-task-table{min-width:920px;table-layout:fixed}.review-task-table th:first-child:has(input){width:44px}.review-task-table :is(th,td){overflow-wrap:anywhere}.review-task-table .review-task-action{display:inline-block;font-weight:600}.review-task-table .cleanup-task-actions{align-items:flex-start;gap:8px}.review-task-table caption{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}

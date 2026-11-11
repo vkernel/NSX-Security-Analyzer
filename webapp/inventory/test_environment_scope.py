@@ -20,8 +20,8 @@ class EnvironmentScopeTests(TestCase):
         self.assertContains(response, 'environment-fixed')
 
     def test_list_switch_keeps_review_and_search_but_resets_pagination(self):
-        response = self.client.get(reverse('findings', args=[self.east.pk]), {'review':'second', 'q':'VDI', 'page':'2'})
-        self.assertContains(response, f'/environments/{self.west.pk}/findings/?review=second&amp;q=VDI')
+        response = self.client.get(reverse('findings', args=[self.east.pk]), {'review':'second_review', 'q':'VDI', 'page':'2'})
+        self.assertContains(response, f'/my-work/?q=VDI&amp;queue=second&amp;environment={self.west.pk}')
         self.assertNotContains(response, 'data-url="/environments/'+str(self.west.pk)+'/findings/?page=')
 
     def test_overview_scope_filters_cards_and_counts(self):

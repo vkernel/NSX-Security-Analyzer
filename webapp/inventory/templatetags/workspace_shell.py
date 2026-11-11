@@ -69,7 +69,7 @@ def relay_sections(context):
         active = 'collections'
     elif current == 'rule-history':
         active = 'firewall'
-    elif current == 'my-work' or current.startswith('deletion-'):
+    elif current in {'my-work', 'findings', 'finding-detail'} or current.startswith('deletion-'):
         active = 'work'
     elif current in {'snapshot', 'impact-preview', 'report-content'}:
         active = 'inventory'
@@ -101,23 +101,29 @@ def relay_sections(context):
         'firewall': [{'label': 'Firewall configuration', 'links': [report(label, panel, 'firewall') for label, panel in [('Summary', 'dfw-overview'), ('Policies', 'dfw-policies'), ('Rules', 'dfw-rules')]]}],
         'naming': [{'label': 'Naming work', 'links': [scoped('Naming review', 'naming-compliance')]}],
         'segmentation': [{'label': 'Segmentation views', 'links': [scoped('Applications', 'segmentation'), scoped('VM-to-VM rules', 'segmentation-pair')]}],
-        'work': [{'label': 'Review work', 'links': [link('My work', 'my-work')]}] if staff else [],
+        'work': [{'label': 'Reviews', 'links': [link('Assigned to me' if staff else 'All findings', 'my-work')]}],
         'collections': [{'label': 'Collections', 'links': [link('All collections', 'all-collections')]}],
         'administration': [{'label': section['label'], 'links': section['links']} for section in admin_sections(context)] if staff else [],
         'personal': [{'label': 'Personal settings', 'links': [link(title, 'website-settings', query={'section': key}) for key, title in [('appearance', 'Appearance'), ('tables', 'Tables'), ('dates', 'Dates & time'), ('updates', 'Live updates'), ('notifications', 'Notifications')]]}],
         'help': [{'label': 'Help & coverage', 'links': [report(label, panel, 'help') for label, panel in [('User guide', 'feature-guide'), ('Audit coverage', 'coverage'), ('Tag coverage', 'tags-coverage')]]}],
     }
     if environment:
-        groups['environments'].append({'label': environment.name, 'links': [scoped(label, route) for label, route in [('Snapshots', 'environment'), ('Compare snapshots', 'snapshot-comparison'), ('Finding reviews', 'findings'), ('Collection coverage', 'collection-coverage')]]})
+        groups['environments'].append({'label': environment.name, 'links': [scoped(label, route) for label, route in [('Snapshots', 'environment'), ('Compare snapshots', 'snapshot-comparison'), ('Collection coverage', 'collection-coverage')]] + [link('Findings', 'my-work', query={'queue':'all','environment':environment.pk})]})
         groups['firewall'][0]['links'].append(scoped('Historical activity', 'rule-history'))
         matrix = scoped('Security matrix', 'segmentation'); matrix['url'] += '?tab=matrix'; matrix['active'] = request.GET.get('tab') == 'matrix' and current == 'segmentation'
         groups['segmentation'][0]['links'].append(matrix)
         if staff:
-            groups['work'][0]['links'] += [scoped('Finding reviews', 'findings'), scoped('Deletion history', 'deletion-history')]
+            groups['work'][0]['links'] += [scoped('Deletion history', 'deletion-history')]
         groups['collections'][0]['links'].append(scoped('History', 'collection-history'))
-    titles = {'overview': 'Overview', 'environments': 'Environments', 'inventory': 'Inventory', 'firewall': 'Firewall', 'naming': 'Naming compliance', 'segmentation': 'Segmentation', 'work': 'My work', 'collections': 'Collections', 'administration': 'Administration', 'personal': 'Personal settings', 'help': 'Help & coverage'}
+    if active=='work' and not context.get('review_workspace'):
+        from ..reviews import QUEUES
+        groups['work'][0]['links'] = [link(label,'my-work',query={'queue':key}) for key,label in QUEUES
+            if staff or key not in ('assigned','second')]
+        if environment and request.user.is_superuser:
+            groups['work'][0]['links'].append(scoped('Deletion history','deletion-history'))
+    titles = {'overview': 'Overview', 'environments': 'Environments', 'inventory': 'Inventory', 'firewall': 'Firewall', 'naming': 'Naming compliance', 'segmentation': 'Segmentation', 'work': 'Reviews', 'collections': 'Collections', 'administration': 'Administration', 'personal': 'Personal settings', 'help': 'Help & coverage'}
     scope_label = 'All environments' if current in {'dashboard', 'my-work', 'activity', 'all-collections'} and not request.GET.get('environment') else environment.name if environment else 'NSX Security Analyzer'
-    canonical = {'naming-compliance':'naming_navigation','findings':'findings_navigation',
+    canonical = {'naming-compliance':'naming_navigation','findings':'work_navigation',
                  'my-work':'work_navigation','activity':'activity_navigation','website-settings':'settings_navigation',
                  'segmentation':'segmentation_navigation','segmentation-pair':'segmentation_navigation',
                  'environment':'history_navigation','snapshot-comparison':'history_navigation','collection-coverage':'history_navigation'}

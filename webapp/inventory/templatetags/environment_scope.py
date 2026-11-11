@@ -19,13 +19,13 @@ def environment_scope(context):
             environment = obj.environment
             break
     lists = {'segmentation-pair', 'segmentation', 'naming-compliance', 'environment', 'findings', 'collection-history', 'rule-history', 'deletion-history', 'collection-coverage', 'snapshot-comparison'}
-    aggregate = name in {'dashboard', 'my-work', 'activity', 'all-collections'}
+    aggregate = name in {'dashboard', 'my-work', 'findings', 'activity', 'all-collections'}
     browsing = name == 'snapshot' and request.GET.get('browse') == '1'
     switchable = aggregate or name in lists or browsing or name == 'workspace-section' and match.kwargs.get('section') != 'help'
     if not switchable:
         return {'fixed_environment': environment}
     selected = str(environment.pk) if environment else str(context.get('selected_environment').pk) if context.get('selected_environment') else ''
-    if aggregate: selected = request.GET.get('environment', '')
+    if aggregate and name!='findings': selected = request.GET.get('environment', '')
     # Session-scoped shortcuts never retain names, URLs or inaccessible objects.
     available = {str(env.pk) for env in environments}
     stored = request.session.get('recent_environment_ids', [])
@@ -37,6 +37,11 @@ def environment_scope(context):
         request.session['recent_environment_ids'] = recent
     ranks = {pk: index + 1 for index, pk in enumerate(recent) if pk != selected}
     params = {key: value for key, value in request.GET.items() if key in {'q', 'sort', 'review', 'queue', 'status', 'kind', 'view', 'tab', 'type', 'actor', 'start', 'end', 'outcome'}}
+    if name in ('my-work','findings'):
+        params.update({key:value for key,value in request.GET.items() if key in ('owner','direction','task_type','page_size')})
+        params['queue']=context.get('queue','all')
+        if params['queue']!='all':
+            params.pop('owner',None);params.pop('review',None)
     latest_ids = {}
     if browsing or name == 'workspace-section':
         latest_query = Snapshot.objects.filter(environment_id=OuterRef('pk')).order_by('-generated_at','-created_at').values('pk')[:1]
@@ -46,7 +51,7 @@ def environment_scope(context):
         query = dict(params)
         if aggregate:
             if env: query['environment'] = env.pk
-            url = reverse(name)
+            url = reverse('my-work' if name=='findings' else name)
         elif browsing or name == 'workspace-section':
             latest = latest_ids.get(env.pk)
             section = match.kwargs.get('section', 'inventory')

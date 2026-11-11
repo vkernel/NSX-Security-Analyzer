@@ -759,7 +759,7 @@ class ReferenceCleanupTests(TestCase):
         self.client.force_login(other)
         response = self.client.get(reverse('notifications'))
         self.assertIn('approval no longer required', response.content.decode())
-        self.assertNotContains(self.client.get(reverse('my-work'), {'queue':'second'}), 'Firewall reference cleanup')
+        self.assertNotContains(self.client.get(reverse('my-work'), {'queue':'second'}), 'data-review-task="cleanup"')
 
     def test_metadata_only_changes_use_fresh_revision_without_new_approval(self):
         self.preview(); self.approve(); self.confirm()

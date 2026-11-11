@@ -21,7 +21,8 @@ class RelayShellTests(TestCase):
         self.assertContains(response, 'data-relay-section')
         self.assertContains(response, 'data-primary="collections"')
         self.assertNotContains(response, 'data-primary="administration"')
-        self.assertNotContains(response, 'data-primary="work"')
+        self.assertContains(response, 'data-primary="work"')
+        self.assertContains(response, 'data-module-label="Reviews"')
         self.assertContains(response, 'data-module-label="Naming compliance"')
 
     def test_snapshot_links_keep_historical_snapshot_and_hashes(self):

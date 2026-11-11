@@ -136,10 +136,10 @@ class FindingWorkflowTests(TestCase):
         self.assertEqual(self.finding.owner_id, self.owner.pk)
         self.assertFalse(self.finding.events.filter(details__action='unassign').exists())
         response = self.client.get(url)
-        self.assertContains(response, 'id="finding-selection-bar" hidden')
-        self.assertContains(response, 'aria-labelledby="release-title"')
-        self.assertContains(response, 'form="bulk-release" name="selected"')
-        self.assertContains(response, 'finding-release.js')
+        self.assertContains(response, 'data-bulk-toolbar="bulk-work" hidden')
+        self.assertContains(response, 'data-bulk-action="release"')
+        self.assertContains(response, 'data-bulk-choice="bulk-work"')
+        self.assertContains(response, 'reviews.js')
 
     def test_bulk_assignment_assigns_unassigned_and_preserves_released_approvals(self):
         self.approve_owner()
@@ -150,8 +150,8 @@ class FindingWorkflowTests(TestCase):
         self.client.force_login(self.reviewer)
         url = reverse('findings', args=[self.env.pk]) + '?owner=none'
         page = self.client.get(url)
-        self.assertContains(page, 'id="assign-open"')
-        self.assertContains(page, 'id="finding-select-all"')
+        self.assertContains(page, 'data-bulk-action="assign"')
+        self.assertContains(page, 'data-bulk-all="bulk-work"')
         response = self.client.post(url, {'action': 'assign', 'owner': self.reviewer.pk,
             'selected': [f'{self.finding.pk}:{self.finding.revision}', f'{other.pk}:{other.revision}']}, follow=True)
         self.assertContains(response, 'Assigned 2 finding(s)')
@@ -721,7 +721,8 @@ class FindingWorkflowTests(TestCase):
     def test_active_queue_and_decision_blocker_are_visible(self):
         self.client.force_login(self.owner)
         response = self.client.get(reverse('findings', args=[self.env.pk]), {'owner':'none'})
-        self.assertContains(response, 'href="?owner=none" aria-current="page"')
+        self.assertEqual(response.context['queue'], 'unassigned')
+        self.assertTrue(next(link for link in response.context['queue_links'] if link['key']=='unassigned')['active'])
         self.assign()
         Finding.objects.filter(pk=self.finding.pk).update(qualification='insufficient')
         response = self.client.get(self.url)

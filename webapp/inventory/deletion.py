@@ -856,6 +856,11 @@ def reference_cleanup(request, pk):
     error = ''
     # Lock batch before item, matching confirmation, to avoid approving a queued request.
     initial = get_object_or_404(DeletionItem, pk=pk)
+    from .review_navigation import return_url
+    review_return = return_url(request, initial.batch.environment_id) if request.GET.get('return_to') else ''
+    def return_to_cleanup():
+        from urllib.parse import urlencode
+        return redirect(request.path + ('?' + urlencode({'return_to':review_return}) if review_return else ''))
     with transaction.atomic():
         batch = DeletionBatch.objects.select_for_update(of=('self',)).select_related('environment', 'requested_by').get(pk=initial.batch_id)
         item = get_object_or_404(DeletionItem.objects.select_for_update(of=('self',)).select_related('finding'), pk=pk)
@@ -878,7 +883,7 @@ def reference_cleanup(request, pk):
                     batch.status = 'preview_queued'; batch.save(update_fields=['status'])
                     record('nsx.deletion_cleanup_revalidation_requested', 'DeletionItem', item.pk, actor=request.user.pk,
                            details={'environment_id': batch.environment_id, 'batch': str(batch.pk), 'path': item.path})
-                    return redirect('deletion-reference-cleanup', pk=pk)
+                    return return_to_cleanup()
                 if not available: raise ValidationError('Cleanup preview expired or is no longer available. Create a new preview.')
                 if request.POST.get('action') == 'reject':
                     reason = request.POST.get('reason', '').strip()[:2000]
@@ -889,7 +894,7 @@ def reference_cleanup(request, pk):
                     item.save(update_fields=['status', 'message', 'finished_at'])
                     record('nsx.deletion_cleanup_rejected', 'DeletionItem', item.pk, actor=request.user.pk,
                            details={'environment_id': batch.environment_id, 'batch': str(batch.pk), 'path': item.path, 'message': item.message})
-                    return redirect('deletion-reference-cleanup', pk=pk)
+                    return return_to_cleanup()
                 guard(batch, item.finding, item)
                 if item.status != 'cleanup_review':
                     raise ValidationError('This plan already has its required approvals. Return to the deletion request.')
@@ -926,7 +931,7 @@ def reference_cleanup(request, pk):
                                 'fingerprint': digest, 'required_approvals': required_count})
                 from .deletion_plan import maybe_schedule
                 maybe_schedule(batch.pk)
-                return redirect('deletion-reference-cleanup', pk=pk)
+                return return_to_cleanup()
             except ValidationError as exc:
                 error = '; '.join(exc.messages)
     revalidating = item.status == 'cleanup_recheck' and batch.status in ('preview_queued', 'checking')
@@ -974,6 +979,7 @@ def reference_cleanup(request, pk):
     template = ('inventory/reference_cleanup_progress.html' if request.method == 'GET' and request.GET.get('fragment') == '1'
                 else 'inventory/reference_cleanup.html')
     response = render(request, template, {'item': item, 'batch': batch,
+        'review_return': review_return,
         'active': active, 'executing': executing, 'waiting': waiting, 'phase_label': phase_label,
         'approved_by_me': approved_by_me, 'is_requester': batch.requested_by_id == request.user.pk, 'eligible_executor': can_execute(request.user, item),
         'phase_message': phase_message, 'review_expired': review_expired, 'closed': closed or item.status in ('cleanup_rejected', 'cancelled'), 'deadline': deadline,

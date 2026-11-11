@@ -476,14 +476,14 @@ class DeletionTests(TestCase):
 
     def test_finding_selection_has_contextual_delete_action(self):
         response = self.client.get(reverse('findings', args=[self.env.pk]) + '?review=ready')
-        self.assertContains(response, 'id="finding-selection-bar" hidden')
-        self.assertContains(response, 'id="delete-selected-open"')
-        self.assertContains(response, 'data-delete-eligible="true"')
-        self.assertContains(response, 'id="bulk-delete-preview"')
+        self.assertContains(response, 'data-bulk-toolbar="bulk-work" hidden')
+        self.assertContains(response, 'data-bulk-action="preview"')
+        self.assertContains(response, ' preview"')
+        self.assertContains(response, 'id="bulk-work"')
         self.assertNotContains(response, 'Delete selected from NSX — choose ready objects')
         self.client.force_login(get_user_model().objects.create_user('selection-operator', is_staff=True))
         response = self.client.get(reverse('findings', args=[self.env.pk]) + '?review=ready')
-        self.assertNotContains(response, 'id="delete-selected-open"')
+        self.assertNotContains(response, 'data-bulk-action="preview"')
 
     @patch.object(d, 'approvals_valid', new=lambda finding: {})
     def test_confirmation_rejects_expired_or_legacy_item_even_when_batch_is_fresh(self):
