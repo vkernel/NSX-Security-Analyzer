@@ -1,0 +1,13 @@
+{
+  "synthetic": true,
+  "source": "Full mocked NSX collection using documented VIF ip_address_info",
+  "guestInfoContainsIPs": false,
+  "confirmedGroupCount": 0,
+  "ipGroupMatches": 1,
+  "firewallReferences": 1,
+  "sourceFieldPreserved": true,
+  "inspectionRetainsIP": true,
+  "liveMembershipRequests": 0,
+  "mobilePageOverflow": false,
+  "browserErrors": []
+}

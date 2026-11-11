@@ -2033,7 +2033,11 @@ def audit(client, workers=4, testing=False, progress=None):
     network_started = time.perf_counter()
     progress(4, 'Collecting network members and linking VM interface attachments')
     network_evidence, network_stats = collect_network(client, all_groups, tags.get('virtual_machines', []),
-        probes=network_probes, workers=workers, testing=testing, resources=resources)
+        probes=network_probes, workers=workers, testing=testing, resources=resources, collect_addresses=True)
+    address_stats = network_evidence.pop('address_diagnostics', {})
+    if address_stats:
+        network_stats['vm_addresses'] = address_stats
+        LOG.info('Saved VM address coverage: %s', address_stats)
     apply_network(inventory['groups'], network_evidence, tags.get('virtual_machines', []))
     network_evidence.pop('groups',None)  # Member arrays already live in the group records; avoid a third report copy.
     membership_evidence['network'] = network_evidence

@@ -56,7 +56,7 @@ def page_list(client, path, *, initial=None, initial_size=1000, testing=False, e
     from .request_pacing import CollectionDeadlineExceeded
     result = {'status':'unavailable', 'items':[], 'reported_count':None, 'notes':[],
               'checked_at':datetime.now(timezone.utc).isoformat(), 'requests':0}
-    rows, cursors, expected = {}, set(), None
+    rows, cursors, conflicts, expected = {}, set(), set(), None
     params = {'page_size':1 if testing else 1000}
     try:
         for number in range(1 if testing else 100):
@@ -97,6 +97,8 @@ def page_list(client, path, *, initial=None, initial_size=1000, testing=False, e
                         raise ValueError('Network inventory record has no identity.')
                 if key in rows:
                     result['notes'].append('Duplicate network identity during pagination.')
+                    if rows[key] != row:
+                        conflicts.add(key)
                 rows[key] = row
             cursor = page.get('cursor')
             if testing:
@@ -122,12 +124,14 @@ def page_list(client, path, *, initial=None, initial_size=1000, testing=False, e
         result['http_status'] = code
         result['notes'].append(f'Network read incomplete (HTTP {code}).' if code else 'Network identities or pagination could not be verified.')
     result['items'] = list(rows.values())
+    if conflicts:
+        result['conflicting_identities'] = sorted(conflicts)
     if rows and result['status'] != 'complete':
         result['status'] = 'partial'
     return result
 
 
-def collect(client, groups, vms, *, probes=None, workers=4, testing=False, resources=()):
+def collect(client, groups, vms, *, probes=None, workers=4, testing=False, resources=(), collect_addresses=False):
     """Read each selected parent/category and each relevant segment inventory once."""
     started = time.monotonic()
     inventory = {g['path']:g for g in groups}
@@ -138,7 +142,7 @@ def collect(client, groups, vms, *, probes=None, workers=4, testing=False, resou
                 'vms':{}, 'groups':{}, 'status':'not_applicable', 'checked_at':datetime.now(timezone.utc).isoformat()}
     stats = {'groups':len(targets), 'requests':0, 'segment_inventories':0, 'reused_probe_pages':0,
              'empty_response_checks':0, 'empty_response_recoveries':0}
-    if not targets:
+    if not targets and not (collect_addresses and vms):
         return metadata, stats
     LOG.info('Network membership collection: groups=%d categories=segments,ports,IP addresses', len(targets))
     lock, modes, denied, unavailable_variants = threading.Lock(), {}, set(), {}
@@ -261,13 +265,19 @@ def collect(client, groups, vms, *, probes=None, workers=4, testing=False, resou
     stats['requests'] += sum(r['requests'] for r in port_results.values())
     metadata['inventory_status'] = ('complete' if vif_result['status']=='complete'
         and all(r['status']=='complete' for r in port_results.values()) and (not fabric or fabric['status']=='complete') and not testing else 'partial')
+    address_complete = vif_result['status']=='complete' and (not fabric or fabric['status']=='complete') and not testing
     # Existing verified configuration search can supply ports outside the selected
     # segments, avoiding extra segment reads just to resolve unrelated interfaces.
     selected = set(port_results)
     other_ports = [p for p in resources if p.get('resource_type')=='SegmentPort'
                    and isinstance(p.get('path'),str) and p['path'].rsplit('/ports/',1)[0] not in selected]
     _bind(metadata, vms, vif_result['items'], [p for r in port_results.values() for p in r['items']] + other_ports,
-          fabric_vms=fabric['items'] if fabric else ())
+          fabric_vms=[vm for vm in fabric['items'] if (vm.get('path') or vm.get('external_id') or vm.get('id'))
+                      not in fabric.get('conflicting_identities',[])] if fabric else (),
+          collect_addresses=collect_addresses, address_complete=address_complete,
+          address_conflicts=vif_result.get('conflicting_identities',()))
+    if not targets:
+        metadata['vms'] = {}  # No network-group scope was selected; IP observations remain separate.
     stats.update(seconds=round(time.monotonic()-started,3), associations=sum(len(v['items']) for v in metadata['vms'].values()),
                  status=metadata['status'], vm_statuses=dict(Counter(v['status'] for v in metadata['vms'].values())))
     metadata['diagnostics'] = stats
@@ -275,7 +285,7 @@ def collect(client, groups, vms, *, probes=None, workers=4, testing=False, resou
     return metadata, stats
 
 
-def _bind(metadata, vms, vifs, ports, *, fabric_vms=()):
+def _bind(metadata, vms, vifs, ports, *, fabric_vms=(), collect_addresses=False, address_complete=False, address_conflicts=()):
     """Join exact, unambiguous IDs; keep direct and network relationships distinct."""
     aliases, attachments, by_path = defaultdict(set), defaultdict(list), {}
     for vm in vms:
@@ -299,6 +309,14 @@ def _bind(metadata, vms, vifs, ports, *, fabric_vms=()):
                 additions[identity].update(matches)
     for identity,owners in additions.items():
         aliases[identity].update(owners)
+    if collect_addresses:
+        from .vm_addresses import save
+        conflicted=set(address_conflicts)
+        address_vifs=[vif for vif in vifs if (vif.get('path') or vif.get('external_id') or vif.get('id')) not in conflicted]
+        metadata['address_diagnostics'] = save(vms, address_vifs, aliases,
+            complete=address_complete, checked_at=metadata['checked_at'])
+    if not metadata['groups']:
+        return
     invalid_inventory = any(len(owners)>1 for owners in aliases.values())
     for port in ports:
         path = port.get('path')

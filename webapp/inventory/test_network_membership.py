@@ -18,6 +18,10 @@ def synthetic_inventory(group_count=2):
     vms=[{'path':'/infra/realized-state/virtual-machines/'+str(i),'external_id':'vm-'+str(i),
           'display_name':'Synthetic VM '+str(i),'tags':[]} for i in range(3)]
     vifs=[{'external_id':'vif-'+str(i),'owner_vm_id':'vm-'+str(i), 'lport_attachment_id':'attachment-'+str(i)} for i in range(2)]
+    for i,vif in enumerate(vifs):
+        vif['ip_address_info']=[{'ip_addresses':['192.0.2.'+str(10+i),'2001:db8::'+str(10+i)],'source':'VM_TOOLS'}]
+    for vm in vms:
+        vm['guest_info']={'os_name':'Synthetic guest','computer_name':vm['display_name']}
     groups=[{'path':GP+'network-'+str(i),'display_name':'Network group '+str(i), 'expression':[
         {'resource_type':'Condition','member_type':'Segment','key':'Tag','operator':'EQUALS','value':'Segment|TEST'}]} for i in range(group_count)]
     client=Mock(membership_hints={},inventory_warnings=[])
@@ -71,6 +75,10 @@ class NetworkCollectionTests(SimpleTestCase):
         self.assertEqual(endpoints['virtual-machines']['status'],'complete')
         self.assertEqual(len(endpoints['network-virtual-machines']['items']),2)
         self.assertEqual(calls['/api/v1/fabric/vifs'],1)
+        vm=report['tags']['virtual_machines'][0]
+        self.assertNotIn('ip_addresses',vm['guest_info'])
+        self.assertEqual(vm['network_interfaces'][0]['ip_address_info'][0]['ip_addresses'],['192.0.2.10','2001:db8::10'])
+        self.assertEqual(vm['ip_address_evidence']['status'],'complete')
         self.assertEqual(sum(count for path,count in calls.items() if path.endswith('/ports')),44)
         self.assertTrue(all(count==1 for path,count in calls.items() if path.endswith('/ports')))
         self.assertEqual(calls[GP+'network-0/members/logical-switches'],1)
@@ -207,13 +215,14 @@ class NetworkCollectionTests(SimpleTestCase):
                 return {'results':[dict(vm,id='fabric-'+str(i)) for i,vm in enumerate(vms)],'result_count':len(vms)}
             return original(path,params)
         client.get.side_effect=get
-        metadata,stats=collect(client,groups,vms,resources=[dict(port,resource_type='SegmentPort') for port in ports])
+        metadata,stats=collect(client,groups,vms,resources=[dict(port,resource_type='SegmentPort') for port in ports],collect_addresses=True)
         self.assertEqual(calls['/api/v1/fabric/vifs'],1)
         self.assertEqual(calls['/api/v1/fabric/virtual-machines'],1)
         self.assertEqual(sum(count for path,count in calls.items() if path.endswith('/ports')),0)
         self.assertEqual(stats['reused_segment_inventories'],44)
         self.assertEqual(metadata['status'],'complete')
         self.assertEqual(len(metadata['vms'][vms[0]['path']]['items']),2)
+        self.assertEqual(vms[0]['network_interfaces'][0]['ip_address_info'][0]['ip_addresses'][0],'192.0.2.10')
 
     def test_partial_pages_keep_positives_and_do_not_claim_complete(self):
         client=Mock()

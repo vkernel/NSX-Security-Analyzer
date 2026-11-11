@@ -14,12 +14,12 @@ from django.http import Http404
 from .models import Snapshot,SnapshotRecord,SnapshotIPReferenceIndex,SnapshotIPReferenceRange,SnapshotVMAddress
 from .current_membership import GROUP
 
-VERSION=2
+VERSION=3
 MAX_ADDRESSES=32
 MAX_RANGES=100000
 MAX_MATCHES=2000
 MAX_EVIDENCE=32
-SCOPE_KEYS=('guest_info','nics','interfaces','network_interfaces','network_interfaces_info')
+SCOPE_KEYS=('guest_info','nics','interfaces','network_interfaces','network_interfaces_info','ip_address_info')
 ADDRESS_KEYS=('ip_address','ip_addresses','ipv4_addresses','ipv6_addresses','ipv4_address','ipv6_address')
 IGNORE_KEYS=('gateway','gateways','default_gateway','dns','dns_servers','dhcp_server')
 
@@ -201,10 +201,11 @@ def prepare(snapshot):
 
 def context(snapshot_id,ordinal):
     snapshot=Snapshot.objects.only('pk','generated_at','browsing_status','testing').annotate(inventory_warning=F('summary__inventory_warnings')).get(pk=snapshot_id)
-    vm=SnapshotRecord.objects.only('pk').get(snapshot=snapshot,view='vms',ordinal=ordinal)
+    vm=SnapshotRecord.objects.only('pk').annotate(address_evidence=F('data__vm_details__ip_address_evidence')).get(snapshot=snapshot,view='vms',ordinal=ordinal)
     projection=prepare(snapshot)
     observations=list(SnapshotVMAddress.objects.filter(projection=projection,record=vm).values('ip','family','address','scope'))
-    stamp=snapshot.generated_at.isoformat()
+    observation=vm.address_evidence if isinstance(vm.address_evidence,dict) else {}
+    stamp=observation.get('checked_at') or snapshot.generated_at.isoformat()
     notes=['Saved IP-definition matches only; not confirmed VM membership, live addresses, effective policy or observed traffic.']
     result={'ip_status':'complete','ip_checked_at':stamp,'ip_addresses':[r['ip'] for r in observations],'ip_notes':notes}
     def finish(groups):
@@ -217,7 +218,12 @@ def context(snapshot_id,ordinal):
         result['ip_status']='not_applicable';notes.append('No supported explicit IP group definitions were saved.')
         return finish({})
     if not observations:
-        result.update(ip_status='not_collected');notes.append('No usable VM addresses were saved. A current direct-membership refresh does not collect IP evidence.')
+        if observation.get('version')==1:
+            result.update(ip_status='unavailable')
+            notes.append('NSX returned no usable addresses on this VM\'s saved interfaces.' if observation.get('status')=='complete' else
+                'VM interface/address collection was incomplete or ownership could not be verified; IP matches remain unknown.')
+        else:
+            result.update(ip_status='not_collected');notes.append('No usable VM addresses were saved. A current direct-membership refresh does not collect IP evidence.')
         return finish({})
     query=Q(pk__in=[])
     for row in observations:query|=Q(scope=row['scope'],family=row['family'],address=row['address'])
@@ -230,6 +236,9 @@ def context(snapshot_id,ordinal):
     if meta.get('range_limit'):notes.append('Saved IP definition index limit reached; additional matches remain unknown.')
     issues=meta.get('vm_issues',{}).get(str(vm.pk))
     if issues:notes.append('Some invalid, scoped, nonportable or excess VM addresses were omitted.')
+    if observation.get('version')==1 and observation.get('status')!='complete':
+        notes.append('Saved VM interface/address collection was incomplete; additional IP references may be missing.')
+        result['ip_status']='partial'
     if shared or issues or meta.get('unresolved_groups') or meta.get('range_limit'):result['ip_status']='partial'
     if not unique:return finish({})
     query=Q(pk__in=[])
@@ -259,6 +268,7 @@ def read(snapshot_id,ordinal,page=0):
         'source':'saved_snapshot','status':metadata['ip_status'],'checked_at':metadata['ip_checked_at'],
         'empty_message':('No explicit IP group definitions were saved.' if metadata['ip_status']=='not_applicable' else
             'No usable VM addresses were saved; IP matches are unknown.' if metadata['ip_status']=='not_collected' else
+            'No usable VM interface addresses are available in the saved NSX evidence; IP matches remain unknown.' if metadata['ip_status']=='unavailable' else
             'No IP matches found in the available evidence; additional matches remain unknown.' if metadata['ip_status']=='partial' else
             'No saved IP group entries match this VM\'s saved addresses.'),
         'saved_count':len(items),'notes':metadata['ip_notes']}

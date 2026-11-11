@@ -119,6 +119,35 @@ VM address fields are present; missing fields remain unknown. Current NSX mode
 retains labelled, timestamped saved IP references; Refresh only checks direct VM
 associations and does not refresh IPs or repair historical evidence.
 
+**VIF address capture correction (11 November 2026):** NSX VM GuestInfo normally
+contains OS/computer details; addresses are reported in the interface inventory's
+[`ip_address_info[].ip_addresses`](https://developer.broadcom.com/xapis/nsx-t-data-center-rest-api/latest/method_ListVifs.html).
+Collection now saves those VIF observations in each VM's `network_interfaces`,
+including source, exact owner identity and collection timestamp/coverage. Fabric
+VM identifiers use the existing exact-ID bridge. Names, tags and matching subnets
+never establish interface ownership. Conflicting or ambiguous owners are omitted.
+
+Network attachment collection and address capture share the same paginated VIF
+read. Where there are no network-group criteria, collection performs one shared
+VIF inventory read (plus the bulk fabric VM identity bridge if needed), with no
+per-VM or VM-by-group calls. A 3,000-VM synthetic case requires three VIF pages,
+not 3,000 requests. Collection logs `Saved VM address coverage` with reported
+address coverage, saved interfaces and incomplete states.
+
+The address cache version is bumped automatically; no schema migration is needed
+for this correction. Older snapshots that never saved VIF addresses cannot recover
+them by rebuilding the browsing cache. They need a collection with the corrected
+worker. If NSX itself returns no usable interface IPs, the drawer says Unavailable;
+another successful collection alone cannot establish addresses absent from NSX.
+Partial interface reads retain known matches with partial coverage.
+
+Correction verification passed all 963 Django tests and the collector suite
+(112 tests, 9 skipped). The [browser acceptance result](performance/vif-address-browser-2026-11-11.json)
+starts with documented synthetic NSX VIF responses, runs full collection and
+snapshot publication, then opens the VM drawer. It finds the subnet group and
+firewall rule with zero live membership requests and no inflated confirmed-group
+count. The earlier GuestInfo-only test did not cover this collection source.
+
 Cache rows are discarded when saved browsing evidence changes or is archived,
 and cascade when the snapshot is deleted. A concurrent invalidation downgrades
 coverage to partial. Bounds are explicit: 32 usable addresses per VM, 100,000
