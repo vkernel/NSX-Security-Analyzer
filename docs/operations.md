@@ -334,9 +334,11 @@ build, or the mutable `development` tag for testing. Pin the same published buil
 for migration, web, worker and scheduler; changing only the web image does not
 update background processing. Release installation defaults are pinned to 0.5.3.
 
-The default `audit_worker --lane all` supervises three independent queues, allowing
-one collection, one finding-review indexing/recalculation and one comparison to run
-side by side. Extra tasks of each type wait. PostgreSQL leases enforce these limits
+The default `audit_worker --lane all` supervises six independent lanes: collection,
+finding-review indexing/recalculation, comparison, deletion preview, deletion
+execution and reference exports. One task per lane can run side by side; extra
+tasks of each type wait. See [reference exports](reference-exports.md) for the
+export lane and its retention limits. PostgreSQL leases enforce these limits
 across replicas; same-environment publication can briefly wait on a database lock.
 See System health for each lane's heartbeat and worker logs for actual progress.
 

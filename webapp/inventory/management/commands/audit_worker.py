@@ -14,10 +14,10 @@ from inventory.services import claim_job, expire_jobs, fail_job, stop_requested,
 
 
 class Command(BaseCommand):
-    help = "Run independent collection, finding-review indexing, comparison, deletion-preview and deletion-execution lanes."
+    help = "Run independent collection, finding-review, comparison, deletion and reference-export lanes."
 
     def add_arguments(self, parser):
-        parser.add_argument("--lane", choices=["all", "both", *LANES], default="all", help="Default supervises all five lanes independently; both is a legacy alias for all.")
+        parser.add_argument("--lane", choices=["all", "both", *LANES], default="all", help="Default supervises all lanes independently; both is a legacy alias for all.")
         parser.add_argument("--once", action="store_true", help="Process at most one queued job, then exit.")
 
     def handle(self, *args, **options):
@@ -221,6 +221,32 @@ class Command(BaseCommand):
             interrupted(check.pk)
         return True
 
+    def run_export(self):
+        from inventory.reference_exports import claim, fail
+        from inventory.models import ReferenceExport
+        # Only this independently leased lane may reconcile interrupted exports.
+        for pk in ReferenceExport.objects.filter(status='running').values_list('pk',flat=True):
+            fail(pk)
+        job=claim()
+        if job is None: return False
+        try:
+            with subprocess.Popen([sys.executable,str(settings.BASE_DIR/'manage.py'),'prepare_reference_export',str(job.pk)]) as process:
+                try:
+                    deadline=time.monotonic()+300
+                    while process.poll() is None:
+                        self.check_lease()
+                        status=ReferenceExport.objects.filter(pk=job.pk).values_list('status',flat=True).first()
+                        if status in (None,'cancelled','expired') or time.monotonic()>=deadline: break
+                        time.sleep(1)
+                finally:
+                    if process.poll() is None:
+                        process.kill();process.wait()
+        except OSError:
+            pass
+        finally:
+            fail(job.pk)
+        return True
+
     def run_worker(self, options):
         lane = options.get("lane", "all")
         self.heartbeat_lanes = tuple(LANES) if lane in ('all', 'both') else (lane,)
@@ -251,7 +277,10 @@ class Command(BaseCommand):
             if lane in ('all', 'both', 'deletion_execution') and self.run_deletion():
                 if options['once']: return
                 continue
-            if lane in ('recalculation', 'comparison', 'deletion_preview', 'deletion_execution'):
+            if lane in ('all','both','exports') and self.run_export():
+                if options['once']: return
+                continue
+            if lane in ('recalculation', 'comparison', 'deletion_preview', 'deletion_execution', 'exports'):
                 if options['once']: return
                 time.sleep(2)
                 continue

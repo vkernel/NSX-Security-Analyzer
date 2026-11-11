@@ -459,6 +459,33 @@ class SnapshotVMMembership(models.Model):
         constraints = [models.UniqueConstraint(fields=['snapshot', 'record_id'], name='snapshot_vm_membership')]
 
 
+class ReferenceExport(models.Model):
+    """Short-lived, owner-only downloads, prepared outside the collection lane."""
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    snapshot = models.ForeignKey(Snapshot, on_delete=models.CASCADE)
+    requested_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
+    request_key = models.UUIDField(default=uuid.uuid4)
+    created_at = models.DateTimeField(auto_now_add=True)
+    started_at = models.DateTimeField(null=True)
+    finished_at = models.DateTimeField(null=True)
+    expires_at = models.DateTimeField()
+    status = models.CharField(max_length=12, default='queued', db_index=True)
+    options = models.JSONField(default=dict)
+    observation = models.JSONField(default=dict)
+    artifact = models.BinaryField(null=True, editable=False)
+    artifact_bytes = models.PositiveIntegerField(default=0)
+    content_bytes = models.PositiveIntegerField(default=0)
+    checksum = models.CharField(max_length=64, blank=True)
+    filename = models.CharField(max_length=180, blank=True)
+    content_type = models.CharField(max_length=100, blank=True)
+    error = models.CharField(max_length=1000, blank=True)
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=['requested_by','request_key'],name='reference_export_request')]
+        indexes = [models.Index(fields=['status','created_at'],name='reference_export_queue'),
+                   models.Index(fields=['expires_at'],name='reference_export_expiry')]
+
+
 class SnapshotIPReferenceIndex(models.Model):
     """Disposable saved-address index, built lazily without collection/API work."""
     snapshot = models.OneToOneField(Snapshot, primary_key=True, on_delete=models.CASCADE)

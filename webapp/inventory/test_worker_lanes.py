@@ -65,7 +65,7 @@ class SupervisorTests(SimpleTestCase):
         self.reconcile = reconcile.start()
         self.addCleanup(reconcile.stop)
 
-    def test_supervisor_starts_and_stops_all_five_lanes(self):
+    def test_supervisor_starts_and_stops_all_lanes(self):
         processes=[MagicMock() for _ in LANES]
         for process in processes: process.poll.return_value=None
         with patch('inventory.management.commands.audit_worker.subprocess.Popen',side_effect=processes) as spawn, patch('inventory.management.commands.audit_worker.time.sleep',side_effect=KeyboardInterrupt):
@@ -75,6 +75,7 @@ class SupervisorTests(SimpleTestCase):
         self.assertEqual(spawn.call_args_list[2].args[0][-1],'comparison')
         self.assertEqual(spawn.call_args_list[3].args[0][-1], 'deletion_preview')
         self.assertEqual(spawn.call_args_list[4].args[0][-1], 'deletion_execution')
+        self.assertEqual(spawn.call_args_list[5].args[0][-1], 'exports')
         for process in processes:
             process.terminate.assert_called_once()
             process.wait.assert_called_once_with(timeout=15)
@@ -83,12 +84,13 @@ class SupervisorTests(SimpleTestCase):
         for lane in LANES:
             with self.subTest(lane=lane):
                 command = Command()
-                with patch.object(command, 'run_finding_check', return_value=False) as finding_check, patch.object(command, 'run_browsing_restore', return_value=False), patch.object(command, 'run_deletion', return_value=False) as deletion, patch.object(command, 'check_lease'), \
+                with patch.object(command, 'run_export', return_value=False) as exports, patch.object(command, 'run_finding_check', return_value=False) as finding_check, patch.object(command, 'run_browsing_restore', return_value=False), patch.object(command, 'run_deletion', return_value=False) as deletion, patch.object(command, 'check_lease'), \
                      patch('inventory.management.commands.audit_worker.expire_jobs'), \
                      patch('inventory.management.commands.audit_worker.claim_job', return_value=None) as collection, \
                      patch('inventory.finding_recalculation.claim', return_value=None) as recalculation, \
                      patch.object(command, 'run_comparison', return_value=False) as comparison:
                     command.run_worker({'lane': lane, 'once': True})
+                self.assertEqual(exports.call_count, int(lane == 'exports'))
                 self.assertEqual(collection.call_count, int(lane == 'collection'))
                 self.assertEqual(recalculation.call_count, int(lane == 'recalculation'))
                 self.assertEqual(comparison.call_count, int(lane == 'comparison'))

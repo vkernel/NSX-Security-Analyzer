@@ -199,7 +199,7 @@ def prepare(snapshot):
         return projection
 
 
-def context(snapshot_id,ordinal):
+def context(snapshot_id,ordinal, *, full=False):
     snapshot=Snapshot.objects.only('pk','generated_at','browsing_status','testing').annotate(inventory_warning=F('summary__inventory_warnings')).get(pk=snapshot_id)
     vm=SnapshotRecord.objects.only('pk').annotate(address_evidence=F('data__vm_details__ip_address_evidence')).get(snapshot=snapshot,view='vms',ordinal=ordinal)
     projection=prepare(snapshot)
@@ -256,7 +256,7 @@ def context(snapshot_id,ordinal):
                 match={'ip':ip['ip'],'entry':row['entry'],'via_groups':row['via']}
                 if match not in edge['ip_matches']:
                     edge['ip_match_count']+=1
-                    if len(edge['ip_matches'])<MAX_EVIDENCE:edge['ip_matches'].append(match)
+                    if full or len(edge['ip_matches'])<MAX_EVIDENCE:edge['ip_matches'].append(match)
                     else:edge['ip_matches_truncated']=True
     return finish(groups)
 

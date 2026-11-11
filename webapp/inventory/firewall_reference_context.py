@@ -4,7 +4,7 @@ from .models import SnapshotRecord
 FIELDS = (('source_groups', 'Source'), ('destination_groups', 'Destination'), ('scope', 'Applied to'))
 
 
-def enrich(snapshot_id, items, vm=False, object_kind=None):
+def enrich(snapshot_id, items, vm=False, object_kind=None, *, full=False):
     if not items:
         return items
     paths = {item.get('path') for item in items if item.get('path')}
@@ -17,17 +17,24 @@ def enrich(snapshot_id, items, vm=False, object_kind=None):
     group_paths = set()
     for item in items:
         groups = item.get('via_groups', []) if vm else [item.get('via_group')]
-        group_paths.update(path for path in groups[:25] if isinstance(path, str))
-    names = dict(SnapshotRecord.objects.filter(snapshot_id=snapshot_id, view='inventory', compact__path__in=group_paths)
-                 .values_list('compact__path', 'name')) if group_paths else {}
+        group_paths.update(path for path in (groups if full else groups[:25]) if isinstance(path, str))
+    names = {}
+    group_paths = sorted(group_paths)
+    for start in range(0,len(group_paths),5000):
+        names.update(SnapshotRecord.objects.filter(snapshot_id=snapshot_id, view='inventory', compact__path__in=group_paths[start:start+5000])
+                     .values_list('compact__path', 'name'))
     result = []
     for item in items:
         row = dict(item)
         saved = rules.get(row.get('path'), {})
-        for key in keys[:6]:
+        for key in (keys if full else keys[:6]):
             value = saved.get('data__' + key)
             if value is not None:
                 row[key] = value
+        if full:
+            row['services']=saved.get('data__services')
+            row['sources_excluded']=saved.get('data__configuration__rule__sources_excluded')
+            row['destinations_excluded']=saved.get('data__configuration__rule__destinations_excluded')
         if saved.get('data__name'):
             row['name'] = saved['data__name']
         sequence = saved.get('data__configuration__rule__sequence_number')
@@ -36,9 +43,9 @@ def enrich(snapshot_id, items, vm=False, object_kind=None):
         # The local snapshot's dfw view contains distributed-firewall rules only.
         row['firewall_type'] = 'DFW' if saved else row.get('firewall_type')
         groups = row.get('via_groups', []) if vm else [row.get('via_group')]
-        row['groups_truncated'] = len(groups) > 25
+        row['groups_truncated'] = not full and len(groups) > 25
         row['matched_groups'] = [{'path': path, 'name': names.get(path, path.rsplit('/', 1)[-1])}
-                                 for path in groups[:25] if isinstance(path, str)]
+                                 for path in (groups if full else groups[:25]) if isinstance(path, str)]
         matched, field_matches = [], []
         valid_groups = row['matched_groups']
         fields = (('services', 'Service'),) if object_kind == 'custom_service' else FIELDS

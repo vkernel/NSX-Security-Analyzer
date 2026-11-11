@@ -184,8 +184,9 @@
       return result;
     },isCurrent:()=>select.value==='current'};
   };
-  window.evidenceCategories=(entries)=>{
+  window.evidenceCategories=(entries,exportIdentity)=>{
     const root=make('div'),nav=make('nav');root.className='evidence-reference-tables';root.dataset.evidenceSection='relationships';root.dataset.evidenceActivate='';nav.className='evidence-category-tabs';nav.setAttribute('aria-label','Reference categories');root.append(nav,...entries.map(entry=>entry.panel));let visible=false,selected=0;
+    if(exportIdentity&&window.referenceExportControl)root.prepend(window.referenceExportControl(exportIdentity,entries,()=>selected));
     const size=()=>root.closest('dialog')?.classList.toggle('evidence-firewall-wide',visible&&!!entries[selected].wide);
     window.WorkspaceTabs(nav,entries,{onSelect:index=>{selected=index;if(visible){size();entries[index].show();}}});
     root.addEventListener('evidence-visible',()=>{visible=true;size();entries[selected].show();});return root;
@@ -222,7 +223,7 @@
     const note=make('p','Saved configuration references only. Collection coverage applies; references do not establish effective policy or observed traffic.');note.className='evidence-note';note.dataset.evidenceSection='relationships';
     // Saved renderers can restore References just before opening the dialog.
     const deferred=table=>({...table,show:()=>queueMicrotask(table.show)});
-    body.append(note,window.evidenceCategories([{...deferred(firewall),label:'Firewall rules'},{...deferred(objects),label:'Other objects'}]));
+    body.append(note,window.evidenceCategories([{...deferred(firewall),label:'Firewall rules',exportSection:'firewall'},{...deferred(objects),label:'Other objects',exportSection:'objects'}],{view:'inventory',path:row.path}));
   };
   window.objectMembershipTables=(body,row)=>{
     if(row?.kind!=='group'||!row.path||!window.reportData||!document.querySelector('[data-server-table]'))return;

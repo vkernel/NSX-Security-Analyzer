@@ -3,9 +3,9 @@ from django.db import connection
 from .firewall_reference_context import enrich
 
 
-def with_ip_context(snapshot_id,ordinal,evidence):
+def with_ip_context(snapshot_id,ordinal,evidence, *, full=False):
     from .ip_references import context
-    groups,metadata=context(snapshot_id,ordinal)
+    groups,metadata=context(snapshot_id,ordinal,full=full)
     for path,edge in groups.items():
         previous=evidence.get(path,{})
         evidence[path]={**edge,**previous,'ip_matches':edge['ip_matches'],'ip_checked_at':edge['ip_checked_at']}
@@ -13,7 +13,7 @@ def with_ip_context(snapshot_id,ordinal,evidence):
     return evidence,metadata
 
 
-def current_context(snapshot, owner):
+def current_context(snapshot, owner, *, direct=None, full=False):
     """Current direct associations plus timestamped saved attachment and IP evidence.
 
     Read only this VM's indexed evidence. Never infer from tags, expand arbitrary
@@ -22,7 +22,7 @@ def current_context(snapshot, owner):
     from .current_membership import namespace, digest, GROUP
     from .network_membership import PORT
     from .models import MembershipRelation, SnapshotRecord
-    evidence = {path:{'path':path,'membership_basis':'direct_vm','membership_source':'current_nsx'}
+    evidence = dict(direct) if direct is not None else {path:{'path':path,'membership_basis':'direct_vm','membership_source':'current_nsx'}
         for path in MembershipRelation.objects.filter(environment=snapshot.environment,
             namespace=namespace(snapshot.environment), vm_key=digest(owner['identity']), present=True
         ).values_list('group__path',flat=True) if isinstance(path,str) and GROUP.fullmatch(path)}
@@ -48,18 +48,21 @@ def current_context(snapshot, owner):
                 network_status = 'partial'
                 continue
             direct = edge['path'] in evidence
+            observed_at = evidence.get(edge['path'],{}).get('observed_at')
             evidence[edge['path']] = dict(edge,via=via,
                 membership_basis='direct_and_network' if direct else 'network_attachment',
                 membership_source='current_and_saved' if direct else 'saved_snapshot',network_checked_at=stamp)
+            if observed_at: evidence[edge['path']]['observed_at']=observed_at
     network={'network_status':network_status,'network_checked_at':stamp,
         'has_saved_network':any(e.get('membership_source') in ('saved_snapshot','current_and_saved') for e in evidence.values())}
-    evidence,ip_metadata=with_ip_context(snapshot.pk,owner['ordinal'],evidence)
+    evidence,ip_metadata=with_ip_context(snapshot.pk,owner['ordinal'],evidence,full=full)
     return evidence,{**network,**ip_metadata}
 
 
-def read(snapshot_id, groups, page=0, path='', detail=False, evidence=None):
+def read(snapshot_id, groups, page=0, path='', detail=False, evidence=None, *, full=False):
     if not groups:
         return None if detail else {'items':[], 'page':page, 'has_next':False}
+    size=500 if full else 25
     # JSON array overlap stays in PostgreSQL; only one bounded rule page is read.
     with connection.cursor() as cursor:
         cursor.execute("""WITH candidates AS (
@@ -69,14 +72,15 @@ def read(snapshot_id, groups, page=0, path='', detail=False, evidence=None):
             SELECT data, (SELECT jsonb_agg(DISTINCT value) FROM jsonb_array_elements_text(refs)
                 WHERE value=ANY(%s)) AS groups
             FROM candidates WHERE refs ?| %s AND (%s='' OR data->>'path'=%s)
-            ORDER BY data->>'name', data->>'path' LIMIT 26 OFFSET %s""",
-            [snapshot_id, groups, groups, path, path, page*25])
+            ORDER BY data->>'name', data->>'path' LIMIT %s OFFSET %s""",
+            [snapshot_id, groups, groups, path, path, size+1, page*size])
         import json
         rows = [(json.loads(row) if isinstance(row,str) else row, json.loads(via) if isinstance(via,str) else via) for row,via in cursor.fetchall()]
     if detail:
         return rows[0][0] if rows else None
-    items = [{**{key:row[key] for key in ('name','path','action','disabled','policy_name') if key in row}, 'via_groups':via} for row,via in rows[:25]]
-    items = enrich(snapshot_id, items, vm=True)
+    keys = ('name','path','action','disabled','policy_name','category','rule_id','sequence_number','source_groups','destination_groups','scope','services') if full else ('name','path','action','disabled','policy_name')
+    items = [{**{key:row[key] for key in keys if key in row}, 'via_groups':via} for row,via in rows[:size]]
+    items = enrich(snapshot_id, items, vm=True,full=full)
     for item in items:
         bases = {(evidence or {}).get(group,{}).get('membership_basis') for group in item['via_groups']}
         confirmed = any(bases & {'direct_vm','network_attachment','direct_and_network'}) or evidence is None
@@ -92,13 +96,15 @@ def read(snapshot_id, groups, page=0, path='', detail=False, evidence=None):
             item['network_checked_at'] = saved[0].get('network_checked_at')
             item['reference_reason'] += '. Attachment evidence is saved; current refresh checks direct VM associations only.'
         if ip_matches:
-            item.update(ip_matches=ip_matches[:12],ip_match_count=len(ip_matches),ip_matches_truncated=len(ip_matches)>12 or any(evidence[g].get('ip_matches_truncated') for g in item['via_groups']),ip_checked_at=next((evidence[g].get('ip_checked_at') for g in item['via_groups'] if evidence[g].get('ip_matches')),None),
+            item.update(ip_matches=ip_matches if full else ip_matches[:12],ip_match_count=len(ip_matches),ip_matches_truncated=(not full and len(ip_matches)>12) or any(evidence[g].get('ip_matches_truncated') for g in item['via_groups']),ip_checked_at=next((evidence[g].get('ip_checked_at') for g in item['via_groups'] if evidence[g].get('ip_matches')),None),
                         reference_basis='confirmed_and_ip' if confirmed else 'ip_subnet')
             item['reference_reason'] = ((item['reference_reason']+'; also matches saved VM IP evidence.') if confirmed else
                 'Saved IP/subnet configuration match; not confirmed VM membership or effective policy.')
         if item.get('exclusion_reference'):
             item['reference_reason'] += ' Excluded fields are negated references, not positive endpoint matches.'
-    return {'items':items,'page':page,'has_next':len(rows)>25}
+        if full:
+            item['membership_evidence']={group:(evidence or {}).get(group,{}) for group in item['via_groups']}
+    return {'items':items,'page':page,'has_next':len(rows)>size}
 
 
 def saved(snapshot_id, ordinal, section, page=0, path=''):

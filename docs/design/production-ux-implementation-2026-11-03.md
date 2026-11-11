@@ -254,3 +254,15 @@ Migration **0066** creates two initially empty paging-cache tables. It does not 
 Synthetic acceptance with 10,000 members loaded the initial page in about 180 ms with simulated 40 ms NSX latency: one NSX call for four UI pages, one call at the next batch boundary, and none on Back. All 897 Django inventory tests, 99 JavaScript tests, and the 112-test offline collector suite pass (nine existing collector skips). A final focused rerun covers failed initial checks retaining older positives. PostgreSQL and fresh SQLite migrations and model checks pass. These are synthetic measurements, not a production latency promise.
 
 [Acceptance data](../performance/progressive-group-membership-2026-11-05.json), [desktop](progressive-membership-2026-11-05/desktop.png), [mobile dark](progressive-membership-2026-11-05/mobile-dark.png).
+
+### 11 November — inventory reference exports
+
+The shared References controls now export CSV, PDF, JSON, YAML and standalone
+HTML for VMs, groups, custom services, tags and scopes. The dialog defaults to
+saved evidence and the selected category, supports all categories and includes
+all retained pages. Current VM observations are frozen from the local cache;
+exporting never starts an NSX check. Coverage, timestamps, negated rule fields,
+interface attachments and IP/subnet provenance remain explicit. Files prepare
+in an independent export worker lane, with owner-only downloads and 24-hour
+expiry. See [reference exports](../reference-exports.md) for operation, evidence
+semantics, limits and synthetic verification.

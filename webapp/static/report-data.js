@@ -186,7 +186,7 @@
     const caveat=make('p','Saved firewall references include confirmed groups, attachments and labelled IP/subnet matches. Current NSX refreshes direct VM associations only. IP matches are not confirmed VM membership or effective policy.');caveat.className='evidence-note';rules.panel.insertBefore(caveat,rules.panel.querySelector('.evidence-table-content'));
     const network=table('network_groups','Saved network links',[{label:'Group',cell:item=>object(item,'groups')},{label:'Interface → port → segment',cell:window.networkAttachmentCell}]);
     const ip=table('ip_groups','Saved IP/subnet matches',[{label:'Group',cell:item=>object(item,'groups')},{label:'VM address → group entry',cell:window.ipReferenceCell}]);
-    body.append(window.evidenceCategories([{...resolved,label:'Groups'},...(summary.network_membership_version===1&&summary.network_membership_status!=='not_applicable'?[{...network,label:'Network links (saved)'}]:[]),{...rules,label:'Firewall rules'},{...ip,label:'IP/subnet matches'}]));
+    body.append(window.evidenceCategories([{...resolved,label:'Groups',exportSection:'resolved_groups'},...(summary.network_membership_version===1&&summary.network_membership_status!=='not_applicable'?[{...network,label:'Network links (saved)',exportSection:'network_groups'}]:[]),{...rules,label:'Firewall rules',exportSection:'confirmed_rules'},{...ip,label:'IP/subnet matches',exportSection:'ip_groups'}],{view:'vms',id}));
     const advanced=make('details'), title=make('summary','VM inventory details'), content=make('div');advanced.dataset.evidenceSection='technical';advanced.append(title,content);body.append(advanced);
     let ready=false,busy=false;
     const technical=async()=>{if(ready||busy)return;busy=true;window.evidenceState(content,'Loading technical details…');try{const response=await load(id,'vm');if(body.evidenceGeneration!==generation)return;content.replaceChildren(window.technicalEvidence(response.details));ready=true;}catch(error){window.evidenceState(content,error.message,technical);}finally{busy=false;}};
@@ -248,14 +248,14 @@
           if(section==='tags')columns=[{label:'Tag',cell:item=>object(item,section)},{label:'VMs',cell:item=>item.vm_count??'Not recorded'},{label:'Groups',cell:item=>item.group_count??'Not recorded'},{label:'Other',cell:item=>item.other_count??'Not recorded'}];
           if(section==='other_assignments')columns.push({label:'Resource type',cell:item=>item.resource_type});
           if(section==='firewall_references')columns=window.firewallReferenceColumns(body,item=>window.openRelatedEvidence(body,{path:item.path},item.name||item.path));
-          const table=window.evidenceTable({title:label,columns,current,wide:section==='firewall_references',load:page=>load(section,page)});categories.push({...table,label});
+          const table=window.evidenceTable({title:label,columns,current,wide:section==='firewall_references',load:page=>load(section,page)});categories.push({...table,label,...(section!=='notes'?{exportSection:section}:{})});
         }
         if(summary.view==='scopes')paged('tags','Tags in this scope');
         else{
           paged('notes','Notes');paged('vms','VM assignments');paged('group_conditions','Group conditions');paged('group_assignments','Group tags');paged('other_assignments','Other resources');paged('firewall_references','Firewall rules');
           paged('condition_evidence','Matching condition definitions',true);paged('review_conditions','Conditions requiring review',true);
         }
-        body.append(window.evidenceCategories(categories));
+        body.append(window.evidenceCategories(categories,{view:summary.view,id}));
         window.workspaceEvidence?.(body,document.getElementById('detail-title'),{...summary.data,inventory_type:summary.view==='scopes'?'Scope':'Tag',evidence_summary_only:true});
 
       }catch(error){if(current()&&error.name!=='AbortError')window.evidenceState(body,error.message,start);}
