@@ -144,14 +144,15 @@
       const query=section==='tags'?{view:'tags',tag:item.tag,scope:item.scope||''}:{path:typeof item==='string'?item:item.path};
       return window.evidenceObject(body,item,query);
     };
-    const table=(section,label,columns,path='')=>window.evidenceTable({title:label,columns,current,wide:section==='related_rules',load:page=>load(id,section,page,path)});
+    const table=(section,label,columns,path='')=>window.evidenceTable({title:label,columns,current,wide:section==='related_rules',countLabel:section==='ip_groups'?'matches':'confirmed',load:page=>load(id,section,page,path)});
     const tags=table('tags','Assigned tags',[{label:'Scope',cell:item=>item.scope||'(empty scope)'},{label:'Value',cell:item=>object(item,'tags')}]);
     const assigned=make('details'),assignedTitle=make('summary','Assigned tags');assigned.dataset.evidenceSection='overview';assigned.dataset.evidenceLazy='true';assigned.append(assignedTitle,tags.panel);assigned.addEventListener('toggle',()=>{if(assigned.open)tags.show();});body.append(assigned);
     if(summary.network_membership_version===1){const counts=make('p',(summary.direct_group_count??'Unknown')+' direct VM groups · '+(summary.network_group_count??'Unknown')+' network groups. Related groups count each group once.');counts.className='evidence-note';counts.dataset.evidenceSection='overview';body.append(counts);}
     const source=window.membershipSource(body,{kind:'vm',id},{automatic:true,initialSource:summary.network_membership_version===1||summary.resolved_membership_status==='complete'?'saved':null});
     const describe=(data,firewall=false)=>{
+      if(firewall&&!data.items.length&&data.ip_status&&!['complete','not_applicable'].includes(data.ip_status))return {...data,empty_message:'No references established from the available evidence. Saved IP/subnet coverage is incomplete; missing references remain unknown.'};
       if(!data.items.length)data={...data,empty_message:data.status==='complete'?(firewall?'No saved firewall rules reference this VM’s confirmed groups.':data.source==='saved_snapshot'?'No confirmed group memberships were saved for this VM.':'NSX returned no group associations for this VM.'):
-        data.source==='current_nsx'?'VM membership is not established. Refresh to check current NSX.':'Membership was not fully collected in this snapshot. Select Current NSX to check this VM.'};
+        ['current_nsx','current_with_saved_network','current_with_saved_references'].includes(data.source)?'VM membership is not established. Refresh to check current NSX.':'Membership was not fully collected in this snapshot. Select Current NSX to check this VM.'};
       return data;
     };
     const resolved=window.evidenceTable({title:summary.network_membership_version===1?'Related groups':'Confirmed groups',current,columns:[{label:'Group',cell:item=>object(item,'groups')},{label:'Membership',cell:item=>window.evidenceBadge(item.membership_basis==='network_attachment'?'Interface attachment':item.membership_basis==='direct_and_network'?'Direct VM + interface':'Direct VM')},...(summary.network_membership_version===1?[{label:'Via',cell:window.networkAttachmentCell}]:[])],load:async page=>describe(await source.load('',page,()=>load(id,'resolved_groups',page)))});
@@ -166,16 +167,26 @@
         const facts=make('p');facts.className='evidence-rule-facts';facts.append(window.evidenceBadge(data.action,'action'),window.evidenceBadge(data.disabled===true?'Disabled':data.disabled===false?'Enabled':null));
         const link=relationLink(item,'rules');link.textContent='Open rule record';
         const services=window.evidenceTable({title:'Configured services',current:()=>current()&&token===inspection,columns:[{label:'Service',cell:service=>service==='ANY'||service.path==='ANY'?'Any service':object(service,'services')}],load:async page=>({items:(data.services||[]).slice(page*25,(page+1)*25),has_next:(page+1)*25<(data.services||[]).length})});
-        const via=source.isCurrent()?window.evidenceTable({title:'Related groups for this rule',current,columns:[{label:'Group',cell:group=>object(group,'groups')}],load:async page=>({items:(data.via_groups||[]).slice(page*25,page*25+25),has_next:(data.via_groups||[]).length>(page+1)*25})}):table('confirmed_via_groups','Related groups for this rule',[{label:'Group',cell:group=>object(group,'groups')}],item.path);
+        const via=window.evidenceTable({title:'Related groups for this rule',current,columns:[{label:'Group',cell:group=>object(data.membership_evidence?.[typeof group==='string'?group:group.path]||group,'groups')},{label:'Evidence',cell:group=>{
+          const edge=data.membership_evidence?.[typeof group==='string'?group:group.path];
+          const root=make('div');root.className='evidence-reference-lines';
+          if(!edge||edge.membership_basis){
+            root.append(make('span',edge?.membership_basis==='network_attachment'?'Saved interface attachment':edge?.membership_basis==='direct_and_network'?'Direct VM + saved attachment':source.isCurrent()?'Current direct VM association':'Saved VM association'));
+          }
+          if(edge?.network_checked_at)root.append(make('small','Attachment collected '+(window.workspaceTimeText?window.workspaceTimeText(edge.network_checked_at):edge.network_checked_at)));
+          if(edge?.ip_matches?.length){root.append(window.evidenceBadge('IP/subnet match'),window.ipReferenceCell(edge));}
+          return root;
+        }}],load:async page=>Array.isArray(data.via_groups)?({items:data.via_groups.slice(page*25,page*25+25),has_next:data.via_groups.length>(page+1)*25}):load(id,'confirmed_via_groups',page,item.path)});
         detail.replaceChildren(facts,link,services.panel,via.panel);services.show();via.show();
       }catch(error){if(current()&&token===inspection)window.evidenceState(detail,error.message,()=>inspect(item,trigger));}
     }
-    const rules=window.evidenceTable({title:'Firewall references',current,wide:true,columns:window.firewallReferenceColumns(body,inspect),load:async page=>describe(await source.load('firewall',page,()=>load(id,'confirmed_rules',page)),true)});source.register(rules);
+    const rules=window.evidenceTable({title:'Firewall references',current,wide:true,countLabel:'references',columns:window.firewallReferenceColumns(body,inspect),load:async page=>describe(await source.load('firewall',page,()=>load(id,'confirmed_rules',page)),true)});source.register(rules);
     source.onChange(()=>{inspection++;ruleDetail.hidden=true;delete rules.panel.dataset.inspecting;});
     rules.panel.append(ruleDetail);
-    const caveat=make('p','Saved firewall configuration through direct VM membership and verified network attachments where collected. Current NSX checks cover direct VM associations only. These references do not establish effective policy or observed traffic.');caveat.className='evidence-note';rules.panel.insertBefore(caveat,rules.panel.querySelector('.evidence-table-content'));
+    const caveat=make('p','Saved firewall references include confirmed groups, attachments and labelled IP/subnet matches. Current NSX refreshes direct VM associations only. IP matches are not confirmed VM membership or effective policy.');caveat.className='evidence-note';rules.panel.insertBefore(caveat,rules.panel.querySelector('.evidence-table-content'));
     const network=table('network_groups','Saved network links',[{label:'Group',cell:item=>object(item,'groups')},{label:'Interface → port → segment',cell:window.networkAttachmentCell}]);
-    body.append(window.evidenceCategories([{...resolved,label:'Groups'},...(summary.network_membership_version===1&&summary.network_membership_status!=='not_applicable'?[{...network,label:'Network links (saved)'}]:[]),{...rules,label:'Firewall rules'}]));
+    const ip=table('ip_groups','Saved IP/subnet matches',[{label:'Group',cell:item=>object(item,'groups')},{label:'VM address → group entry',cell:window.ipReferenceCell}]);
+    body.append(window.evidenceCategories([{...resolved,label:'Groups'},...(summary.network_membership_version===1&&summary.network_membership_status!=='not_applicable'?[{...network,label:'Network links (saved)'}]:[]),{...rules,label:'Firewall rules'},{...ip,label:'IP/subnet matches'}]));
     const advanced=make('details'), title=make('summary','VM inventory details'), content=make('div');advanced.dataset.evidenceSection='technical';advanced.append(title,content);body.append(advanced);
     let ready=false,busy=false;
     const technical=async()=>{if(ready||busy)return;busy=true;window.evidenceState(content,'Loading technical details…');try{const response=await load(id,'vm');if(body.evidenceGeneration!==generation)return;content.replaceChildren(window.technicalEvidence(response.details));ready=true;}catch(error){window.evidenceState(content,error.message,technical);}finally{busy=false;}};

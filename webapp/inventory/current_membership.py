@@ -39,7 +39,7 @@ def subject(snapshot, kind, identity):
         scope = path.split('/realized-state/', 1)[0] if path and '/realized-state/' in path else '/infra'
         if not re.fullmatch(r'/(?:infra|global-infra|orgs/[^/]+/projects/[^/]+/infra)', scope):
             scope = '/infra'
-        return {'identity':ext, 'external_id':ext, 'name':row['name'], 'vm_path':path, 'scope':scope}
+        return {'identity':ext, 'external_id':ext, 'name':row['name'], 'vm_path':path, 'scope':scope, 'ordinal':int(identity)}
     if kind != 'group' or not GROUP.fullmatch(identity):
         raise ValueError('A saved VM or group is required.')
     row = get_object_or_404(SnapshotRecord.objects.values('name'), snapshot=snapshot, view='inventory', compact__path=identity, data__kind='group')
@@ -176,7 +176,7 @@ def cached(snapshot, kind, owner, page=0, *, include_items=True, paging_session=
             if row: item.update(name=row['name'], vm_path=row['compact__path'])
     notes = list(lookup.notes) if lookup else ['Observed through related-object checks; this subject has not had a complete check.']
     if kind == 'vm':
-        notes.append('Current checks cover direct VM associations only. Select Saved snapshot for collected port/segment attachment references.')
+        notes.append('Current group lists cover direct VM associations. Collected attachment links remain separate saved evidence in network links and firewall references.')
     fresh = bool(lookup and lookup.expires_at and lookup.expires_at > timezone.now())
     if not fresh and lookup: notes.append('Cached observation is stale; check current NSX to refresh.')
     if lookup and status != 'complete' and positive: notes.append('Positive observations may come from earlier checks; their individual observation times are retained.')
@@ -241,9 +241,20 @@ def endpoint(request, pk):
             result['can_continue'] = result['needs_more'] = False
             result['notes'].append('An operator must load further NSX pages; the available pages can be browsed without a live read.')
         if firewall:
-            from .confirmed_references import read
-            groups = list(MembershipRelation.objects.filter(environment=env, namespace=namespace(env), vm_key=digest(owner['identity']), present=True).values_list('group__path',flat=True))
-            result = {**result, **read(snapshot.pk, groups, page), 'notes':result['notes']+['Current VM memberships matched against saved firewall configuration; not live rule state or observed traffic.']}
+            from .confirmed_references import read, current_context
+            evidence, network = current_context(snapshot, owner)
+            result = {**result, **read(snapshot.pk, list(evidence), page, evidence=evidence),
+                **network, 'notes':result['notes']+['Current VM memberships and verified saved attachments matched against saved firewall configuration; not live rule state or observed traffic.']}
+            if network['has_saved_network']:
+                result['source'] = 'current_with_saved_network'
+                result['notes'].append('Network attachment evidence was collected '+str(network['network_checked_at'] or 'at an unknown time')+'. Refresh does not recheck network attachments.')
+            if network['has_saved_ip']:
+                result['source']='current_with_saved_references'
+            result['notes'].extend(network['ip_notes'][1:])
+            if network['ip_status'] not in ('complete','not_applicable'):result['status']='partial'
+            if network['network_status'] not in ('complete','not_applicable'):
+                result['status'] = 'partial'
+                result['notes'].append('Saved network coverage is incomplete; additional firewall references may be missing.')
             result.pop('saved_count',None)
         response = JsonResponse(result); response['Cache-Control']='private, no-store'; return response
     except ValidationError as exc:

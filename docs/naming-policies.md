@@ -41,6 +41,38 @@ Previous versions can be opened as drafts, saved, previewed and activated; revie
 
 ## Group naming compliance
 
+Name outcomes and review progress are independent. **Needs attention**, **Compliant**
+and **Exceptions** partition the evaluated names; **Review needed** is a separate
+queue that can include a compliant name. A stale workflow does not remove a name
+from Compliant. Policy previews, the queues and exports use the same name outcomes.
+Review-needed counts are shown separately and must not be added to environment totals.
+
+Reviews fingerprint the winning active policy configuration and effective tag scope
+mappings for each group. Saving a draft, editing a draft mapping, renaming a policy,
+or changing an unrelated active policy does not invalidate a current review or
+exception. Changing relevant active rules, the group evidence, or an exception's
+expiry still requires review. Unchanged legacy fingerprints remain recognized;
+legacy fingerprints that cannot be verified conservatively require renewed review.
+No existing review history is rewritten and no schema migration is required.
+
+Coverage quality is displayed separately. With inventory warnings, matching names
+are labelled **Name matches (provisional)** and do not establish confirmed compliance
+or resolve an awaiting-verification workflow. A policy preview uses **Name matches
+(draft)** and identifies its source collection. Archived, unprepared or missing
+evidence shows **Assessment unavailable** and dashes instead of zero-compliant counts.
+Restore or collect source evidence before exporting an unavailable assessment.
+The CSV includes the displayed outcome and an `evidence_quality` column.
+
+Queue links preserve search, group type, policy and owner filters. Switching to a
+different queue clears the outcome filter so a previous Name differs filter cannot
+silently empty the Compliant queue. The selected queue's count matches its table;
+the other queue counts describe the results their links open.
+
+The [synthetic browser verification](performance/naming-consistency-2026-11-11.json)
+uses 600 groups per environment. It confirms unchanged active counts after a draft
+save, a separate review queue, qualified provisional/draft matches, unavailable
+counts shown as dashes, and usable mobile layout without JavaScript errors.
+
 Use **Naming compliance** in the left menu. Filter by group type, outcome, policy, owner or search. Each row shows current name, group path/type, proposed name and the evidence behind every component. Expand evidence for definition tags, explicit addresses/members, nested definitions and member VM tag suggestions. Group metadata tags are not treated as membership conditions.
 
 Duplicate proposals are checked case-insensitively against other groups' current and proposed names in the same environment. Names occupied by another group remain collisions even when that group might later be renamed.

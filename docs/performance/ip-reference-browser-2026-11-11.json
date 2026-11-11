@@ -1,0 +1,17 @@
+{
+  "synthetic": true,
+  "confirmedGroupCount": 1,
+  "ipGroupMatches": 4,
+  "firewallReferences": 6,
+  "currentModeRetainsSavedReferences": true,
+  "ipv4Subnet": true,
+  "ipv6Subnet": true,
+  "addressRange": true,
+  "nestedIPUnion": true,
+  "mixedConditionExcluded": true,
+  "ruleExclusionLabelled": true,
+  "inspectionRetainsAddressAndDefinition": true,
+  "liveMembershipPosts": 0,
+  "mobilePageOverflow": false,
+  "browserErrors": []
+}

@@ -63,6 +63,28 @@ function currentResult(items=[],extra={}){return {items,status:'complete',saved_
 function autoVm(dom){dom.window.document.getElementById('detail-dialog').membershipInitialSource=null;}
 const four=Array.from({length:4},(_,i)=>({path:'/infra/groups/'+i,name:'Actual group '+i}));
 
+test('IP/subnet evidence is lazy, labelled and separate from confirmed groups and is retained in rule inspection',async()=>{
+ const dom=setup(),w=dom.window,d=w.document,body=d.getElementById('detail-body'),calls=[];
+ const edge={path:'/infra/groups/subnet',name:'Subnet',reference_basis:'ip_subnet',membership_source:'saved_snapshot',
+  ip_checked_at:'2026-11-11T08:00:00Z',ip_matches:[{ip:'192.0.2.10',entry:'192.0.2.0/24',via_groups:[]}]};
+ w.fetch=async()=>{throw Error('Saved IP references must not call current NSX');};
+ w.reportData=async(_,q)=>{calls.push(q.section);if(q.section==='resolved_groups')return {items:[],status:'complete'};
+  if(q.section==='ip_groups')return {items:[edge],status:'partial',saved_count:1,source:'saved_snapshot'};
+  if(q.section==='confirmed_rules')return {items:[{...rule,ip_matches:edge.ip_matches,reference_reason:'Saved IP/subnet configuration match; not confirmed VM membership.'}],status:'complete'};
+  if(q.section==='confirmed_rule')return {details:{services:['ANY'],via_groups:[edge.path],membership_evidence:{[edge.path]:edge}}};
+  return {items:[]};};
+ await w.showVmRelationships(body,null,7,{...summary,resolved_group_count:0,resolved_membership_status:'complete'});
+ tab(d,'References');await tick();assert.equal(calls.includes('ip_groups'),false);assert.doesNotMatch(d.querySelector('#evidence-references tbody').textContent,/Subnet/);
+ tab(d,'IP/subnet matches',d.querySelector('#evidence-references .evidence-category-tabs'));await tick();
+ assert.match(body.textContent,/192.0.2.10 → 192.0.2.0\/24/);assert.ok(calls.includes('ip_groups'));
+ assert.match(d.querySelector('#evidence-references .evidence-table-section:not([hidden]) .evidence-table-status').textContent,/1 match; total unknown/);
+ tab(d,'Firewall rules',d.querySelector('#evidence-references .evidence-category-tabs'));await tick();
+ d.querySelector('[aria-label^="Inspect references"]').click();await tick();await tick();
+ assert.match(d.querySelector('.evidence-rule-inspection').textContent,/IP\/subnet match/);
+ assert.match(d.querySelector('.evidence-rule-inspection').textContent,/192.0.2.10 → 192.0.2.0\/24/);
+ assert.equal(d.querySelectorAll('script').length,0);dom.window.close();
+});
+
 test('network-aware VM references retain saved attachment provenance and keep direct counts separate',async()=>{
  const dom=setup(),w=dom.window,d=w.document,body=d.getElementById('detail-body'),calls=[];autoVm(dom);
  const edge={path:'/infra/groups/network',name:'Network group',membership_basis:'network_attachment',via:[{interface_id:'vif-1',port_path:'/infra/segments/s/ports/p',segment_path:'/infra/segments/s'}]};
@@ -112,7 +134,7 @@ test('VM References lazily refreshes missing associations once and keeps snapsho
  assert.equal(d.querySelector('#evidence-references tbody').children.length,4);assert.match(d.querySelector('#evidence-references').textContent,/Current NSX/);assert.match(d.querySelector('#evidence-references').textContent,/4 confirmed/);
  const select=d.querySelector('.evidence-membership-source select');select.value='saved';select.dispatchEvent(new w.Event('change'));await tick();assert.equal(d.querySelector('#evidence-references tbody').children.length,2);
  select.value='current';select.dispatchEvent(new w.Event('change'));await tick();assert.equal(calls.length,2);assert.equal(d.querySelector('#evidence-references tbody').children.length,4);
- assert.deepEqual([...d.querySelectorAll('#evidence-references [role=tab]')].map(b=>b.textContent),['Groups','Firewall rules']);assert.equal(savedCalls.some(s=>['related_groups','related_rules'].includes(s)),false);
+ assert.deepEqual([...d.querySelectorAll('#evidence-references [role=tab]')].map(b=>b.textContent),['Groups','Firewall rules','IP/subnet matches']);assert.equal(savedCalls.some(s=>['related_groups','related_rules'].includes(s)),false);
  dom.window.close();
 });
 

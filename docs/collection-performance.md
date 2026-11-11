@@ -20,11 +20,23 @@ unknown. No per-VM/group cross-product or realized-state scan is introduced.
 Initial cleanup probes for selected network groups request up to 1,000 members,
 and their pages are reused. Other necessary category pages use 1,000 records and
 verified cursors. Modern segment/port endpoints fall back to legacy endpoints on
-compatibility failures. Group-category reads stop at 100 pages and explicitly
+compatibility failures. Empty successful segment/port lists are also checked against
+the alternate endpoint, including empty reused probe pages. Positive lists add no
+compatibility reads. A recovered endpoint choice is shared by its scope/category;
+unsupported or denied compatibility endpoints are not repeatedly probed. Diagnostics
+include `empty_response_checks` and `empty_response_recoveries`.
+Group-category reads stop at 100 pages and explicitly
 retain partial coverage at that limit. Permission failures and failed pages retain
 positive evidence without establishing a complete zero. Additional reads are
 limited to selected network groups. Negative attachment results never establish
 cleanup or deletion eligibility.
+An authoritative positive list recovered through compatibility also supersedes an
+earlier empty cleanup probe, keeping findings consistent with the saved members.
+
+If both port endpoints are empty but an exact saved interface attachment points to
+a resolved member segment, attachment coverage stays partial. This contradiction
+does not establish a complete zero or manufacture a parent membership. Arbitrary
+nested group AND/OR conditions are never bypassed by inheriting a child's links.
 
 Port configuration already returned by collection search is reused when it covers
 the selected effective ports. Remaining relevant segment inventories are fetched
@@ -35,6 +47,10 @@ or five reads when their configuration is already available. Both modes reuse tw
 mandatory segment-member pages and produce identical VM relationships. These are
 actual mock call counts, not a promise of production collection duration. Exact
 network evidence requires reads that the previous one-member sampling omitted.
+The [attachment regression benchmark](performance/attachment-reference-fixes-2026-11-10.json)
+keeps the healthy network phase at five requests. With 12 groups and a compatibility
+recovery, both 3 and 3,000 synthetic VMs use 38 network requests, one shared VIF
+inventory and no segment inventory requests when search already supplied the ports.
 
 The VM inventory shows unique **Related groups** across direct and network
 relationships. Drawers identify their basis and retain interface → port → segment
@@ -44,8 +60,15 @@ firewall references use the same unique relationships and state their reason.
 These references do not establish effective firewall policy or observed traffic.
 
 New snapshots default to their saved evidence, including partial network evidence.
-Explicit Current NSX checks remain separate direct VM association checks and say
-so; they do not repair or silently mix historical network links. Coverage is limited
+Explicit Current NSX checks remain separate direct VM association checks. Firewall
+references and rule inspection combine those associations with verified attachments
+already saved for this VM, labelled **Current VM associations + saved attachments**.
+Each attachment-based rule retains its collection timestamp; refreshing direct VM
+associations does not recheck network links. Saved links never enter the live cache
+and snapshots remain unchanged. Both rule views use the same evidence context, keep
+paging and deduplicate rules that match both membership types. Browsing adds no
+NSX calls. Current group lists continue to show direct associations separately from
+the saved Network links tab. Coverage is limited
 to visible inventory and the default enforcement point, excludes IP-only inference,
 and is not an atomic NSX snapshot. Endpoint and attachment completeness are tracked
 separately. Missing network evidence is shown in coverage and collection diagnostics.
@@ -56,10 +79,67 @@ then run a fresh full collection. Existing snapshots remain immutable. The
 [synthetic browser acceptance](performance/network-membership-browser-2026-11-10.json)
 verifies zero direct VM members, two attached VMs, all member totals, segment paging,
 VM counts and saved firewall references without any live membership request.
+The [current-reference browser acceptance](performance/attachment-reference-browser-2026-11-10.json)
+also verifies that an empty current direct-association cache retains the saved
+attachment-based rule, shows its collection timestamp, and permits inspection
+through the same evidence context without any live membership POST.
 
 API reference: [NSX group member categories](https://developer.broadcom.com/xapis/nsx-t-data-center-rest-api/latest/inventory_group_members.html).
 
 ## Earlier collection optimizations
+
+### Saved IP/subnet firewall references · 11 November 2026
+
+VM References includes an **IP/subnet matches** table and firewall references
+through those saved address definitions. This is configuration evidence, not
+confirmed VM group membership, current IP ownership, effective policy or observed
+traffic. Confirmed Related groups counts and live membership caches are unchanged.
+
+Hosts, CIDRs and inclusive ranges support IPv4 and IPv6. A group must contain one
+explicit IPAddressExpression, or one PathExpression referencing only supported
+IP-only child groups in the same scope. Cycles, missing children, malformed or
+mixed/extended conditions remain unresolved. An IP branch never bypasses an
+additional tag/identity/AND/OR condition. NSX's documented IP expression format
+supports [addresses, ranges and subnets](https://developer.broadcom.com/xapis/nsx-t-data-center-rest-api/latest/method_AddorRemoveGroupIPAddresses.html).
+
+Only saved VM runtime address fields are used, not tags, names, gateways or DNS
+configuration. Shared addresses in the same saved scope, invalid/scoped/link-local,
+loopback, multicast and unspecified addresses are excluded with an explicit note.
+Project scopes remain separate. A rule's excluded source/destination is labelled
+as a negated reference, never a positive endpoint match. Direct rule IP literals
+and ANY-only rules are outside this group-reference path.
+
+Apply migration **0067_saved_ip_references** before starting matching web versions.
+It creates empty derived cache tables with indexes; it does not backfill or index
+existing snapshot tables. On first IP-reference browse, one index is built for
+the selected snapshot. Warm reads use indexed numeric address intervals and a
+shared-address lookup rather than rescanning every group. Browsing adds no NSX
+calls and collection does not build this index. Existing snapshots work if saved
+VM address fields are present; missing fields remain unknown. Current NSX mode
+retains labelled, timestamped saved IP references; Refresh only checks direct VM
+associations and does not refresh IPs or repair historical evidence.
+
+Cache rows are discarded when saved browsing evidence changes or is archived,
+and cascade when the snapshot is deleted. A concurrent invalidation downgrades
+coverage to partial. Bounds are explicit: 32 usable addresses per VM, 100,000
+compiled intervals per snapshot, 32 nested levels and 2,000 matching intervals per
+lookup. Limit hits retain known matches and mark missing coverage unknown. Dense
+evidence is limited to 32 details per group and 12 per firewall list row; the UI
+identifies omitted details and links to the saved group definition.
+
+Synthetic acceptance covered subnet/range/IPv6 matches, pure nested groups,
+excluded rule fields, mixed-condition rejection and preservation of saved
+references in Current NSX mode. The [browser result](performance/ip-reference-browser-2026-11-11.json)
+records four IP group matches and six firewall references while the VM's
+confirmed group count stays at one, with no live membership requests.
+
+The [local synthetic benchmark](performance/ip-reference-benchmark-2026-11-11.json)
+used 10,000 groups and 3,000 VMs: a 0.573-second initial index build and a
+5.497-millisecond median across 20 warm lookups, with seven database queries per
+lookup, no warm group-definition rescans and no NSX calls. These local figures
+are regression evidence, not a production latency prediction. Verification also
+passed 953 Django tests, 103 JavaScript tests and final focused membership/IP
+checks; the migration matches the models.
 
 For the current saved VM membership strategy, its request-cost tradeoffs and
 synthetic measurements, see [Saved VM associations during collection](workspace-performance.md#saved-vm-associations-during-collection--5-november-2026).

@@ -11,7 +11,8 @@ def enrich(snapshot_id, items, vm=False, object_kind=None):
     keys = ('category', 'policy_name', 'rule_id', 'action', 'disabled', 'sequence_number',
             'source_groups', 'destination_groups', 'scope')
     records = SnapshotRecord.objects.filter(snapshot_id=snapshot_id, view='dfw', compact__path__in=paths).values(
-        'compact__path', 'data__name', 'data__services', 'data__configuration__rule__sequence_number', *['data__' + key for key in keys])
+        'compact__path', 'data__name', 'data__services', 'data__configuration__rule__sequence_number',
+        'data__configuration__rule__sources_excluded','data__configuration__rule__destinations_excluded', *['data__' + key for key in keys])
     rules = {row['compact__path']: row for row in records}
     group_paths = set()
     for item in items:
@@ -47,8 +48,11 @@ def enrich(snapshot_id, items, vm=False, object_kind=None):
                 continue
             direct = [group for group in valid_groups if group['path'] in configured]
             if direct:
-                matched.append(label)
-                field_matches.extend({'field': label, 'group': group} for group in direct)
+                excluded = saved.get('data__configuration__rule__'+('sources_excluded' if key=='source_groups' else 'destinations_excluded' if key=='destination_groups' else '')) is True
+                field=label+' (excluded)' if excluded else label
+                matched.append(field)
+                field_matches.extend({'field':field,'group':group,'excluded':excluded} for group in direct)
+                if excluded:row['exclusion_reference']=True
         row['matched_fields'] = matched
         row['field_matches'] = field_matches
         row['reference_reason'] = ('Saved service reference' if object_kind == 'custom_service' else

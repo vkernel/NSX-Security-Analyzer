@@ -91,10 +91,11 @@ class NamingTests(TestCase):
         self.vm=self.add_vm('vm-1','PRD-RTM',self.tags)
         self.assertEqual(self.rows()[0]['progress_label'],'Resolved')
         self.assertNotEqual(self.rows(simulation=True)[0]['progress_label'],'Resolved')
+        self.policy.configuration['components'][0]['max_length']+=1
         self.policy.revision+=1;self.policy.save()
         self.assertTrue(self.rows()[0]['work_stale'])
         proposal=NamingProposal.objects.get();self.assertEqual(proposal.owner,self.user);self.assertEqual(proposal.note,'External rename')
-        self.assertContains(self.client.get(self.url()),'Review required')
+        self.assertContains(self.client.get(self.url(),{'tab':'review'}),'Review required')
 
     def test_exception_expiry_and_attention_tabs(self):
         self.assertContains(self.post(action='exception',note='Temporary',owner=self.user.pk),'expiry date')
@@ -207,7 +208,9 @@ class NamingTests(TestCase):
     def test_coverage_warning_never_establishes_compliance(self):
         self.vm.name='PRD-RTM';self.vm.save()
         self.snapshot.summary={'inventory_warnings':True};self.snapshot.save()
-        self.assertEqual(self.rows()[0]['status'],'Evidence incomplete')
+        self.assertEqual(self.rows()[0]['status'],'Compliant')
+        self.assertEqual(self.rows()[0]['coverage_status'],'provisional')
+        self.assertEqual(self.rows()[0]['outcome_label'],'Name matches (provisional)')
 
     def test_archived_snapshot_is_not_empty_compliance(self):
         self.snapshot.browsing_status='archived';self.snapshot.save()
@@ -361,6 +364,7 @@ class NamingTests(TestCase):
         self.assertContains(self.post(action='exception'),'record a reason')
         self.assertEqual(self.post(action='exception',note='Intentional integration name',owner=self.user.pk,expires_at='2099-01-01').status_code,302)
         self.assertEqual(self.rows()[0]['status'],'Reviewed exception')
+        self.policy.configuration['components'][0]['max_length']+=1
         self.policy.revision+=1;self.policy.save()
         self.assertTrue(self.rows()[0]['exception_stale'])
         self.assertNotEqual(self.rows()[0]['status'],'Reviewed exception')
@@ -492,7 +496,7 @@ class NamingTests(TestCase):
         from .naming_views import impact
         summary=impact(self.policy)['summaries'][0]
         self.assertEqual(summary['total'],2)
-        self.assertEqual(dict(summary['counts']),{'Compliant':2})
+        self.assertEqual(dict(summary['counts']),{'Name matches (draft)':2})
         self.assertEqual(summary['policy_counts'],{'all':1,'compliant':1,'attention':0,'exceptions':0})
         response=self.client.post(reverse('naming-policy-edit',args=[self.policy.pk]), {'action':'preview'})
         self.assertContains(response,'This draft policy · 1 matching groups')

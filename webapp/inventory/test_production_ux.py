@@ -87,8 +87,8 @@ class ProductionUXTests(TestCase):
         url=reverse('naming-compliance',args=[self.env.pk])
         with patch('inventory.naming_views.analyze',return_value=(self.snapshot,rows,'')):
             response=self.client.get(url)
-        self.assertEqual(response.context['tab_counts'],{'all':8,'compliant':0,'attention':8,'exceptions':0})
-        self.assertEqual(sum(bucket['count'] for bucket in response.context['issue_groups']),8)
+        self.assertEqual(response.context['tab_counts'],{'all':8,'compliant':1,'attention':6,'exceptions':1})
+        self.assertEqual(sum(bucket['count'] for bucket in response.context['issue_groups']),6)
         for bucket in response.context['issue_groups']:
             with patch('inventory.naming_views.analyze',return_value=(self.snapshot,rows,'')):
                 destination=self.client.get(url+bucket['url'])

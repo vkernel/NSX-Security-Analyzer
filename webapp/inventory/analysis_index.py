@@ -16,6 +16,8 @@ LOG = logging.getLogger('inventory.web')
 
 
 def invalidate(snapshot_id):
+    from .models import SnapshotIPReferenceIndex
+    SnapshotIPReferenceIndex.objects.filter(snapshot_id=snapshot_id).delete()
     SnapshotAnalysisIndex.objects.filter(snapshot_id=snapshot_id).delete()
     SnapshotNamingAssessment.objects.filter(snapshot_id=snapshot_id).delete()
     SnapshotVMMembership.objects.filter(snapshot_id=snapshot_id).delete()
@@ -24,7 +26,7 @@ def invalidate(snapshot_id):
 @receiver(post_save, sender=SnapshotRecord)
 def record_changed(sender, instance, raw=False, update_fields=None, **kwargs):
     # Publication uses bulk_create and explicitly prepares the projection once.
-    if not raw and (update_fields is None or {'data','name','view','ordinal','snapshot','snapshot_id'} & set(update_fields)):
+    if not raw and (update_fields is None or {'data','compact','name','view','ordinal','snapshot','snapshot_id'} & set(update_fields)):
         invalidate(instance.snapshot_id)
 
 

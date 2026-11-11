@@ -1,0 +1,16 @@
+{
+  "synthetic": true,
+  "groups": 10000,
+  "vms": 3000,
+  "indexRanges": 10000,
+  "indexVMAddresses": 3000,
+  "coldBuildSeconds": 0.573,
+  "warmLookups": 20,
+  "warmMedianMilliseconds": 5.497,
+  "warmQueryCounts": [
+    7
+  ],
+  "warmGroupRescans": 0,
+  "nsxCalls": 0,
+  "scope": "Local synthetic PostgreSQL measurement; not a production latency prediction. Index construction occurs on first browse, not collection."
+}

@@ -136,11 +136,12 @@ def collect(client, groups, vms, *, probes=None, workers=4, testing=False, resou
         targets = targets[:1]
     metadata = {'version':1, 'scope':'Visible parent-group effective ports and saved VM/VIF/Policy-port attachments; default enforcement point',
                 'vms':{}, 'groups':{}, 'status':'not_applicable', 'checked_at':datetime.now(timezone.utc).isoformat()}
-    stats = {'groups':len(targets), 'requests':0, 'segment_inventories':0, 'reused_probe_pages':0}
+    stats = {'groups':len(targets), 'requests':0, 'segment_inventories':0, 'reused_probe_pages':0,
+             'empty_response_checks':0, 'empty_response_recoveries':0}
     if not targets:
         return metadata, stats
     LOG.info('Network membership collection: groups=%d categories=segments,ports,IP addresses', len(targets))
-    lock, modes, denied = threading.Lock(), {}, set()
+    lock, modes, denied, unavailable_variants = threading.Lock(), {}, set(), {}
     progress = {'completed':0, 'last_log':time.monotonic()}
     def members(task):
         group, endpoint = task
@@ -154,19 +155,47 @@ def collect(client, groups, vms, *, probes=None, workers=4, testing=False, resou
             for row in initial.get('results',[])):
             initial = None  # Need Policy identities, not opaque realized port IDs.
         uri = group['path']+'/members/'+endpoint
+        variant = 'legacy'
         if initial is not None:
             result = page_list(client,uri,initial=initial,initial_size=probe.page_sizes.get(endpoint,1),testing=testing,endpoint=endpoint)
         elif (scope,endpoint) in denied:
             result = {'status':'unavailable','items':[],'reported_count':None,'notes':['Network category API denied for this scope.'],'requests':0}
         else:
             modern = modes.get((scope,endpoint),'modern') == 'modern'
+            variant = 'modern' if modern else 'legacy'
             uri = group['path']+'/members/'+(MODERN[endpoint] if modern else endpoint)
             result = page_list(client,uri,testing=testing,endpoint=endpoint)
             if modern and MODERN[endpoint] != endpoint and result.get('http_status') in (400,404,405,501) and not result['items']:
+                unavailable_variants[(scope,endpoint,MODERN[endpoint])] = result['http_status']
                 failed_requests = result['requests']
                 result = page_list(client,group['path']+'/members/'+endpoint,testing=testing,endpoint=endpoint)
                 result['requests'] += failed_requests
                 modes[(scope,endpoint)] = 'legacy'
+                variant = 'legacy'
+        # A supported endpoint can return an empty typed list even when its
+        # compatibility endpoint has members. Verify only empty network lists;
+        # positive lists retain the existing shared fast path.
+        if (not testing and endpoint in ('logical-switches','logical-ports')
+                and result['status']=='complete' and not result['items']):
+            alternate = endpoint if variant=='modern' else MODERN[endpoint]
+            prior_failure = unavailable_variants.get((scope,endpoint,alternate))
+            check = ({'status':'unavailable','items':[],'requests':0,'http_status':prior_failure}
+                     if prior_failure else page_list(client,group['path']+'/members/'+alternate,endpoint=endpoint))
+            if check.get('http_status') in (400,404,405,501,401,403):
+                unavailable_variants[(scope,endpoint,alternate)] = check['http_status']
+            with lock:
+                stats['empty_response_checks'] += int(not prior_failure)
+                stats['empty_response_recoveries'] += int(bool(check['items']))
+            requests = result['requests']+check['requests']
+            if check['items']:
+                result = check
+                result['compatibility_recovered'] = True
+                # Learn compatibility once per scope/category, before fan-out.
+                modes[(scope,endpoint)] = 'legacy' if variant=='modern' else 'modern'
+            elif check['status']!='complete' and check.get('http_status') not in (400,404,405,501):
+                result['status'] = 'partial'
+                result['notes'].append('Empty network response could not be verified against the compatibility endpoint.')
+            result['requests'] = requests
         if result.get('http_status') in (401,403):
             denied.add((scope,endpoint))
         with lock:
@@ -288,7 +317,11 @@ def _bind(metadata, vms, vifs, ports, *, fabric_vms=()):
         if isinstance(attachment,dict) and isinstance(attachment.get('id'),str) and attachment['id']:
             attachments[attachment['id']].append(port)
     parent_ports = defaultdict(list)
+    unresolved_segments = set()
     for group_path,endpoints in metadata['groups'].items():
+        if not endpoints['logical-ports']['items']:
+            unresolved_segments.update(row['path'] for row in endpoints['logical-switches']['items']
+                if isinstance(row.get('path'),str) and SEGMENT.fullmatch(row['path']))
         for row in endpoints['logical-ports']['items']:
             path = row.get('path')
             if not isinstance(path,str) or not PORT.fullmatch(path):
@@ -331,6 +364,12 @@ def _bind(metadata, vms, vifs, ports, *, fabric_vms=()):
             uncertain.add(owner)
             continue
         port = candidates[0]
+        if port['path'].rsplit('/ports/',1)[0] in unresolved_segments:
+            # A VM is attached to a reported member segment, but neither typed
+            # port list supplied its group edge. Keep unknown, never complete zero
+            # or inferred membership through arbitrary parent AND/OR criteria.
+            invalid_inventory = True
+            uncertain.add(owner)
         for group_path in parent_ports.get(port['path'],[]):
             edge = edges[owner].setdefault(group_path, {'path':group_path, 'name':group_path.rsplit('/',1)[-1],
                 'membership_basis':'network_attachment', 'via':[]})
@@ -368,6 +407,12 @@ def apply(report_groups, metadata, vms):
         if endpoints is None:
             continue
         group['network_membership_version'] = 1
+        if group.get('membership')=='empty' and any(
+                endpoint.get('compatibility_recovered') and endpoint['items'] for endpoint in endpoints.values()):
+            # An authoritative positive list supersedes an earlier empty probe.
+            # Network absence is never used to establish deletion eligibility.
+            group['membership'] = 'nonempty'
+            group['notes'] = ['Network members recovered through a compatibility endpoint; the earlier empty probe was superseded.']
         evidence = group.setdefault('resolved_membership',{'version':1,'endpoints':{}})
         evidence['checked_at'] = metadata['checked_at']
         evidence['endpoints'].update(endpoints)

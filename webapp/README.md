@@ -333,9 +333,16 @@ ranges and `requirements.lock` records the exact tested versions.
 Open Administration to add/edit environments and set **Automatic sync** per manager.
 The default is hourly, including existing environments after this upgrade. The
 first scheduled run is one interval after saving or scheduler initialization.
-Choose 15/30 minutes, hourly, 6/12 hours, daily, weekly, or Manual only. Pausing an
+Choose 15/30 minutes, hourly, 2/3/4/6/8/12 hours, daily, weekly, or Manual only. Pausing an
 environment disables scheduling. Superusers also manage users and permission groups
 from the same workspace design.
+
+For large environments, start with every 3 hours, or every 2 hours when fresher
+snapshots are needed. Choose an interval longer than a typical full collection,
+and account for other environments sharing the workers. These are repeating
+intervals, not fixed times of day. Existing schedules and the hourly default are
+unchanged. Check the separate **Stale data after (hours)** setting when choosing
+a longer interval so expected gaps are not reported as stale.
 
 The Compose `scheduler` service checks persisted PostgreSQL schedules every 15
 seconds independently of the collection workers. Concurrent schedulers serialize

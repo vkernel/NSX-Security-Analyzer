@@ -81,7 +81,8 @@
     dialog.querySelector('.evidence-context')?.remove();
     const context=make('p',null,'evidence-context');
     const environment=document.querySelector('#environment-switcher option:checked')?.textContent || document.querySelector('.environment-fixed a')?.textContent;
-    const snapshot=document.querySelector('[data-snapshot-open]')?.textContent || document.querySelector('.snapshot-context')?.textContent;
+    const snapshotControl=document.querySelector('[data-snapshot-open]') || document.querySelector('.snapshot-context');
+    const snapshot=snapshotControl?.getAttribute('aria-label') || snapshotControl?.textContent;
     context.textContent=[environment,snapshot].filter(Boolean).join(' · ');
     if(context.textContent)heading.after(context);
     dialog.scrollTop=0;

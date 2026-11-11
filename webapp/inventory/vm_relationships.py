@@ -13,6 +13,9 @@ def read(snapshot_id, ordinal, section='summary', page=0, path='', context=False
     if section == 'summary':
         from .resolved_membership import vm_summary
         return {'data': vm_summary(summary['compact'])}
+    if section == 'ip_groups':
+        from .ip_references import read
+        return read(snapshot_id,ordinal,max(0,page))
     if section in ('confirmed_rules', 'confirmed_rule', 'confirmed_via_groups'):
         from .confirmed_references import saved
         return saved(snapshot_id, ordinal, section, page, path)

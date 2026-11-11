@@ -175,12 +175,49 @@ class CurrentMembershipTests(TestCase):
         save(self.env,'vm',self.owner,self.four,'complete',[])
         result=self.client.get(self.url,{'kind':'vm','id':1,'section':'firewall'}).json()
         self.assertEqual([item['name'] for item in result['items']],['Rule 0'])
-        self.assertIn('saved firewall',result['notes'][-1])
+        self.assertIn('saved firewall',' '.join(result['notes']))
         api=reverse('snapshot-data',args=[self.snapshot.pk])
         self.assertEqual(self.client.get(api,{'op':'current-member-rule','id':1,'path':'/infra/rules/1'}).status_code,404)
         self.assertEqual(self.client.get(api,{'op':'current-member-rule','id':1,'path':'/infra/rules/0'}).json()['details']['services'],['ANY'])
         saved=self.client.get(api,{'op':'vm-relationships','id':1,'section':'confirmed_rules'}).json()
         self.assertEqual(saved['items'],[])  # Saved two groups did not include Group 3.
+
+    def test_saved_network_rules_are_deduplicated_paged_and_keep_partial_coverage(self):
+        stamp=timezone.now().isoformat()
+        self.vm.compact.update(network_membership_version=1,network_membership_status='partial',network_membership_checked_at=stamp)
+        self.vm.data['network_groups']=[{'path':GP+'0','name':'Network group','via':[{
+            'interface_id':'vif','port_path':'/infra/segments/s/ports/p','segment_path':'/infra/segments/s'}]}]
+        self.vm.save()
+        save(self.env,'vm',self.owner,self.four,'complete',[])
+        for i in range(30):
+            SnapshotRecord.objects.create(snapshot=self.snapshot,ordinal=50+i,view='dfw',name=f'Rule {i:02}',
+                compact={'path':'/infra/rules/'+str(i)},data={'path':'/infra/rules/'+str(i),'name':f'Rule {i:02}',
+                    'source_groups':[GP+'0'],'destination_groups':[GP+'0'],'scope':[], 'services':['ANY']},columns=[],sort_values={})
+        with patch('inventory.deletion.connection') as connect:
+            first=self.client.get(self.url,{'kind':'vm','id':1,'section':'firewall'}).json()
+            second=self.client.get(self.url,{'kind':'vm','id':1,'section':'firewall','page':1}).json()
+            connect.assert_not_called()
+        self.assertEqual(first['status'],'partial')
+        self.assertEqual(len(first['items']),25);self.assertTrue(first['has_next'])
+        self.assertEqual(len(second['items']),5);self.assertFalse(second['has_next'])
+        self.assertEqual(first['items'][0]['via_groups'],[GP+'0'])
+        self.assertEqual(first['items'][0]['network_checked_at'],stamp)
+        self.assertIn('Direct VM membership and verified interface attachment',first['items'][0]['reference_reason'])
+
+    def test_unverified_network_or_tag_edges_do_not_authorize_rule_inspection(self):
+        self.vm.compact.update(network_membership_version=1,network_membership_status='partial')
+        self.vm.data['network_groups']=[{'path':GP+'20','via':[]},
+            {'path':GP+'21','via':[{'interface_id':'vif','port_path':'/infra/segments/s/ports/p','segment_path':'/infra/segments/other'}]}]
+        self.vm.save()
+        save(self.env,'vm',self.owner,[],'complete',[])
+        for i in (20,21):
+            SnapshotRecord.objects.create(snapshot=self.snapshot,ordinal=50+i,view='dfw',name=str(i),
+                compact={'path':'/infra/rules/'+str(i)},data={'path':'/infra/rules/'+str(i),'source_groups':[GP+str(i)]},columns=[],sort_values={})
+            response=self.client.get(reverse('snapshot-data',args=[self.snapshot.pk]),
+                {'op':'current-member-rule','id':1,'path':'/infra/rules/'+str(i)})
+            self.assertEqual(response.status_code,404)
+        result=self.client.get(self.url,{'kind':'vm','id':1,'section':'firewall'}).json()
+        self.assertEqual(result['items'],[]);self.assertEqual(result['status'],'partial')
 
 
 class AssociationPagingTests(SimpleTestCase):

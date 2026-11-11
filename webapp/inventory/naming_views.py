@@ -48,21 +48,26 @@ def impact(policy):
         transitions = Counter()
         for row in after:
             old = previous.get(row['identity'], {})
-            transitions[(old.get('status', 'New group'), row['status'])] += 1
+            transitions[(old.get('outcome_label',old.get('status','New group')), row.get('outcome_label',row['status']))] += 1
             if len(examples) < 40 and (old.get('proposed') != row['proposed'] or old.get('status') != row['status'] or row['status'] != 'Compliant'):
-                examples.append({'environment': env.name, 'name': row['name'], 'before': old.get('proposed', ''), 'after': row['proposed'], 'status': row['status'], 'reasons': row['reasons']})
+                examples.append({'environment': env.name, 'name': row['name'], 'before': old.get('proposed', ''), 'after': row['proposed'], 'status': row.get('outcome_label',row['status']), 'reasons': row['reasons']})
         policy_rows = [row for row in after if str(policy.pk) in row.get('matching_policy_ids', [])]
+        state = naming.assessment_state(snapshot,after,warning,draft=True)
         summaries.append({'environment': env, 'counts': naming.counts(after), 'total': len(after), 'warning': warning,
                           'policy_counts': naming.queue_counts(policy_rows),
+                          'snapshot':snapshot,'assessment_state':state,'compliant_label':naming.compliant_label(state),
+                          'review_count':sum(row.get('review_required',False) for row in policy_rows),
                           'new_conflicts': transitions[('Compliant', 'Ambiguous policy')],
                           'transitions': [{'before': a, 'after': b, 'count': count} for (a, b), count in sorted(transitions.items())]})
         stamp.append([env.pk, str(old_snapshot.pk) if old_snapshot else '', str(snapshot.pk) if snapshot else '', warning,
-                      [(r['identity'], r['baseline'], r['status'], r['proposed']) for r in after]])
+                      [(r['identity'], r['baseline'], r['status'], r['proposed'],r['decision_stamp'],
+                        r.get('review_required',False),r.get('coverage_status')) for r in after]])
     # Includes other policy and mapping edits even if they currently produce identical names.
     fingerprint = naming.digest([policy.revision, policy.draft, stamp,
         list(NamingPolicy.objects.order_by('pk').values('pk', 'revision')),
         list(NamingScopeBinding.objects.order_by('pk').values('policy_id', 'environment_id', 'scopes', 'draft_scopes'))])
-    return {'summaries': summaries, 'examples': examples, 'fingerprint': fingerprint}
+    return {'summaries': summaries, 'examples': examples, 'fingerprint': fingerprint,
+            'available':any(summary['assessment_state']!='unavailable' for summary in summaries)}
 
 
 @login_required
@@ -193,11 +198,12 @@ def csv_response(rows):
     response = HttpResponse(content_type='text/csv; charset=utf-8')
     response['Content-Disposition'] = 'attachment; filename="naming-assessment.csv"'
     writer = csv.writer(response)
-    writer.writerow(['group_path', 'group_type', 'current_name', 'proposed_name', 'policy', 'status', 'issues', 'owner', 'progress', 'ticket', 'exception_expiry'])
+    writer.writerow(['group_path', 'group_type', 'current_name', 'proposed_name', 'policy', 'status', 'issues', 'owner', 'progress', 'ticket', 'exception_expiry','evidence_quality'])
     for row in rows:
-        values = [row['identity'], row['group_type'], row['name'], row['proposed'], row['policy'].name if row['policy'] else '', row['status'], '; '.join(row['reasons'])]
+        values = [row['identity'], row['group_type'], row['name'], row['proposed'], row['policy'].name if row['policy'] else '', row.get('outcome_label',row['status']), '; '.join(row['reasons'])]
         proposal = row.get('proposal')
         values.extend([proposal.owner.username if proposal and proposal.owner else '', row.get('progress_label',''), proposal.workflow.get('ticket','') if proposal else '', str(proposal.expires_at or '') if proposal else ''])
+        values.append(row.get('coverage_status','ready'))
         writer.writerow(["'" + value if value.lstrip().startswith(('=', '+', '-', '@', '\t', '\r')) else value for value in values])
     return response
 
@@ -330,7 +336,8 @@ def compliance(request, pk):
     query, status, policy_id = request.GET.get('q', '').strip(), request.GET.get('status', ''), request.GET.get('policy', '')
     owner_filter = request.GET.get('owner', '')
     tab = request.GET.get('tab', 'attention')
-    if tab not in ('attention','compliant','exceptions','all'): tab = 'attention'
+    if tab not in ('attention','compliant','exceptions','review','all'): tab = 'attention'
+    assessment_state = naming.assessment_state(snapshot,rows,warning,simulation=simulation)
     groups = {}
     policy_names = {str(policy.pk):policy for policy in NamingPolicy.objects.filter(enabled=True, removed_at__isnull=True)}
     for row in rows:
@@ -341,16 +348,23 @@ def compliance(request, pk):
                 and (not policy_id or policy_id in r.get('matching_policy_ids', []))
                 and (not owner_filter or r['proposal'] and str(r['proposal'].owner_id) == owner_filter)]
     totals = naming.counts(scoped)
-    scoped = [r for r in scoped if not status or r['status'] == status]
+    outcome_filters = [{'value':value,'label':naming.compliant_label(assessment_state) if value=='Compliant' else value}
+                       for value in sorted({row['status'] for row in scoped})]
     tab_counts = naming.queue_counts(scoped)
-    filtered = [r for r in scoped if naming.in_queue(r, tab)]
+    review_count = sum(row.get('review_required',False) for row in scoped)
+    narrowed = [r for r in scoped if not status or r['status'] == status]
+    filtered = [r for r in narrowed if naming.in_queue(r, tab)]
+    if status:
+        if tab=='review': review_count=len(filtered)
+        else: tab_counts[tab]=len(filtered)
     navigation = []
-    for key, label in [('attention', 'Needs attention'), ('compliant', 'Compliant'), ('exceptions', 'Exceptions'), ('all', 'All groups')]:
+    for key, label in [('attention', 'Needs attention'), ('compliant', naming.compliant_label(assessment_state)), ('exceptions', 'Exceptions'), ('review','Review needed'), ('all', 'All groups')]:
         link_params = request.GET.copy()
         link_params['tab'] = key
         for transient in ('page', 'export'):
             link_params.pop(transient, None)
-        navigation.append({'key': key, 'label': label, 'count': tab_counts[key], 'url': '?' + link_params.urlencode()})
+        if key!=tab: link_params.pop('status',None)
+        navigation.append({'key': key, 'label': label, 'count':None if assessment_state=='unavailable' else review_count if key=='review' else tab_counts[key], 'url': '?' + link_params.urlencode()})
     remedies = {'Ambiguous policy': 'Resolve policy overlap', 'No applicable policy': 'Review policy coverage',
                 'Invalid value': 'Inspect invalid values', 'Missing required tags': 'Review missing components',
                 'Duplicate proposed name': 'Compare colliding groups', 'Name differs': 'Review name corrections',
@@ -389,10 +403,13 @@ def compliance(request, pk):
         if not request.user.is_superuser and row['status'] in ('Ambiguous policy','No applicable policy'):
             row['next_url'] = reverse('collection-coverage', args=[environment.pk])
             row['next_action'] = 'Review evidence coverage'
-    if request.GET.get('export') == 'csv': return csv_response(filtered)
+    if request.GET.get('export') == 'csv':
+        if assessment_state=='unavailable': return HttpResponse('Naming assessment unavailable. Restore or collect source evidence before exporting.',status=409)
+        return csv_response(filtered)
     page = Paginator(filtered, table_page_size(request)).get_page(request.GET.get('page'))
     params = request.GET.copy();params.pop('page', None);params.pop('export', None)
     return render(request, 'inventory/naming_compliance.html', {'environment': environment, 'snapshot': snapshot, 'page': page,
+        'assessment_state':assessment_state,'review_count':review_count,'outcome_filters':outcome_filters,
         'tab':tab, 'tab_counts':tab_counts, 'naming_navigation': navigation, 'counts_filtered':bool(query or group_type or status or policy_id or owner_filter), 'selected_ids':request.POST.getlist('selected'), 'submitted_action':request.POST.get('action', ''), 'issue_groups':list(groups.values()), 'table_total': len(rows), 'group_type': group_type, 'warning': warning, 'totals': totals, 'error': error, 'query': query, 'status': status, 'policy_id': policy_id,
         'proposal_form': proposal_form, 'simulation': simulation, 'owner_filter': owner_filter,
         'owners': get_user_model().objects.filter(is_active=True, is_staff=True).order_by('username'),
@@ -475,5 +492,5 @@ def naming_example(request):
     for component in row['components']:
         if row['group_type'] == 'static' and component['issue'] == 'Missing required tags':
             component['help'] = 'Prepare and review a value for ' + component['scope'] + ' in Naming compliance → All groups.'
-    return JsonResponse({'name': row['name'], 'environment': environment.name, 'proposed': row['proposed'], 'status': row['status'],
+    return JsonResponse({'name': row['name'], 'environment': environment.name, 'proposed': row['proposed'], 'status': naming.compliant_label('provisional' if warning else 'draft') if row['status']=='Compliant' else row['status'],
                          'components': row['components'], 'warning': warning, 'message': message})

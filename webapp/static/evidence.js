@@ -71,15 +71,36 @@
     return root;
   };
   window.networkAttachmentCell=item=>{
-    const root=make('div');root.className='evidence-reference-lines';
-    for(const via of item.via||[]){const entry=make('div');entry.append(make('span','Interface '+via.interface_id));
-      for(const path of [via.port_path,via.segment_path]){const code=make('code',path);code.className='evidence-path';entry.append(code);}root.append(entry);}
+    const root=make('div');root.className='evidence-attachments';
+    for(const via of item.via||[]){const entry=make('dl');entry.className='evidence-attachment';
+      for(const [label,value] of [['Interface',via.interface_id],['Port',via.port_path],['Segment',via.segment_path]]){
+        const term=make('dt',label+' '),description=make('dd'),code=make('code',value||'Not recorded');code.className='evidence-path';description.append(code);entry.append(term,description);
+      }root.append(entry);}
     if(!root.children.length)root.append(make('span','Direct VM association'));
     return root;
   };
-  window.evidenceTable=({title,columns,load,current=()=>true,wide=false,empty='No relationships recorded in this snapshot.'})=>{
+  window.ipReferenceCell=item=>{
+    const root=make('div');root.className='evidence-reference-lines';
+    for(const [index,match] of (item.ip_matches||[]).entries()){
+      const line=make('div');line.append(make('span',match.ip+' → '+match.entry));
+      for(const path of match.via_groups||[]){const code=make('code','Via '+path);code.className='evidence-path';line.append(code);}
+      if(index<3)root.append(line);
+      else{let more=root.querySelector('details');if(!more){more=make('details');more.append(make('summary','More IP matches'));root.append(more);}more.append(line);}
+    }
+    if(item.ip_matches_truncated)root.append(make('small','Additional IP matches omitted here; inspect the saved group definition for all entries.'));
+    if(item.ip_checked_at)root.append(make('small','Saved '+(window.workspaceTimeText?window.workspaceTimeText(item.ip_checked_at):item.ip_checked_at)));
+    return root;
+  };
+  const memberNotes=new Map([
+    ['VMs linked through effective member ports and saved interface attachments; not direct VM members.',''],
+    ['VM members from direct associations for the collected visible VM inventory; default enforcement point.','Collected VM inventory; default enforcement point.'],
+    ['NSX reads are not atomic. Membership changes during collection can affect this list.','Membership may change during collection.'],
+    ['Some VM identities or association lookups are incomplete; missing members remain unknown.','Some VM lookups are incomplete; missing members are unknown.'],
+    ['Detailed lists are retrieved separately from collection. Collected identities are retained; missing members remain unknown.','Detailed list not collected; missing members are unknown.']
+  ]);
+  window.evidenceTable=({title,columns,load,current=()=>true,wide=false,compactMembership=false,countLabel='confirmed',empty='No relationships recorded in this snapshot.'})=>{
     const root=make('section'),heading=make('h3',title),status=make('p'),coverage=make('p'),content=make('div'),failure=make('div'),pager=make('nav'),previous=make('button','Previous'),next=make('button','Next');
-    coverage.className='evidence-note';coverage.hidden=true;
+    coverage.className=compactMembership?'evidence-note evidence-member-metadata':'evidence-note';coverage.hidden=true;
     root.className='evidence-table-section';status.className='evidence-table-status';status.setAttribute('role','status');content.className='evidence-table-content';pager.className='evidence-pagination';pager.setAttribute('aria-label',title+' pages');previous.type=next.type='button';previous.setAttribute('aria-label','Previous '+title.toLowerCase());next.setAttribute('aria-label','Next '+title.toLowerCase());pager.append(previous,next);pager.hidden=true;root.append(heading,status,content,pager);
     root.insertBefore(coverage,content);
     failure.hidden=true;root.insertBefore(failure,content);
@@ -88,15 +109,19 @@
       if(busy||!current())return;busy=true;const token=++version;root.setAttribute('aria-busy','true');failure.hidden=true;status.textContent='Loading '+title.toLowerCase()+'…';previous.disabled=next.disabled=true;
       try{
         const data=await load(target);if(token!==version||!current())return;page=target;loaded=true;
-        const scroll=make('div'),table=make('table'),caption=make('caption',title),head=make('thead'),labels=make('tr'),rows=make('tbody');scroll.className='evidence-table-scroll';scroll.tabIndex=0;scroll.setAttribute('role','region');scroll.setAttribute('aria-label',title+' table');table.className='evidence-table'+(wide?' evidence-firewall-table':'');
+        const scroll=make('div'),table=make('table'),caption=make('caption',title),head=make('thead'),labels=make('tr'),rows=make('tbody');scroll.className='evidence-table-scroll';scroll.tabIndex=0;scroll.setAttribute('role','region');scroll.setAttribute('aria-label',title+' table');table.className='evidence-table'+(wide?' evidence-firewall-table':'')+(columns.some(column=>[window.networkAttachmentCell,window.ipReferenceCell].includes(column.cell))?' evidence-network-table':'');
         for(const column of columns){const th=make('th',column.label);th.scope='col';if(column.width)th.style.width=column.width;labels.append(th);}head.append(labels);
         for(const item of data.items){const row=make('tr');for(const column of columns){const td=make('td'),value=column.cell(item);if(value?.nodeType)td.append(value);else td.textContent=value==null?'Not recorded':String(value);row.append(td);}rows.append(row);}
         const states={complete:'Complete',partial:'Partial',configured:'Configured',not_applicable:'Not applicable',unavailable:'Unavailable',not_collected:'Not collected',not_supported:'Not supported'};
         const missing=data.status&&data.status!=='complete';
         if(!data.items.length){const row=make('tr'),td=make('td',data.empty_message||(data.status==='not_applicable'?'This member category does not apply to the saved definition.':missing?(data.source==='current_nsx'?'Membership is not established. Refresh to check current NSX.':data.status==='not_collected'?(data.notes?.length?'Member list was not collected; see the collection notes.':'Member identities were not collected in this snapshot. Run a new collection.'):'No member identities saved for this category; membership is not established.'):empty));td.colSpan=columns.length;td.className='evidence-table-empty';row.append(td);rows.append(row);}
         table.append(caption,head,rows);scroll.append(table);content.replaceChildren(scroll);status.textContent=data.items.length?`${page*25+1}–${page*25+data.items.length} shown · Page ${page+1}`:'No entries recorded';hasNext=!!data.has_next;pager.hidden=!page&&!hasNext;previous.disabled=!page;next.disabled=!hasNext;
-        if(data.status){const count=data.loaded_count!=null?`${data.loaded_count} loaded${data.reported_count!=null?' · '+data.reported_count+' reported by NSX':data.can_continue?' · more available':''}`:data.status==='partial'?(data.saved_count??data.items.length)+' confirmed; total unknown':'';status.textContent=(states[data.status]||data.status)+(count?' · '+count:'')+' · '+status.textContent;status.dataset.membershipStatus=data.status;}
-        coverage.textContent=[data.source==='current_nsx'?'Current NSX':data.source==='saved_snapshot'?'Saved snapshot':'',data.stale?'Stale observation':'',data.saved_count!=null?`${data.saved_count} ${data.source==='current_nsx'?'confirmed':'saved'}${data.reported_count!=null?' · '+data.reported_count+' reported by NSX':''}`:'',data.checked_at?(data.source==='current_nsx'?'Checked ':'Collected ')+(window.workspaceTimeText?window.workspaceTimeText(data.checked_at):data.checked_at):'',...(data.notes||[])].filter(Boolean).join(' · ');coverage.hidden=!coverage.textContent;
+        if(data.status){const total=data.saved_count??data.items.length,unit=total===1&&['matches','references'].includes(countLabel)?(countLabel==='matches'?'match':'reference'):countLabel;
+          const count=data.loaded_count!=null?`${data.loaded_count} loaded${data.reported_count!=null?' · '+data.reported_count+' reported by NSX':data.can_continue?' · more available':''}`:data.status==='partial'?total+' '+unit+'; total unknown':'';status.textContent=(states[data.status]||data.status)+(count?' · '+count:'')+' · '+status.textContent;status.dataset.membershipStatus=data.status;}
+        const notes=compactMembership?[...new Set((data.notes||[]).map(note=>memberNotes.has(note)?memberNotes.get(note):note))]:(data.notes||[]);
+        const repeatCount=compactMembership&&(data.loaded_count!=null||data.status==='partial');
+        const counts=repeatCount?(data.loaded_count==null&&data.reported_count!=null?data.reported_count+' reported by NSX':''):data.saved_count!=null?`${data.saved_count} ${data.source==='current_nsx'?'confirmed':'saved'}${data.reported_count!=null?' · '+data.reported_count+' reported by NSX':''}`:'';
+        coverage.textContent=[data.source==='current_with_saved_references'?'Current VM associations + saved attachment/IP evidence':data.source==='current_with_saved_network'?'Current VM associations + saved attachments':data.source==='current_nsx'?'Current NSX':data.source==='saved_snapshot'?'Saved snapshot':'',data.stale?'Stale observation':'',counts,data.checked_at?(['current_nsx','current_with_saved_network','current_with_saved_references'].includes(data.source)?'Checked ':'Collected ')+(window.workspaceTimeText?window.workspaceTimeText(data.checked_at):data.checked_at):'',...notes].filter(Boolean).join(' · ');coverage.hidden=!coverage.textContent;
       }catch(error){if(current()){status.textContent='Unable to load '+title.toLowerCase()+(loaded?'; showing the previous loaded page.':'');const targetNode=loaded?failure:content;targetNode.hidden=false;window.evidenceState(targetNode,error.message,()=>render(target));}}
       finally{busy=false;root.removeAttribute('aria-busy');previous.disabled=!page;next.disabled=!hasNext;if(reloadPending){reloadPending=false;if(!root.closest('[hidden]'))render(0);}}
     }
@@ -178,7 +203,7 @@
       {label:'State',cell:item=>window.evidenceBadge(item.disabled===true?'Disabled':item.disabled===false?'Enabled':null)},
       {label:'Matched fields',cell:item=>lines(item.matched_fields?.length?item.matched_fields:['Not retained'])},
       {label:referenceLabel,cell:item=>{const root=make('div');root.className='evidence-reference-lines';const matches=item.field_matches||[],groups=item.matched_groups||[];const known=new Set(matches.map(match=>match.group.path)),shown=[...matches,...groups.filter(group=>!known.has(group.path)).map(group=>({field:matches.length?'Field not retained':'',group}))];if(shown.length){for(const match of shown.slice(0,3)){const entry=make('div'),link=make('button',match.group.name||match.group.path);entry.className='evidence-firewall-match';link.type='button';link.className='evidence-object-link';link.title=match.group.path;link.onclick=()=>window.openRelatedEvidence(body,{path:match.group.path},match.group.name||match.group.path);if(match.field)entry.append(make('small',match.field));entry.append(link);root.append(entry);}}if(shown.length>3||item.groups_truncated)root.append(make('small','More groups in rule inspection'));if(!groups.length)root.append(make('span','Not retained'));return root;}},
-      {label:'Reason / limits',cell:item=>lines([item.reference_reason||'Not retained',item.field_note].filter(Boolean))},
+      {label:'Reason / limits',cell:item=>{const root=lines([item.reference_reason||'Not retained',item.network_checked_at?'Attachment collected '+(window.workspaceTimeText?window.workspaceTimeText(item.network_checked_at):item.network_checked_at):'',item.field_note].filter(Boolean));if(item.ip_matches?.length)root.append(window.ipReferenceCell(item));return root;}},
       {label:'Details',cell:item=>{const button=make('button','Inspect');button.type='button';button.setAttribute('aria-label','Inspect references for '+(item.name||item.path));button.onclick=()=>inspect(item,button);return button;}}
     ].map((column,index)=>({...column,width:[4,7,9,17,4,4,6,7,8,12,16,6][index]+'%'}));
   };
@@ -211,11 +236,14 @@
       ['ip-addresses','IP addresses','IP members'],['logical-ports','Ports','Resolved port members'],['logical-switches','Segments','Resolved segment members']];
     const entries=categoriesList.map(([section,label,title])=>{
       const saved=page=>window.reportData(null,{op:'group-members',path:row.path,section,page});
-      const table=window.evidenceTable({title,columns:section==='network-virtual-machines'?[...columns,{label:'Interface attachment',cell:window.networkAttachmentCell}]:columns,current,empty:section==='network-virtual-machines'?'No verified VM attachment links were saved.':'NSX returned no members for this category.',load:page=>section==='virtual-machines'?source.load('',page,()=>saved(page)):saved(page)});
+      const attachedColumns=[{label:'VM / identity',cell:item=>{
+        const object=columns[0].cell(item),identity=make('code',item.external_id||item.id||item.identity||'Not recorded');identity.className='evidence-member-identity';object.append(identity);return object;
+      }},{label:'Network attachment',cell:window.networkAttachmentCell}];
+      const table=window.evidenceTable({title,columns:section==='network-virtual-machines'?attachedColumns:columns,current,compactMembership:true,empty:section==='network-virtual-machines'?'No verified VM attachment links were saved.':'NSX returned no members for this category.',load:page=>section==='virtual-machines'?source.load('',page,()=>saved(page)):saved(page)});
       if(section==='virtual-machines'){table.panel.prepend(source.panel);source.register(table);}
       return {...table,label,show:()=>queueMicrotask(table.show)};
     });
-    const note=make('p',row.network_membership_version===1?'VMs lists direct VM membership. Attached VMs lists saved VM interfaces linked to effective member ports. A segment-based group can have attached VMs while its direct VM count is zero.':'VM members can use saved snapshot or current NSX evidence. IP, port and segment lists use saved evidence and do not establish VM membership.');note.className='evidence-note';note.dataset.evidenceSection='members';
+    const note=make('p',row.network_membership_version===1?'VMs: direct membership · Attached VMs: saved interface links.':'VMs: saved or current NSX · IPs, ports and segments: saved evidence only; not VM membership.');note.className='evidence-member-help';note.dataset.evidenceSection='members';
     const categories=window.evidenceCategories(entries);categories.dataset.evidenceSection='members';categories.querySelector('nav').setAttribute('aria-label','Member categories');
     body.append(note,categories);
   };

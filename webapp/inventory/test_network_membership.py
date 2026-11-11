@@ -104,6 +104,88 @@ class NetworkCollectionTests(SimpleTestCase):
         client.get.assert_not_called()
         self.assertEqual(metadata['status'],'not_applicable')
 
+    def test_empty_modern_ports_recover_legacy_members_once_then_share_inventory(self):
+        client,groups,vms,vifs,ports,calls=synthetic_inventory(12)
+        original=client.get.side_effect
+        def get(path,params=None):
+            if path.endswith('/members/segment-ports'):
+                calls[path]+=1
+                return {'results':[],'result_count':0}
+            return original(path,params)
+        client.get.side_effect=get
+        metadata,stats=collect(client,groups,vms,resources=[dict(p,resource_type='SegmentPort') for p in ports])
+        self.assertEqual(metadata['status'],'complete')
+        self.assertEqual(len(metadata['vms'][vms[0]['path']]['items']),12)
+        self.assertEqual(stats['empty_response_recoveries'],1)
+        self.assertEqual(sum(n for p,n in calls.items() if p.endswith('/members/segment-ports')),1)
+        self.assertEqual(calls['/api/v1/fabric/vifs'],1)
+        self.assertEqual(stats['segment_inventories'],0)
+        self.assertEqual(stats['reused_segment_inventories'],44)
+
+    def test_empty_modern_segments_and_empty_reused_legacy_ports_are_verified(self):
+        client,groups,vms,vifs,ports,calls=synthetic_inventory(1)
+        original=client.get.side_effect
+        def get(path,params=None):
+            if path.endswith('/members/segments'):
+                calls[path]+=1
+                return {'results':[],'result_count':0}
+            return original(path,params)
+        client.get.side_effect=get
+        probe=Mock(pages={'logical-ports':{'results':[],'result_count':0}},page_sizes={'logical-ports':1000})
+        metadata,stats=collect(client,groups,vms,probes={groups[0]['path']:probe})
+        self.assertEqual(len(metadata['groups'][groups[0]['path']]['logical-switches']['items']),44)
+        self.assertEqual(len(metadata['vms'][vms[0]['path']]['items']),1)
+        self.assertEqual(stats['empty_response_recoveries'],2)
+
+    def test_recovered_positive_lists_supersede_an_earlier_empty_cleanup_probe(self):
+        client,groups,vms,vifs,ports,calls=synthetic_inventory(1)
+        original=client.get.side_effect
+        def get(path,params=None):
+            if path.endswith(('/members/logical-switches','/members/logical-ports','/members/ip-addresses')):
+                calls[path]+=1
+                return {'results':[],'result_count':0}
+            return original(path,params)
+        client.get.side_effect=get
+        resources=groups+[dict(port,resource_type='SegmentPort') for port in ports]
+        with patch.object(collector,'verified_configuration_search',return_value=(resources,{'mode':'all_types'})), \
+             patch.object(collector,'audit_dfw',return_value=({'policies':[],'rules':[],'errors':[]},[])):
+            report=collector.audit(client,workers=4)
+        self.assertEqual(report['objects'][0]['membership'],'nonempty')
+        self.assertEqual(report['inventory']['groups'][0]['membership'],'nonempty')
+        self.assertEqual(collector.vm_inventory_rows(report)[0]['network_group_count'],1)
+
+    def test_contradictory_empty_port_lists_remain_unknown_without_inventing_parent_edges(self):
+        client,groups,vms,vifs,ports,calls=synthetic_inventory(1)
+        original=client.get.side_effect
+        def get(path,params=None):
+            if path.endswith(('/members/segment-ports','/members/logical-ports')):
+                calls[path]+=1
+                return {'results':[],'result_count':0}
+            return original(path,params)
+        client.get.side_effect=get
+        metadata,stats=collect(client,groups,vms)
+        self.assertEqual(metadata['status'],'partial')
+        self.assertEqual(metadata['vms'][vms[0]['path']]['status'],'partial')
+        self.assertEqual(metadata['vms'][vms[0]['path']]['items'],[])
+        self.assertEqual(calls[groups[0]['path']+'/members/logical-ports'],1)
+
+    def test_empty_compatibility_permission_failure_is_partial_and_probed_once(self):
+        client,groups,vms,vifs,ports,calls=synthetic_inventory(12)
+        original=client.get.side_effect
+        def get(path,params=None):
+            if path.endswith('/members/segment-ports'):
+                calls[path]+=1
+                return {'results':[],'result_count':0}
+            if path.endswith('/members/logical-ports'):
+                calls[path]+=1
+                raise collector.AuditError('denied',status_code=403)
+            return original(path,params)
+        client.get.side_effect=get
+        metadata,stats=collect(client,groups,vms)
+        self.assertEqual(metadata['status'],'partial')
+        self.assertEqual(sum(n for p,n in calls.items() if p.endswith('/members/logical-ports')),1)
+        self.assertTrue(all(e['logical-ports']['status']=='partial' for e in metadata['groups'].values()))
+
     def test_testing_samples_one_network_group_and_never_expands_all_groups(self):
         client,groups,vms,vifs,ports,calls=synthetic_inventory(50)
         metadata,stats=collect(client,groups,vms[:1],testing=True)
@@ -200,6 +282,69 @@ class NetworkCollectionTests(SimpleTestCase):
 
 
 class NetworkSnapshotTests(TestCase):
+    def test_recovered_empty_port_response_reaches_vm_counts_members_and_firewall(self):
+        from .models import Environment,Snapshot,SnapshotRecord
+        from .snapshot_index import build
+        from .vm_relationships import read as vm_read
+        from .group_memberships import read as group_read
+        good,_=synthetic_report(1,reuse_search_ports=True)
+        client,groups,vms,vifs,ports,calls=synthetic_inventory(1)
+        original=client.get.side_effect
+        def get(path,params=None):
+            if path.endswith('/members/segment-ports'):
+                calls[path]+=1
+                return {'results':[],'result_count':0}
+            return original(path,params)
+        client.get.side_effect=get
+        resources=groups+[dict(port,resource_type='SegmentPort') for port in ports]
+        with patch.object(collector,'verified_configuration_search',return_value=(resources,{'mode':'all_types'})), \
+             patch.object(collector,'audit_dfw',return_value=(deepcopy(good['dfw']),[])):
+            report=collector.audit(client,workers=4)
+        env=Environment.objects.create(name='Recovered network',slug='recovered',manager='https://recovered.invalid')
+        snapshot=Snapshot.objects.create(environment=env,generated_at=timezone.now(),report=report)
+        with patch('inventory.deletion.connection',side_effect=AssertionError('No live NSX for saved browsing')):
+            build(snapshot)
+            vm=SnapshotRecord.objects.get(snapshot=snapshot,view='vms',name='Synthetic VM 0')
+            self.assertEqual(vm.compact['resolved_group_count'],1)
+            self.assertEqual(len(group_read(snapshot.pk,GP+'network-0','network-virtual-machines')['items']),2)
+            self.assertEqual(len(vm_read(snapshot.pk,vm.ordinal,'confirmed_rules')['items']),1)
+        self.assertEqual(report['membership_evidence']['network']['diagnostics']['empty_response_recoveries'],1)
+
+    def test_current_firewall_keeps_saved_network_links_and_inspection_with_separate_timestamp(self):
+        from django.contrib.auth import get_user_model
+        from django.test import Client
+        from django.urls import reverse
+        from .models import Environment,Snapshot,SnapshotRecord,MembershipRelation
+        from .snapshot_index import build
+        from .current_membership import subject,save
+        from .confirmed_references import saved
+        report,_=synthetic_report(1,reuse_search_ports=True)
+        env=Environment.objects.create(name='Mixed references',slug='mixed',manager='https://mixed.invalid')
+        snapshot=Snapshot.objects.create(environment=env,generated_at=timezone.now(),report=report)
+        build(snapshot)
+        vm=SnapshotRecord.objects.get(snapshot=snapshot,view='vms',name='Synthetic VM 0')
+        owner=subject(snapshot,'vm',vm.ordinal)
+        save(env,'vm',owner,[],'complete',[])
+        browser=Client();browser.force_login(get_user_model().objects.create_user('mixed-operator',is_staff=True))
+        with patch('inventory.deletion.connection',side_effect=AssertionError('Cached browsing must not contact NSX')):
+            result=browser.get(reverse('current-membership',args=[snapshot.pk]),
+                {'kind':'vm','id':vm.ordinal,'section':'firewall'}).json()
+            self.assertEqual(len(result['items']),1)
+            self.assertTrue(result['has_saved_network'])
+            self.assertEqual(result['source'],'current_with_saved_network')
+            self.assertEqual(result['network_checked_at'],vm.compact['network_membership_checked_at'])
+            self.assertEqual(result['items'][0]['network_checked_at'],result['network_checked_at'])
+            self.assertIn('Attachment evidence is saved',result['items'][0]['reference_reason'])
+            detail=browser.get(reverse('snapshot-data',args=[snapshot.pk]),
+                {'op':'current-member-rule','id':vm.ordinal,'path':result['items'][0]['path']})
+            self.assertEqual(detail.status_code,200)
+            evidence=detail.json()['details']['membership_evidence'][GP+'network-0']
+            self.assertEqual(evidence['membership_source'],'saved_snapshot')
+            self.assertEqual(evidence['membership_basis'],'network_attachment')
+            self.assertEqual(len(saved(snapshot.pk,vm.ordinal,'confirmed_rules')['items']),1)
+        self.assertEqual(MembershipRelation.objects.count(),0) # Saved edges never become current observations.
+        snapshot.refresh_from_db();self.assertEqual(snapshot.report,report)
+
     def test_saved_vm_counts_group_categories_and_firewall_references_agree_without_nsx(self):
         from .models import Environment,Snapshot,SnapshotRecord
         from .snapshot_index import build

@@ -33,17 +33,41 @@ def with_component_values(group, proposal, *, simulation=False):
 
 def queue_counts(rows):
     return {
-        'attention': sum(bool(row['needs_attention']) for row in rows),
-        'compliant': sum(row['status'] == 'Compliant' and not row['needs_attention'] for row in rows),
-        'exceptions': sum(row['status'] == 'Reviewed exception' and not row['needs_attention'] for row in rows),
+        'attention': sum(row['status'] not in ('Compliant','Reviewed exception') for row in rows),
+        'compliant': sum(row['status'] == 'Compliant' for row in rows),
+        'exceptions': sum(row['status'] == 'Reviewed exception' for row in rows),
         'all': len(rows),
     }
 
 
 def in_queue(row, tab):
-    return (tab == 'all' or tab == 'attention' and row['needs_attention']
-            or tab == 'compliant' and row['status'] == 'Compliant' and not row['needs_attention']
-            or tab == 'exceptions' and row['status'] == 'Reviewed exception' and not row['needs_attention'])
+    return (tab == 'all' or tab == 'attention' and row['status'] not in ('Compliant','Reviewed exception')
+            or tab == 'compliant' and row['status'] == 'Compliant'
+            or tab == 'exceptions' and row['status'] == 'Reviewed exception'
+            or tab == 'review' and row.get('review_required',False))
+
+
+def assessment_state(snapshot, rows, warning, *, simulation=False, draft=False):
+    if not snapshot or snapshot.browsing_status!='ready' or not rows and warning:
+        return 'unavailable'
+    return 'provisional' if warning else 'draft' if draft or simulation else 'ready'
+
+
+def compliant_label(state):
+    return 'Name matches (provisional)' if state=='provisional' else 'Name matches (draft)' if state=='draft' else 'Compliant'
+
+
+def active_policy_stamp(row, policies, bindings):
+    """Only the winning active rules and effective tag scopes affect this group."""
+    matching = set(row['matching_policy_ids'])
+    rules = []
+    for policy in policies:
+        if str(policy.pk) not in matching:
+            continue
+        effective_scopes = {c['field']:scope(c,bindings.get(policy.pk,{}))
+            for c in policy.configuration.get('components',[]) if c.get('source')=='tag'}
+        rules.append((policy.pk,policy.environment_id,policy.configuration,effective_scopes))
+    return 'v2:'+digest(sorted(rules,key=lambda rule:rule[0]))[:61]
 
 
 def _explicit_single_ip_value(group):
@@ -186,7 +210,7 @@ def inventory(environment, snapshot=None):
             if member['kind'] == 'ExternalIDExpression' and member['member_type'] == 'VirtualMachine':
                 tags = vm_tags.get(member['value'])
                 group['supporting'].append({'source': member['value'], 'detail': 'Member VM tags: suggestion only' if tags is not None else 'Member VM evidence unavailable', 'tags': tags or []})
-    warning = 'Inventory coverage has warnings; results are provisional and cannot establish compliance.' if snapshot.inventory_warning else ''
+    warning = 'Inventory coverage has warnings. Name matches are provisional; compliance and workflow resolution are not confirmed.' if snapshot.inventory_warning else ''
     if not groups: warning = 'No indexed groups found. Check collection coverage and browsing preparation.'
     return snapshot, groups, warning
 
@@ -316,18 +340,20 @@ def evaluate(group, policies, bindings):
 
 def assess(environment, replacement=None, simulation=False):
     snapshot = inventory_snapshot(environment)
-    policies = list(NamingPolicy.objects.filter(enabled=True, removed_at__isnull=True).filter(Q(environment__isnull=True) | Q(environment=environment)))
+    policies = list(NamingPolicy.objects.filter(enabled=True, removed_at__isnull=True).filter(Q(environment__isnull=True) | Q(environment=environment)).order_by('pk'))
     if replacement:
         policies = [p for p in policies if p.pk != replacement.pk]
         if replacement.environment_id in (None, environment.pk): policies.append(replacement)
     bindings = {b.policy_id: (b.draft_scopes if replacement and b.policy_id == replacement.pk else b.scopes) for b in NamingScopeBinding.objects.filter(environment=environment)}
-    proposals = {p.group_path: p for p in NamingProposal.objects.filter(environment=environment, object_type='group').select_related('owner', 'reviewed_by')}
+    proposals = {p.group_path: p for p in NamingProposal.objects.filter(environment=environment, object_type='group').select_related('owner', 'reviewed_by').order_by('group_path','pk')}
     from .models import SnapshotNamingAssessment
     from .analysis_index import VERSION
-    signature = digest(['naming-assessment-v3', VERSION, str(snapshot.pk) if snapshot else None,
+    legacy_reviews = any((p.workflow.get('policy_stamp') and not p.workflow['policy_stamp'].startswith('v2:'))
+        or (p.state=='exception' and p.exception_policy_stamp and not p.exception_policy_stamp.startswith('v2:')) for p in proposals.values())
+    signature = digest(['naming-assessment-v4', VERSION, str(snapshot.pk) if snapshot else None,
                         snapshot.browsing_status if snapshot else None, bool(snapshot.inventory_warning) if snapshot else False,
                         str(timezone.localdate()), simulation,
-                        [(p.pk,p.revision,p.name,p.configuration) for p in policies], bindings,
+                        [(p.pk,p.environment_id,p.revision if legacy_reviews else None,p.name,p.configuration) for p in sorted(policies,key=lambda p:p.pk)], bindings,
                         [{k:v for k,v in p.__dict__.items() if k!='_state'} for p in proposals.values()]])
     if snapshot and snapshot.browsing_status=='ready' and replacement is None:
         cached=SnapshotNamingAssessment.objects.filter(snapshot=snapshot,simulation=simulation,signature=signature).values_list('rows',flat=True).first()
@@ -336,7 +362,7 @@ def assess(environment, replacement=None, simulation=False):
             for row in cached:
                 row['policy']=by_policy.get(row.pop('_policy_id'))
                 row['proposal']=proposals.get(row['identity'])
-            warning='Inventory coverage has warnings; results are provisional and cannot establish compliance.' if snapshot.inventory_warning else ''
+            warning='Inventory coverage has warnings. Name matches are provisional; compliance and workflow resolution are not confirmed.' if snapshot.inventory_warning else ''
             if not cached: warning='No indexed groups found. Check collection coverage and browsing preparation.'
             return snapshot,cached,warning
     snapshot, groups, warning = inventory(environment, snapshot)
@@ -356,18 +382,23 @@ def assess(environment, replacement=None, simulation=False):
         if row['proposed'] and len(names[row['proposed'].casefold()]) > 1:
             row['status'] = 'Duplicate proposed name'
             row['reasons'].append('This name matches another group’s current or proposed name in this environment (case-insensitive).')
-        if warning and row['status'] == 'Compliant':
-            row['status'] = 'Evidence incomplete'
-            row['reasons'].append(warning)
-    policy_stamp = digest([[(p.pk, p.revision, p.configuration) for p in sorted(policies, key=lambda p: p.pk)], bindings])
+    # Recognize an unchanged legacy review conservatively. New reviews use the
+    # relevant active configuration, never draft revision numbers or other rules.
+    legacy_stamp = digest([[(p.pk,p.revision,p.configuration) for p in sorted(policies,key=lambda p:p.pk)],bindings])
+    policy_stamps = {}
     for row in rows:
+        matching = tuple(sorted(row['matching_policy_ids']))
+        if matching not in policy_stamps:
+            policy_stamps[matching] = active_policy_stamp(row,policies,bindings)
+        policy_stamp = policy_stamps[matching]
+        accepted_stamps = (policy_stamp,legacy_stamp)
         row['policy_stamp'] = policy_stamp
         proposal = row['proposal']
         work = proposal.workflow if proposal else {}
         definition_stamp = digest([row['identity'], row.get('definition'), row.get('unique_id'), row['observed_tags']])
         row['definition_stamp'] = definition_stamp
-        changed = bool(work and (work.get('policy_stamp') != policy_stamp or work.get('definition_stamp') != definition_stamp))
-        resolved = bool(work.get('state') == 'awaiting' and not changed and not warning and not simulation and snapshot and str(snapshot.pk) != work.get('snapshot') and snapshot.generated_at.isoformat() > work.get('snapshot_time', '') and row['status'] == 'Compliant' and row['observed_status'] == 'Compliant' and row['name'] == work.get('proposed'))
+        changed = bool(work and (work.get('policy_stamp') not in accepted_stamps or work.get('definition_stamp') != definition_stamp))
+        resolved = bool(work.get('state') == 'awaiting' and not changed and not warning and not simulation and replacement is None and snapshot and str(snapshot.pk) != work.get('snapshot') and snapshot.generated_at.isoformat() > work.get('snapshot_time', '') and row['status'] == 'Compliant' and row['observed_status'] == 'Compliant' and row['name'] == work.get('proposed'))
         row['work_stale'] = changed
         row['progress_label'] = 'Resolved' if resolved else 'Review required — evidence changed' if changed else {'in_review':'In review','prepared':'Change prepared','awaiting':'Awaiting verification'}.get(work.get('state'), 'In review' if proposal and proposal.owner_id else 'Unassigned')
         row['next_action'] = {'Name differs':'Review name correction','Ambiguous policy':'Resolve conflicting policies','No applicable policy':'Configure a naming policy','Duplicate proposed name':'Resolve name collision','Evidence incomplete':'Review collection coverage'}.get(row['status'], 'Review component evidence')
@@ -378,13 +409,18 @@ def assess(environment, replacement=None, simulation=False):
         row['name_diff'] = [{'changed':tag!='equal', 'old':''.join(before_parts[a:b]), 'new':''.join(after_parts[c:d])} for tag,a,b,c,d in SequenceMatcher(None, before_parts, after_parts, autojunk=False).get_opcodes()] if row['proposed'] else []
         proposal = row['proposal']
         row['decision_stamp'] = digest([row['baseline'], policy_stamp, [proposal.state, proposal.tags, proposal.note, str(proposal.updated_at)] if proposal else None])
-        row['exception_stale'] = bool(proposal and proposal.state == 'exception' and (row['stale'] or proposal.exception_policy_stamp != policy_stamp or not proposal.owner_id or not proposal.expires_at or proposal.expires_at < timezone.localdate()))
+        row['exception_stale'] = bool(proposal and proposal.state == 'exception' and (row['stale'] or proposal.exception_policy_stamp not in accepted_stamps or not proposal.owner_id or not proposal.expires_at or proposal.expires_at < timezone.localdate()))
         if proposal and proposal.state == 'exception' and not row['exception_stale']:
             row['reasons'].append('Reviewed exception: ' + proposal.note)
             row['status'] = 'Reviewed exception'
         if proposal and proposal.state == 'exception' and row['exception_stale']:
             row['reasons'].append('Exception expired or evidence changed; review it again.')
-        row['needs_attention'] = row['status'] not in ('Compliant','Reviewed exception') or row['work_stale'] or row['exception_stale']
+            row['progress_label'] = 'Review required — exception expired or changed'
+        row['needs_attention'] = row['status'] not in ('Compliant','Reviewed exception')
+        row['review_required'] = row['work_stale'] or row['exception_stale']
+        if row['review_required']: row['next_action']='Review changed evidence'
+        row['coverage_status'] = 'provisional' if warning else 'draft' if replacement is not None or simulation else 'ready'
+        row['outcome_label'] = compliant_label(row['coverage_status']) if row['status']=='Compliant' else row['status']
     if snapshot and snapshot.browsing_status=='ready' and replacement is None:
         stored=[]
         for row in rows:
@@ -397,4 +433,4 @@ def assess(environment, replacement=None, simulation=False):
 
 
 def counts(rows):
-    return sorted(Counter(row['status'] for row in rows).items())
+    return sorted(Counter(row.get('outcome_label',row['status']) for row in rows).items())

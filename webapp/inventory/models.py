@@ -45,7 +45,8 @@ class Environment(models.Model):
     enabled = models.BooleanField(default=True)
     sync_interval_minutes = models.PositiveIntegerField(default=60, choices=[
         (0, "Manual only"), (15, "Every 15 minutes"), (30, "Every 30 minutes"),
-        (60, "Every hour"), (360, "Every 6 hours"), (720, "Every 12 hours"),
+        (60, "Every hour"), (120, "Every 2 hours"), (180, "Every 3 hours"),
+        (240, "Every 4 hours"), (360, "Every 6 hours"), (480, "Every 8 hours"), (720, "Every 12 hours"),
         (1440, "Daily"), (10080, "Weekly")])
     next_sync_at = models.DateTimeField(null=True, blank=True, editable=False)
 
@@ -456,6 +457,42 @@ class SnapshotVMMembership(models.Model):
 
     class Meta:
         constraints = [models.UniqueConstraint(fields=['snapshot', 'record_id'], name='snapshot_vm_membership')]
+
+
+class SnapshotIPReferenceIndex(models.Model):
+    """Disposable saved-address index, built lazily without collection/API work."""
+    snapshot = models.OneToOneField(Snapshot, primary_key=True, on_delete=models.CASCADE)
+    version = models.PositiveIntegerField(default=0)
+    metadata = models.JSONField(default=dict)
+
+
+class SnapshotIPReferenceRange(models.Model):
+    projection = models.ForeignKey(SnapshotIPReferenceIndex, on_delete=models.CASCADE)
+    scope = models.CharField(max_length=64)
+    family = models.PositiveSmallIntegerField()
+    lower = models.DecimalField(max_digits=39, decimal_places=0)
+    upper = models.DecimalField(max_digits=39, decimal_places=0)
+    group_path = models.TextField()
+    group_name = models.TextField()
+    entry = models.TextField()
+    via = models.JSONField(default=list)
+
+    class Meta:
+        indexes = [models.Index(fields=['projection','scope','family','lower'],name='ip_ref_range_lower'),
+                   models.Index(fields=['projection','scope','family','upper'],name='ip_ref_range_upper')]
+
+
+class SnapshotVMAddress(models.Model):
+    projection = models.ForeignKey(SnapshotIPReferenceIndex, on_delete=models.CASCADE)
+    record = models.ForeignKey(SnapshotRecord, on_delete=models.CASCADE)
+    scope = models.CharField(max_length=64)
+    family = models.PositiveSmallIntegerField()
+    address = models.DecimalField(max_digits=39, decimal_places=0)
+    ip = models.CharField(max_length=45)
+
+    class Meta:
+        indexes = [models.Index(fields=['projection','scope','family','address'],name='ip_ref_vm_address')]
+        constraints = [models.UniqueConstraint(fields=['projection','record','ip'],name='ip_ref_vm_identity')]
 
 
 class SnapshotNamingAssessment(models.Model):
