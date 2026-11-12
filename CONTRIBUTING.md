@@ -4,6 +4,10 @@ Discuss substantial changes in an issue before opening a pull request. Contribut
 [Apache License 2.0](LICENSE), unless explicitly stated otherwise. Only submit work
 you have the right to contribute.
 
+For Claude Code, start with [CLAUDE.md](CLAUDE.md) and the
+[project handover](docs/claude-code-handover.md). Keep machine-specific context in
+ignored `CLAUDE.local.md`.
+
 ## Local development
 
 Use Python 3.12 for the web application and Node.js for the collector's JavaScript
@@ -40,6 +44,22 @@ python webapp/manage.py makemigrations --check --dry-run
 Some PostgreSQL concurrency tests are skipped under SQLite. The CI workflow runs
 against PostgreSQL in an isolated test database. It does not connect to NSX.
 Use synthetic fixtures when testing; do not add real snapshots or credentials.
+
+### JavaScript validation
+
+The separate Node tests under `webapp/tests-js` also need `jsdom`. The last verified
+setup used Node 24.2.0 and jsdom 29.1.1; that jsdom version requires Node 20.19+,
+22.13+ within those major versions, or Node 24+. Install the test dependency outside
+the checkout and run from the repository root:
+
+```sh
+npm install --prefix /tmp/nsxa-js-tests --no-save --no-package-lock jsdom@29.1.1
+NODE_PATH=/tmp/nsxa-js-tests/node_modules node --test webapp/tests-js/*.test.cjs
+```
+
+Django tests do not automatically run this separate suite. Browser acceptance
+also needs an isolated application, synthetic fixtures and a browser runner such
+as Playwright; Node unit tests alone do not verify the complete UI flow.
 
 For UI changes, check light/dark themes, narrow screens, keyboard navigation,
 focus behavior and actual navigation to a different item. Confirm collection

@@ -115,6 +115,7 @@ The default service listens on loopback. Use an HTTPS reverse proxy for shared a
 | [Operations](docs/operations.md) | Upgrades, backups, recovery and troubleshooting |
 | [Architecture](docs/architecture.md) | Components, storage and collection flow |
 | [Contributing](CONTRIBUTING.md) | Development setup, tests and pull requests |
+| [Claude Code handover](docs/claude-code-handover.md) | Published baseline, evidence semantics, source map and continuation checklist |
 | [Security](SECURITY.md) | Reporting vulnerabilities and deployment boundaries |
 | [Support](SUPPORT.md) | Bug reports and useful diagnostics |
 | [Roadmap](roadmap.md) | Planned improvements and deferred features |
