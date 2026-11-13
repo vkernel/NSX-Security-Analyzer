@@ -1565,6 +1565,10 @@ def add_tag_firewall_references(tags, groups, resources):
     rules = {path: r for path, r in configuration.items()
              if "/rules/" in path and not r.get("marked_for_delete")
              and (r.get("resource_type") == "Rule" or "rule_id" in r)}
+    # A policy's Applied To covers every rule in that policy.
+    policy_rules = {}
+    for path in rules:
+        policy_rules.setdefault(path.split("/rules/", 1)[0], []).append(path)
     pool, indices, cache = [], {}, {}
 
     def consumers(group_path):
@@ -1579,6 +1583,8 @@ def add_tag_firewall_references(tags, groups, resources):
             for owner in refs.get(path, ()):
                 if owner in rules:
                     found.add(owner)
+                elif owner in policy_rules:
+                    found.update(policy_rules[owner])
                 elif owner in group_paths:
                     pending.append(owner)
         cache[group_path] = found
@@ -1597,7 +1603,7 @@ def add_tag_firewall_references(tags, groups, resources):
                                  "tag_use": "condition" if group_path in row["group_conditions"] else "assignment"})
         row["firewall_references"] = evidence
     tags["firewall_rules"] = pool
-    tags["firewall_reference_note"] = ("Visible firewall rules referencing tag-using groups, directly or through nested groups. "
+    tags["firewall_reference_note"] = ("Visible firewall rules referencing tag-using groups, directly, through nested groups or through a policy Applied To. "
         "Includes disabled rules. Tags attached to groups are metadata; these references do not prove tag-based traffic matching. "
         "Search coverage and inventory gaps apply; absence of references is not proof of non-use.")
 

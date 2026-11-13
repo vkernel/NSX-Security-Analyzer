@@ -102,7 +102,10 @@ class StorageLifecycleTests(TestCase):
         rule = SnapshotVMRule(snapshot=self.latest, path='/rule', data=data)
         share_json([rule]); rule.save()
         self.assertEqual(rows[0].payload_id, rule.payload_id)
-        self.assertEqual(read(self.latest.pk, 999, 'firewall_references')['items'], [data, data])
+        # Both shared edges name the same rule: one row per rule, with the exact shared payload.
+        item, = read(self.latest.pk, 999, 'firewall_references')['items']
+        self.assertEqual({k: v for k, v in item.items() if k not in ('nsx_order', 'via_groups', 'tag_uses')}, {'path': '/rule', 'name': data['name']})
+        self.assertEqual((item['via_groups'], item['tag_uses']), (['/g'], []))
         vm = SnapshotRecord.objects.create(snapshot=self.latest, ordinal=1000, view='vms', name='vm', sort_name='vm', compact={}, data={'_shared_vm_rules':True, 'related_rules':[{'path':'/rule'}]}, columns=[], sort_values={}, search_basic='', search_evidence='')
         expanded = SnapshotRecord.objects.filter(pk=vm.pk).annotate(value=ExpandedVMData()).values_list('value', flat=True).get()
         self.assertEqual(expanded['related_rules'][0], data)

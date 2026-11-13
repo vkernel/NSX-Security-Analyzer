@@ -59,27 +59,41 @@ def current_context(snapshot, owner, *, direct=None, full=False):
     return evidence,{**network,**ip_metadata}
 
 
+
+def rule_groups(detail):
+    """Group paths a saved rule references: sources, destinations, its Applied to and its
+    policy's Applied To (which takes precedence in NSX). Configuration, not effective policy."""
+    policy = ((detail.get('configuration') or {}).get('policy') or {}).get('scope')
+    return [value for field in (detail.get('source_groups'), detail.get('destination_groups'), detail.get('scope'), policy)
+            if isinstance(field, list) for value in field if isinstance(value, str)]
+
 def read(snapshot_id, groups, page=0, path='', detail=False, evidence=None, *, full=False):
     if not groups:
         return None if detail else {'items':[], 'page':page, 'has_next':False}
     size=500 if full else 25
     # JSON array overlap stays in PostgreSQL; only one bounded rule page is read.
+    # Rows follow configured NSX order: category, policy sequence, rule sequence.
+    from .firewall_reference_context import nsx_order_sql
+    order_select, order = nsx_order_sql('data', "data->>'path'")
     with connection.cursor() as cursor:
-        cursor.execute("""WITH candidates AS (
+        cursor.execute(f"""WITH candidates AS (
             SELECT data, COALESCE(data->'source_groups','[]'::jsonb) ||
-                COALESCE(data->'destination_groups','[]'::jsonb) || COALESCE(data->'scope','[]'::jsonb) AS refs
+                COALESCE(data->'destination_groups','[]'::jsonb) || COALESCE(data->'scope','[]'::jsonb) ||
+                (CASE WHEN jsonb_typeof(data#>'{{configuration,policy,scope}}') = 'array'
+                    THEN data#>'{{configuration,policy,scope}}' ELSE '[]'::jsonb END) AS refs
             FROM inventory_snapshotrecord WHERE snapshot_id=%s AND view='dfw')
             SELECT data, (SELECT jsonb_agg(DISTINCT value) FROM jsonb_array_elements_text(refs)
-                WHERE value=ANY(%s)) AS groups
+                WHERE value=ANY(%s)) AS groups, {order_select}
             FROM candidates WHERE refs ?| %s AND (%s='' OR data->>'path'=%s)
-            ORDER BY data->>'name', data->>'path' LIMIT %s OFFSET %s""",
+            ORDER BY {order} LIMIT %s OFFSET %s""",
             [snapshot_id, groups, groups, path, path, size+1, page*size])
         import json
-        rows = [(json.loads(row) if isinstance(row,str) else row, json.loads(via) if isinstance(via,str) else via) for row,via in cursor.fetchall()]
+        load = lambda value: json.loads(value) if isinstance(value,str) else value
+        rows = [(load(row), load(via), load(position)) for row,via,position in cursor.fetchall()]
     if detail:
         return rows[0][0] if rows else None
     keys = ('name','path','action','disabled','policy_name','category','rule_id','sequence_number','source_groups','destination_groups','scope','services') if full else ('name','path','action','disabled','policy_name')
-    items = [{**{key:row[key] for key in keys if key in row}, 'via_groups':via} for row,via in rows[:size]]
+    items = [{**{key:row[key] for key in keys if key in row}, 'via_groups':via, 'nsx_order':position} for row,via,position in rows[:size]]
     items = enrich(snapshot_id, items, vm=True,full=full)
     for item in items:
         bases = {(evidence or {}).get(group,{}).get('membership_basis') for group in item['via_groups']}
@@ -118,14 +132,14 @@ def saved(snapshot_id, ordinal, section, page=0, path=''):
         from django.http import Http404
         detail = read(snapshot_id,groups,path=path,detail=True)
         if detail is None: raise Http404('Rule is not referenced through this VM\'s saved membership or IP evidence.')
-        detail['via_groups']=sorted(set(groups).intersection(detail.get('source_groups',[])+detail.get('destination_groups',[])+detail.get('scope',[])))
+        detail['via_groups']=sorted(set(groups).intersection(rule_groups(detail)))
         detail['membership_evidence']={group:evidence[group] for group in detail['via_groups']}
         return {'details':detail}
     if section == 'confirmed_via_groups':
         detail = read(snapshot_id,groups,path=path,detail=True)
         from django.http import Http404
         if detail is None: raise Http404
-        values = sorted(set(groups).intersection(detail.get('source_groups',[])+detail.get('destination_groups',[])+detail.get('scope',[])))
+        values = sorted(set(groups).intersection(rule_groups(detail)))
         return {'items':values[page*25:page*25+25],'has_next':len(values)>(page+1)*25,'page':page}
     result = read(snapshot_id, groups, page, evidence=evidence)
     result.update(status=row['compact__resolved_membership_status'] or 'not_collected',

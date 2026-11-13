@@ -49,7 +49,7 @@ class TagRelationshipTests(TestCase):
             conditions=read(self.snapshot.pk,1,'condition_evidence',2)
         self.assertEqual(len(rules['items']),10)
         self.assertEqual(rules['items'][0]['name'],'Rule 50')
-        self.assertEqual(rules['items'][0]['via_group'],'/infra/groups/one')
+        self.assertEqual(rules['items'][0]['via_groups'],['/infra/groups/one'])
         self.assertNotIn('large_unused_data',str(rules))
         self.assertEqual(conditions['items'][0]['name'],'Condition 50')
         self.assertEqual(read(self.snapshot.pk,1,'review_conditions')['items'],[{'reason':'Legacy definition'}])
@@ -62,14 +62,17 @@ class TagRelationshipTests(TestCase):
         SnapshotRecord.objects.create(snapshot=self.snapshot,ordinal=800,columns=[],sort_values={},view='dfw',name='DNS',compact={'path':path},data={
             'category':'Infrastructure','policy_name':'AD','rule_id':6121,'action':'ALLOW','disabled':False,
             'configuration':{'rule':{'sequence_number':10}},'source_groups':['/infra/groups/one'],'scope':['/infra/groups/one']})
-        legacy = read(self.snapshot.pk,1,'firewall_references',2,context=True)
+        # The only saved rule sorts first in configured NSX order; unsaved rules keep stored order.
+        legacy = read(self.snapshot.pk,1,'firewall_references',0,context=True)
         item = legacy['items'][0]
+        self.assertEqual((item['path'],item['nsx_order']['category']),(path,'Infrastructure'))
+        self.assertEqual(legacy['items'][1]['name'],'Rule 0')
         self.assertEqual((item['policy_name'],item['rule_id'],item['sequence_number']),('AD',6121,10))
         self.assertEqual(item['matched_fields'],['Source','Applied to'])
         self.assertEqual(item['reference_reason'],'Group membership condition')
         index_record(self.row,self.snapshot.presentation.tag_evidence)
         self.row.relationships_ready=True;self.row.save(update_fields=['relationships_ready'])
-        self.assertEqual(read(self.snapshot.pk,1,'firewall_references',2,context=True),legacy)
+        self.assertEqual(read(self.snapshot.pk,1,'firewall_references',0,context=True),legacy)
 
     def test_sections_and_snapshot_isolation(self):
         for section in ('tags','arbitrary'):
@@ -101,7 +104,12 @@ class TagRelationshipTests(TestCase):
                 result = read(self.snapshot.pk,1,section,1)
             self.assertEqual(result, before)
             self.assertEqual(len(queries),2)
-            self.assertFalse(any('jsonb_' in q['sql'] for q in queries))
+            if section == 'firewall_references':
+                # Sorting into NSX order precedes paging: one bounded query over this tag's
+                # edges and saved rules, without reading shared presentation metadata.
+                self.assertFalse(any('tag_evidence' in q['sql'] for q in queries))
+            else:
+                self.assertFalse(any('jsonb_' in q['sql'] for q in queries))
             self.assertLess(len(str(result)),20000)
         clear_index(self.snapshot.pk)
         self.assertFalse(SnapshotRelationship.objects.exists())

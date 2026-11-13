@@ -165,6 +165,7 @@
         const response=source.isCurrent()?await window.reportData(null,{op:'current-member-rule',id,path:item.path}):await load(id,'confirmed_rule',0,item.path);if(!current()||token!==inspection)return;
         const data=response.details;
         const facts=make('p');facts.className='evidence-rule-facts';facts.append(window.evidenceBadge(data.action,'action'),window.evidenceBadge(data.disabled===true?'Disabled':data.disabled===false?'Enabled':null));
+        const sequence=data.configuration?.rule?.sequence_number??data.sequence_number,context=[data.policy_name,data.category,sequence!=null?'Sequence '+sequence:''].filter(Boolean).join(' · ');if(context)facts.append(make('span',context));
         const link=relationLink(item,'rules');link.textContent='Open rule record';
         const services=window.evidenceTable({title:'Configured services',current:()=>current()&&token===inspection,columns:[{label:'Service',cell:service=>service==='ANY'||service.path==='ANY'?'Any service':object(service,'services')}],load:async page=>({items:(data.services||[]).slice(page*25,(page+1)*25),has_next:(page+1)*25<(data.services||[]).length})});
         const via=window.evidenceTable({title:'Related groups for this rule',current,columns:[{label:'Group',cell:group=>object(data.membership_evidence?.[typeof group==='string'?group:group.path]||group,'groups')},{label:'Evidence',cell:group=>{

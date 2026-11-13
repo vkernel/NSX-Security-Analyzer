@@ -182,6 +182,29 @@ class CurrentMembershipTests(TestCase):
         saved=self.client.get(api,{'op':'vm-relationships','id':1,'section':'confirmed_rules'}).json()
         self.assertEqual(saved['items'],[])  # Saved two groups did not include Group 3.
 
+    def test_current_firewall_references_use_nsx_order_and_policy_applied_to(self):
+        # Current direct associations (groups 0-3) come from the local cache; no NSX request.
+        save(self.env,'vm',self.owner,self.four,'complete',[])
+        P='/infra/domains/default/security-policies/'
+        specs=[('app','Application',100,['ANY'],[GP+'0']),('policy-only','Infrastructure',20,[GP+'2'],['ANY']),
+               ('ethernet','Ethernet',5,['ANY'],[GP+'1']),('unrelated','Emergency',1,[GP+'20'],['ANY'])]
+        for i,(name,category,sequence,policy_scope,sources) in enumerate(specs):
+            path=P+name+'/rules/r'
+            SnapshotRecord.objects.create(snapshot=self.snapshot,ordinal=80+i,view='dfw',name=name,compact={'path':path},
+                data={'path':path,'name':name,'category':category,'policy_name':name,'policy_path':P+name,'source_groups':sources,
+                      'destination_groups':['ANY'],'scope':['ANY'],'services':['ANY'],
+                      'configuration':{'rule':{'sequence_number':10},'policy':{'sequence_number':sequence,'scope':policy_scope}}},
+                columns=[],sort_values={})
+        with patch('inventory.deletion.connection') as connect:
+            result=self.client.get(self.url,{'kind':'vm','id':1,'section':'firewall'}).json()
+            api=reverse('snapshot-data',args=[self.snapshot.pk])
+            detail=self.client.get(api,{'op':'current-member-rule','id':1,'path':P+'policy-only/rules/r'}).json()['details']
+            connect.assert_not_called()
+        self.assertEqual([item['name'] for item in result['items']],['ethernet','policy-only','app'])
+        self.assertEqual([item['nsx_order']['category'] for item in result['items']],['Ethernet','Infrastructure','Application'])
+        self.assertEqual(result['items'][1]['matched_fields'],['Applied to (policy)'])
+        self.assertEqual(detail['via_groups'],[GP+'2'])
+
     def test_saved_network_rules_are_deduplicated_paged_and_keep_partial_coverage(self):
         stamp=timezone.now().isoformat()
         self.vm.compact.update(network_membership_version=1,network_membership_status='partial',network_membership_checked_at=stamp)

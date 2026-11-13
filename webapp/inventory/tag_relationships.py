@@ -21,6 +21,8 @@ def read(snapshot_id, ordinal, section='summary', page=0, context=False, *, full
     allowed = {'tags'} if row['view'] == 'scopes' else MAPS | set(CONDITIONS) | {'firewall_references', 'notes'}
     if section not in allowed:
         raise ValueError('Unknown relationship section.')
+    if section == 'firewall_references':
+        return page_result(snapshot_id, firewall_page(snapshot_id, row, page), page, section, context, full=full)
     if row['relationships_ready']:
         from .models import SnapshotRelationship
         start = page * PAGE_SIZE
@@ -41,13 +43,44 @@ def read(snapshot_id, ordinal, section='summary', page=0, context=False, *, full
         if section in CONDITIONS:
             sql = "WITH source AS (SELECT CASE WHEN r.data ? %s THEN p.tag_evidence->'condition_sets'->(r.data->>%s)::int ELSE r.data->%s END AS items " + source + "), page AS (SELECT value, position FROM source, jsonb_array_elements(COALESCE(items, '[]'::jsonb)) WITH ORDINALITY AS e(value, position) ORDER BY position LIMIT 26 OFFSET %s) SELECT CASE WHEN jsonb_typeof(value) = 'number' THEN p.tag_evidence->'conditions'->(value::text)::int ELSE value END FROM page LEFT JOIN inventory_snapshotpresentation p ON p.snapshot_id = %s ORDER BY position"
             params = [CONDITIONS[section], CONDITIONS[section], section, *args, page * PAGE_SIZE, snapshot_id]
-        else:
-            sql = "WITH source AS (SELECT data->'firewall_references' AS items " + base + "), page AS (SELECT value, position FROM source, jsonb_array_elements(COALESCE(items, '[]'::jsonb)) WITH ORDINALITY AS e(value, position) ORDER BY position LIMIT 26 OFFSET %s) SELECT jsonb_build_object('name', rule->>'name', 'path', rule->>'path', 'rule_id', rule->'rule_id', 'disabled', rule->'disabled', 'via_group', value->'via_group', 'tag_use', value->'tag_use') FROM page LEFT JOIN inventory_snapshotpresentation p ON p.snapshot_id = %s LEFT JOIN LATERAL (SELECT p.tag_evidence->'firewall_rules'->(value->>'rule')::int AS rule) resolved ON true ORDER BY position"
-            params = [*args, page * PAGE_SIZE, snapshot_id]
+
     with connection.cursor() as cursor:
         cursor.execute(sql, params)
         items = [json.loads(item[0]) if isinstance(item[0], str) else item[0] for item in cursor.fetchall()]
     return page_result(snapshot_id, items, page, section, context,full=full)
+
+
+def firewall_page(snapshot_id, row, page):
+    """Tag firewall edges in configured NSX order; sorting precedes paging."""
+    from .firewall_reference_context import nsx_order_sql
+    if row['relationships_ready']:
+        refs = """SELECT COALESCE(j.data, s.data) AS item, s.position FROM inventory_snapshotrelationship s
+            LEFT JOIN inventory_sharedsnapshotjson j ON j.id = s.payload_id
+            WHERE s.record_id = %s AND s.section = 'firewall_references'"""
+        params = [row['pk']]
+    else:
+        # Legacy rows keep rule metadata in the snapshot presentation.
+        refs = """SELECT jsonb_build_object('name', rule->>'name', 'path', rule->>'path', 'rule_id', rule->'rule_id',
+                'disabled', rule->'disabled', 'via_group', value->'via_group', 'tag_use', value->'tag_use') AS item, position
+            FROM inventory_snapshotrecord r LEFT JOIN inventory_snapshotpresentation p ON p.snapshot_id = r.snapshot_id,
+                jsonb_array_elements(COALESCE(r.data->'firewall_references', '[]'::jsonb)) WITH ORDINALITY AS e(value, position)
+                LEFT JOIN LATERAL (SELECT p.tag_evidence->'firewall_rules'->(value->>'rule')::int AS rule) resolved ON true
+            WHERE r.id = %s"""
+        params = [row['pk']]
+    # One row per rule: a rule reached through several tag-using groups lists all of them.
+    order_select, order = nsx_order_sql('saved_rule.data', 'rules.position')
+    sql = f"""WITH refs AS ({refs}), rules AS (
+            SELECT (array_agg(item ORDER BY position))[1] - 'via_group' - 'tag_use' AS item, min(position) AS position,
+                COALESCE(jsonb_agg(DISTINCT item->'via_group') FILTER (WHERE jsonb_typeof(item->'via_group') = 'string'), '[]'::jsonb) AS via_groups,
+                COALESCE(jsonb_agg(DISTINCT item->'tag_use') FILTER (WHERE jsonb_typeof(item->'tag_use') = 'string'), '[]'::jsonb) AS tag_uses
+            FROM refs GROUP BY COALESCE(item->>'path', 'position:' || position))
+        SELECT rules.item || jsonb_build_object('via_groups', rules.via_groups, 'tag_uses', rules.tag_uses, 'nsx_order', {order_select})
+        FROM rules LEFT JOIN inventory_snapshotrecord saved_rule ON saved_rule.snapshot_id = %s AND saved_rule.view = 'dfw'
+            AND saved_rule.compact->>'path' = rules.item->>'path'
+        ORDER BY {order} LIMIT %s OFFSET %s"""
+    with connection.cursor() as cursor:
+        cursor.execute(sql, [*params, snapshot_id, PAGE_SIZE + 1, page * PAGE_SIZE])
+        return [json.loads(item) if isinstance(item, str) else item for (item,) in cursor.fetchall()]
 
 
 def page_result(snapshot_id, items, page, section, context, *, full=False):

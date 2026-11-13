@@ -16,7 +16,11 @@ including objects opened through a related-object link.
    prevents unfinished work from publishing a file.
 
 Exports include every retained reference page in the selection, regardless of
-which table page is visible. A category with no retained rows still has an
+which table page is visible. Firewall rows follow configured NSX order: category
+(Ethernet first, Application last), policy sequence, then rule sequence; rules
+without saved sequence numbers come last in their category. Rules whose policy
+Applied To contains the group are included and labelled "Applied to (policy)".
+Tag exports list each rule once with every tag-using group that reaches it. A category with no retained rows still has an
 explicit coverage entry. Exporting does not repair missing collection evidence.
 
 ## Evidence and formats
@@ -31,7 +35,10 @@ labelled as negated references, and IP matches are not an effective-policy or
 traffic verdict.
 
 - **CSV:** one reference per row, repeated provenance/coverage columns, firewall
-  fields and a structured-reference JSON column. Empty categories have a coverage
+  fields (rule category, name, path, policy, policy sequence, rule sequence, rule
+  ID, sources, destinations, services, context profiles, applied to, action,
+  state, matched in and reason) and a
+  structured-reference JSON column. Empty categories have a coverage
   row. UTF-8 with BOM; formula-like cells are neutralized for spreadsheet use.
 - **JSON / YAML:** the versioned canonical document, with full retained
   relationship evidence beyond drawer display limits. Existing collection or

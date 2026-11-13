@@ -28,6 +28,11 @@ class ObjectReferenceTests(TestCase):
             compact={'path':path},data=dict(data,path=path),columns=[],sort_values={})
 
     def test_firewall_pages_are_bounded_deduplicated_and_enriched(self):
+        from .firewall_reference_context import context_profiles_in_use
+        context_profiles_in_use.cache_clear()
+        with CaptureQueriesContext(connection) as queries:
+            read(self.snapshot.pk,self.path)
+        self.assertEqual(len(queries),5) # includes the once-per-snapshot context profile check
         with CaptureQueriesContext(connection) as queries:
             first=read(self.snapshot.pk,self.path)
         self.assertEqual(len(first['items']),25);self.assertTrue(first['has_next'])

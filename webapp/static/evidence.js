@@ -110,12 +110,17 @@
       try{
         const data=await load(target);if(token!==version||!current())return;page=target;loaded=true;
         const scroll=make('div'),table=make('table'),caption=make('caption',title),head=make('thead'),labels=make('tr'),rows=make('tbody');scroll.className='evidence-table-scroll';scroll.tabIndex=0;scroll.setAttribute('role','region');scroll.setAttribute('aria-label',title+' table');table.className='evidence-table'+(wide?' evidence-firewall-table':'')+(columns.some(column=>[window.networkAttachmentCell,window.ipReferenceCell].includes(column.cell))?' evidence-network-table':'');
-        for(const column of columns){const th=make('th',column.label);th.scope='col';if(column.width)th.style.width=column.width;labels.append(th);}head.append(labels);
-        for(const item of data.items){const row=make('tr');for(const column of columns){const td=make('td'),value=column.cell(item);if(value?.nodeType)td.append(value);else td.textContent=value==null?'Not recorded':String(value);row.append(td);}rows.append(row);}
+        const shown=columns.filter(column=>!column.visible||column.visible(data));
+        for(const column of shown){const th=make('th',column.label);th.scope='col';if(column.width)th.style.width=column.width;labels.append(th);}head.append(labels);
+        // Optional group headings (columns.groups) start a new row group with full-width header rows.
+        let group=rows,previousItem=null;
+        for(const item of data.items){const headings=columns.groups?.(item,previousItem)||[];previousItem=item;
+          if(headings.length){group=make('tbody');group.className='evidence-row-group';for(const heading of headings){const tr=make('tr'),th=make('th');tr.className='evidence-group-row';tr.dataset.level=heading.level;th.scope='rowgroup';th.colSpan=shown.length;th.append(heading.content);tr.append(th);group.append(tr);}table.append(group);}
+          const row=make('tr');for(const column of shown){const td=make('td'),value=column.cell(item);if(value?.nodeType)td.append(value);else td.textContent=value==null?'Not recorded':String(value);row.append(td);}group.append(row);}
         const states={complete:'Complete',partial:'Partial',configured:'Configured',not_applicable:'Not applicable',unavailable:'Unavailable',not_collected:'Not collected',not_supported:'Not supported'};
         const missing=data.status&&data.status!=='complete';
-        if(!data.items.length){const row=make('tr'),td=make('td',data.empty_message||(data.status==='not_applicable'?'This member category does not apply to the saved definition.':missing?(data.source==='current_nsx'?'Membership is not established. Refresh to check current NSX.':data.status==='not_collected'?(data.notes?.length?'Member list was not collected; see the collection notes.':'Member identities were not collected in this snapshot. Run a new collection.'):'No member identities saved for this category; membership is not established.'):empty));td.colSpan=columns.length;td.className='evidence-table-empty';row.append(td);rows.append(row);}
-        table.append(caption,head,rows);scroll.append(table);content.replaceChildren(scroll);status.textContent=data.items.length?`${page*25+1}–${page*25+data.items.length} shown · Page ${page+1}`:'No entries recorded';hasNext=!!data.has_next;pager.hidden=!page&&!hasNext;previous.disabled=!page;next.disabled=!hasNext;
+        if(!data.items.length){const row=make('tr'),td=make('td',data.empty_message||(data.status==='not_applicable'?'This member category does not apply to the saved definition.':missing?(data.source==='current_nsx'?'Membership is not established. Refresh to check current NSX.':data.status==='not_collected'?(data.notes?.length?'Member list was not collected; see the collection notes.':'Member identities were not collected in this snapshot. Run a new collection.'):'No member identities saved for this category; membership is not established.'):empty));td.colSpan=shown.length;td.className='evidence-table-empty';row.append(td);rows.append(row);}
+        table.prepend(caption,head,rows);scroll.append(table);content.replaceChildren(scroll);status.textContent=data.items.length?`${page*25+1}–${page*25+data.items.length} shown · Page ${page+1}`:'No entries recorded';hasNext=!!data.has_next;pager.hidden=!page&&!hasNext;previous.disabled=!page;next.disabled=!hasNext;
         if(data.status){const total=data.saved_count??data.items.length,unit=total===1&&['matches','references'].includes(countLabel)?(countLabel==='matches'?'match':'reference'):countLabel;
           const count=data.loaded_count!=null?`${data.loaded_count} loaded${data.reported_count!=null?' · '+data.reported_count+' reported by NSX':data.can_continue?' · more available':''}`:data.status==='partial'?total+' '+unit+'; total unknown':'';status.textContent=(states[data.status]||data.status)+(count?' · '+count:'')+' · '+status.textContent;status.dataset.membershipStatus=data.status;}
         const notes=compactMembership?[...new Set((data.notes||[]).map(note=>memberNotes.has(note)?memberNotes.get(note):note))]:(data.notes||[]);
@@ -191,22 +196,63 @@
     window.WorkspaceTabs(nav,entries,{onSelect:index=>{selected=index;if(visible){size();entries[index].show();}}});
     root.addEventListener('evidence-visible',()=>{visible=true;size();entries[selected].show();});return root;
   };
-  window.firewallReferenceColumns=(body,inspect,{referenceLabel='Matched groups'}={})=>{
+  // Saved rule configuration per reference row; matched entries are marked where they occur.
+  window.firewallRuleFieldCell=(body,field,{none='Any'}={})=>{
+    const root=make('div');root.className='evidence-reference-lines evidence-rule-field';
+    if(!field?.recorded){root.append(make('span','Not recorded'));return root;}
+    if(field.origin==='policy')root.append(make('small','From policy'));
+    if(field.excluded){const negated=window.evidenceBadge('NOT');negated.dataset.tone='warning';negated.title='Negated selection: every endpoint except these entries';root.append(negated);}
+    if(field.any){root.append(make('span',none));return root;}
+    const entries=field.items.map(entry=>{
+      const line=make('div'),label=entry.known?make('button',entry.name):make('span',entry.name);line.className='evidence-field-entry';label.title=entry.path;
+      if(entry.known){label.type='button';label.className='evidence-object-link';label.onclick=()=>window.openRelatedEvidence(body,{path:entry.path},entry.name);}
+      line.append(label);
+      if(entry.matched){line.dataset.matched='true';const mark=make('span','✓');mark.className='evidence-match-mark';mark.setAttribute('aria-hidden','true');const spoken=make('span',' (matched)');spoken.className='visually-hidden';line.append(mark,spoken);}
+      return line;
+    });
+    root.append(...entries.slice(0,3));
+    const hidden=entries.slice(3),omitted=field.total-field.items.length;
+    if(hidden.length){const more=make('button','+'+(field.total-3)+' more');more.type='button';more.className='evidence-more';
+      more.onclick=()=>{more.replaceWith(...hidden,...(omitted>0?[make('small',omitted+' more in the rule record')]:[]));hidden[0].querySelector('button,span')?.focus?.();};root.append(more);}
+    return root;
+  };
+  window.firewallReferenceColumns=(body,inspect)=>{
     const lines=values=>{const root=make('div');root.className='evidence-reference-lines';for(const value of values)root.append(make('span',value));return root;};
-    return [
-      {label:'Type',cell:item=>item.firewall_type},
-      {label:'Category',cell:item=>item.category},
-      {label:'Policy',cell:item=>item.policy_name},
-      {label:'Rule',cell:item=>window.evidenceObject(body,item,{path:item.path})},
-      {label:'ID',cell:item=>item.rule_id},
-      {label:'Seq',cell:item=>item.sequence_number},
-      {label:'Action',cell:item=>window.evidenceBadge(item.action,'action')},
-      {label:'State',cell:item=>window.evidenceBadge(item.disabled===true?'Disabled':item.disabled===false?'Enabled':null)},
-      {label:'Matched fields',cell:item=>lines(item.matched_fields?.length?item.matched_fields:['Not retained'])},
-      {label:referenceLabel,cell:item=>{const root=make('div');root.className='evidence-reference-lines';const matches=item.field_matches||[],groups=item.matched_groups||[];const known=new Set(matches.map(match=>match.group.path)),shown=[...matches,...groups.filter(group=>!known.has(group.path)).map(group=>({field:matches.length?'Field not retained':'',group}))];if(shown.length){for(const match of shown.slice(0,3)){const entry=make('div'),link=make('button',match.group.name||match.group.path);entry.className='evidence-firewall-match';link.type='button';link.className='evidence-object-link';link.title=match.group.path;link.onclick=()=>window.openRelatedEvidence(body,{path:match.group.path},match.group.name||match.group.path);if(match.field)entry.append(make('small',match.field));entry.append(link);root.append(entry);}}if(shown.length>3||item.groups_truncated)root.append(make('small','More groups in rule inspection'));if(!groups.length)root.append(make('span','Not retained'));return root;}},
-      {label:'Reason / limits',cell:item=>{const root=lines([item.reference_reason||'Not retained',item.network_checked_at?'Attachment collected '+(window.workspaceTimeText?window.workspaceTimeText(item.network_checked_at):item.network_checked_at):'',item.field_note].filter(Boolean));if(item.ip_matches?.length)root.append(window.ipReferenceCell(item));return root;}},
-      {label:'Details',cell:item=>{const button=make('button','Inspect');button.type='button';button.setAttribute('aria-label','Inspect references for '+(item.name||item.path));button.onclick=()=>inspect(item,button);return button;}}
-    ].map((column,index)=>({...column,width:[4,7,9,17,4,4,6,7,8,12,16,6][index]+'%'}));
+    const field=(name,options)=>item=>window.firewallRuleFieldCell(body,item.rule_fields?.[name],options);
+    const columns=[
+      {label:'Category',width:7,cell:item=>item.nsx_order?.category||item.category||'Not recorded'},
+      {label:'Name',width:12,cell:item=>{const root=make('div'),label=item.name||item.path?.split('/').pop()||'Not recorded',button=make('button',label);root.className='evidence-object evidence-rule-name';
+        button.type='button';button.className='evidence-object-link';button.title=item.path||'';button.setAttribute('aria-label','Inspect references for '+label);button.onclick=()=>inspect(item,button);root.append(button);
+        const order=item.nsx_order,context=order?(order.rule_sequence!=null?'Rule sequence '+order.rule_sequence:'Rule sequence not recorded'):[item.policy_name,item.category].filter(Boolean).join(' · ');if(context)root.append(make('small',context));return root;}},
+      {label:'ID',width:4,cell:item=>item.rule_id},
+      {label:'Sources',width:10,cell:field('sources')},
+      {label:'Destinations',width:10,cell:field('destinations')},
+      {label:'Services',width:9,cell:field('services')},
+      {label:'Context profiles',width:8,visible:data=>data.items.some(item=>item.show_context_profiles),cell:field('context_profiles',{none:'None'})},
+      {label:'Applied to',width:9,cell:field('applied_to',{none:'DFW'})},
+      {label:'Action',width:6,cell:item=>window.evidenceBadge(item.action,'action')},
+      {label:'State',width:7,cell:item=>window.evidenceBadge(item.disabled===true?'Disabled':item.disabled===false?'Enabled':null)},
+      {label:'Matched in',width:8,cell:item=>{const root=lines(item.matched_fields||[]),direct=new Set((item.field_matches||[]).map(match=>match.group.path)),indirect=(item.matched_groups||[]).filter(group=>!direct.has(group.path));
+        for(const group of indirect.slice(0,3)){const entry=make('div'),link=make('button',group.name||group.path);entry.className='evidence-firewall-match';link.type='button';link.className='evidence-object-link';link.title=group.path;link.onclick=()=>window.openRelatedEvidence(body,{path:group.path},group.name||group.path);entry.append(make('small','Field not retained'),link);root.append(entry);}
+        if(indirect.length>3||item.groups_truncated)root.append(make('small','More groups in rule inspection'));
+        if(!root.children.length)root.append(make('span','Not retained'));return root;}},
+      {label:'Reason / limits',width:10,cell:item=>{const root=lines([item.reference_reason||'Not retained',item.network_checked_at?'Attachment collected '+(window.workspaceTimeText?window.workspaceTimeText(item.network_checked_at):item.network_checked_at):'',item.field_note].filter(Boolean));if(item.ip_matches?.length)root.append(window.ipReferenceCell(item));return root;}}
+    ].map(column=>({...column,width:column.width+'%'}));
+    columns.groups=window.firewallReferenceGroups;
+    return columns;
+  };
+  // Configured NSX order: category, then policy. Counts and "continued" span all pages.
+  window.firewallReferenceGroups=(item,previous)=>{
+    const order=item.nsx_order;if(!order)return [];
+    const before=previous?.nsx_order,count=value=>value+' '+(value===1?'reference':'references');
+    // The first row of every page repeats its headings; the server says whether they continue.
+    const sameCategory=!!before&&before.category===order.category,samePolicy=sameCategory&&before.policy_key===order.policy_key;
+    const heading=(level,title,details,continued)=>{const content=make('span');content.className='evidence-group-heading';content.append(make('strong',title));
+      for(const detail of [...details,continued?'continued from the previous page':''].filter(Boolean))content.append(make('small',detail));return {level,content};};
+    const headings=[];
+    if(!sameCategory)headings.push(heading('category',order.category_known?order.category:'Category: '+order.category,[count(order.category_count)],!before&&order.category_continued));
+    if(!samePolicy)headings.push(heading('policy','Policy: '+(order.policy||'Not recorded'),[order.policy_sequence!=null?'Policy sequence '+order.policy_sequence:'Order not recorded',count(order.policy_count)],!before&&order.policy_continued));
+    return headings;
   };
   // Both direct inventory selection and related-object navigation use this renderer.
   window.objectReferenceTables=(body,row)=>{
@@ -216,7 +262,7 @@
     const load=(section,page)=>window.reportData(null,{op:'object-references',path:row.path,section,page});
     const inspect=item=>window.openRelatedEvidence(body,{path:item.path},item.name||item.path);
     const firewall=window.evidenceTable({title:'Firewall references',wide:true,current,load:page=>load('firewall',page),
-      columns:window.firewallReferenceColumns(body,inspect,{referenceLabel:row.kind==='custom_service'?'Matched service':'Matched groups'})});
+      columns:window.firewallReferenceColumns(body,inspect)});
     const objects=window.evidenceTable({title:'Other referencing objects',current,load:page=>load('objects',page),
       columns:[{label:'Object',cell:item=>window.evidenceObject(body,item,{path:item.path})}]});
     body.querySelectorAll('[data-evidence-section="relationships"]').forEach(node=>node.remove());

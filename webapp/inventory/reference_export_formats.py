@@ -7,7 +7,10 @@ import json
 MIMES = {'csv':'text/csv; charset=utf-8','pdf':'application/pdf','json':'application/json',
          'yaml':'application/yaml','html':'text/html; charset=utf-8'}
 MAX_CONTENT = 64*1024*1024
-COLUMNS = ('Name','Path','Type','Category','Policy','Rule ID','Seq','Action','State','Matched fields','Matched groups','Reason / evidence')
+# Rows arrive in configured NSX order (category, policy sequence, rule sequence).
+COLUMNS = ('Rule category','Name','Path','Policy','Policy sequence','Rule sequence','Rule ID','Sources','Destinations','Services','Context profiles','Applied to','Action','State','Matched in','Reason / evidence')
+ACTION = COLUMNS.index('Action')
+NONE = {'context_profiles':'None','applied_to':'DFW'}
 
 
 def text(value):
@@ -16,23 +19,39 @@ def text(value):
     return str(value)
 
 
+def rule_field(item,name):
+    field=(item.get('rule_fields') or {}).get(name)
+    if not field or not field.get('recorded'): return ''
+    if field.get('any'): return NONE.get(name,'Any')
+    values=[entry.get('name') or entry.get('path') for entry in field.get('items',[])]
+    if field.get('total',len(values))>len(values): values.append('+%d more'%(field['total']-len(values)))
+    prefix=('From policy: ' if field.get('origin')=='policy' else '')+('NOT ' if field.get('excluded') else '')
+    return prefix+'; '.join(text(value) for value in values)
+
+
 def row(item):
-    if not isinstance(item,dict): return (text(item),)+('',)*11
-    fields='; '.join(item.get('matched_fields') or [])
-    groups='; '.join((match.get('field','')+': '+match.get('group',{}).get('name',match.get('group',{}).get('path',''))) for match in item.get('field_matches',[]))
-    if not groups: groups='; '.join(text(group.get('name',group.get('path'))) if isinstance(group,dict) else text(group) for group in item.get('matched_groups',item.get('via_groups',[])))
+    if not isinstance(item,dict): return (text(item),)+('',)*(len(COLUMNS)-1)
+    label=lambda group: text(group.get('name',group.get('path'))) if isinstance(group,dict) else text(group)
+    matches=item.get('field_matches',[])
+    direct={match.get('group',{}).get('path') for match in matches}
+    indirect=[group for group in item.get('matched_groups',item.get('via_groups',[])) if (group.get('path') if isinstance(group,dict) else group) not in direct]
+    # Matched in: field/object pairs, plus matched objects whose field was not retained.
+    groups='; '.join([match.get('field','')+': '+label(match.get('group',{})) for match in matches]+
+                     [('Field not retained: ' if matches else '')+label(group) for group in indirect])
     evidence='; '.join(text(item[key]) for key in ('reference_reason','membership_basis','membership_source','network_checked_at','ip_checked_at','field_note') if item.get(key))
     if item.get('via'): evidence+='; Interface links: '+text(item['via'])
     if item.get('ip_matches'): evidence+='; IP matches: '+text(item['ip_matches'])
-    return tuple(text(value) for value in (item.get('name',item.get('tag','')),item.get('path'),item.get('firewall_type',item.get('resource_type')),
-        item.get('category'),item.get('policy_name'),item.get('rule_id'),item.get('sequence_number'),item.get('action'),
+    order=item.get('nsx_order') if isinstance(item.get('nsx_order'),dict) else {}
+    return tuple(text(value) for value in (order.get('category',item.get('category')),item.get('name',item.get('tag','')),item.get('path'),item.get('policy_name'),
+        order.get('policy_sequence'),order.get('rule_sequence',item.get('sequence_number')),item.get('rule_id'),
+        *(rule_field(item,name) for name in ('sources','destinations','services','context_profiles','applied_to')),item.get('action'),
         'Disabled' if item.get('disabled') is True else 'Enabled' if item.get('disabled') is False else '',
-        fields,groups,evidence))
+        groups,evidence))
 
 
 def report_table(section):
     if section['key'] in ('firewall','confirmed_rules','firewall_references'):
-        return COLUMNS,[12,16,4,6,8,4,4,5,5,8,13,15],[row(item) for item in section['items']]
+        return COLUMNS,[7,10,9,8,5,5,4,8,8,7,6,7,4,4,8,10],[row(item) for item in section['items']]
     rows=[]
     for item in section['items']:
         if not isinstance(item,dict): rows.append((text(item),'',''));continue
@@ -80,7 +99,7 @@ def html_bytes(document):
             '<p class="status">'+esc(human(section.get('status','unknown')))+' · '+esc(human(section['source']))+' · '+esc(section.get('checked_at'))+'</p>',
             '<p>'+esc(' '.join(section['notes']))+'</p><div class="table-scroll"><table><thead><tr>'+''.join('<th scope="col">'+esc(column)+'</th>' for column in columns)+'</tr></thead><tbody>'])
         for item,cells in zip(section['items'],rows):
-            parts.append('<tr data-reference>'+''.join('<td'+(' class="action-'+cells[7].lower()+'"' if len(cells)==12 and index==7 and cells[7].lower() in ('allow','drop','reject') else '')+'>'+esc(value)+'</td>' for index,value in enumerate(cells))+'</tr>')
+            parts.append('<tr data-reference>'+''.join('<td'+(' class="action-'+cells[ACTION].lower()+'"' if len(cells)==len(COLUMNS) and index==ACTION and cells[ACTION].lower() in ('allow','drop','reject') else '')+'>'+esc(value)+'</td>' for index,value in enumerate(cells))+'</tr>')
             parts.append('<tr data-reference><td colspan="'+str(len(columns))+'"><details><summary>Structured reference</summary><pre>'+esc(json.dumps(item,ensure_ascii=False,indent=2))+'</pre></details></td></tr>')
         if not section['items']: parts.append('<tr><td colspan="'+str(len(columns))+'">No references retained in this category. See coverage above.</td></tr>')
         parts.append('</tbody></table></div></section>')
@@ -124,9 +143,10 @@ def pdf_bytes(document):
         widths=[pdf.width*weight/sum(weights) for weight in weights]
         story.append(KeepTogether([para(section['label']+' ('+str(section['count'])+')',heading),
             para(human(section.get('status','unknown'))+' · '+human(section['source'])+' · '+text(section.get('checked_at'))),para(' '.join(section['notes'])),Spacer(1,6)]))
-        values=[[para(column,ParagraphStyle('Column',parent=small,fontName='ReferenceBold')) for column in columns]]
+        # Headers are plain words: wrap between words, unlike paths in body cells.
+        values=[[para(column,ParagraphStyle('Column',parent=small,fontName='ReferenceBold',wordWrap=None)) for column in columns]]
         for cells in rows:
-            values.append([para(value,ParagraphStyle('Action',parent=base,textColor=colors.HexColor('#146343' if value=='ALLOW' else '#9c2d24'))) if len(cells)==12 and index==7 and value in ('ALLOW','DROP','REJECT') else para(value) for index,value in enumerate(cells)])
+            values.append([para(value,ParagraphStyle('Action',parent=base,textColor=colors.HexColor('#146343' if value=='ALLOW' else '#9c2d24'))) if len(cells)==len(COLUMNS) and index==ACTION and value in ('ALLOW','DROP','REJECT') else para(value) for index,value in enumerate(cells)])
         if not section['items']: values.append([para('No references retained. See coverage above.')]+[para('') for _ in columns[1:]])
         table=LongTable(values,colWidths=widths,repeatRows=1,splitInRow=1,hAlign='LEFT')
         table.setStyle(TableStyle([('BACKGROUND',(0,0),(-1,0),colors.HexColor('#edf2f5')),('VALIGN',(0,0),(-1,-1),'TOP'),('LINEBELOW',(0,0),(-1,0),.5,colors.HexColor('#a5b7c4')),('LINEBELOW',(0,1),(-1,-1),.25,colors.HexColor('#d5dfe5')),('LEFTPADDING',(0,0),(-1,-1),5),('RIGHTPADDING',(0,0),(-1,-1),5),('TOPPADDING',(0,0),(-1,-1),6),('BOTTOMPADDING',(0,0),(-1,-1),6)]))

@@ -97,8 +97,23 @@ project/scope separation, pagination checks, partial positives and excluded fiel
 
 The evidence drawer uses shared table-based references for VMs, groups and
 services, including navigation from one referenced object to another. Firewall
-reference tables widen the drawer and retain rule category, policy, ID, sequence,
-action/state, matched fields, groups and reason. Avoid restoring nested collapsible
+reference tables widen the drawer and show Category, Name (with the rule
+sequence), ID, Sources, Destinations, Services, Context profiles (only when the
+snapshot uses them), Applied to, Action, State, Matched in and Reason / limits.
+Rows follow configured NSX order before paging: category (Ethernet, Emergency,
+Infrastructure, Environment, Application, then unknown), policy sequence, rule
+sequence. Category and policy heading rows carry totals across all pages and
+repeat as "continued" on later pages. Missing sequences sort last and show
+"Order not recorded". This is configured order, not an effective-policy verdict.
+Matched objects are marked in place; negated fields show NOT; a policy-level
+Applied To is labelled "From policy". A policy's Applied To selects every rule in
+that policy: VM and group references include those rules (read from saved rule
+configuration, so existing snapshots benefit) with "Applied to (policy)" in
+Matched in. Tag references gain them from new collections only, because tag
+firewall edges are prepared at collection time. Tag firewall tables show one row
+per rule; a rule reached through several tag-using groups lists every group and
+both tag uses (condition and/or group assignment). Exports use the same order and start
+with Rule category, adding Policy sequence and Rule sequence columns. Avoid restoring nested collapsible
 lists, character-by-character path wrapping or large repeated notices.
 
 VM References contains groups, saved network links, firewall rules and IP/subnet

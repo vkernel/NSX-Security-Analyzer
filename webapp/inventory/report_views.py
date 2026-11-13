@@ -160,7 +160,7 @@ def snapshot_data(request, pk):
                 result = {'id': row.ordinal, 'view': row.view}
             elif op == 'current-member-rule':
                 from .current_membership import subject
-                from .confirmed_references import read, current_context
+                from .confirmed_references import read, current_context, rule_groups
                 owner_snapshot = Snapshot.objects.select_related('environment').defer('report','html','summary').get(pk=pk)
                 owner = subject(owner_snapshot, 'vm', request.GET.get('id', '-1'))
                 evidence, network = current_context(owner_snapshot, owner)
@@ -169,7 +169,7 @@ def snapshot_data(request, pk):
                 if not path: raise ValueError('A rule path is required.')
                 detail = read(pk, groups, path=path, detail=True)
                 if detail is None: raise Http404('Rule is not referenced through current VM associations or verified saved attachments.')
-                detail['via_groups'] = sorted(set(groups).intersection(detail.get('source_groups',[])+detail.get('destination_groups',[])+detail.get('scope',[])))
+                detail['via_groups'] = sorted(set(groups).intersection(rule_groups(detail)))
                 detail['membership_evidence'] = {group:evidence[group] for group in detail['via_groups']}
                 result = {'details':detail}
             elif op == 'object-references':

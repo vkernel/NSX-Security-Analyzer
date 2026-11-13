@@ -205,7 +205,7 @@ class ReferenceFormatTests(SimpleTestCase):
     def test_csv_formulas_are_neutralized_and_structured_formats_round_trip(self):
         document=self.document()
         cells=list(csv.reader(io.StringIO(render(document,'csv').decode('utf-8-sig'))))[1]
-        self.assertEqual(cells[1],"'=SUM(1,2)");self.assertTrue(cells[15].startswith("'=HYPERLINK"))
+        self.assertEqual(cells[1],"'=SUM(1,2)");self.assertTrue(cells[16].startswith("'=HYPERLINK"))
         self.assertEqual(json.loads(render(document,'json')),document)
         self.assertEqual(yaml.safe_load(render(document,'yaml')),document)
 

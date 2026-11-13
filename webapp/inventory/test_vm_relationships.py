@@ -63,6 +63,11 @@ class VMRelationshipTests(TestCase):
             'configuration':{'rule':{'sequence_number':0}},'source_groups':['/group/1'],'destination_groups':[],
             'scope':['/group/1']})
         SnapshotRecord.objects.create(snapshot=self.snapshot,ordinal=801,columns=[],sort_values={},view='inventory',name='Zwolle',compact={'path':'/group/1'},data={})
+        from .firewall_reference_context import context_profiles_in_use
+        context_profiles_in_use.cache_clear()
+        with CaptureQueriesContext(connection) as queries:
+            data = read(self.snapshot.pk,1,'related_rules',context=True)
+        self.assertEqual(len(queries),5) # includes the once-per-snapshot context profile check
         with CaptureQueriesContext(connection) as queries:
             data = read(self.snapshot.pk,1,'related_rules',context=True)
         item = next(row for row in data['items'] if row['path']==path)
