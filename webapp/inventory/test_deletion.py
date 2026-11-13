@@ -560,10 +560,10 @@ class DeletionTests(TestCase):
             d.validate_live(client,self.finding)
             self.assertEqual(search.call_count,1)
             self.assertEqual(references.call_count,1)
-            cache['evidence']['completed']-=61
+            cache['evidence']['completed']-=d.SCAN_REUSE_SECONDS+1
             d.validate_live(client,self.finding)
             self.assertEqual(search.call_count,2)
-            cache['evidence']['completed']-=61
+            cache['evidence']['completed']-=d.SCAN_REUSE_SECONDS+1
             search.side_effect=ValidationError('Search incomplete')
             with self.assertRaises(ValidationError): d.validate_live(client,self.finding)
             self.assertNotIn('evidence',cache)
@@ -592,18 +592,114 @@ class DeletionTests(TestCase):
         self.assertIn('timings',self.item.verification)
         self.assertIsNone(self.batch.confirmed_at)
 
-    def test_execute_never_uses_preview_dependency_cache(self):
+    def test_execution_uses_a_fresh_run_scoped_scan_never_a_preview_cache(self):
+        # A preview cache is never handed to execution; run() builds a new one per run.
+        seen=[]
         client=Mock(inventory_warnings=[],cleanup_plan=[])
         def check(current,finding):
-            self.assertIsNone(current.preview_dependency_cache)
+            seen.append(current.preview_dependency_cache)
             raise ValidationError('New references found during fresh execution check')
+        self.batch.status='running';self.batch.save()
         with patch.object(d,'approvals_valid',return_value={}), patch.object(d,'connection') as connect, \
              patch.object(d,'validate_live',side_effect=check), patch.object(d,'delete_once') as delete:
             connect.return_value.__enter__.return_value=client
-            d.process_item(self.item,execute=True,preview_cache={'evidence':'old'})
+            d.run(self.batch.pk)
             delete.assert_not_called()
+        cache,=seen
+        self.assertTrue(cache['execution'])
+        self.assertNotIn('evidence',cache)
+        self.assertEqual((cache['targets'],cache['deleted']),([self.item.path],set()))
         self.item.refresh_from_db()
         self.assertEqual(self.item.status,'blocked')
+
+    @patch.object(d, 'approvals_valid', new=lambda finding: {})
+    def test_republication_without_relevant_change_does_not_block(self):
+        self.finding.revision+=1;self.finding.save()
+        d.guard(self.batch,self.finding,self.item)  # Same evidence, approvals and identity.
+        self.finding.evidence=dict(self.evidence,configuration=dict(self.evidence['configuration'],description='changed'))
+        with self.assertRaisesMessage(ValidationError,'The finding changed'):
+            d.guard(self.batch,self.finding,self.item)
+        self.finding.evidence=self.evidence
+        self.item.approved_evidence={}  # Not yet previewed: the exact revision is required.
+        with self.assertRaisesMessage(ValidationError,'The finding changed'):
+            d.guard(self.batch,self.finding,self.item)
+
+    def test_shared_scan_excludes_deleted_objects_and_orders_same_request_references(self):
+        rule={'resource_type':'Rule','path':'/infra/domains/default/security-policies/p/rules/r','services':[self.obj['path']]}
+        scan=([self.obj,rule],{'mode':'all_types'})
+        with patch.object(d,'approvals_valid',return_value={}), patch.object(d.collector,'objects',return_value=[]), \
+             patch.object(d.collector,'verified_configuration_search',return_value=scan) as search:
+            preview={'targets':[self.obj['path'],rule['path']],'deleted':set(),'execution':False}
+            client=Mock(inventory_warnings=[],preview_dependency_cache=preview); client.get.return_value=self.obj
+            self.assertEqual(d.validate_live(client,self.finding),self.obj)
+            self.assertEqual(client.batch_dependencies,[rule['path']])
+            self.assertIsNotNone(client.dependency_scanned_at)
+            execution={'targets':[self.obj['path']],'deleted':set(),'execution':True}
+            client=Mock(inventory_warnings=[],preview_dependency_cache=execution); client.get.return_value=self.obj
+            with self.assertRaisesMessage(ValidationError,'Referenced by: '+rule['path']):
+                d.validate_live(client,self.finding)
+            execution['deleted'].add(rule['path'])  # Deleted earlier in this run and verified absent.
+            self.assertEqual(d.validate_live(client,self.finding),self.obj)
+            self.assertEqual(search.call_count,2)  # The execution scan was reused within the window.
+
+    def test_execution_deletes_referencing_objects_first(self):
+        items=[Mock(path='/group', verification={'batch_dependencies':['/rule']}),
+               Mock(path='/child', verification={'batch_dependencies':['/group']}),
+               Mock(path='/rule', verification={})]
+        self.assertEqual([item.path for item in d.dependency_order(items)],['/rule','/group','/child'])
+        cycle=[Mock(path='/a', verification={'batch_dependencies':['/b']}), Mock(path='/b', verification={'batch_dependencies':['/a']})]
+        self.assertEqual([item.path for item in d.dependency_order(cycle)],['/a','/b'])
+
+    def test_objects_that_cannot_finish_before_authorization_ends_are_not_attempted(self):
+        self.batch.status='running';self.batch.confirmed_at=timezone.now()-timedelta(minutes=59,seconds=30);self.batch.save()
+        self.item.verified_at=self.batch.confirmed_at;self.item.save()
+        with patch.object(d,'connection') as connect, patch.object(d,'delete_once') as delete:
+            d.run(self.batch.pk)
+            connect.assert_not_called();delete.assert_not_called()
+        self.item.refresh_from_db();self.batch.refresh_from_db()
+        self.assertEqual(self.item.status,'not_attempted')
+        self.assertIn('No change was made in NSX',self.item.message)
+        self.assertEqual(self.batch.status,'completed')
+        response=self.client.get(reverse('deletion-detail',args=[self.batch.pk]))
+        self.assertContains(response,'Not attempted')
+        self.assertContains(response,'?remaining='+str(self.batch.pk))
+        self.assertContains(response,'0 deleted · 0 blocked · 1 not attempted')
+
+    def test_interrupted_execution_marks_untouched_objects_not_attempted(self):
+        self.batch.status='running';self.batch.save()
+        d.interrupted(self.batch.pk)
+        self.item.refresh_from_db()
+        self.assertEqual(self.item.status,'not_attempted')
+
+    @patch.object(d, 'approvals_valid', new=lambda finding: {})
+    def test_authorized_refresh_runs_for_the_whole_plan_and_stops_instead_of_looping(self):
+        from . import deletion_plan as plan
+        self.batch.status='preview_ready';self.batch.confirmed_at=None;self.batch.ticket='';self.batch.save()
+        self.item.verified_at=timezone.now()-timedelta(minutes=11);self.item.save()
+        def arm(refreshes):
+            items=list(self.batch.items.order_by('pk'))
+            self.batch.execution_intent={'state':'armed','actor_id':str(self.user.pk),'ticket':'CHG-auto','refreshes':refreshes,
+                'fingerprint':plan.fingerprint(self.batch,items),'expires_at':(timezone.now()+timedelta(minutes=30)).isoformat()}
+            self.batch.status='preview_ready';self.batch.save()
+        arm(0)
+        with patch.object(plan,'can_execute',return_value=True):
+            plan.maybe_schedule(self.batch.pk)
+            self.batch.refresh_from_db();self.item.refresh_from_db()
+            self.assertEqual((self.batch.status,self.item.status,self.batch.execution_intent['refreshes']),('preview_queued','pending',1))
+            self.item.status='verified';self.item.save()
+            arm(plan.MAX_AUTOMATIC_REFRESHES)
+            plan.maybe_schedule(self.batch.pk)
+        self.batch.refresh_from_db()
+        self.assertEqual(self.batch.execution_intent['state'],'stopped')
+        self.assertIn('Confirm a smaller set',self.batch.execution_intent['message'])
+        self.assertIsNone(self.batch.confirmed_at)
+
+    def test_deletion_reads_are_paced_with_bounded_retries(self):
+        from .credentials import encrypt_password
+        self.env.username='reader';self.env.password_ciphertext=encrypt_password('test-only');self.env.retries=5;self.env.save()
+        with d.connection(self.env) as client:
+            self.assertEqual(client.retries,d.READ_RETRIES)
+            self.assertTrue(hasattr(client,'request_pacer'))
 
 
 @override_settings(STORAGES={'staticfiles': {'BACKEND': 'django.contrib.staticfiles.storage.StaticFilesStorage'}})

@@ -495,6 +495,34 @@ the latest owner approval, including an invalidated approval where retained.
 Apply migration **0054** before deploying matching web and worker images.
 
 
+### Deletion speed, time limits and "Not attempted"
+
+Each preview or execution run performs one full live dependency scan (all
+domains, groups, services and a complete NSX search) and reuses it for later
+objects of the same run for up to 120 seconds, then scans again. Object identity,
+configuration, condition checks and the final read immediately before DELETE stay
+per object. A preview's verification time is the time of the scan it used, so the
+ten-minute confirmation window starts when the dependency evidence was read.
+Reference cleanup always forces a fresh scan before the group is deleted.
+
+Objects that reference each other in one request no longer block each other in
+the preview. Execution deletes the referencing objects first (rules, then the
+groups and services they used, parents before nested groups). Objects verified
+absent earlier in the run are not counted as references. If a referencing object is
+not deleted, the live check blocks the object it referenced.
+
+Read-only verification requests use shared NSX pacing (Retry-After and 429
+cooldown) with up to two retries. DELETE and rule PUT requests are never retried.
+A later collection that republishes a finding without changing its identity,
+configuration, evidence or approvals no longer blocks a queued deletion.
+
+Before each object, the worker checks that it can finish before the one-hour
+execution authorization and the worker time limit end. Objects that cannot are
+marked **Not attempted** (no change was made in NSX) instead of failing, and the
+request offers **Preview remaining work**. A worker restart also marks untouched
+objects **Not attempted**. An armed automatic execution refreshes an expired plan
+at most twice, then stops and asks for a smaller set or manual confirmation.
+
 ### Replacing an expired deletion preview
 
 A preview expires ten minutes after verification unless confirmed in time. Starting a new preview retires overlapping expired verification entries under a database lock, records the expiry in audit history, and queues fresh verification. It does not reuse the expired authorization or send NSX writes. Fresh previews, cleanup reviews, and queued/running executions still prevent duplicate requests.

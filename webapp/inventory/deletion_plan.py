@@ -19,6 +19,9 @@ from .audit_events import record
 from .user_labels import user_label
 
 
+MAX_AUTOMATIC_REFRESHES = 2
+
+
 def fingerprint(batch, items):
     rows = [(item.pk, item.path, cleanup.fingerprint(item)) for item in items]
     return hashlib.sha256(json.dumps([batch.manager, rows], sort_keys=True).encode()).hexdigest()
@@ -46,7 +49,15 @@ def maybe_schedule(pk):
             if any(not can_execute(actor, item) for item in items): raise ValidationError('The authorizing administrator cannot execute every object under current execution settings.')
             stale = [item for item in items if not item.verified_at or timezone.now()-item.verified_at >= timedelta(minutes=10)]
             if stale:
-                for item in stale:
+                # Refresh the whole plan together so items do not expire in turn. Stop
+                # instead of looping when verification cannot fit the confirmation window.
+                refreshes = int(intent.get('refreshes', 0) or 0)
+                if refreshes >= MAX_AUTOMATIC_REFRESHES:
+                    raise ValidationError('Verification did not finish within the ten-minute confirmation window after '
+                        f'{refreshes} automatic refreshes. Confirm a smaller set of objects, or refresh and confirm manually.')
+                batch.execution_intent = intent = {**intent, 'refreshes': refreshes + 1}
+                batch.save(update_fields=['execution_intent'])
+                for item in items:
                     item.verification = {**item.verification, 'refresh_requested': True}
                     item.status = 'cleanup_recheck' if item.cleanup_plan else 'pending'
                     item.message = 'Refreshing verification before the explicitly authorized execution.'
@@ -128,7 +139,7 @@ def review(request, pk):
         item.plan_summary=cleanup.summary(item.cleanup_plan) if item.cleanup_plan else 'Delete this object after fresh execution checks.'
         item.approval_count=len({str(d.get('actor_id')) for d in item.cleanup_approvals})
         item.approval_required=cleanup.requirement(item.finding) if item.cleanup_plan and item.finding else 0
-        item.plan_status = {'verified':'Ready for confirmation', 'cleanup_review':'Awaiting cleanup approval', 'cleanup_recheck':'Rechecking approved cleanup', 'pending':'Waiting for verification', 'deleted':'Deleted', 'blocked':'Blocked', 'failed':'Failed', 'cancelled':'Cancelled'}.get(item.status, item.status.replace('_',' ').capitalize())
+        item.plan_status = {'verified':'Ready for confirmation', 'cleanup_review':'Awaiting cleanup approval', 'cleanup_recheck':'Rechecking approved cleanup', 'pending':'Waiting for verification', 'deleted':'Deleted', 'blocked':'Blocked', 'failed':'Failed', 'cancelled':'Cancelled', 'not_attempted':'Not attempted'}.get(item.status, item.status.replace('_',' ').capitalize())
     pending_items = [item for item in items if item.status == 'cleanup_review']
     remaining = sum(max(0, item.approval_required-item.approval_count) for item in pending_items)
     has_pending = any(not any(str(d.get('actor_id')) == str(request.user.pk) for d in item.cleanup_approvals) for item in pending_items)

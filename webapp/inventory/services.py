@@ -18,6 +18,11 @@ from .concurrency import adapt_requests
 
 
 @lru_cache(maxsize=1)
+
+def post_processing_reserve(limit):
+    """Seconds kept for snapshot preparation, indexing and findings after retrieval."""
+    return min(max(300, limit * 0.15), limit * 0.4)
+
 def engine():
     from . import collector
     return collector
@@ -281,7 +286,11 @@ def execute_job(job_id):
                     prefix = "Resolved members found: "
                     if note.startswith(prefix) and note[len(prefix):] in audit.MEMBERSHIP_ENDPOINTS:
                         client.membership_hints[row["path"]] = note[len(prefix):]
-        client.request_deadline = time.monotonic() + max(0, settings.AUDIT_TIMEOUT - (timezone.now()-job.started_at).total_seconds() - 10) if job.started_at else time.monotonic() + settings.AUDIT_TIMEOUT - 10
+        # NSX retrieval stops early enough to save, index and publish the snapshot
+        # before the worker's hard limit; a kill during publication loses everything.
+        reserve = post_processing_reserve(settings.AUDIT_TIMEOUT)
+        elapsed = (timezone.now()-job.started_at).total_seconds() if job.started_at else 0
+        client.request_deadline = time.monotonic() + max(0, settings.AUDIT_TIMEOUT - elapsed - reserve)
         maximum_requests = config.get("max_concurrent_requests", 8)
         concurrency = None if job.testing else adapt_requests(client, maximum=maximum_requests)
         try:

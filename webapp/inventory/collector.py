@@ -56,6 +56,9 @@ def configure_logging(debug=False):
     LOG.propagate = False
 
 
+MAX_THROTTLED_RETRIES = 20
+
+
 class AuditError(Exception):
     """A request or inventory completeness check failed."""
 
@@ -164,17 +167,22 @@ class NSXClient:
         retry_deadline = min(retry_deadline, phase_deadline)
         if hasattr(self, "request_context"):
             self.request_context.deadline = retry_deadline
-        for attempt in range(retries + 1):
+        # 429 responses wait on the shared pacer and do not consume attempts; they
+        # stay bounded by the retry deadline. A connection reset or read timeout
+        # is retried once: every collection request is a read-only GET.
+        attempt = throttled = 0
+        transport_retried = False
+        while True:
             if hasattr(self, "request_context"):
                 retry_deadline = self.request_context.deadline
-            if (attempt or phase_deadline != float("inf")) and time.monotonic() >= retry_deadline:
+            if (attempt or throttled or transport_retried or phase_deadline != float("inf")) and time.monotonic() >= retry_deadline:
                 raise AuditError("GET {}: retry time budget exhausted".format(path))
             if hasattr(self, "metrics_lock"):
                 with self.metrics_lock:
                     self.metrics["requests"] += 1
-                    self.metrics["retries"] += int(attempt > 0)
+                    self.metrics["retries"] += int(bool(attempt or throttled or transport_retried))
             started = time.perf_counter()
-            LOG.debug("GET %s attempt=%d timeout=%ss", path, attempt + 1,
+            LOG.debug("GET %s attempt=%d timeout=%ss", path, attempt + throttled + 1,
                       getattr(self, "bulk_timeout", 8) if bulk else getattr(self, "timeout", "default"))
             try:
                 data = self._get(path, params)
@@ -183,20 +191,27 @@ class NSXClient:
             except AuditError as exc:
                 if hasattr(self, "request_context"):
                     retry_deadline = self.request_context.deadline
-                if exc.status_code not in (429, 502, 503, 504) or attempt == retries:
-                    LOG.warning("GET %s failed status=%s attempts=%d; no further retries", path, exc.status_code, attempt+1)
-                    raise
-                if exc.status_code == 429 and hasattr(self, 'request_pacer'):
+                transport = (exc.status_code is None and not getattr(exc, "local", False)
+                             and isinstance(exc.__cause__, (urllib3.exceptions.HTTPError, OSError)))
+                if exc.status_code == 429 and hasattr(self, 'request_pacer') and retries and throttled < MAX_THROTTLED_RETRIES:
                     # Shared pacing already applies Retry-After to every worker.
-                    # Do not consume a per-request budget sleeping a second time.
-                    LOG.warning("GET %s returned HTTP 429; retry %d/%d after shared NSX cooldown", path, attempt + 1, retries)
+                    throttled += 1
+                    LOG.warning("GET %s returned HTTP 429; retry after shared NSX cooldown (throttled %d)", path, throttled)
                     continue
-                delay = max(exc.retry_after or 0, min(2 ** attempt, 30) + random.uniform(0, 1))
+                if transport and retries and not transport_retried:
+                    transport_retried = True
+                    delay = 1 + random.uniform(0, 1)
+                elif exc.status_code in (429, 502, 503, 504) and attempt < retries:
+                    delay = max(exc.retry_after or 0, min(2 ** attempt, 30) + random.uniform(0, 1))
+                    attempt += 1
+                else:
+                    LOG.warning("GET %s failed status=%s attempts=%d; no further retries", path, exc.status_code, attempt + throttled + int(transport_retried) + 1)
+                    raise
                 if time.monotonic() + delay >= retry_deadline:
                     LOG.warning("GET %s failed status=%s; retry time budget exhausted", path, exc.status_code)
                     raise
-                LOG.warning("GET %s returned HTTP %s; retry %d/%d in %.2fs",
-                            path, exc.status_code, attempt + 1, retries, delay)
+                LOG.warning("GET %s returned %s; retry %d/%d in %.2fs",
+                            path, "HTTP %s" % exc.status_code if exc.status_code else "a transport error", attempt or 1, retries, delay)
                 time.sleep(delay)
 
     def _get(self, path, params=None):
@@ -210,7 +225,9 @@ class NSXClient:
         phase_deadline = getattr(getattr(self, 'request_context', None), 'phase_deadline', float('inf'))
         remaining = phase_deadline - time.monotonic()
         if remaining <= 0:
-            raise AuditError('Counter recovery time budget exhausted')
+            error = AuditError('Counter recovery time budget exhausted')
+            error.local = True  # Never reached NSX; not evidence of manager overload.
+            raise error
         timeout = min(timeout, remaining)
         try:
             response = self.http.request("GET", url, headers=self.headers, redirect=False,

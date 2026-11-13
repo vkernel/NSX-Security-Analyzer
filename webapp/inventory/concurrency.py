@@ -7,6 +7,7 @@ import time
 import urllib3
 
 LOG = logging.getLogger('inventory.collector')
+OVERLOAD_WINDOW = 5  # seconds; one reduction per burst of overload errors
 
 
 def request_category(path, params=None):
@@ -66,7 +67,7 @@ class AdaptiveRequests:
                     self.waiters.remove(ticket)
                     self.condition.notify_all()
 
-    def release(self, started, error=None, endpoint="other"):
+    def release(self, started, error=None, endpoint="other", local=False):
         elapsed = self.clock() - started
         with self.condition:
             previous_limit = self.limit
@@ -76,7 +77,9 @@ class AdaptiveRequests:
             cause = getattr(error, "__cause__", None)
             optional_timeout = ((endpoint == "policy_statistics" or endpoint.startswith('membership/') and endpoint.endswith('/page'))
                                 and (isinstance(error, TimeoutError) or isinstance(cause, (TimeoutError, urllib3.exceptions.ReadTimeoutError))))
-            overloaded = (error is not None and not optional_timeout and
+            # Local deadline or budget errors never reached NSX and are not backpressure.
+            local = local or getattr(error, 'local', False) is True
+            overloaded = (error is not None and not optional_timeout and not local and
                           getattr(error, 'status_code', None) in (None, 429, 502, 503, 504))
             # Compare like endpoints. Statistics can be naturally slow without
             # indicating overload; one slow response must not serialize the audit.
@@ -87,7 +90,7 @@ class AdaptiveRequests:
             state["durations"].append(elapsed)
             state["maximum"] = max(state["maximum"], elapsed)
             if error is not None:
-                state["failures"][str(getattr(error, "status_code", None) or "transport_or_decode")] += 1
+                state["failures"]["local_budget" if local else str(getattr(error, "status_code", None) or "transport_or_decode")] += 1
             degraded = False
             if error is None:
                 slow = state["samples"] >= 4 and elapsed > max(state["baseline"] * 2, state["baseline"] + 2)
@@ -98,7 +101,8 @@ class AdaptiveRequests:
                 degraded = state["slow_streak"] >= 3
             else:
                 state["slow_streak"] = 0
-            if overloaded or (degraded and self.clock() - self.last_decrease >= 30):
+            # Simultaneous failures of one burst reduce the limit once, as the 429 pacer does.
+            if (overloaded and self.clock() - self.last_decrease >= OVERLOAD_WINDOW) or (degraded and self.clock() - self.last_decrease >= 30):
                 reduced = max(1, self.limit // 2)
                 self.decreases += int(reduced < self.limit)
                 self.limit = reduced
@@ -114,7 +118,7 @@ class AdaptiveRequests:
                     self.increases += 1
                     self.successes = 0
                     self.contended = False
-            elif not optional_timeout:
+            elif not optional_timeout and not local:
                 self.successes = 0
             if self.limit != previous_limit:
                 LOG.info('NSX concurrency changed: previous=%d current=%d maximum=%d category=%s response_seconds=%.3f backpressure=%s latency_degraded=%s',
@@ -159,6 +163,7 @@ def adapt_requests(client, maximum=8):
         phase_deadline = getattr(client.request_context, 'phase_deadline', None)
         started = controller.acquire(deadline=phase_deadline, endpoint=endpoint)
         error = None
+        sent = False
         try:
             # Queue time is not time spent attempting a request. The whole
             # collection deadline still bounds pacing and server cooldowns.
@@ -169,13 +174,14 @@ def adapt_requests(client, maximum=8):
                                                       getattr(client, 'request_deadline', float('inf')),
                                                       phase_deadline if phase_deadline is not None else float('inf'))
             started = controller.clock()
+            sent = True
             return original(path, params)
         except BaseException as exc:
             error = exc
             raise
         finally:
             pacer.result(error)
-            controller.release(started, error, endpoint)
+            controller.release(started, error, endpoint, local=not sent)
 
     # Limit each attempt; NSXClient.get releases the slot before retry backoff.
     client._get = request
