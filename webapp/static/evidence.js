@@ -58,7 +58,9 @@
 (() => {
   const make=(tag,text)=>{const node=document.createElement(tag);if(text!=null)node.textContent=text;return node;};
   window.evidenceBadge=(value,kind='state')=>{
-    const text=value==null?'Not recorded':String(value).replaceAll('_',' '),badge=make('span',text);badge.className='evidence-status';
+    // Raw state values (NOT_COLLECTED, not_collected) read as sentence case; actions and markers keep their spelling.
+    const raw=value==null?'Not recorded':String(value).replaceAll('_',' ');
+    const text=kind==='state'&&/^[A-Z ]+$|^[a-z ]+$/.test(raw)?raw.charAt(0).toUpperCase()+raw.slice(1).toLowerCase():raw,badge=make('span',text);badge.className='evidence-status';
     const key=text.toUpperCase();
     badge.dataset.tone=kind==='action'&&key==='ALLOW'?'positive':kind==='action'&&['DROP','REJECT'].includes(key)?'negative':['DISABLED','PARTIAL','UNAVAILABLE','NOT COLLECTED'].includes(key)?'warning':'neutral';
     return badge;
@@ -201,7 +203,7 @@
     const root=make('div');root.className='evidence-reference-lines evidence-rule-field';
     if(!field?.recorded){root.append(make('span','Not recorded'));return root;}
     if(field.origin==='policy')root.append(make('small','From policy'));
-    if(field.excluded){const negated=window.evidenceBadge('NOT');negated.dataset.tone='warning';negated.title='Negated selection: every endpoint except these entries';root.append(negated);}
+    if(field.excluded){const negated=window.evidenceBadge('NOT','marker');negated.dataset.tone='warning';negated.title='Negated selection: every endpoint except these entries';root.append(negated);}
     if(field.any){root.append(make('span',none));return root;}
     const entries=field.items.map(entry=>{
       const line=make('div'),label=entry.known?make('button',entry.name):make('span',entry.name);line.className='evidence-field-entry';label.title=entry.path;

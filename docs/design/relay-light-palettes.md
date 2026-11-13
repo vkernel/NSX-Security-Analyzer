@@ -1,5 +1,7 @@
 # Relay · Six light palette alternatives
 
+> **Historical record.** This document describes the design or implementation at the time it was written. Current code, tests and the main documentation take precedence.
+
 The selected Relay option 04 layout is retained. These six alternatives replace the green-tinted light canvas and raised surfaces with neutral whites and grays. The selected Relay dark palette remains the reference.
 
 [Open the comparison](relay-light-palettes/index.html) · [View all six](relay-light-palettes/overview.html) · [Overview image](relay-light-palettes/previews/overview.png)

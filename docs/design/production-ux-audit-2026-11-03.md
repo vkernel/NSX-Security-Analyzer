@@ -1,5 +1,7 @@
 # Production UX audit and proposal · 3 November 2026
 
+> **Historical record.** This document describes the design or implementation at the time it was written. Current code, tests and the main documentation take precedence.
+
 Status: historical audit/proposal. The approved changes are now [implemented locally](production-ux-implementation-2026-11-03.md), with verification and screenshots recorded separately. Baseline: development commit `6928572de9e38d757c09fe1ddc9de6eac8afb30e`.
 
 The application needs a consistent interaction and page structure before another styling pass. Relay option 04 and Bridge 06 remain the chosen identity. The priorities are to make context switching understandable, bring useful content higher on the page, and stop using generic controls and evidence panels for unrelated tasks.

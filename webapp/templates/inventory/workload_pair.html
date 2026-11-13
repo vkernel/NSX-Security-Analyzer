@@ -31,7 +31,7 @@
 {% table_footer page %}
 <details class="form-card"><summary>Share and export this investigation</summary><div class="pair-secondary"><a class="button" href="{{ export_url }}">Export rule explanations</a><button type="button" class="button" data-copy-pair>Copy snapshot link</button><span data-copy-status role="status"></span></div></details>
 <details class="form-card"><summary>Save this investigation</summary><form method="post">{% csrf_token %}<label>View name<input name="name" maxlength="100" required></label><button name="action" value="save_pair">Save personal view</button></form></details>
-{% else %}<section class="pair-empty"><div class="pair-icon">↔</div><h2>Start with two workloads</h2><p>Select the source and destination above. Add a protocol and port to focus the investigation.</p><p>The application explains candidate configuration rules; it does not simulate traffic or change NSX.</p></section>{% endif %}
+{% else %}<section class="pair-empty"><div class="pair-icon">↔</div><h2>Start with two workloads</h2><p>Select the source and destination above. Add a protocol and port to focus the investigation.</p></section>{% endif %}
 {% else %}<p class="notice">Snapshot browsing evidence is archived or being prepared. <a href="{% url 'snapshot' snapshot.pk %}">Open snapshot to restore evidence</a>.</p>{% endif %}
 
 <div data-segmentation-status data-snapshot="{{ snapshot.pk }}" data-url="{% url 'segmentation' environment.pk %}?check=1"></div>

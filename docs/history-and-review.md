@@ -195,11 +195,12 @@ The list shows at most 50 matching results; the unread count covers all matches 
 
 ## Evidence drawer
 
-Inventory and firewall details use **Overview**, **Relationships**, and
-**Technical details** tabs. The overview shows recorded status and evidence;
-relationships contain references or assignments; technical details hold paths and
-raw definitions. Expand a section to inspect its contents. Existing saved reports
-remain readable, without rebuilding snapshot indexes for this layout change.
+Inventory and firewall details use **Summary**, **Members**, **References**,
+**History** and **Technical details** tabs where they apply. The summary shows
+recorded status and evidence; members and references hold saved and, for VMs and
+groups, current membership evidence and firewall references; technical details hold
+paths and raw definitions. Links to related objects open them in the same drawer, and
+**Back** returns to the previous object.
 
 Use **Expand** on desktop for a wider drawer. On smaller screens the drawer uses
 the available width. Escape or Close returns to the table. The VM relationship
@@ -266,21 +267,21 @@ their saved data.
 
 ### Collection and recalculation concurrency
 
-The normal `python manage.py audit_worker` command now supervises five independent
+The normal `python manage.py audit_worker` command supervises six independent
 lanes in the existing worker container. One collection may run globally, and one
-finding-review indexing/recalculation, one snapshot comparison and one read-only deletion preview may run alongside it. Confirmed deletion uses its own lane. Additional jobs remain queued.
+finding-review indexing/recalculation, one snapshot comparison, one read-only deletion preview, one confirmed deletion and one reference export may run alongside it. Additional jobs remain queued.
 PostgreSQL locks enforce these limits across worker replicas; SQLite is intended
 for a single-worker development deployment. No extra Compose service or Kubernetes
-Deployment is needed. Allow worker memory for all five subprocesses together.
+Deployment is needed. Allow worker memory for all six subprocesses together.
 
 The command name remains `audit_worker` for deployment compatibility; UI labels use
-“collection worker.” `--lane collection`, `--lane recalculation` `--lane comparison`, `--lane deletion_preview` and `--lane deletion_execution` are available
+“collection worker.” `--lane collection`, `--lane recalculation`, `--lane comparison`, `--lane deletion_preview`, `--lane deletion_execution` and `--lane exports` are available
 for separate process deployments. `--once` processes at most one job and exits;
-with its default lane it conservatively reserves all five lanes for that invocation.
+with its default lane it conservatively reserves all six lanes for that invocation.
 Stop old worker replicas during upgrade, apply migrations, then start the matching new build.
 
 ### Filtering comparisons and personal work
 
 A prepared comparison shows totals by change type. Search by object name or exact path text, and filter Added, Removed, Changed, Presence uncertain or Evidence incomplete. Totals describe the whole pair; the result count describes the current filters. No matching differences does not mean the whole pair is unchanged. Preparing comparisons update automatically without replacing the filter form.
 
-**My work** supports environment filtering and sorting by assignment age, name or environment. Each row shows review stage, recorded approval count and the same evidence-readiness assessment used by the review page. Expand **Why?** for a blocker or independent-check requirement. Readiness is checked again when submitting a decision. Assignment age uses the most recent recorded assignment event; older work without one shows Not recorded.
+**Reviews** supports environment filtering and sorting by assignment age, name or environment. Each row shows review stage, recorded approval count and the same evidence-readiness assessment used by the review page. Expand **Why?** for a blocker or independent-check requirement. Readiness is checked again when submitting a decision. Assignment age uses the most recent recorded assignment event; older work without one shows Not recorded.

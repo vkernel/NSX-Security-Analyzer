@@ -200,6 +200,9 @@ def workspace(request, environment=None, *, legacy=False):
     counts = {key: in_queue(base, request.user, key).count() + sum(cleanup_in_queue(t, request.user, key) for t in cleanup) for key, _ in QUEUES}
     queue_links = links(request, queue, environment, counts)
     qualifiers = list((environment.findings if environment else Finding.objects).filter(present=True).values('qualification').annotate(total=Count('pk')).order_by('qualification')) if not invalid_scope else []
+    labels = dict(Finding._meta.get_field('qualification').choices)
+    for entry in qualifiers:
+        entry['label'] = labels.get(entry['qualification'], entry['qualification'].replace('_', ' ').capitalize())
     context = {'page': page, 'environment': environment, 'selected_environment': environment,
         'work_environment': selected, 'queue': queue, 'queue_links': queue_links, 'queue_counts': counts,
         'queue_label': dict(QUEUES)[queue], 'scope_label': environment.name if environment else 'All environments',

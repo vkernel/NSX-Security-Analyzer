@@ -295,7 +295,7 @@ def finding_policy(request):
                 affected = [environment.pk] if environment else Environment.objects.exclude(pk__in=FindingPolicy.objects.filter(environment__isnull=False).values('environment_id')).values_list('pk', flat=True)
                 queue(affected, kinds)
             from django.contrib import messages
-            messages.success(request, 'Criteria saved. Finding reviews are being recalculated from retained collection history by the worker; no new collection is required.')
+            messages.success(request, 'Criteria saved. Reviews are being recalculated from retained collection history; no new collection is required.')
             return redirect(request.get_full_path())
     return render(request, 'inventory/finding_policy.html', {'form': form, 'selected': selected,
         'environment': environment, 'overridden': bool(saved), 'environments': Environment.objects.only('pk', 'name').order_by('name'),

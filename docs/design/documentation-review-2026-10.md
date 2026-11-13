@@ -1,5 +1,7 @@
 # Documentation update — 23 October 2026
 
+> **Historical record.** Documentation review notes from October 2026. Current code, tests and the main documentation take precedence.
+
 Added the read-only saved deletion configuration viewer with copy/download controls
 and manual recreation guidance; no automated recovery is provided.
 

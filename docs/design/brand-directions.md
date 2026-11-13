@@ -1,5 +1,7 @@
 # Five brand and interface directions
 
+> **Historical record.** This document describes the design or implementation at the time it was written. Current code, tests and the main documentation take precedence.
+
 These five Unslop explorations propose new identities for NSX Security Analyzer. They are standalone, interactive design concepts using the same illustrative data. The application and published Docker image are unchanged.
 
 Open [the interactive comparison](brand-directions/index.html) in a browser. Switch between five directions, then choose Segmentation, Naming review or Login & brand. The map, evidence drawers, VM-pair lookup and naming selection demonstrate interactions locally. No credentials are sent or stored and no application APIs are called.

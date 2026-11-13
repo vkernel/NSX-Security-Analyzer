@@ -1,5 +1,7 @@
 # Production UX implementation · 3 November 2026
 
+> **Historical record.** This document describes the design or implementation at the time it was written. Current code, tests and the main documentation take precedence.
+
 Status at validation: implementation and follow-up code changes complete, before publication. Publishing this source does not deploy it to an operational environment. [Completed follow-up and synthetic-inventory acceptance](production-ux-acceptance-2026-11-03.md). This delivers the implementation phases in the [approved audit and proposal](production-ux-audit-2026-11-03.md). Relay option 04 navigation, Bridge 06 light and Relay dark remain the product identity.
 
 ## Implemented changes

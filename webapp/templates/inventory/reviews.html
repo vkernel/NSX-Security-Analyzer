@@ -27,7 +27,7 @@
 <p>Findings enter review when they meet the configured observation criteria. Assigned work is retained when evidence changes; completed and rejected reviews are available under All findings.</p>
 <p>2 days requires 48 hours between qualifying snapshots; time after the latest snapshot does not count.</p>
 {% if historical_finding_count %}<p>{{ historical_finding_count }} historical findings are no longer currently observed. This does not mean their objects were deleted.</p>{% endif %}
-<dl class="finding-counts">{% for entry in qualification_counts %}<div><dt>{{ entry.qualification|capfirst }}</dt><dd>{{ entry.total }}</dd></div>{% endfor %}</dl>
+<dl class="finding-counts">{% for entry in qualification_counts %}<div><dt>{{ entry.label }}</dt><dd>{{ entry.total }}</dd></div>{% endfor %}</dl>
 {% if environment %}<a href="{% url 'collection-coverage' environment.pk %}">Review collection coverage</a>{% endif %}
 </details>{% endif %}
 {% if environment and user.is_superuser %}<p><a href="{% url 'deletion-history' environment.pk %}">Deletion history · {{ environment.name }} →</a></p>{% endif %}

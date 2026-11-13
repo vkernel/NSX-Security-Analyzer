@@ -58,7 +58,7 @@
     let first=true;
     groups.forEach((items,label)=>{
       if(!items.length&&label==='Members'&&!(row?.kind==='group'||row?.inventory_type==='Group'))return;
-      if(!items.length&&label==='History')items.push(make('p','This snapshot contains point-in-time evidence. Open Finding reviews for decision and observation history.','muted'));
+      if(!items.length&&label==='History')items.push(make('p','This snapshot contains point-in-time evidence. Open Reviews for decision and observation history.','muted'));
       if(!items.length)items.push(make('p',label==='References'?'No relationship details recorded for this object.':'No additional details recorded.','muted'));
       const button=make('button',label), panel=make('div',null,'evidence-panel');button.type='button';
       const id='evidence-'+label.toLowerCase().replaceAll(' ','-');panel.id=id;button.id=id+'-tab';button.setAttribute('role','tab');button.setAttribute('aria-controls',id);button.setAttribute('aria-selected',String(first));button.tabIndex=first?0:-1;
@@ -119,7 +119,7 @@
     function reportNavigation(){
       if(!tabs)return;const id=location.hash.slice(1)||'overview';let kind=Object.keys(filters).find(key=>filters[key].some(([,anchor])=>anchor===id));
       const isFirewall=['rules','policies'].includes(kind)||id==='dfw-overview',isHelp=['feature-guide','coverage','tags-coverage'].includes(id);
-      const items=isHelp?[['User guide','feature-guide'],['Audit coverage','coverage'],['Tag coverage','tags-coverage']]:isFirewall?firewall:[['Overview','overview'],...inventory];
+      const items=isHelp?[['User guide','feature-guide'],['Coverage & definitions','coverage'],['Tag coverage','tags-coverage']]:isFirewall?firewall:[['Overview','overview'],...inventory];
       tabs.replaceChildren();for(const [label,anchor] of items){const link=make('a',label);link.href='#'+anchor;if(id===anchor || (kind && filters[kind]?.some(([,value])=>value===id) && filters[kind][0][1]===anchor))link.setAttribute('aria-current','page');tabs.append(link);}
       if(isFirewall){const link=make('a','Historical activity');link.href='/environments/'+document.body.dataset.tableScope+'/rule-history/';tabs.append(link);}
       document.querySelectorAll('[data-primary]').forEach(link=>{if(link.dataset.primary===(isFirewall?'firewall':isHelp?'help':'inventory'))link.setAttribute('aria-current','page');else link.removeAttribute('aria-current');});

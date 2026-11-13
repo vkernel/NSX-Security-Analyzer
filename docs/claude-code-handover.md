@@ -234,14 +234,13 @@ This handover updates GitHub documentation and does not rebuild the runtime imag
 5. Add the separate JavaScript suite to GitHub Actions as a scoped follow-up task.
    The current workflow installs Node for collector checks but does not run
    `webapp/tests-js/*.test.cjs`; those 113 checks currently need a separate run.
-6. Open review backlog from 13 November 2026, in priority order: P2 — remove
-   repeated caveats and "audit" wording in the UI, unify Reviews terminology,
-   restructure the in-app help (generated in `collector.py`) into task-based
-   topics, correct GitHub docs (release banners, worker lanes, concurrency,
-   SECURITY roles, PostgreSQL test setup, roadmap, historical design index), run
-   the network phase in parallel with other collection work, show per-branch
-   collection progress, and index snapshots outside the publish transaction.
-   P3 — warm-start pacing, collection CPU clean-ups, shared page header/empty
+6. Open review backlog from 13 November 2026. P2 items done on development: UI
+   caveats and "audit" wording, Reviews terminology, task-based in-app help
+   (`feature_guide()` in `collector.py`), GitHub doc corrections and live collection
+   progress counts. Still open: restructure the long `finding-review-workflow.md`
+   and `collection-performance.md` guides; measure phase times before overlapping
+   the network phase with other collection work; index snapshots outside the
+   publish transaction (needs UI handling of "index not ready"). P3 — warm-start pacing, collection CPU clean-ups, shared page header/empty
    state components, theme tokens for chart colours and removal of the dead
    standalone report code.
 7. Update this baseline when significant code or publication state changes. Track

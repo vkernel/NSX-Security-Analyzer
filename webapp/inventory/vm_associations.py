@@ -157,6 +157,8 @@ def collect(client, vms, *, workers=4, testing=False):
                 LOG.info('VM association progress: completed=%d total=%d requests=%d statuses=%s elapsed_seconds=%.1f',
                          stats['completed'], len(candidates), stats['requests'], states, now-started)
                 last_log[0] = now
+            from .collector import report_progress
+            report_progress(client, 'VM associations', stats['completed'], len(candidates))
 
     # Verify one identity per scope before parallel fan-out, avoiding a denial storm.
     first, rest, scopes = [], [], set()

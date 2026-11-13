@@ -275,3 +275,7 @@ test('firewall references group by NSX category and policy, repeating headings o
  d.querySelector('[aria-label="Next firewall references"]').click();await tick();table=d.querySelector('.evidence-firewall-table');
  assert.deepEqual(headings(),['category:Application3 referencescontinued from the previous page','policy:Policy: WebOrder not recorded2 referencescontinued from the previous page','category:Category: Custom1 reference','policy:Policy: OtherPolicy sequence 101 reference']);
  assert.match(table.textContent,/Rule sequence not recorded/);dom.window.close();});
+test('status badges read as sentence case while actions and markers keep their spelling',()=>{const dom=setup(),w=dom.window;
+ const badge=w.evidenceBadge('NOT_COLLECTED');assert.equal(badge.textContent,'Not collected');assert.equal(badge.dataset.tone,'warning');
+ assert.equal(w.evidenceBadge('partial').textContent,'Partial');assert.equal(w.evidenceBadge('Enabled').textContent,'Enabled');
+ assert.equal(w.evidenceBadge('DROP','action').textContent,'DROP');assert.equal(w.evidenceBadge('NOT','marker').textContent,'NOT');dom.window.close();});

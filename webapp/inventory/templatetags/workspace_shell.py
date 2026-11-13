@@ -105,7 +105,7 @@ def relay_sections(context):
         'collections': [{'label': 'Collections', 'links': [link('All collections', 'all-collections')]}],
         'administration': [{'label': section['label'], 'links': section['links']} for section in admin_sections(context)] if staff else [],
         'personal': [{'label': 'Personal settings', 'links': [link(title, 'website-settings', query={'section': key}) for key, title in [('appearance', 'Appearance'), ('tables', 'Tables'), ('dates', 'Dates & time'), ('updates', 'Live updates'), ('notifications', 'Notifications')]]}],
-        'help': [{'label': 'Help & coverage', 'links': [report(label, panel, 'help') for label, panel in [('User guide', 'feature-guide'), ('Audit coverage', 'coverage'), ('Tag coverage', 'tags-coverage')]]}],
+        'help': [{'label': 'Help & coverage', 'links': [report(label, panel, 'help') for label, panel in [('User guide', 'feature-guide'), ('Coverage & definitions', 'coverage'), ('Tag coverage', 'tags-coverage')]]}],
     }
     if environment:
         groups['environments'].append({'label': environment.name, 'links': [scoped(label, route) for label, route in [('Snapshots', 'environment'), ('Compare snapshots', 'snapshot-comparison'), ('Collection coverage', 'collection-coverage')]] + [link('Findings', 'my-work', query={'queue':'all','environment':environment.pk})]})

@@ -1010,7 +1010,7 @@ examples.forEach((_,index) => {
         self.assertTrue(all(r["usage"] == "unknown" for r in report["objects"]))
         self.assertEqual(report["dfw"]["policies"][0]["status"], "unknown")
         self.assertEqual(report["dfw"]["rules"][0]["hit_status"], "unknown")
-        self.assertIn("Testing sample — not a full audit", rendered_document(report))
+        self.assertIn("Testing sample — not a full collection", rendered_document(report))
 
     def test_repeated_reads_always_fetch_fresh_data(self):
         client = self.client_with_pages([{"results": [1]}, {"results": [2]}])

@@ -99,6 +99,11 @@ def update_progress(job_id, completed, stage):
     completed = max(0, min(6, completed))
     AuditJob.objects.filter(pk=job_id, status="running", progress_completed__lte=completed).update(
         progress_completed=completed, progress_stage=stage[:150])
+    import threading
+    if threading.current_thread() is not threading.main_thread():
+        # Live counts are reported from request threads; do not leave their connections open.
+        from django.db import connection
+        connection.close()
 
 
 @transaction.atomic

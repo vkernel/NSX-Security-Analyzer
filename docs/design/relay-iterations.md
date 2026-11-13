@@ -1,5 +1,7 @@
 # Relay · Twenty menu and workspace iterations
 
+> **Historical record.** This document describes the design or implementation at the time it was written. Current code, tests and the main documentation take precedence.
+
 Twenty distinct Relay layout options, each with both dark and light mode: **20 layouts × 2 themes = 40 combinations**. Relay’s selected logo, route-inspired icons, mint accent, typography and evidence-first character remain consistent. The menus and placement of supporting evidence change.
 
 [Open the interactive chooser](relay-iterations/index.html) · [Compare two options](relay-iterations/compare.html) · [Original Relay exploration](circuit-atlas-directions/index.html?concept=relay)

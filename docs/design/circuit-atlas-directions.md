@@ -1,5 +1,7 @@
 # Ten new brand directions · Circuit + Atlas
 
+> **Historical record.** This document describes the design or implementation at the time it was written. Current code, tests and the main documentation take precedence.
+
 Ten standalone design alternatives for NSX Security Analyzer, based on the compact operational precision of Circuit and the spacious application landscape of Atlas. The original five directions remain available in [the earlier exploration](brand-directions/index.html).
 
 Start with the [interactive chooser](circuit-atlas-directions/index.html), then use [Compare two designs](circuit-atlas-directions/compare.html) to compare the same screen side by side. Everything opens locally without a server or external font request.

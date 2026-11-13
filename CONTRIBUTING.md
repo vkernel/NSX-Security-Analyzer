@@ -41,8 +41,27 @@ python webapp/manage.py check
 python webapp/manage.py makemigrations --check --dry-run
 ```
 
-Some PostgreSQL concurrency tests are skipped under SQLite. The CI workflow runs
-against PostgreSQL in an isolated test database. It does not connect to NSX.
+Some PostgreSQL concurrency tests are skipped under SQLite, and membership, JSONB
+and firewall-reference queries need PostgreSQL. The CI workflow runs against
+PostgreSQL in an isolated test database. It does not connect to NSX.
+
+### PostgreSQL test database
+
+Run the Django suite against a disposable PostgreSQL container with synthetic data
+only. Django creates and drops its own `test_` database:
+
+```sh
+docker run -d --name nsxa-test-pg -e POSTGRES_DB=nsx -e POSTGRES_USER=nsx \
+  -e POSTGRES_PASSWORD=local-test-only -p 127.0.0.1:55432:5432 postgres:17-alpine
+export POSTGRES_HOST=127.0.0.1 POSTGRES_PORT=55432 POSTGRES_DB=nsx \
+  POSTGRES_USER=nsx POSTGRES_PASSWORD=local-test-only POSTGRES_SSLMODE=disable
+unset NSX_SQLITE_PATH
+python webapp/manage.py test inventory --noinput
+docker rm -f -v nsxa-test-pg
+```
+
+Run only one test run at a time against the same server: parallel runs share the
+`test_` database and fail with deadlocks or duplicate keys.
 Use synthetic fixtures when testing; do not add real snapshots or credentials.
 
 ### JavaScript validation

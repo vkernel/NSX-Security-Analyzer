@@ -206,6 +206,8 @@ def collect(client, groups, vms, *, probes=None, workers=4, testing=False, resou
             stats['requests'] += result['requests']
             stats['reused_probe_pages'] += int(initial is not None)
             progress['completed'] += 1
+            from .collector import report_progress
+            report_progress(client, 'network member lists', progress['completed'], len(targets)*len(ENDPOINTS))
             if time.monotonic()-progress['last_log']>=30:
                 LOG.info('Network member list progress: completed=%d total=%d requests=%d elapsed_seconds=%.1f',
                          progress['completed'],len(targets)*len(ENDPOINTS),stats['requests'],time.monotonic()-started)

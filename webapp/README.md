@@ -1,9 +1,8 @@
 # NSX Security Analyzer workspace
 
-> **Release 0.5.3** includes compact review actions, returning assignments to
-> unassigned, and independent collection, finding recalculation and comparison lanes.
-> Deploy matching images for web, worker, scheduler and migrations. Stop old worker
-> replicas before starting the new workers; apply all pending migrations first.
+Source build and configuration reference. Release notes are in the
+[changelog](../CHANGELOG.md); deploy matching images for web, worker, scheduler and
+migrations, and apply pending migrations before starting new workers.
 
 
 See [snapshot maintenance and stopping collections](../docs/snapshot-maintenance.md) for the optional refresh container and staff-only stop controls.
@@ -195,10 +194,13 @@ configuration, so keep database backups and CSV exports appropriately protected.
 ## Worker operation
 
 One queued/running audit is permitted per environment, enforced in PostgreSQL.
-Workers claim jobs using row locks with `skip_locked`. The default worker supervises three independent lanes: one collection, one finding
-recalculation and one snapshot comparison can run simultaneously. PostgreSQL leases
-enforce one task per type across all replicas. Request concurrency adapts within a collection.
-Requests start at two in flight and may grow to eight when work is waiting.
+Workers claim jobs using row locks with `skip_locked`. The default worker supervises six independent lanes:
+collection, finding recalculation, snapshot comparison, deletion preview, deletion
+execution and reference exports. One task per lane can run simultaneously; PostgreSQL
+leases enforce one task per type across all replicas. Request concurrency adapts within a collection.
+Requests start at two in flight and may grow to the environment's **Maximum concurrent
+NSX requests** (Edit environment → Advanced request settings; default 8, range 1–32)
+when work is waiting.
 HTTP throttling, server errors and network failures reduce concurrency immediately.
 Successful requests use separate latency baselines for inventory, search,
 membership, policy statistics and rule statistics; three consecutive responses
@@ -216,8 +218,8 @@ HTTP 400/404/405/501 start at six hours. Repeated failures double the delay up t
 reused. Missing/unmapped counters in a successful bulk response do not trigger
 this cooldown.
 Additional worker replicas do not increase the global one-collection limit. Keep
-`audit_worker --lane all` (the default) for all five task queues, or use separately
-sized `collection`, `recalculation`, `comparison`, `deletion_preview` and `deletion_execution` lane processes with the same
+`audit_worker --lane all` (the default) for all six task queues, or use separately
+sized `collection`, `recalculation`, `comparison`, `deletion_preview`, `deletion_execution` and `exports` lane processes with the same
 image and database. Account for their combined memory usage. See
 [resource sizing](../docs/resource-sizing.md#concurrent-collection-and-finding-history-replay).
 
@@ -383,9 +385,10 @@ automatic deletion.
 ## Automatic collection concurrency
 
 Environment settings no longer expose a worker count. Full web collections start
-with two concurrent NSX requests and can grow gradually to eight when requests
-complete quickly and checks are waiting. Sustained latency degradation against each endpoint family’s learned baseline,
-HTTP 429/502/503/504, and network failures reduce the limit. Growth resumes only
+with two concurrent NSX requests and can grow gradually to the environment's
+Maximum concurrent NSX requests (default 8, range 1–32) when requests complete
+quickly and checks are waiting. Sustained latency degradation against each endpoint family’s learned baseline,
+HTTP 429/502/503/504, and network failures reduce the limit, once per burst of errors. Growth resumes only
 after 30 seconds of recovery and sufficient fast responses. Existing in-flight
 requests finish when the limit is reduced; subsequent requests wait for capacity.
 Retry backoff holds no request slot. Small inventories naturally use fewer slots.

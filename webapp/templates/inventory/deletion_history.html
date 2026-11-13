@@ -1,6 +1,6 @@
 {% extends 'base.html' %}{% load ui_components %}{% load review_identity %}{% block content %}
 <a class="breadcrumb" href="{% url 'environment' environment.pk %}">← {{ environment.name }}</a>
-<div class="page-heading"><div><h1>Finding reviews</h1><p class="lead">Deletion history · {{ environment.name }}</p></div></div>
+<div class="page-heading"><div><h1>Deletion history</h1><p class="lead">{{ environment.name }}</p></div></div>
 {% include 'inventory/history_navigation.html' %}{% load workflow_status %}{% workflow_status %}
 <nav class="page-tabs" aria-label="Review queues"><a href="{% url 'findings' environment.pk %}?owner=me">My reviews</a><a href="{% url 'findings' environment.pk %}?owner=none">Unassigned</a><a href="{% url 'findings' environment.pk %}?review=second_review">Awaiting second approval</a><a href="{% url 'findings' environment.pk %}?review=ready">Ready for decommissioning</a><a href="{% url 'findings' environment.pk %}?review=rejected">Rejected</a><a href="{% url 'findings' environment.pk %}?review=decommissioned">Decommissioned</a><a href="{% url 'deletion-history' environment.pk %}" aria-current="page">Deletion history</a><a href="{% url 'findings' environment.pk %}?review=suppressed">Suppressed</a></nav>
 <p>Preview requests and confirmed deletions, newest first. Object names and paths are retained after deletion. A completed request may include blocked or unsuccessful objects.</p>

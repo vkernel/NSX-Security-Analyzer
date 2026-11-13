@@ -1,5 +1,7 @@
 # Relay / Bridge · Application-wide consistency audit
 
+> **Historical record.** This document describes the design or implementation at the time it was written. Current code, tests and the main documentation take precedence.
+
 The selected Relay option 04 layout and Bridge 06 light palette remain the design direction. This is a polish and integration pass over the current application, including populated results and historical presentations.
 
 ## Direction

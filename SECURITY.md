@@ -13,8 +13,9 @@ supported-version matrix yet.
 
 ## Deployment boundaries
 
-- All signed-in users can read all environments. Staff can manage environments and collections; superusers manage accounts and permissions.
-- Collection uses GET requests and requires read permissions. Confirmed administrator deletion additionally requires NSX CRUD permissions for the supported resource. The application never escalates the saved account permissions. Preview and DELETE run in the collection worker; retain and restrict access to deletion records and saved pre-deletion configurations.
+- All signed-in users can read all environments. Roles are Viewer (read only), Operator (collections and finding reviews) and Administrator (environments, accounts, settings and NSX deletion). Local and federated (Keycloak/LDAPS) accounts use the same roles.
+- Reference exports are downloadable only by the user who requested them, expire after 24 hours and are limited by per-user quotas. Exports never contact NSX.
+- Collection uses GET requests and requires read permissions. Confirmed administrator deletion additionally requires NSX CRUD permissions for the supported resource. The application never escalates the saved account permissions. Preview and DELETE run in separate lanes of the worker; retain and restrict access to deletion records and saved pre-deletion configurations.
 - Keep TLS verification enabled. Review retrieved Manager certificate fingerprints before trusting them.
 - Protect `.env`, database backups and `DJANGO_SECRET_KEY`. Saved manager passwords use authenticated encryption derived from this secret.
 - The database contains sensitive inventory, trusted CA certificates, configuration and encrypted credentials. Limit access and encrypt backups at rest.

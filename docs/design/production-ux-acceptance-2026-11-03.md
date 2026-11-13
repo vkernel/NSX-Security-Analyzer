@@ -1,5 +1,7 @@
 # Unslop follow-up and acceptance · 3 November 2026
 
+> **Historical record.** This document describes the design or implementation at the time it was written. Current code, tests and the main documentation take precedence.
+
 The outstanding code recommendations and the requested synthetic-inventory acceptance checks are complete locally. The user confirmed that synthetic inventories are the acceptance basis. This extends the [implementation record](production-ux-implementation-2026-11-03.md). This record captures acceptance before publication. Development publication is identified by the Git commit and matching Docker image tag; publishing does not update the running operational deployment.
 
 ## Delivered

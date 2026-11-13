@@ -128,6 +128,14 @@ class FindingRecalculationTests(TestCase):
         self.assertNotIn('insufficient', [row['qualification'] for row in response.context['qualification_counts']])
         self.assertContains(response, 'historical findings are no longer currently observed')
 
+    def test_qualification_counts_show_readable_labels(self):
+        self.snapshot(0); synchronize(self.env.pk)
+        Finding.objects.filter(environment=self.env, kind='empty_group').update(qualification='insufficient')
+        response = self.client.get(reverse('findings', args=[self.env.pk]))
+        labels = {row['qualification']: row['label'] for row in response.context['qualification_counts']}
+        self.assertEqual(labels['insufficient'], 'Insufficient evidence')
+        self.assertContains(response, '<dt>Insufficient evidence</dt>', html=False)
+
     def test_vdi_warning_uses_own_gap_and_returning_members_restart(self):
         from .models import TransientEmptinessPolicy
         from .test_transient import config
@@ -309,6 +317,9 @@ class FindingRecalculationTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn('Why some findings are not listed', response.json()['html'])
         self.assertIn('minimum of 24 hours', response.json()['html'])
-        for text in ('Return to unassigned', 'Compare selected', '1237/1238',
-                     'three attempts in total', 'Start diagnostic collection'):
+        for text in ('Return to unassigned', 'Compare selected', 'Start diagnostic collection',
+                     'Applied to (policy)', 'Not attempted', 'Export references'):
             self.assertIn(text, response.json()['html'])
+        # Operator internals live on the coverage page and in the documentation.
+        for text in ('1237/1238', 'My work', 'Overview, Relationships'):
+            self.assertNotIn(text, response.json()['html'])

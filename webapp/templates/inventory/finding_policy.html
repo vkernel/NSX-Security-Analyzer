@@ -1,6 +1,6 @@
 {% extends 'base.html' %}{% block content %}
 <a class="breadcrumb" href="{% url 'administration' %}">← Administration</a>
-<div class="page-heading"><div><h1>Finding review criteria</h1><p class="lead">Choose how many days each condition must be observed before it appears in Finding reviews.</p></div></div>
+<div class="page-heading"><div><h1>Finding review criteria</h1><p class="lead">Choose how many days each condition must be observed before it appears in Reviews.</p></div></div>
 
 <form method="get" class="directory-toolbar"><label>Policy scope<select name="environment"><option value="">Global defaults</option>{% for env in environments %}<option value="{{ env.pk }}" {% if selected == env.pk|stringformat:'s' %}selected{% endif %}>{{ env.name }}</option>{% endfor %}</select></label><button class="button">Select</button></form>
 <p>{% if environment %}{% if overridden %}This environment has its own policy.{% else %}This environment inherits global defaults. Saving creates an override.{% endif %}{% else %}Applies to all environments without an override.{% endif %}</p>

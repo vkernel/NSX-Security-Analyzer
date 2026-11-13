@@ -28,7 +28,8 @@ resources. See [reference exports](reference-exports.md) for artifact preparatio
 access and retention.
 A conditional database constraint prevents two active collections for one environment.
 Job configuration captures the environment settings at queue time. Collection
-concurrency adapts internally; it is not an environment form setting.
+concurrency adapts automatically up to the environment's Maximum concurrent NSX
+requests setting (default 8, range 1–32).
 
 The shared collector reads inventory and search references, checks membership and
 retrieves counters. Failed or incomplete checks retain uncertainty. History analysis
