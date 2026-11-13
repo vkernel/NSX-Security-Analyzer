@@ -4,6 +4,21 @@ The application uses shared page headers, status badges, action menus, table con
 empty states and theme-aware surfaces across the main workspace pages. These patterns
 also apply to collection, review, deletion, cleanup and settings workflows.
 
+## Visual language (coss ui)
+
+The workspace follows the look of [coss ui](https://coss.com/ui): neutral surfaces,
+hairline borders with a soft bottom shadow, 10px controls and 14px framed cards.
+- **Tokens:** colours, focus ring, radius and shadows are defined once in
+  `static/design-system.css` for light, dark and system themes.
+- **Component layer:** `static/coss.css` loads last and restyles the shared components
+  without markup changes: light navigation rail, outline default buttons with a solid
+  neutral primary, 36px controls (44px on phones), framed cards, quiet table headers,
+  underline page tabs, segmented in-panel tabs, rounded drawers and `kbd` hints.
+- **Fonts:** the stack starts with Inter and Geist Mono and falls back to the system UI
+  font, because pages load fonts only from the application itself.
+- **Colour use:** status colour is reserved for outcomes (allow, drop, warnings);
+  primary actions are neutral, and destructive actions stay red.
+
 ## Actions and navigation
 
 Use a descriptive page title, a short purpose and environment context where relevant.

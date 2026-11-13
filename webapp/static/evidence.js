@@ -222,7 +222,7 @@
     const lines=values=>{const root=make('div');root.className='evidence-reference-lines';for(const value of values)root.append(make('span',value));return root;};
     const field=(name,options)=>item=>window.firewallRuleFieldCell(body,item.rule_fields?.[name],options);
     const columns=[
-      {label:'Category',width:7,cell:item=>item.nsx_order?.category||item.category||'Not recorded'},
+      {label:'Category',width:8,cell:item=>item.nsx_order?.category||item.category||'Not recorded'},
       {label:'Name',width:12,cell:item=>{const root=make('div'),label=item.name||item.path?.split('/').pop()||'Not recorded',button=make('button',label);root.className='evidence-object evidence-rule-name';
         button.type='button';button.className='evidence-object-link';button.title=item.path||'';button.setAttribute('aria-label','Inspect references for '+label);button.onclick=()=>inspect(item,button);root.append(button);
         const order=item.nsx_order,context=order?(order.rule_sequence!=null?'Rule sequence '+order.rule_sequence:'Rule sequence not recorded'):[item.policy_name,item.category].filter(Boolean).join(' · ');if(context)root.append(make('small',context));return root;}},
@@ -238,7 +238,7 @@
         for(const group of indirect.slice(0,3)){const entry=make('div'),link=make('button',group.name||group.path);entry.className='evidence-firewall-match';link.type='button';link.className='evidence-object-link';link.title=group.path;link.onclick=()=>window.openRelatedEvidence(body,{path:group.path},group.name||group.path);entry.append(make('small','Field not retained'),link);root.append(entry);}
         if(indirect.length>3||item.groups_truncated)root.append(make('small','More groups in rule inspection'));
         if(!root.children.length)root.append(make('span','Not retained'));return root;}},
-      {label:'Reason / limits',width:10,cell:item=>{const root=lines([item.reference_reason||'Not retained',item.network_checked_at?'Attachment collected '+(window.workspaceTimeText?window.workspaceTimeText(item.network_checked_at):item.network_checked_at):'',item.field_note].filter(Boolean));if(item.ip_matches?.length)root.append(window.ipReferenceCell(item));return root;}}
+      {label:'Reason / limits',width:9,cell:item=>{const root=lines([item.reference_reason||'Not retained',item.network_checked_at?'Attachment collected '+(window.workspaceTimeText?window.workspaceTimeText(item.network_checked_at):item.network_checked_at):'',item.field_note].filter(Boolean));if(item.ip_matches?.length)root.append(window.ipReferenceCell(item));return root;}}
     ].map(column=>({...column,width:column.width+'%'}));
     columns.groups=window.firewallReferenceGroups;
     return columns;

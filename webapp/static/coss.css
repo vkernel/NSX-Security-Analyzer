@@ -1,0 +1,83 @@
+/* coss ui theme layer: neutral surfaces, translucent hairlines with soft bottom
+   shadows, 10px controls and 14px frames. Loaded last; markup is unchanged.
+   Colours come from the tokens in design-system.css (light, dark and system). */
+
+/* Typography */
+body[data-theme]{font-family:var(--font-interface);letter-spacing:-.006em}
+body[data-theme] :is(h1,h2,h3){font-weight:600;letter-spacing:-.01em}
+body[data-theme] :is(.page-heading h1,.report-toolbar h1){font-size:26px;font-weight:600;letter-spacing:-.02em}
+body[data-theme] :is(code,kbd,.path,.evidence-path,.mono){font-family:var(--font-mono)}
+body[data-theme] a{text-underline-offset:3px}
+body[data-theme] .workspace-main a:not(.button):hover{text-decoration:underline}
+
+/* Navigation: light neutral rail and section panel */
+body[data-theme] .workspace-sidebar{background:var(--nav);border-right:1px solid var(--line)}
+body[data-theme] .workspace-module-rail{--app-accent:var(--app-text);--ink:var(--app-text);--muted:var(--app-muted);--line:var(--app-border);--app-surface-soft:var(--hover);--focus:var(--focus);background:var(--nav);border-right:1px solid var(--line)}
+body[data-theme] .workspace-module-rail :is(nav.workspace-navigation a,.sidebar-bottom a){border-radius:var(--radius);color:var(--muted)}
+body[data-theme] .workspace-module-rail :is(nav.workspace-navigation a,.sidebar-bottom a):hover{background:var(--hover);color:var(--ink)}
+body[data-theme] .workspace-module-rail :is(nav.workspace-navigation a,.sidebar-bottom a)[aria-current]{background:var(--app-surface);color:var(--ink);border-color:var(--line);box-shadow:var(--shadow-xs);font-weight:500}
+body[data-theme] .workspace-section-panel{background:var(--nav)}
+body[data-theme] .workspace-sidebar :is(.section-link-group,[data-section-navigation]) a{border-radius:8px}
+body[data-theme] .workspace-sidebar :is(.section-link-group,[data-section-navigation]) a[aria-current]{background:var(--app-surface);border-color:var(--line);color:var(--ink);box-shadow:var(--shadow-xs);font-weight:500}
+body[data-theme] .section-link-group h3{font-weight:500}
+body[data-theme] .application-topbar{background:var(--app-surface);border-bottom:1px solid var(--line)}
+body[data-theme] .application-topbar>.topbar-actions>a.button{color:var(--ink)}
+
+/* Buttons: default is the outline style; primary is neutral and solid */
+body[data-theme] :is(button,.button){min-height:36px;border-radius:var(--radius);border-color:var(--input);box-shadow:var(--shadow-xs);font-weight:500}
+body[data-theme] :is(button,.button):hover:not(:disabled):not([aria-disabled=true]){background:var(--hover);border-color:var(--input)}
+body[data-theme] :is(.button.primary,button.primary,.workspace-main input[type=submit]){box-shadow:0 1px 2px rgba(0,0,0,.12),inset 0 1px 0 rgba(255,255,255,.12)}
+body[data-theme] :is(button:disabled,[aria-disabled=true]){box-shadow:none}
+body[data-theme] :is(.copy-path,.table-widget .header-sort,.table-widget .header-filter,.table-widget .row-open,.mobile-nav-toggle,.mobile-nav-close,.relay-theme-toggle,.switcher-options button){box-shadow:none}
+/* Link-style buttons (object names, "+N more") stay text, not outline buttons. */
+body[data-theme] :is(.evidence-object-link,.evidence-more,.evidence-path-copy){box-shadow:none;border-color:transparent;min-height:0}
+body[data-theme] #detail-dialog .evidence-firewall-table :is(td,th){font-size:13px}
+body[data-theme] .button.destructive{box-shadow:0 1px 2px rgba(220,38,38,.25)}
+
+/* Inputs */
+body[data-theme] :is(input:not([type=checkbox]):not([type=radio]):not([type=range]),select,textarea){min-height:36px;border:1px solid var(--input);border-radius:var(--radius);box-shadow:var(--shadow-xs)}
+body[data-theme] :is(input[type=checkbox],input[type=radio]){accent-color:var(--action)}
+body[data-theme] :is(a,button,input,select,textarea,summary,[role=tab]):focus-visible{outline:2px solid var(--focus);outline-offset:2px}
+body[data-theme] .workspace-switcher>summary{border-color:var(--input);border-radius:var(--radius);box-shadow:var(--shadow-xs)}
+body[data-theme] .workspace-switcher>summary:hover,body[data-theme] .workspace-switcher[open]>summary{border-color:var(--input)}
+body[data-theme] :is(.switcher-panel,.topbar-popover,.search-options-body,.column-popup,.filter-picker){border-radius:12px;border-color:var(--line);box-shadow:var(--shadow-popover)}
+body[data-theme] .switcher-options button[aria-current]{background:var(--hover);color:var(--ink)}
+
+/* Badges and pills */
+body[data-theme] :is(.pill,.badge,.count,.evidence-status){border-radius:6px;font-weight:500;font-size:12px}
+body[data-theme] .evidence-status[data-tone=positive]{background:var(--success-bg);color:var(--success-text)}
+body[data-theme] .evidence-status[data-tone=negative]{background:var(--error-bg);color:var(--error-text)}
+body[data-theme] .evidence-status[data-tone=warning]{background:var(--warning-bg);color:var(--warning-text)}
+
+/* Frames: cards and panels */
+body[data-theme] :is(.form-card,.settings-panel,.environment-card,.table-widget,.snapshot-chart,.seg-card,.pair-panel,.module,.card,.empty-state,.appearance-preview){border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow-xs)}
+body[data-theme] .operational-metrics>a{border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow-xs)}
+body[data-theme] :is(.notice,.collection-bar,.overview,.guide-start,.collection-error-body){border-radius:var(--radius)}
+body[data-theme] .empty-state{border-style:dashed;box-shadow:none}
+
+/* Tables: quiet headers, hairline rows, soft hover */
+body[data-theme] table th{background:transparent;color:var(--muted);font-weight:500;font-size:12px}
+body[data-theme] thead th{border-bottom:1px solid var(--line)}
+body[data-theme] tbody tr:nth-child(even){background:transparent}
+body[data-theme] tbody tr:hover{background:var(--hover)}
+body[data-theme] .evidence-group-row>th{background:var(--app-surface-soft)}
+
+/* Tabs: underline for page tabs, segmented for in-panel tabs */
+body[data-theme] .page-tabs a[aria-current],body[data-theme] .page-tabs a[aria-selected=true]{color:var(--ink);border-bottom-color:var(--ink);font-weight:500}
+body[data-theme] :is(.evidence-tabs,.evidence-category-tabs){display:inline-flex;flex-wrap:nowrap;gap:2px;padding:3px;margin-bottom:16px;background:var(--app-surface-soft);border:0;border-radius:12px;max-width:100%;overflow-x:auto}
+body[data-theme] :is(.evidence-tabs,.evidence-category-tabs) [role=tab]{min-height:32px;border:1px solid transparent;border-radius:9px;background:transparent;color:var(--muted);box-shadow:none;padding:4px 12px;white-space:nowrap}
+body[data-theme] :is(.evidence-tabs,.evidence-category-tabs) [role=tab]:hover:not([aria-selected=true]){background:transparent;color:var(--ink);border-color:transparent}
+body[data-theme] :is(.panel-step-tabs,.panel-evidence-tabs,.evidence-tabs,.evidence-category-tabs) :is([aria-pressed=true],[aria-selected=true]){background:var(--app-surface);color:var(--ink);border-color:var(--line);box-shadow:var(--shadow-xs);font-weight:500}
+
+/* Drawers and dialogs */
+body[data-theme] dialog{border:1px solid var(--line);border-radius:16px;box-shadow:var(--shadow-panel)}
+body[data-theme] dialog::backdrop{background:var(--overlay)}
+body[data-theme] :is(.workspace-panel){border-color:var(--line);box-shadow:var(--shadow-panel)}
+
+/* Keyboard hints */
+body[data-theme] kbd{border:1px solid var(--line);border-bottom-width:2px;border-radius:5px;padding:0 5px;font-size:11px;background:var(--app-surface);color:var(--muted)}
+
+/* Touch targets on small screens */
+@media(max-width:600px){
+ body[data-theme] :is(button,.button,select,input:not([type=checkbox]):not([type=radio]):not([type=range])){min-height:44px}
+}
