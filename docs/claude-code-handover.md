@@ -7,7 +7,9 @@ paced reads, "Not attempted" for time limits) and hardens collection (publicatio
 time reserve, 429/transport retries, single backoff per burst), followed by
 interface clean-up, a task-based in-app user guide, live collection progress
 counts and corrected GitHub documentation, then publication before indexing,
-warm-start pacing and restructured guides. That application build is published;
+warm-start pacing, restructured guides and the coss ui visual language (tokens in
+`design-system.css`, component layer in `coss.css`; see docs/ui-patterns.md). That
+application build is published;
 verification of the user's running deployment is the next operational check if
 requested. The remaining review backlog is listed under "Suggested next actions".
 
@@ -28,11 +30,11 @@ requested. The remaining review backlog is listed under "Suggested next actions"
 | --- | --- |
 | Repository | [vkernel/NSX-Security-Analyzer](https://github.com/vkernel/NSX-Security-Analyzer) |
 | Branch | `development` |
-| Application commit | `17dd110cc13126519846640d95899207bfea0944` |
+| Application commit | `5bf667c31508a2f1b0c93856b7da4188a1322040` |
 | Application version | `0.5.3`; inspect the build revision as well as the version |
 | Mutable image | `vkernel/nsx-security-analyzer:development` |
-| Pinned image | `vkernel/nsx-security-analyzer:development-17dd110` |
-| Published image digest | `sha256:9c8bcedf7c2c491fd1329370faf78b17ecea7db45dee0118069842ae785b3cfc` |
+| Pinned image | `vkernel/nsx-security-analyzer:development-5bf667c` |
+| Published image digest | `sha256:b90b2cfa1e34a250bb9b5c368d24de2326ef4a79c3914cb1e16e8c3477eafcb0` |
 | Platforms | `linux/amd64` and `linux/arm64` |
 | Latest migration | `0069_reference_exports` |
 
@@ -257,7 +259,7 @@ This handover updates GitHub documentation and does not rebuild the runtime imag
 ```text
 Read CLAUDE.md and docs/claude-code-handover.md, then CLAUDE.local.md if it exists.
 Check the current branch and working tree, and identify changes since application
-build 17dd110. Preserve unrelated edits and use synthetic data for verification.
+build 5bf667c. Preserve unrelated edits and use synthetic data for verification.
 Summarize the current implementation and proposed next steps, then continue with
 my next task. Do not publish an image or change a deployment unless I request it.
 ```
