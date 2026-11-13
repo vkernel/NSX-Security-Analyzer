@@ -4,11 +4,11 @@ Updated 13 November 2026. Continue development of the Django NSX Security Analyz
 workspace from the same checkout. The latest application work makes NSX deletion
 faster and more reliable (shared live scan per run, in-request dependency order,
 paced reads, "Not attempted" for time limits) and hardens collection (publication
-time reserve, 429/transport retries, single backoff per burst). It follows the
-NSX-ordered firewall references. That application build is published;
+time reserve, 429/transport retries, single backoff per burst), followed by
+interface clean-up, a task-based in-app user guide, live collection progress
+counts and corrected GitHub documentation. That application build is published;
 verification of the user's running deployment is the next operational check if
-requested. A prioritised review backlog (P2/P3: UI noise, in-app help and GitHub
-documentation, collection speed) is still open; see "Suggested next actions".
+requested. The remaining review backlog is listed under "Suggested next actions".
 
 ## First session
 
@@ -27,11 +27,11 @@ documentation, collection speed) is still open; see "Suggested next actions".
 | --- | --- |
 | Repository | [vkernel/NSX-Security-Analyzer](https://github.com/vkernel/NSX-Security-Analyzer) |
 | Branch | `development` |
-| Application commit | `2e604c897bfdfc45e5427561eb36be93097e1b58` |
+| Application commit | `d5542b697f80afb76dab3b24175f2900c278f5ae` |
 | Application version | `0.5.3`; inspect the build revision as well as the version |
 | Mutable image | `vkernel/nsx-security-analyzer:development` |
-| Pinned image | `vkernel/nsx-security-analyzer:development-2e604c8` |
-| Published image digest | `sha256:c63480dd9a69812d476084ca114a9c8d261e9ce1a9b2adab8fa915d04ccb052e` |
+| Pinned image | `vkernel/nsx-security-analyzer:development-d5542b6` |
+| Published image digest | `sha256:34d3cc6a3c04381ec014a9aac6bdd9524e773cac964da49d1b9da1cebcfa4a5c` |
 | Platforms | `linux/amd64` and `linux/arm64` |
 | Latest migration | `0069_reference_exports` |
 
@@ -155,8 +155,8 @@ The application baseline passed these checks on 13 November 2026:
 
 | Check | Result |
 | --- | --- |
-| Django inventory tests on isolated PostgreSQL | 1,020 passed |
-| JavaScript tests | 113 passed |
+| Django inventory tests on isolated PostgreSQL | 1,021 passed |
+| JavaScript tests | 114 passed |
 | Offline collector tests | 113 run; successful result |
 | Browser export acceptance | 1,001 synthetic firewall references, all five formats, no export-triggered NSX requests (11 November); 13 November: synthetic VM/group/tag/custom-service exports through the worker lane in NSX order |
 | UI and PDF review | Light/dark, mobile, keyboard focus/return, 44-page landscape PDF with final rule present; 13 November: firewall drawers (VM, group, tag, custom service) and PDF header wrapping |
@@ -233,7 +233,7 @@ This handover updates GitHub documentation and does not rebuild the runtime imag
    obsolete mockups and dated screenshots as historical design references.
 5. Add the separate JavaScript suite to GitHub Actions as a scoped follow-up task.
    The current workflow installs Node for collector checks but does not run
-   `webapp/tests-js/*.test.cjs`; those 113 checks currently need a separate run.
+   `webapp/tests-js/*.test.cjs`; those 114 checks currently need a separate run.
 6. Open review backlog from 13 November 2026. P2 items done on development: UI
    caveats and "audit" wording, Reviews terminology, task-based in-app help
    (`feature_guide()` in `collector.py`), GitHub doc corrections and live collection
@@ -252,7 +252,7 @@ This handover updates GitHub documentation and does not rebuild the runtime imag
 ```text
 Read CLAUDE.md and docs/claude-code-handover.md, then CLAUDE.local.md if it exists.
 Check the current branch and working tree, and identify changes since application
-build 2e604c8. Preserve unrelated edits and use synthetic data for verification.
+build d5542b6. Preserve unrelated edits and use synthetic data for verification.
 Summarize the current implementation and proposed next steps, then continue with
 my next task. Do not publish an image or change a deployment unless I request it.
 ```
