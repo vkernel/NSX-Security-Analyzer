@@ -1,11 +1,14 @@
 # Claude Code project handover
 
 Updated 13 November 2026. Continue development of the Django NSX Security Analyzer
-workspace from the same checkout. The latest application work shows firewall
-references in configured NSX order with full saved rule fields, includes rules
-selected through a policy's Applied To and merges tag rows per rule. That
-application build is published; verification of the user's running deployment is
-the next operational check if requested.
+workspace from the same checkout. The latest application work makes NSX deletion
+faster and more reliable (shared live scan per run, in-request dependency order,
+paced reads, "Not attempted" for time limits) and hardens collection (publication
+time reserve, 429/transport retries, single backoff per burst). It follows the
+NSX-ordered firewall references. That application build is published;
+verification of the user's running deployment is the next operational check if
+requested. A prioritised review backlog (P2/P3: UI noise, in-app help and GitHub
+documentation, collection speed) is still open; see "Suggested next actions".
 
 ## First session
 
@@ -24,11 +27,11 @@ the next operational check if requested.
 | --- | --- |
 | Repository | [vkernel/NSX-Security-Analyzer](https://github.com/vkernel/NSX-Security-Analyzer) |
 | Branch | `development` |
-| Application commit | `a6b2b361a15d4d562f2d25fa6a625950f634243e` |
+| Application commit | `2e604c897bfdfc45e5427561eb36be93097e1b58` |
 | Application version | `0.5.3`; inspect the build revision as well as the version |
 | Mutable image | `vkernel/nsx-security-analyzer:development` |
-| Pinned image | `vkernel/nsx-security-analyzer:development-a6b2b36` |
-| Published image digest | `sha256:f89f6a19860735d2260a37545aed845a4695e3900ce57c8b4442b465a66195e0` |
+| Pinned image | `vkernel/nsx-security-analyzer:development-2e604c8` |
+| Published image digest | `sha256:c63480dd9a69812d476084ca114a9c8d261e9ce1a9b2adab8fa915d04ccb052e` |
 | Platforms | `linux/amd64` and `linux/arm64` |
 | Latest migration | `0069_reference_exports` |
 
@@ -152,9 +155,9 @@ The application baseline passed these checks on 13 November 2026:
 
 | Check | Result |
 | --- | --- |
-| Django inventory tests on isolated PostgreSQL | 999 passed |
+| Django inventory tests on isolated PostgreSQL | 1,020 passed |
 | JavaScript tests | 113 passed |
-| Offline collector tests | 112 run, with 9 skips; successful result |
+| Offline collector tests | 113 run; successful result |
 | Browser export acceptance | 1,001 synthetic firewall references, all five formats, no export-triggered NSX requests (11 November); 13 November: synthetic VM/group/tag/custom-service exports through the worker lane in NSX order |
 | UI and PDF review | Light/dark, mobile, keyboard focus/return, 44-page landscape PDF with final rule present; 13 November: firewall drawers (VM, group, tag, custom service) and PDF header wrapping |
 | Image checks on both CPU architectures | Registry images pulled by digest: non-root execution, build revision, fresh migrations, assets, export lane/heartbeat and all renderers passed |
@@ -231,7 +234,17 @@ This handover updates GitHub documentation and does not rebuild the runtime imag
 5. Add the separate JavaScript suite to GitHub Actions as a scoped follow-up task.
    The current workflow installs Node for collector checks but does not run
    `webapp/tests-js/*.test.cjs`; those 113 checks currently need a separate run.
-6. Update this baseline when significant code or publication state changes. Track
+6. Open review backlog from 13 November 2026, in priority order: P2 — remove
+   repeated caveats and "audit" wording in the UI, unify Reviews terminology,
+   restructure the in-app help (generated in `collector.py`) into task-based
+   topics, correct GitHub docs (release banners, worker lanes, concurrency,
+   SECURITY roles, PostgreSQL test setup, roadmap, historical design index), run
+   the network phase in parallel with other collection work, show per-branch
+   collection progress, and index snapshots outside the publish transaction.
+   P3 — warm-start pacing, collection CPU clean-ups, shared page header/empty
+   state components, theme tokens for chart colours and removal of the dead
+   standalone report code.
+7. Update this baseline when significant code or publication state changes. Track
    new work as separate scoped tasks rather than assuming old chat proposals are
    still outstanding.
 
@@ -240,7 +253,7 @@ This handover updates GitHub documentation and does not rebuild the runtime imag
 ```text
 Read CLAUDE.md and docs/claude-code-handover.md, then CLAUDE.local.md if it exists.
 Check the current branch and working tree, and identify changes since application
-build a6b2b36. Preserve unrelated edits and use synthetic data for verification.
+build 2e604c8. Preserve unrelated edits and use synthetic data for verification.
 Summarize the current implementation and proposed next steps, then continue with
 my next task. Do not publish an image or change a deployment unless I request it.
 ```
