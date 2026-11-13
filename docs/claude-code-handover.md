@@ -6,7 +6,8 @@ faster and more reliable (shared live scan per run, in-request dependency order,
 paced reads, "Not attempted" for time limits) and hardens collection (publication
 time reserve, 429/transport retries, single backoff per burst), followed by
 interface clean-up, a task-based in-app user guide, live collection progress
-counts and corrected GitHub documentation. That application build is published;
+counts and corrected GitHub documentation, then publication before indexing,
+warm-start pacing and restructured guides. That application build is published;
 verification of the user's running deployment is the next operational check if
 requested. The remaining review backlog is listed under "Suggested next actions".
 
@@ -27,11 +28,11 @@ requested. The remaining review backlog is listed under "Suggested next actions"
 | --- | --- |
 | Repository | [vkernel/NSX-Security-Analyzer](https://github.com/vkernel/NSX-Security-Analyzer) |
 | Branch | `development` |
-| Application commit | `d5542b697f80afb76dab3b24175f2900c278f5ae` |
+| Application commit | `17dd110cc13126519846640d95899207bfea0944` |
 | Application version | `0.5.3`; inspect the build revision as well as the version |
 | Mutable image | `vkernel/nsx-security-analyzer:development` |
-| Pinned image | `vkernel/nsx-security-analyzer:development-d5542b6` |
-| Published image digest | `sha256:34d3cc6a3c04381ec014a9aac6bdd9524e773cac964da49d1b9da1cebcfa4a5c` |
+| Pinned image | `vkernel/nsx-security-analyzer:development-17dd110` |
+| Published image digest | `sha256:9c8bcedf7c2c491fd1329370faf78b17ecea7db45dee0118069842ae785b3cfc` |
 | Platforms | `linux/amd64` and `linux/arm64` |
 | Latest migration | `0069_reference_exports` |
 
@@ -155,7 +156,7 @@ The application baseline passed these checks on 13 November 2026:
 
 | Check | Result |
 | --- | --- |
-| Django inventory tests on isolated PostgreSQL | 1,021 passed |
+| Django inventory tests on isolated PostgreSQL | 1,025 passed |
 | JavaScript tests | 114 passed |
 | Offline collector tests | 113 run; successful result |
 | Browser export acceptance | 1,001 synthetic firewall references, all five formats, no export-triggered NSX requests (11 November); 13 November: synthetic VM/group/tag/custom-service exports through the worker lane in NSX order |
@@ -256,7 +257,7 @@ This handover updates GitHub documentation and does not rebuild the runtime imag
 ```text
 Read CLAUDE.md and docs/claude-code-handover.md, then CLAUDE.local.md if it exists.
 Check the current branch and working tree, and identify changes since application
-build d5542b6. Preserve unrelated edits and use synthetic data for verification.
+build 17dd110. Preserve unrelated edits and use synthetic data for verification.
 Summarize the current implementation and proposed next steps, then continue with
 my next task. Do not publish an image or change a deployment unless I request it.
 ```
