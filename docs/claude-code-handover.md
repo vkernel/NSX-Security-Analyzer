@@ -1,9 +1,11 @@
 # Claude Code project handover
 
-Updated 12 November 2026. Continue development of the Django NSX Security Analyzer
-workspace from the same checkout. The latest application work adds reference
-exports for inventory objects. That application build is published; verification
-of the user's running deployment is the next operational check if requested.
+Updated 13 November 2026. Continue development of the Django NSX Security Analyzer
+workspace from the same checkout. The latest application work shows firewall
+references in configured NSX order with full saved rule fields, includes rules
+selected through a policy's Applied To and merges tag rows per rule. That
+application build is published; verification of the user's running deployment is
+the next operational check if requested.
 
 ## First session
 
@@ -22,15 +24,15 @@ of the user's running deployment is the next operational check if requested.
 | --- | --- |
 | Repository | [vkernel/NSX-Security-Analyzer](https://github.com/vkernel/NSX-Security-Analyzer) |
 | Branch | `development` |
-| Application commit | `876c2ccbc3e71729bc6993d24f3796511ae6bde4` |
+| Application commit | `a6b2b361a15d4d562f2d25fa6a625950f634243e` |
 | Application version | `0.5.3`; inspect the build revision as well as the version |
 | Mutable image | `vkernel/nsx-security-analyzer:development` |
-| Pinned image | `vkernel/nsx-security-analyzer:development-876c2cc` |
-| Published image digest | `sha256:99382f0e02d0378322b3c6b16e119643485ab73c03dfd6510067eedd18ea2087` |
+| Pinned image | `vkernel/nsx-security-analyzer:development-a6b2b36` |
+| Published image digest | `sha256:f89f6a19860735d2260a37545aed845a4695e3900ce57c8b4442b465a66195e0` |
 | Platforms | `linux/amd64` and `linux/arm64` |
 | Latest migration | `0069_reference_exports` |
 
-These publication results were verified on 11 November 2026. Recheck mutable tags
+These publication results were verified on 13 November 2026. Recheck mutable tags
 and the remote branch before a later publication. The handover documentation is
 published separately from the application image. The running cluster's revision
 and migration state must be inspected before claiming that a rollout is complete.
@@ -146,16 +148,16 @@ before changing format schemas, job lifecycle or deployment requirements.
 
 ## Verification baseline
 
-The application baseline passed these checks on 11 November 2026:
+The application baseline passed these checks on 13 November 2026:
 
 | Check | Result |
 | --- | --- |
-| Django inventory tests on isolated PostgreSQL | 987 passed |
-| JavaScript tests | 110 passed |
+| Django inventory tests on isolated PostgreSQL | 999 passed |
+| JavaScript tests | 113 passed |
 | Offline collector tests | 112 run, with 9 skips; successful result |
-| Browser export acceptance | 1,001 synthetic firewall references, all five formats, no export-triggered NSX requests |
-| UI and PDF review | Light/dark, mobile, keyboard focus/return, 44-page landscape PDF with final rule present |
-| Image checks on both CPU architectures | Non-root execution, fresh migrations, assets, dependencies, export lane/heartbeat and all renderers passed |
+| Browser export acceptance | 1,001 synthetic firewall references, all five formats, no export-triggered NSX requests (11 November); 13 November: synthetic VM/group/tag/custom-service exports through the worker lane in NSX order |
+| UI and PDF review | Light/dark, mobile, keyboard focus/return, 44-page landscape PDF with final rule present; 13 November: firewall drawers (VM, group, tag, custom service) and PDF header wrapping |
+| Image checks on both CPU architectures | Registry images pulled by digest: non-root execution, build revision, fresh migrations, assets, export lane/heartbeat and all renderers passed |
 
 Use [the committed synthetic acceptance record](performance/reference-exports-2026-11-11.json)
 for browser measurements. Its earlier full-suite count predates the final
@@ -215,7 +217,8 @@ This handover updates GitHub documentation and does not rebuild the runtime imag
 
 1. If the user wants deployment acceptance, verify the selected image revision on
    every component, migration `0069`, worker heartbeat and an export from an
-   existing snapshot. Prefer read-only checks; ask for missing access only when
+   existing snapshot. Confirm with a read-only NSX policy read that security
+   policies return `scope` (Applied To) and how whole-DFW is represented. Prefer read-only checks; ask for missing access only when
    necessary, and use synthetic data for reproduction.
 2. Keep a synthetic regression case for every membership/address/reference issue.
    Measure request counts and phase times before optimizing collection. Preserve
@@ -227,7 +230,7 @@ This handover updates GitHub documentation and does not rebuild the runtime imag
    obsolete mockups and dated screenshots as historical design references.
 5. Add the separate JavaScript suite to GitHub Actions as a scoped follow-up task.
    The current workflow installs Node for collector checks but does not run
-   `webapp/tests-js/*.test.cjs`; those 110 checks currently need a separate run.
+   `webapp/tests-js/*.test.cjs`; those 113 checks currently need a separate run.
 6. Update this baseline when significant code or publication state changes. Track
    new work as separate scoped tasks rather than assuming old chat proposals are
    still outstanding.
@@ -237,7 +240,7 @@ This handover updates GitHub documentation and does not rebuild the runtime imag
 ```text
 Read CLAUDE.md and docs/claude-code-handover.md, then CLAUDE.local.md if it exists.
 Check the current branch and working tree, and identify changes since application
-build 876c2cc. Preserve unrelated edits and use synthetic data for verification.
+build a6b2b36. Preserve unrelated edits and use synthetic data for verification.
 Summarize the current implementation and proposed next steps, then continue with
 my next task. Do not publish an image or change a deployment unless I request it.
 ```
