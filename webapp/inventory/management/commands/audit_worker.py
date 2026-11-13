@@ -322,6 +322,11 @@ class Command(BaseCommand):
                             process.kill()
                             process.wait()
                             raise
+                        finally:
+                            # A collector stopped while building browsing data leaves a published
+                            # snapshot; the background rebuild lane finishes its index.
+                            from inventory.models import Snapshot
+                            Snapshot.objects.filter(job_id=job.pk, browsing_status='indexing').update(browsing_status='queued')
                 except OSError:
                     LOG.error("job=%s collector subprocess could not start", job.pk)
                     fail_job(job.pk, "The worker could not start the collector process.")

@@ -69,6 +69,21 @@ def report_progress(client, key, completed, total):
         note(key, completed, total)
 
 
+CHART_TONES = {'#087f8c': 'referenced', '#b76b13': 'candidate', '#7955b2': 'unknown', '#8493a6': 'unassessed'}
+
+TAG_OPERATORS = {"EQUALS", "CONTAINS", "STARTSWITH", "ENDSWITH"}
+
+
+def tag_matches(operator, tag, expected):
+    """Case-folded tag comparison for supported NSX condition operators."""
+    if operator == "EQUALS":
+        return tag == expected
+    if operator == "CONTAINS":
+        return expected in tag
+    if operator == "STARTSWITH":
+        return tag.startswith(expected)
+    return tag.endswith(expected)
+
 class AuditError(Exception):
     """A request or inventory completeness check failed."""
 
@@ -1412,48 +1427,51 @@ def audit_tags(client, groups, testing=False, resources=(), workers=1, inventori
             tag_record({"scope": scope, "tag": tag})
             known_tags.add((scope.casefold(), tag.casefold()))
         supported.append((group, scope.casefold(), tag.casefold(), condition))
-    def may_reference(condition, scope, tag):
+    # Parse unsupported conditions once; a condition whose scope is understood can
+    # only concern tags in that scope (see may_reference).
+    review_parts = []
+    for item in unsupported:
+        parts = tag_condition_parts(item["condition"].get("value"))
+        expected = tuple(part.casefold() for part in parts) if parts is not None else None
+        scoped = bool(expected and expected[0] and item["condition"].get("scope_operator", "EQUALS") == "EQUALS")
+        review_parts.append((item, expected, scoped))
+
+    def may_reference(condition, expected, scope, tag):
         """Use understood constraints to bound uncertainty from an unsupported condition."""
-        parts = tag_condition_parts(condition.get("value"))
-        if parts is None:
+        if expected is None:
             return True
-        expected_scope, expected_tag = (part.casefold() for part in parts)
+        expected_scope, expected_tag = expected
         if (expected_scope and condition.get("scope_operator", "EQUALS") == "EQUALS"
-                and scope.casefold() != expected_scope):
+                and scope != expected_scope):
             return False
         # Unknown/negative tag operators cannot safely exclude a tag in this scope.
-        comparisons = {"EQUALS": lambda: tag.casefold() == expected_tag,
-                       "CONTAINS": lambda: expected_tag in tag.casefold(),
-                       "STARTSWITH": lambda: tag.casefold().startswith(expected_tag),
-                       "ENDSWITH": lambda: tag.casefold().endswith(expected_tag)}
-        comparison = comparisons.get(condition.get("operator"))
-        return not expected_tag or comparison is None or comparison()
+        operator = condition.get("operator")
+        return not expected_tag or operator not in TAG_OPERATORS or tag_matches(operator, tag, expected_tag)
 
-    exact_conditions, other_conditions = {}, []
+    exact_conditions, other_conditions = {}, {}
     for index, (_, scope, tag, condition) in enumerate(supported):
         if condition["operator"] == "EQUALS":
             exact_conditions.setdefault((scope, tag), []).append(index)
         else:
-            other_conditions.append(index)
+            other_conditions.setdefault(scope, []).append(index)
     for (scope, tag), row in records.items():
-        keys = {(scope.casefold(), tag.casefold()), ("", tag.casefold()),
-                (scope.casefold(), ""), ("", "")}
-        candidates = sorted(other_conditions + [index for key in keys for index in exact_conditions.get(key, [])])
+        scope_cf, tag_cf = scope.casefold(), tag.casefold()
+        keys = {(scope_cf, tag_cf), ("", tag_cf), (scope_cf, ""), ("", "")}
+        # Non-EQUALS conditions can only match their own scope or a scope-free condition.
+        candidates = sorted(other_conditions.get(scope_cf, []) + (other_conditions.get("", []) if scope_cf else [])
+                            + [index for key in keys for index in exact_conditions.get(key, [])])
         for index in candidates:
             group, expected_scope, expected_tag, condition = supported[index]
-            if ((not expected_scope or scope.casefold() == expected_scope)
-                    and (not expected_tag or {"EQUALS": lambda: tag.casefold() == expected_tag,
-                         "CONTAINS": lambda: expected_tag in tag.casefold(),
-                         "STARTSWITH": lambda: tag.casefold().startswith(expected_tag),
-                         "ENDSWITH": lambda: tag.casefold().endswith(expected_tag)}[condition["operator"]]())):
+            if ((not expected_scope or scope_cf == expected_scope)
+                    and (not expected_tag or tag_matches(condition["operator"], tag_cf, expected_tag))):
                 row["group_conditions"][group["path"]] = group.get("display_name", group["path"])
                 cid = condition_id(group, condition)
                 row["condition_evidence"].append(cid)
                 matched_ids.add(cid)
         vm_used = bool(row["vms"])
         group_used = bool(row["group_conditions"] or row["group_assignments"])
-        row["review_conditions"] = [condition_id({"path": item["group"]}, item["condition"]) for item in unsupported
-                                    if may_reference(item["condition"], scope, tag)]
+        row["review_conditions"] = [condition_id({"path": item["group"]}, item["condition"]) for item, expected, scoped in review_parts
+                                    if not (scoped and expected[0] != scope_cf) and may_reference(item["condition"], expected, scope_cf, tag_cf)]
         vm_unknown = not vm_used and (testing or bool(vm_errors))
         group_unknown = not group_used and (testing or bool(group_errors) or bool(row["review_conditions"]))
         row["vm_usage"] = "used" if vm_used else "unknown" if vm_unknown else "not_found"
@@ -2207,9 +2225,11 @@ def overview_charts(groups, services, rules, testing=False):
             total, "sampled" if testing else "inventoried")
         output += '<ul class="chart-legend">'
         for label, count, color, anchor in slices:
-            output += ('<li><a href="#{}"><span class="chart-key" style="background:{}" aria-hidden="true"></span>'
+            # The workspace restyles segments with theme tokens using this explicit category.
+            tone = CHART_TONES.get(color.lower(), 'referenced')
+            output += ('<li><a href="#{}" data-usage="{}"><span class="chart-key" style="background:{}" aria-hidden="true"></span>'
                        '<span>{}</span><strong>{:,}</strong><small>{:.1f}%</small></a></li>').format(
-                           anchor, color, escape(label), count, 100 * count / total)
+                           anchor, tone, color, escape(label), count, 100 * count / total)
         output += '</ul></div></article>'
     return output + '</div><p class="chart-note">' + (
         'Testing sample only; proportions do not represent the full inventory. ' if testing else '') + (

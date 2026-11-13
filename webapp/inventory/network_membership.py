@@ -213,6 +213,20 @@ def collect(client, groups, vms, *, probes=None, workers=4, testing=False, resou
                          progress['completed'],len(targets)*len(ENDPOINTS),stats['requests'],time.monotonic()-started)
                 progress['last_log']=time.monotonic()
         return group['path'], endpoint, result
+    # The VIF inventory depends on nothing above; read it alongside the member lists.
+    # It shares the client's request limiter and pacing. Testing stays sequential.
+    vif_pool = None if testing else ThreadPoolExecutor(max_workers=1, thread_name_prefix='network-vifs')
+    vif_future = vif_pool.submit(page_list, client, '/api/v1/fabric/vifs', testing=testing) if vif_pool else None
+    try:
+        return _collect_members(client, targets, vms, vif_future, members, metadata, stats, started,
+                                workers, testing, resources, collect_addresses)
+    finally:
+        if vif_pool:
+            vif_pool.shutdown(wait=True, cancel_futures=True)
+
+
+def _collect_members(client, targets, vms, vif_future, members, metadata, stats, started,
+                     workers, testing, resources, collect_addresses):
     # Probe category compatibility/permissions before parallel fan-out.
     tasks = [(g,e) for g in targets for e in ENDPOINTS]
     first, rest, seen = [], [], set()
@@ -234,7 +248,7 @@ def collect(client, groups, vms, *, probes=None, workers=4, testing=False, resou
         for row in endpoints['logical-ports']['items']:
             if isinstance(row.get('path'),str) and PORT.fullmatch(row['path']):
                 segments.add(row['path'].rsplit('/ports/',1)[0])
-    vif_result = page_list(client,'/api/v1/fabric/vifs',testing=testing)
+    vif_result = vif_future.result() if vif_future else page_list(client,'/api/v1/fabric/vifs',testing=testing)
     stats['requests'] += vif_result['requests']
     aliases = set().union(*(vm_identities(vm) for vm in vms)) if vms else set()
     fabric = None

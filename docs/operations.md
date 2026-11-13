@@ -146,7 +146,7 @@ VM identities against a reported total of 1,238. A duplicate does not fill the g
 The message does not establish whether the cause is inventory churn, page overlap
 or an inconsistent NSX count. VM runtime-only differences are tolerated for seven
 known fields, but missing identities, tag changes and count checks remain strict.
-See [verification details](collection-performance.md#diagnostics).
+See [verification details](collection-performance.md#inventory-changes-during-collection).
 
 This differs from the cross-check that every directly collected group/service path
 appears in configuration search. Persistent missing search paths after three
@@ -410,7 +410,7 @@ its saved JSON for manual work in NSX. This administrator-only viewer never cont
 NSX. Keep downloads under the same access controls as inventory exports; they can
 include internal addresses, tags and policy details. A historical record is not proof
 of current absence: check NSX before recreating anything after an uncertain outcome.
-See [manual recreation guidance](finding-review-workflow.md#view-saved-configuration-for-manual-recreation).
+See [manual recreation guidance](finding-review-workflow.md#saved-deletion-configuration).
 
 ### Scoped verification upgrade
 
@@ -494,6 +494,15 @@ the latest owner approval, including an invalidated approval where retained.
 
 Apply migration **0054** before deploying matching web and worker images.
 
+
+### New snapshots: Preparing browsing data
+
+A collection publishes its snapshot and findings first, then builds the browsing index.
+Until that finishes the snapshot page shows **Preparing browsing data** (status
+`indexing`). If indexing fails or the collector is stopped or times out while
+indexing, the snapshot is queued for the background rebuild, which the comparison lane
+runs with `index_snapshots`. A snapshot left in `failed` can be rebuilt by an
+administrator from its page; no new collection is needed.
 
 ### Deletion speed, time limits and "Not attempted"
 

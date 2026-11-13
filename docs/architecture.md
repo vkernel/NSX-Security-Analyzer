@@ -61,4 +61,4 @@ Administrator deletion requests are stored as batches with per-object evidence a
 outcomes. Read-only previews run in a separate lane; confirmed execution uses its own exclusive lane. The
 worker revalidates approvals and live evidence before each DELETE, never retries a
 DELETE automatically, and records uncertain outcomes separately. See the
-[workflow](finding-review-workflow.md#delete-approved-objects-from-nsx).
+[workflow](finding-review-workflow.md#deletion-from-nsx).

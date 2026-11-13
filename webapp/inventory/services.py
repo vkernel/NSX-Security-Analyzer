@@ -19,6 +19,43 @@ from .concurrency import adapt_requests
 
 @lru_cache(maxsize=1)
 
+
+def warm_start(environment, manager, concurrency, pacer):
+    """Start from the previous collection's settled rate and concurrency when that run
+    against the same manager saw no throttling and no concurrency reduction. Throttling
+    and overload still reduce both immediately."""
+    previous = environment.snapshots.filter(testing=False).values_list(
+        'report__manager', 'report__performance__request_pacing', 'report__performance__concurrency').first()
+    if not previous:
+        return None
+    previous_manager, pacing, adaptive = previous
+    if previous_manager != manager or not isinstance(pacing, dict) or not isinstance(adaptive, dict):
+        return None
+    rate, final = pacing.get('requests_per_second'), adaptive.get('final')
+    if (pacing.get('throttled_attempts') != 0 or adaptive.get('decreases') != 0
+            or not isinstance(rate, (int, float)) or not isinstance(final, int)):
+        return None
+    with pacer.condition:
+        pacer.rate = max(pacer.rate, min(pacer.maximum_rate, rate * WARM_START_FACTOR))
+    with concurrency.condition:
+        concurrency.limit = concurrency.initial = concurrency.peak = max(concurrency.limit, min(concurrency.maximum, int(final * WARM_START_FACTOR)))
+    return {'requests_per_second': round(pacer.rate, 2), 'concurrency': concurrency.limit}
+
+
+WARM_START_FACTOR = 0.75
+
+
+def index_published_snapshot(job_id, snapshot):
+    """Build browsing data for a committed snapshot. A failure leaves the snapshot and
+    findings published and hands the index to the background rebuild lane."""
+    from .snapshot_index import build
+    try:
+        with phase(job_id, "index_snapshot"):
+            build(snapshot, getattr(snapshot, '_rendered', None))
+    except Exception as exc:
+        log_failure(job_id, exc)
+        Snapshot.objects.filter(pk=snapshot.pk, browsing_status='indexing').update(browsing_status='queued')
+
 def post_processing_reserve(limit):
     """Seconds kept for snapshot preparation, indexing and findings after retrieval."""
     return min(max(300, limit * 0.15), limit * 0.4)
@@ -298,6 +335,9 @@ def execute_job(job_id):
         client.request_deadline = time.monotonic() + max(0, settings.AUDIT_TIMEOUT - elapsed - reserve)
         maximum_requests = config.get("max_concurrent_requests", 8)
         concurrency = None if job.testing else adapt_requests(client, maximum=maximum_requests)
+        warm = None
+        if concurrency:
+            warm = warm_start(job.environment, urlsplit(client.base_url).netloc, concurrency, client.request_pacer)
         try:
             with phase(job.pk, "retrieve_nsx_inventory"):
                 report = audit.audit(client, workers=1 if job.testing else concurrency.maximum, testing=job.testing,
@@ -319,6 +359,8 @@ def execute_job(job_id):
             report.setdefault("performance", {})["concurrency"] = concurrency.summary()
             report["performance"]["workers"] = concurrency.peak
             report["performance"]["request_pacing"] = client.request_pacer.summary()
+            if warm:
+                report["performance"]["warm_start"] = warm
         from .version import VERSION, BUILD
         report.setdefault('performance', {})['collector_build'] = {
             'version': VERSION, 'revision': BUILD['revision'], 'built_at': BUILD['built_at'],
@@ -342,10 +384,10 @@ def execute_job(job_id):
                 return  # Expired jobs cannot publish a late result.
             snapshot.job = current
             with phase(job.pk, "write_snapshot"):
+                # Browsing data is built after this commit; the snapshot and its
+                # findings are published even if indexing later fails or is killed.
+                snapshot.browsing_status = 'indexing'
                 snapshot.save()
-            from .snapshot_index import build
-            with phase(job.pk, "index_snapshot"):
-                build(snapshot, snapshot._rendered)
             from .findings import synchronize
             with phase(job.pk, "synchronize_findings"):
                 synchronize(job.environment_id, collected_snapshot=snapshot, job_id=job.pk)
@@ -363,6 +405,7 @@ def execute_job(job_id):
         LOG.info("job=%s collection committed elapsed_seconds=%.1f", job.pk, time.monotonic() - started)
         record('collection.completed', 'AuditJob', job.pk,
                details={'snapshot_id': str(snapshot.pk), 'elapsed_seconds': round(time.monotonic()-started, 3)}, best_effort=True)
+        index_published_snapshot(job.pk, snapshot)
         # Diagnostics are supplemental: a telemetry write failure cannot undo success.
         try:
             retained = AuditJob.objects.filter(pk=job.pk).values_list('diagnostics', flat=True).first() or {}

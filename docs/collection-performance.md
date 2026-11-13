@@ -1,986 +1,556 @@
 # Collection performance
 
-## Network member lists and VM attachments · 10 November 2026
+This guide explains how a collection retrieves NSX evidence, how request pacing and
+concurrency protect the NSX Manager, where to find timing data and how to tune a slow
+collection. For CPU, memory and capacity planning, see
+[resource sizing](resource-sizing.md). For saved VM membership strategy and browsing
+performance, see [workspace performance](workspace-performance.md).
 
-Network-based groups now save paginated effective segment, port and IP lists.
-Selection follows Segment, SegmentPort and interface criteria, including referenced
-parent groups. VM-only groups retain the existing direct association path and add
-no network requests. Parent effective ports, rather than child group or tag
-matches, determine network references.
+Every collection request is a read-only GET. Faster is only better when coverage stays
+the same: unknown, unavailable, partial and complete-empty evidence remain distinct
+states, and no optimization turns a missing answer into an empty one.
 
-Collection joins those ports to VM interfaces using exact `owner_vm_id`,
-`lport_attachment_id`, Policy `attachment.id` and canonical port paths. One
-Management Plane VIF inventory is retrieved through the same HTTPS pool, request
-pacer, adaptive concurrency limiter and overall deadline. If owners use fabric VM
-IDs, one fabric VM inventory bridges exact identities to the Policy VM inventory.
-Names, MAC addresses and IP addresses are not identity fallbacks. Ambiguous owners,
-attachments, conflicting interface records and unresolvable legacy port IDs remain
-unknown. No per-VM/group cross-product or realized-state scan is introduced.
+## How a collection runs
 
-Initial cleanup probes for selected network groups request up to 1,000 members,
-and their pages are reused. Other necessary category pages use 1,000 records and
-verified cursors. Modern segment/port endpoints fall back to legacy endpoints on
-compatibility failures. Empty successful segment/port lists are also checked against
-the alternate endpoint, including empty reused probe pages. Positive lists add no
-compatibility reads. A recovered endpoint choice is shared by its scope/category;
-unsupported or denied compatibility endpoints are not repeatedly probed. Diagnostics
-include `empty_response_checks` and `empty_response_recoveries`.
-Group-category reads stop at 100 pages and explicitly
-retain partial coverage at that limit. Permission failures and failed pages retain
-positive evidence without establishing a complete zero. Additional reads are
-limited to selected network groups. Negative attachment results never establish
-cleanup or deletion eligibility.
-An authoritative positive list recovered through compatibility also supersedes an
-earlier empty cleanup probe, keeping findings consistent with the saved members.
+### Worker lanes
 
-If both port endpoints are empty but an exact saved interface attachment points to
-a resolved member segment, attachment coverage stays partial. This contradiction
-does not establish a complete zero or manufacture a parent membership. Arbitrary
-nested group AND/OR conditions are never bypassed by inheriting a child's links.
+The collection worker supervises independent subprocess lanes. Each lane runs at most one
+task at a time across all worker replicas, enforced with PostgreSQL session advisory
+locks:
 
-Port configuration already returned by collection search is reused when it covers
-the selected effective ports. Remaining relevant segment inventories are fetched
-once and shared by every group/VM. The [synthetic request comparison](performance/network-membership-2026-11-10.json)
-uses two groups sharing 44 segments, 605 ports and 844 IP entries, with three VMs.
-Full network evidence requires 49 reads when 44 segment inventories must be fetched,
-or five reads when their configuration is already available. Both modes reuse two
-mandatory segment-member pages and produce identical VM relationships. These are
-actual mock call counts, not a promise of production collection duration. Exact
-network evidence requires reads that the previous one-member sampling omitted.
-The [attachment regression benchmark](performance/attachment-reference-fixes-2026-11-10.json)
-keeps the healthy network phase at five requests. With 12 groups and a compatibility
-recovery, both 3 and 3,000 synthetic VMs use 38 network requests, one shared VIF
-inventory and no segment inventory requests when search already supplied the ports.
+| Lane | Work |
+| --- | --- |
+| Collection | One collection across all environments |
+| Recalculation | Finding-review indexing and criteria recalculation |
+| Comparison | Snapshot comparisons |
+| Deletion preview | Read-only NSX deletion previews |
+| Deletion execution | Confirmed NSX deletions |
+| Exports | Reference exports |
 
-The VM inventory shows unique **Related groups** across direct and network
-relationships. Drawers identify their basis and retain interface → port → segment
-provenance. Network groups show **VMs** for direct membership and **Attached VMs**
-for attachment links; a zero direct count can coexist with attached VMs. Saved
-firewall references use the same unique relationships and state their reason.
-These references do not establish effective firewall policy or observed traffic.
+Lanes have separate queues, so a recalculation or comparison can run alongside a
+collection. Publication for one environment briefly serializes on its environment lock,
+and a newly saved snapshot can make a running recalculation retry against the new
+history. Separate Analyzer databases do not share these limits. Stop old worker replicas
+before starting upgraded workers so old and new lane behavior cannot overlap.
 
-New snapshots default to their saved evidence, including partial network evidence.
-Explicit Current NSX checks remain separate direct VM association checks. Firewall
-references and rule inspection combine those associations with verified attachments
-already saved for this VM, labelled **Current VM associations + saved attachments**.
-Each attachment-based rule retains its collection timestamp; refreshing direct VM
-associations does not recheck network links. Saved links never enter the live cache
-and snapshots remain unchanged. Both rule views use the same evidence context, keep
-paging and deduplicate rules that match both membership types. Browsing adds no
-NSX calls. Current group lists continue to show direct associations separately from
-the saved Network links tab. Coverage is limited
-to visible inventory and the default enforcement point, excludes IP-only inference,
-and is not an atomic NSX snapshot. Endpoint and attachment completeness are tracked
-separately. Missing network evidence is shown in coverage and collection diagnostics.
-Noncanonical legacy port identities stay unresolved rather than being guessed.
+**Administration → Operations → System health** shows collection, recalculation,
+comparison and scheduler heartbeats. Each loop reports at most every 15 seconds; a report
+older than 180 seconds is marked **Not reporting**. Heartbeats show supervisor activity,
+not collection progress or database health. Kubernetes readiness probes and Docker
+healthchecks read local heartbeat files; they do not restart services or query
+PostgreSQL.
 
-No schema migration is added. Update the collection worker as well as the web app,
-then run a fresh full collection. Existing snapshots remain immutable. The
-[synthetic browser acceptance](performance/network-membership-browser-2026-11-10.json)
-verifies zero direct VM members, two attached VMs, all member totals, segment paging,
-VM counts and saved firewall references without any live membership request.
-The [current-reference browser acceptance](performance/attachment-reference-browser-2026-11-10.json)
-also verifies that an empty current direct-association cache retains the saved
-attachment-based rule, shows its collection timestamp, and permits inspection
-through the same evidence context without any live membership POST.
+### Collection stages
 
-API reference: [NSX group member categories](https://developer.broadcom.com/xapis/nsx-t-data-center-rest-api/latest/inventory_group_members.html).
+The collection page shows the current stage. Percentages count completed stages, not
+time remaining.
 
-## Earlier collection optimizations
+| Stage | Work | Runs in parallel |
+| --- | --- | --- |
+| 0 · Reading domains, groups and services | Domains, then every domain's group list and the service list | Group and service lists |
+| 1 · Scanning references, firewall counters and VM associations | Starts three retrieval branches: configuration search, DFW rules and counters, and membership | Search, DFW and membership branches |
+| 2 · Completing firewall rules and counters | Search finished; DFW continues | |
+| 3 · Collecting VM associations and checking group membership | DFW finished; membership continues | |
+| 4 · Checking tags and VM assignments | Reference analysis, tag analysis | |
+| 4 · Collecting network members and linking VM interface attachments | Network member lists and VM interface inventory for network-based groups | Member lists across groups |
+| 5 · Preparing report and hit history | Build the report, carry forward hit history | |
+| 6 · Saving snapshot | Save, index and synchronize findings | |
+| 7 · Completed | **Completed** or **Completed with coverage warnings** | |
 
-### Saved IP/subnet firewall references · 11 November 2026
+The membership branch first reads the tag catalog (`/infra/tags`) and VM inventory
+(`/infra/realized-state/virtual-machines`) in parallel, then reads each VM's group
+associations, then probes membership for groups that no association already proved
+non-empty.
 
-VM References includes an **IP/subnet matches** table and firewall references
-through those saved address definitions. This is configuration evidence, not
-confirmed VM group membership, current IP ownership, effective policy or observed
-traffic. Confirmed Related groups counts and live membership caches are unchanged.
+Testing samples and single-worker runs stay sequential. All branches share one request
+limiter and one pacer, so running them together does not raise the request rate ceiling.
 
-Hosts, CIDRs and inclusive ranges support IPv4 and IPv6. A group must contain one
-explicit IPAddressExpression, or one PathExpression referencing only supported
-IP-only child groups in the same scope. Cycles, missing children, malformed or
-mixed/extended conditions remain unresolved. An IP branch never bypasses an
-additional tag/identity/AND/OR condition. NSX's documented IP expression format
-supports [addresses, ranges and subnets](https://developer.broadcom.com/xapis/nsx-t-data-center-rest-api/latest/method_AddorRemoveGroupIPAddresses.html).
+### Live progress counts
 
-Only saved VM runtime address fields are used, not tags, names, gateways or DNS
-configuration. Shared addresses in the same saved scope, invalid/scoped/link-local,
-loopback, multicast and unspecified addresses are excluded with an explicit note.
-Project scopes remain separate. A rule's excluded source/destination is labelled
-as a negated reference, never a positive endpoint match. Direct rule IP literals
-and ANY-only rules are outside this group-reference path.
+Long branches append live counts to the stage text, for example
+`groups checked 1,200/4,800 · VM associations 2,950/3,000`. The counters are:
 
-Apply migration **0067_saved_ip_references** before starting matching web versions.
-It creates empty derived cache tables with indexes; it does not backfill or index
-existing snapshot tables. On first IP-reference browse, one index is built for
-the selected snapshot. Warm reads use indexed numeric address intervals and a
-shared-address lookup rather than rescanning every group. Browsing adds no NSX
-calls and collection does not build this index. Existing snapshots work if saved
-VM address fields are present; missing fields remain unknown. Current NSX mode
-retains labelled, timestamped saved IP references; Refresh only checks direct VM
-associations and does not refresh IPs or repair historical evidence.
+- **groups checked**: membership probes completed out of all audited groups.
+- **VM associations**: VM association reads completed out of collected VMs.
+- **network member lists**: network member-list reads completed out of planned reads
+  (selected network groups × member categories).
 
-**VIF address capture correction (11 November 2026):** NSX VM GuestInfo normally
-contains OS/computer details; addresses are reported in the interface inventory's
-[`ip_address_info[].ip_addresses`](https://developer.broadcom.com/xapis/nsx-t-data-center-rest-api/latest/method_ListVifs.html).
-Collection now saves those VIF observations in each VM's `network_interfaces`,
-including source, exact owner identity and collection timestamp/coverage. Fabric
-VM identifiers use the existing exact-ID bridge. Names, tags and matching subnets
-never establish interface ownership. Conflicting or ambiguous owners are omitted.
+Counts update at most every 10 seconds, and immediately when a branch completes. A count
+can stand still while requests wait for pacing or throttling.
 
-Network attachment collection and address capture share the same paginated VIF
-read. Where there are no network-group criteria, collection performs one shared
-VIF inventory read (plus the bulk fabric VM identity bridge if needed), with no
-per-VM or VM-by-group calls. A 3,000-VM synthetic case requires three VIF pages,
-not 3,000 requests. Collection logs `Saved VM address coverage` with reported
-address coverage, saved interfaces and incomplete states.
+### Prior-run hints
 
-The address cache version is bumped automatically; no schema migration is needed
-for this correction. Older snapshots that never saved VIF addresses cannot recover
-them by rebuilding the browsing cache. They need a collection with the corrected
-worker. If NSX itself returns no usable interface IPs, the drawer says Unavailable;
-another successful collection alone cannot establish addresses absent from NSX.
-Partial interface reads retain known matches with partial coverage.
+The worker reads a compact projection of the previous snapshot: membership endpoint
+hints, statistics cooldowns and rule identity and hit-history fields. Previous evidence
+only orders probes or skips known-failing optional endpoints; NSX is always queried
+again, and negative membership is never reused.
 
-Correction verification passed all 963 Django tests and the collector suite
-(112 tests, 9 skipped). The [browser acceptance result](performance/vif-address-browser-2026-11-11.json)
-starts with documented synthetic NSX VIF responses, runs full collection and
-snapshot publication, then opens the VM drawer. It finds the subnet group and
-firewall rule with zero live membership requests and no inflated confirmed-group
-count. The earlier GuestInfo-only test did not cover this collection source.
+**Warm start.** When the previous collection against the same manager finished with
+no HTTP 429 throttling and no concurrency reduction, the next collection starts at 75%
+of its final request rate and concurrency, never above the environment's maximum.
+Otherwise it starts cold (10 requests/s, concurrency 2). Throttling and overload still
+reduce both immediately. The applied values are saved in
+`performance.warm_start`.
 
-Cache rows are discarded when saved browsing evidence changes or is archived,
-and cascade when the snapshot is deleted. A concurrent invalidation downgrades
-coverage to partial. Bounds are explicit: 32 usable addresses per VM, 100,000
-compiled intervals per snapshot, 32 nested levels and 2,000 matching intervals per
-lookup. Limit hits retain known matches and mark missing coverage unknown. Dense
-evidence is limited to 32 details per group and 12 per firewall list row; the UI
-identifies omitted details and links to the saved group definition.
+### Publication
 
-Synthetic acceptance covered subnet/range/IPv6 matches, pure nested groups,
-excluded rule fields, mixed-condition rejection and preservation of saved
-references in Current NSX mode. The [browser result](performance/ip-reference-browser-2026-11-11.json)
-records four IP group matches and six firewall references while the VM's
-confirmed group count stays at one, with no live membership requests.
+After retrieval, the worker prepares the report and publishes it in one transaction:
+the snapshot (`write_snapshot`), its findings (`synchronize_findings`) and the
+collection's success. A collection that is stopped or has expired cannot publish a late
+result, and earlier snapshots stay available.
 
-The [local synthetic benchmark](performance/ip-reference-benchmark-2026-11-11.json)
-used 10,000 groups and 3,000 VMs: a 0.573-second initial index build and a
-5.497-millisecond median across 20 warm lookups, with seven database queries per
-lookup, no warm group-definition rescans and no NSX calls. These local figures
-are regression evidence, not a production latency prediction. Verification also
-passed 953 Django tests, 103 JavaScript tests and final focused membership/IP
-checks; the migration matches the models.
+The browsing index (`index_snapshot`) is built right after that commit, in the same
+process. Meanwhile the snapshot shows **Preparing browsing data**; findings and reviews
+are already available. If indexing fails, or the collector is stopped or times out
+while indexing, the published snapshot is handed to the background rebuild (the same
+path used to restore archived snapshots), so the collection is not lost.
 
-For the current saved VM membership strategy, its request-cost tradeoffs and
-synthetic measurements, see [Saved VM associations during collection](workspace-performance.md#saved-vm-associations-during-collection--5-november-2026).
+Finding publication advances observations, eligibility and workflow state on every
+collection, but rewrites saved JSON evidence only when its fingerprint changes. Index
+writes use batches of up to 500 records and an estimated 4 MiB payload; a single
+oversized record is written alone. Finding updates and their review events use batches
+of 100 under the environment lock.
 
-For CPU, memory and capacity planning, see [small, medium and large resource sizing](resource-sizing.md).
+## Request pacing and concurrency
 
-Development builds from 0.2.2-dev retain fresh inventory and counter checks while reducing transport and fallback overhead.
+Each request passes three gates in order: the adaptive concurrency limiter, the shared
+request pacer and the per-request retry policy. All collection threads share the same
+gates, and waiting requests are served in FIFO order, so a thread finishing one request
+cannot jump ahead of already-queued work.
 
-- HTTPS connections are pooled per collection (up to 16 connections); the existing adaptive limiter still caps concurrent requests at eight. Uploaded CA certificates and hostname validation remain supported. Redirects are rejected, and the pool closes when collection finishes. System HTTPS proxy settings and proxy bypass rules are honored.
-- Optional policy statistics use an eight-second connect/read timeout, or the environment timeout if shorter. Each bulk request has one attempt. Individual rule requests retain the environment timeout and retry policy.
-- Failed policy endpoints use a cooldown saved in PostgreSQL snapshot data. Transient failures start at one hour; HTTP 400/404/405/501 start at six hours. Repeated failures double the delay up to 24 hours. After expiry, collection probes the endpoint again. A successful complete response clears its failure history. Manager mismatches and testing snapshots are ignored. These are endpoint failure records, never cached counters.
-- Rule fallback requests become eligible as soon as their policy request finishes; they do not wait for all bulk requests. Both use one bounded executor and the existing shared adaptive request limiter.
-- Incomplete, ambiguous, or malformed bulk evidence still falls back to individual rules. Search scope, pagination checks, membership checks and enforcement-point coverage are unchanged.
+### Maximum concurrent NSX requests
+
+Set **Maximum concurrent NSX requests** in **Edit environment → Advanced request
+settings**: default **8**, range **1–32**. The value is saved per environment and
+captured when a collection is queued; queued or running collections keep their captured
+value, and older queued jobs without it use 8. No restart, ConfigMap or environment
+variable is needed.
+
+This is a ceiling, not a target. It also sets the size of the worker thread pools,
+including the firewall counter pool, while all HTTP requests still pass through the
+shared limiter. The HTTPS connection pool holds up to 16 connections per collection,
+reuses TLS connections, rejects redirects, honors system proxy settings and closes when
+the collection finishes.
+
+### Adaptive concurrency
+
+| Behavior | Rule |
+| --- | --- |
+| Start | 2 concurrent requests (or the maximum, if lower) |
+| Increase | +1 after `max(8, 4 × current limit)` successes while requests were waiting, at least 30 seconds after the last reduction, up to the maximum |
+| Reduce on overload | Halve (minimum 1) on HTTP 429, 502, 503 or 504, or a transport error. A burst of overload errors within 5 seconds causes one reduction. |
+| Reduce on latency | Halve after three consecutive responses that are much slower than that endpoint's own baseline, at most once every 30 seconds |
+| Not overload | Local time-budget errors (the request never reached NSX), read timeouts of optional bulk policy statistics, and optional member-page timeouts |
+
+Latency baselines are tracked per endpoint category, so naturally slow statistics calls
+do not throttle other endpoints.
+
+### Shared request pacer
+
+| Behavior | Rule |
+| --- | --- |
+| Start | 10 requests per second, no initial burst |
+| Increase | +25% (at least +1/s) after 20 consecutive successes and 10 seconds since the last change, up to 40/s |
+| HTTP 429 | Halve the rate (minimum 0.5/s) and start a shared cooldown. Simultaneous rejections during one cooldown halve the rate once. The cooldown honors numeric or HTTP-date `Retry-After`. |
+| After throttling | Growth waits until 30 seconds after the shared cooldown ends |
+
+These are conservative application values, not NSX limits. Shared clients or expensive
+endpoints can still trigger throttling.
+
+### Retries
+
+- **HTTP 429** waits on the shared pacer's cooldown and is retried without using one of
+  the environment's retry attempts (up to 20 throttled retries).
+- **Transport errors** (connection reset, read timeout) are retried once after one to
+  two seconds.
+- **HTTP 502, 503 and 504** (and 429 when the shared pacer is unavailable) use the
+  environment's retry count, with exponential backoff plus jitter or `Retry-After`.
+- Bulk policy statistics and optional member-detail pages are not retried.
+- Each request has a 60-second retry budget. Time spent waiting for concurrency or
+  pacing does not consume it.
+
+### Collection deadline and post-processing reserve
+
+The worker time limit is `NSX_AUDIT_TIMEOUT` (default 3,600 seconds). Retrieval stops
+early enough to save, index and publish the snapshot before that limit:
+
+```text
+reserve = min(max(300 s, 15% of the limit), 40% of the limit)
+```
+
+| Worker limit | Reserve | Retrieval deadline |
+| --- | --- | --- |
+| 600 s | 240 s | 360 s |
+| 3,600 s (default) | 540 s | 3,060 s |
+| 7,200 s | 1,080 s | 6,120 s |
+
+All waits are bounded by the retrieval deadline. Reaching it aborts the collection
+rather than recording remaining checks as unknown; earlier snapshots stay available. The
+worker's own timeout and **Stop collection** remain effective.
+
+## Membership and network collection
+
+### VM group associations
+
+Each collected VM's group associations are read from
+`virtual-machine-group-associations` by exact external ID: normally one request per VM,
+paginated with 1,000 results per page and up to 100 pages. The first VM of each scope is
+read before the parallel fan-out, and a 401, 403, 405 or 501 response disables that
+scope instead of repeating the error for every VM. Ambiguous VM identities are not
+queried. Names and IP addresses never identify membership.
+
+A positive association proves that a group is non-empty, so that group needs no
+membership probe. Missing or empty associations never establish that a group is empty.
+
+### Group membership probes
+
+Groups without a positive association are probed through the NSX group member
+endpoints.
+
+- **Order:** the endpoint that found members in the previous snapshot, then endpoints
+  suggested by the group's member types, then the remaining supported endpoints. A
+  positive result ends the check.
+- **Type-specific plans:** a simple flat condition with one known member type skips
+  inapplicable endpoints. VirtualMachine keeps VM, IP and logical-port probes; Segment
+  keeps logical-switch, IP and logical-port; VIF and SegmentPort keep IP and logical-port.
+  Mixed types, nested or path expressions, extended criteria and uncertain definitions
+  keep all four probes. See Broadcom's
+  [VM members](https://developer.broadcom.com/xapis/nsx-t-data-center-rest-api/latest/method_GetGroupVMMembers.html),
+  [logical-switch members](https://developer.broadcom.com/xapis/nsx-t-data-center-rest-api/latest/method_GetGroupLSMembers.html)
+  and [logical-port members](https://developer.broadcom.com/xapis/nsx-t-data-center-rest-api/latest/method_GetGroupLPMembers.html).
+- **Negative evidence:** every required negative probe must succeed without an
+  unexplained continuation cursor. A failed probe stays unknown unless another endpoint
+  returns members. Prior empty results are never reused.
+- **Duplicates:** identical repeated group paths are probed once; conflicting
+  definitions for the same path fail the collection.
+
+**Restricted VM fast path.** A local group with exactly one positive VirtualMachine
+Name or Tag `EQUALS` condition can be established empty from one fresh VM membership
+response with an explicit `result_count` of zero, an empty result list and no cursor;
+the IP and port probes are omitted and noted. Remote, mixed, nested and extended
+definitions, missing counts, cursors and failures always use the full plan. About 5% of
+eligible groups get full verification, rotating daily in UTC, and Sunday verifies every
+group. A verification discrepancy rechecks every shortcut result before publication and
+disables the shortcut for later collections.
+
+### Network member lists and VM attachments
+
+Groups whose criteria involve segments, segment ports or interfaces (including through
+referenced parent groups) also save their effective segment, port and IP member lists.
+VM-only groups use the direct association path and add no network requests.
+
+- Selected network groups request up to 1,000 members in their initial probe, and those
+  pages are reused. Other pages use 1,000 records and verified cursors, up to 100 pages
+  per category; at that limit coverage is explicitly partial.
+- Modern segment and port endpoints fall back to legacy endpoints on compatibility
+  failures. Empty successful lists are checked against the alternate endpoint; positive
+  lists are not. A recovered endpoint choice is shared per scope and category, and
+  unsupported or denied endpoints are not probed again. Diagnostics count
+  `empty_response_checks` and `empty_response_recoveries`.
+- Permission and page failures keep positive evidence without establishing a complete
+  zero. Negative attachment results never establish cleanup or deletion eligibility.
+
+Ports are joined to VM interfaces by exact `owner_vm_id`, `lport_attachment_id`, Policy
+`attachment.id` and canonical port paths, using one shared Management Plane VIF
+inventory read through the same pool, pacer and limiter. That VIF read starts with the
+network phase and runs alongside the group member-list reads. If owners use fabric VM IDs, one
+fabric VM inventory bridges them to Policy VMs. Names, MAC and IP addresses are never
+identity fallbacks; ambiguous owners, conflicting interfaces and unresolvable legacy
+port IDs stay unknown. Port configuration already returned by search is reused, and
+remaining segment inventories are fetched once and shared. There is no per-VM × group
+cross-product and no realized-state scan.
+
+If both port endpoints are empty but a saved interface attachment points to a member
+segment, attachment coverage stays partial. Nested AND/OR conditions are never bypassed
+by inheriting a child's links. See
+[NSX group member categories](https://developer.broadcom.com/xapis/nsx-t-data-center-rest-api/latest/inventory_group_members.html).
+
+### VM interface addresses
+
+The same paginated VIF read saves each VM's interface addresses from
+[`ip_address_info[].ip_addresses`](https://developer.broadcom.com/xapis/nsx-t-data-center-rest-api/latest/method_ListVifs.html)
+in the VM's `network_interfaces`, with source, owner identity, timestamp and coverage.
+Guest information is not an address source. Conflicting or ambiguous owners are
+omitted. Collection logs `Saved VM address coverage`. Browsing uses these addresses for
+saved IP/subnet references; that index is built on first browse, not during collection.
+If NSX returns no usable interface IPs, the VM shows **Unavailable**.
+
+## Counters and statistics
+
+Rule hit counters are read per policy in bulk where possible, with per-rule fallback.
+
+- **Bulk policy statistics** use an eight-second connect/read timeout (or the environment
+  timeout if shorter) and one attempt. Only one bulk probe runs at a time; the remaining
+  counter workers serve rule fallbacks, which start as soon as their policy's bulk
+  request finishes.
+- **Fallback** to individual rules happens for incomplete, ambiguous or malformed bulk
+  evidence. Bulk entries are mapped by exact rule path, or by `internal_rule_id` to the
+  system-assigned numeric `rule_id` within the same policy. Display names and
+  user-supplied IDs are never used; duplicate or conflicting mappings fall back. See the
+  [RuleStatistics schema](https://developer.broadcom.com/xapis/nsx-t-data-center-rest-api/latest/types_RuleStatistics.html).
+- **Cooldowns** for failed bulk endpoints are saved with the snapshot: transient
+  failures start at one hour, HTTP 400/404/405/501 at six hours, doubling to at most
+  24 hours. Responses without an unambiguous rule identity get a 30-minute cooldown.
+  After expiry the endpoint is probed again; a complete success clears its history.
+  Cooldowns are failure records, never cached counters. Individual rule counters are
+  always fetched fresh.
+- **Timeout recovery:** after the first pass, rules whose counters timed out get one
+  recovery pass with at most two concurrent requests and a shared 30-second budget.
+  Rules that still fail keep unknown evidence. HTTP errors and malformed results are not
+  retried here. Diagnostics are in `statistics_retry`.
+- **Unsupported statistics:** Ethernet rules are kept with **Not supported** activity and
+  are not queried. An NSX HTTP 400 with error 500209 is also treated as unsupported. This
+  is not zero traffic and never qualifies as zero-activity evidence.
+
+Cooldown history comes from the latest successful non-testing snapshot from the same
+Manager. If a collection fails before saving, its new cooldown information is lost;
+retention can also remove history, after which the next collection probes normally.
+
+## Search and coverage verification
+
+Configuration references come from the NSX Policy search API, verified against the
+directly collected groups and services.
+
+1. Queries exclude `VirtualMachine`, `VirtualNetworkInterface` and
+   `GenericPolicyRealizedResource` with flat `NOT` clauses, then flat `!` clauses. If
+   NSX rejects a query (HTTP 400) or returns nothing despite known group/service
+   inventory, the next form is tried: `resource_type:*`, then `*` (runtime types removed
+   locally after pagination is verified), then an explicit list of configuration types.
+   The explicit list is a compatibility mode with limited coverage, recorded as such.
+2. Requests sort by ascending `path`; if NSX rejects sorting, the same query runs
+   unsorted. See the
+   [NSX Search API](https://developer.broadcom.com/xapis/nsx-t-data-center-rest-api/latest/method_QuerySearch.html).
+3. Pagination continues until the unique count matches the reported total or the cursor
+   ends. Duplicates are identified by resource type, origin site and Policy path (or
+   parent-scoped ID); identical repeats are dropped, conflicting versions trigger a
+   restart from page one after two and four seconds.
+4. If directly collected groups or services are missing from the results, the whole
+   search is retried up to three times (waiting two and four seconds).
+
+All query alternatives and retries share a budget of five search scans. Partial results
+are never accepted. Persistent gaps fail the collection with missing group/service
+counts, returned record counts, the query and up to three missing path samples. A gap
+alone does not prove indexing lag; query behavior or path scope can explain it.
+
+### Inventory changes during collection
+
+Objects created or deleted while the collector pages through an inventory can change
+its count. A count mismatch or duplicate without a reported total retries that inventory
+from page one twice (after two and four seconds), discarding the previous attempt. If it
+still disagrees, the collection finishes with **coverage warnings** and the affected
+endpoints appear under the report's **Coverage**. A small difference, such as 38,399
+received versus 38,409 reported, is still unverified. Failed requests, invalid responses,
+repeated cursors and deadline exhaustion remain retrieval errors.
+
+Conflicting-version warnings list up to three object identities and up to 20 changed
+top-level field names per object, without values. For duplicate VM records from the
+realized-state VM inventory, changes only to `_last_sync_time`, `compute_ids`,
+`guest_info`, `host_id`, `local_id_on_host`, `power_state` or `source` do not invalidate
+tag verification; those values are first-observed, not an atomic VM snapshot. Any other
+field difference still triggers retries.
+
+Inventory warnings pause only the findings that depend on the affected evidence; see
+[inventory warnings in the review workflow](finding-review-workflow.md#inventory-warnings-pause-affected-findings).
+Allow changes to settle, then collect again. Persistent mismatches in a quiet
+environment warrant checking NSX search health and API visibility.
 
 ## Diagnostics
 
-Duplicate `VirtualMachine` records from `/infra/realized-state/virtual-machines`
-are compared for tag-inventory consistency. Changes only to `_last_sync_time`,
-`compute_ids`, `guest_info`, `host_id`, `local_id_on_host`, `power_state`, or
-`source` do not invalidate tag verification. Those runtime details remain
-first-observed display values, not an atomic VM snapshot. Tags, deletion state,
-names and all other fields still undergo conflict detection; identity and count
-checks remain enforced. This exception does not apply to other endpoints.
+Open **Collections → Diagnostics** on a collection (operator or administrator) for
+request statistics, retries, concurrency and stage timings. Request statistics are
+available while the source snapshot is retained; for live or interrupted work, use the
+worker logs. Older snapshots may lack newer metrics.
 
-Search coverage is checked against the directly collected groups and services.
-When that inventory is non-empty but a broad search returns zero results, the
-collector tries the next query syntax, including the existing explicit
-configuration-type fallback. This also handles HTTP 200 empty responses, not
-just HTTP 400 query rejections. Each alternative starts from page one; rejected
-queries and the successful query scope are recorded. The explicit-type fallback
-retains its narrower coverage limitation. An actually empty direct inventory
-does not trigger this compatibility fallback.
-If any paths are absent, collection retries coverage up to three times
-(waiting two and four seconds). Compatibility queries, changing-inventory retries
-and coverage retries share a maximum of five search scans. Search pagination does
-not start an additional nested retry loop. Each attempt discards incomplete results;
-partial search results are never accepted as verified coverage. Persistent gaps fail the task and report missing group/service
-counts, returned record/path counts, the query, and up to three missing path
-samples. A gap alone does not establish indexing lag: query behavior or path
-scope may also explain it. Testing samples skip this completeness check; HTTP
-errors are not retried by this coverage check. Non-search inventory warnings remain in force even when search coverage succeeds.
+### Where to find the numbers
 
-New snapshots save DFW strategy counts in `dfw.collection_diagnostics`: policies evaluated, fully successful bulk policies, policies skipped during cooldown, fallback rules and categorized reasons (counted per rule). Empty policies are excluded.
+| Location | Contents |
+| --- | --- |
+| `performance.phases_seconds` | `inventory`, `search`, `dfw`, `search_and_dfw`, `membership`, `vm_associations`, `parallel_retrieval`, `references`, `tags`, `network_membership` |
+| Publication timeline | `retrieve_nsx_inventory`, `prepare_snapshot`, `write_snapshot`, `index_snapshot`, `synchronize_findings`, `wait_for_environment_lock` and commit time |
+| `performance.concurrency` | Initial, peak and final limit, increases, decreases, per-endpoint queue wait, and per-endpoint successes, failures by status, p95 and maximum latency |
+| `performance.request_pacing` | Completed and failed attempts, average and final rate, throttled attempts, aggregate pacing wait |
+| `performance.membership` | Groups checked, probe calls, probes per group, outcomes, endpoint responses, typed-plan groups and omitted probes, VM fast-path counters, VM probe comparison, network statistics |
+| `dfw.collection_diagnostics` | Policies evaluated, bulk successes, cooldown skips, fallback rules and categorized fallback reasons |
+| `performance.collection_scope` | Group rows and unique paths per domain; added/removed group counts versus the previous snapshot from the same Manager, with up to ten samples |
+| **Collecting worker** | Version, full revision, build time and configured maximum of the worker that collected the snapshot (older snapshots show "Not recorded") |
 
-`performance.concurrency.endpoints` includes successful and failed attempts, failure counts by HTTP status, total request time, maximum latency, and p95 latency from the most recent 512 attempts per endpoint family. Timing excludes waiting for the adaptive limiter but includes transport time. Request durations can overlap; their sum is not collection elapsed time. Existing phase timings remain the wall-clock reference.
+### Reading the numbers
 
-Cooldown history comes from the latest successful non-testing snapshot. If collection fails before saving a snapshot, new cooldown information from that run is not persisted. Retention or deleting snapshots may also remove failure history; the next collection then probes normally.
+- Phase times overlap. `search`, `dfw` and `membership` run concurrently; use
+  `search_and_dfw` and `parallel_retrieval` for wall-clock time and never add the parts.
+- Request durations overlap too. Endpoint request time, queue wait and aggregate pacing
+  wait are summed across threads, not elapsed time. Endpoint timing excludes limiter
+  waiting and includes transport time; p95 uses the most recent 512 attempts per
+  endpoint category.
+- **Membership workload** counts logical probes, which exclude internal HTTP retries. A
+  response with no members is not proof of emptiness.
+- **VM membership check comparison** counts, without extra requests, whether simple
+  VM-only definitions agreed across VM, IP and port probes, had a negative VM response
+  followed by positive IP/port evidence, had incomplete follow-up, or never reached the
+  VM probe. Zero disagreements in one collection do not prove a VM-only shortcut is safe.
+- Bulk-counter fallback codes distinguish missing, unmapped or ambiguous identity,
+  incomplete nested counters, invalid counters, missing or duplicate scope counters,
+  HTTP errors and cooldown, counted per rule.
+- `wait_for_environment_lock` separates contention from evidence processing.
 
-## Validation
+### Logs
 
-Compare several collections of equivalent inventories using total elapsed time, DFW phase time, bulk success/skip counts, fallback counts and unknown statistics. A faster run is not an improvement if coverage deteriorates. Offline regression tests check fallback equivalence, early fallback scheduling, increasing cooldown and recovery, bounded diagnostics, redirects, uploaded-CA validation and actual TLS connection reuse.
+Worker logs include, every 30 seconds of activity:
 
-References: [NSX policy statistics](https://developer.broadcom.com/xapis/nsx-t-data-center-rest-api/latest/method_GetSecurityPolicyStatistics.html), [urllib3 connection pooling and TLS](https://urllib3.readthedocs.io/en/stable/advanced-usage.html).
+- `NSX request progress`: completed and failed attempts, measured rate, configured rate,
+  throttled attempts and aggregate pacing wait.
+- `NSX concurrency progress`: limit, maximum, active, waiting and per-endpoint p95.
+- `Group membership progress` and `VM association progress`: completed and total.
 
-## Unsupported statistics and timeout recovery
+Concurrency changes, throttling cooldowns, rate increases (only when the rate changes)
+and retry exhaustion are logged when they happen, and a final pacing summary is logged
+when retrieval ends.
 
-Ethernet policy rules are retained in inventory with **Not supported** activity and no hit count. Their statistics endpoints are not queried. An explicit NSX HTTP 400 / error 500209 response is also recognized as unsupported. This does not establish zero traffic. Unsupported rules remain in inventory totals, are shown separately from unknown statistics, and cannot qualify as historical zero-activity evidence.
+## Tuning and troubleshooting
 
-After the first statistics pass completes, transport timeouts get one recovery pass with at most two concurrent requests (one in single-worker mode). A shared 30-second recovery budget limits admissions, pacing waits, transport timeouts and HTTP retries. In-flight calls finish or time out; this is not a hard process-kill deadline. Rules that cannot be retried retain unknown evidence. HTTP errors and malformed results do not trigger this recovery. Initial timeout notes and timestamps are retained in `statistics_retry`. Diagnostics count retries, recoveries, skipped retries and recovery duration. The overall collection deadline still applies.
+1. **Measure first.** Compare several full collections of equivalent inventories: total
+   elapsed time, phase times, throttled attempts, concurrency reductions, bulk
+   success/skip and fallback counts, and unknown statistics or membership. A faster run
+   is not an improvement if coverage deteriorates.
+2. **Raise the ceiling carefully.** Start with the default 8. If NSX latency stays flat,
+   there are no 429s and the adaptive limit reaches the ceiling, compare equivalent
+   collections at 12 and 16. Do not expect proportional speedups.
+3. **Back off on throttling.** Frequent 429s, concurrency reductions or rising p95
+   latency mean NSX or a shared client is saturated. Lower the ceiling or move the
+   schedule. More retries or higher NSX API limits do not replace sustainable pacing.
+4. **Membership-heavy collections.** Check probes per group, typed-plan groups and VM
+   association statuses. A denied association scope or many ambiguous VM identities
+   moves work to group probes.
+5. **Search coverage failures.** Read the missing-path samples and the query mode. Allow
+   inventory changes to settle and collect again; check NSX search health when gaps
+   persist.
+6. **Timeouts near the limit.** Compare `parallel_retrieval` with the retrieval deadline.
+   Raising `NSX_AUDIT_TIMEOUT` also raises the reserve. Never raise concurrency to
+   compensate for incomplete evidence.
 
-Statistics tasks are capped at two concurrent workers in addition to the shared adaptive request limiter. Inventory concurrency is unchanged. Sequential recovery runs after that pool completes. Compare one versus two using equivalent read-only rule requests before raising this cap; a short comparison does not establish capacity for every manager.
+Compatibility-search limits and unsupported extended-identity membership are coverage
+limitations, not pacing failures; resolving timeouts does not make them complete.
 
-## Overlapping phases and optional probes
+## Snapshot preparation and report browsing
 
-Search and DFW collection run concurrently after initial inventory, through the same adaptive request limiter. Testing and single-worker calls stay sequential. Search completeness failures still discard the audit; no partial snapshot is accepted. Individual `search` and `dfw` phase times overlap and must not be added together. `search_and_dfw` records their combined wall time.
+Report pages read prepared data from PostgreSQL and never query NSX.
 
-Only one optional policy-statistics task is scheduled at a time. Remaining statistics capacity can serve rule fallbacks. A bulk read timeout is recorded and enters cooldown without reducing the manager-wide concurrency limit. Rule timeouts, connection failures, and explicit HTTP backpressure (including 429/503) still reduce the limit. No NSX-side configuration or service restart is performed.
+- Each snapshot keeps its original JSONB report plus separate summary panels, table
+  records, evidence, coverage summaries and indexed tag/scope relationships. This uses
+  extra storage and is deleted with the snapshot.
+- Tables load 25, 50 or 100 rows; search, filters and sorting run in PostgreSQL with a
+  15-second statement limit. Plain-text search supports AND, OR and quoted phrases;
+  regular expressions use PostgreSQL syntax. Column suggestions return at most 100
+  values. Row counts are reused for five minutes until the search or filters change.
+- CSV exports stream all matching rows in the current order, with evidence as JSON in
+  the final column.
+- Evidence, VM relationships and tag/scope relationships load on demand in pages of 25.
+  The browser keeps at most 30 relationship responses (about 2 MB) per page.
+- Historical activity saves an assessment for up to five minutes per time window;
+  snapshot and collection changes invalidate it.
+- The first comparison of a snapshot pair runs in the comparison lane; results are
+  saved and paginated. Logs show `projection_seconds`, `compare_seconds` and
+  `persist_seconds`.
+- Web logs record a `Snapshot page` entry with `mode=indexed` or `mode=legacy`,
+  metadata, presentation and render timings, and response size. `mode=legacy` means the
+  snapshot is not indexed. A long metadata time points to database latency; compare with
+  browser network timing to separate server work from ingress and rendering.
 
-## Report navigation
+### Saved VM relationships
 
-On an open snapshot, Inventory and Firewall switch sections without fetching the
-report again. The selected snapshot stays fixed while navigating its sections; use
-the snapshot selector or reopen Inventory from another page to load a newer snapshot.
+VM pages keep three kinds of evidence distinguishable. None of them describes effective
+firewall policy or observed traffic.
 
-New snapshots prepare their report presentation during collection, in the same
-transaction as snapshot publication. PostgreSQL retains the original JSONB report
-and stores separate summary panels, table records, and evidence. This uses additional
-database storage and adds an `index_snapshot` phase to collection diagnostics, but
-removes full report parsing and rendering from the first page request.
+- **Direct associations.** **Related groups** on a VM and **VMs** on a group come from the
+  saved VM group associations.
+- **Network links.** Network groups show **Attached VMs** for verified interface → port →
+  segment attachments; a zero direct VM count can coexist with attached VMs. Drawers name
+  the basis and keep the attachment provenance.
+- **IP/subnet matches.** VM References lists groups whose saved address definitions
+  match the VM's saved interface addresses, and firewall references through them. This
+  is configuration evidence, not group membership or current IP ownership, and does not
+  change Related groups counts.
 
-The first response contains the inventory and firewall summaries. Other sections
-load when selected. Tables retrieve 25, 50, or 100 records at a time; search, column
-filters, and sorting run across the selected section in PostgreSQL. Evidence is
-requested only when its dialog opens. CSV exports stream **all matching records**
-in the current sort order, including evidence as JSON in the final column. A CSV
-export is not limited to the visible page.
+IP matching supports IPv4 and IPv6 hosts, CIDRs and inclusive ranges. A group must
+contain one explicit `IPAddressExpression`, or one `PathExpression` that references only
+supported IP-only child groups in the same scope; cycles, missing children and mixed or
+extended conditions stay unresolved, and an IP branch never bypasses another condition.
+Shared addresses in the same scope, and link-local, loopback, multicast, unspecified or
+invalid addresses are excluded with a note. Excluded rule source/destination fields are
+shown as negated references. Direct rule IP literals and ANY-only rules are outside this
+path. The address index is built on first browse per snapshot and bounded to 32 addresses
+per VM, 100,000 intervals per snapshot, 32 nesting levels and 2,000 matching intervals per
+lookup; limit hits keep known matches and mark coverage partial. See the
+[NSX IP expression format](https://developer.broadcom.com/xapis/nsx-t-data-center-rest-api/latest/method_AddorRemoveGroupIPAddresses.html).
 
-Plain-text search supports AND / OR and quoted phrases. Indexed reports use
-PostgreSQL regular expressions, whose syntax can differ from JavaScript regexes in
-older reports. Search and export database statements have a 15-second limit; a very
-complex expression may need to be simplified. Column value suggestions return at
-most 100 distinct values. Name sorting is case-insensitive text ordering.
+**Current NSX** mode refreshes only direct VM associations. Firewall references then
+combine them with saved attachments and saved IP matches, labelled **Current VM
+associations + saved attachments**, each with its collection timestamp. Saved links never
+enter the live cache, and snapshots are not changed.
 
-All report endpoints require authentication, check snapshot existence, and return
-private, non-cacheable responses. The queryable presentation is shared across web
-pods through PostgreSQL; no Redis or per-pod warm-up is required. Snapshot retention
-also deletes these associated records. NSX is never queried while browsing a report.
+### Preparing older snapshots
 
-### Existing snapshots
-
-After upgrading to a build that includes migration `0018_snapshot_presentation`,
-run migrations through the normal deployment process, then prepare older snapshots:
+New collections prepare their data automatically. To prepare or refresh existing
+snapshots, run the management command in a separately sized maintenance container or
+Job, not in the live web container:
 
 ```sh
 # Docker Compose: run from the folder containing compose.yaml and .env.
 docker compose run --rm --no-deps snapshot-refresh python manage.py index_snapshots
 
-# Kubernetes: command to configure in an optional, separately sized maintenance Job.
+# Kubernetes: configure the same command in a maintenance Job.
 python manage.py index_snapshots
 ```
 
-The command reads one saved snapshot at a time, commits each index atomically, and
-skips snapshots already indexed. It can be restarted after interruption. Allow it
-to finish before measuring cold-page performance for older snapshots. Until indexed,
-older snapshots remain readable through the previous renderer and its bounded
-per-process cache. Newly collected snapshots are indexed automatically.
+- Without options, only snapshots missing derived data are prepared; already-indexed
+  snapshots are skipped and the command can be restarted.
+- `--refresh` rebuilds existing indexes (needed after upgrades that change embedded
+  controls or projections).
+- `--snapshot UUID` limits the run to one snapshot, which helps isolate a failure.
 
-### Diagnosing a slow first page
-
-The report page reads only display metadata for its snapshot selector (IDs,
-timestamps and testing flags). It does not fetch historical summary JSON, report
-JSON, or environment credentials for that selector. Migration
-`0019_snapshot_latest_index` adds an index for selecting an environment's newest
-snapshots in date order.
-
-Web container logs include a `Snapshot page` entry with `mode=indexed` or
-`mode=legacy`, timings for metadata retrieval, presentation loading and template
-rendering, and the response size. Inspect them with:
-
-```sh
-kubectl -n nsx-security-analyzer logs deployment/web --since=10m
-```
-
-`mode=legacy` means the snapshot has not been indexed and still needs the old
-full-report renderer. Run the `index_snapshots` command above; also ensure the
-collection worker runs the updated image so new snapshots are indexed. The report
-page displays a notice for unindexed snapshots.
-
-For indexed reports, a long metadata time suggests database query/connection
-latency; a long presentation time points to retrieving the prepared presentation.
-Compare the request timing with the browser's network timing to distinguish server
-work from ingress delays, network transfer and browser rendering. The logs alone
-do not measure those browser or ingress delays.
-
-### Inventory and Firewall subpages
-
-Table page changes reuse a signed matching-row count for five minutes. Changing the
-search or column filters triggers a new count. Evidence remains available on demand,
-and CSV exports still include every matching row. Column value searches wait briefly
-while typing and cancel superseded requests. Evidence columns accept text filters
-without aggregating large evidence payloads into suggestion lists.
-
-Tag details select only the referenced conditions and firewall rules from PostgreSQL;
-tag coverage selects only its relevant conditions.
-
-Historical activity saves a shared assessment in PostgreSQL and filters and paginates
-those saved rows. The first request for a time window still calculates the assessment.
-Subsequent requests reuse it for up to five minutes, with the assessed period shown on
-the page. Snapshot and collection-result changes invalidate it. Compact counter
-projections reduce the data read during assessment; the original snapshots remain intact.
-
-After deploying this update and applying migrations, refresh existing prepared reports
-once to update their embedded controls and add the compact history projections:
-
-```sh
-docker compose run --rm --no-deps snapshot-refresh python manage.py index_snapshots --refresh
-```
-
-In Kubernetes, configure the same management command in a separately sized, on-demand
-maintenance Job following the [manual maintenance procedure](snapshot-maintenance.md#kubernetes-create-a-temporary-job-manually):
-
-```sh
-python manage.py index_snapshots --refresh
-```
-
-Use the application image and database/Secret settings for the Job. See the
+Each snapshot is one transaction: a failed refresh rolls back that snapshot's index. The
+old index is deleted with SQL inside the same transaction. Memory is not fixed: source
+JSON, lookup maps and layout still occupy memory. Progress logs bracket JSON loading with
+`stage=load_report_start` and `stage=load_report_complete`, add checkpoints for history
+projection, layout, row insertion and saving, and report `peak_rss_mib` (process
+lifetime high-water RSS, not current pod usage). Until prepared, older snapshots show an
+explicit notice rather than a misleading result. See
+[snapshot maintenance](snapshot-maintenance.md#kubernetes-create-a-temporary-job-manually)
+and the
 [Kubernetes guide](../deploy/kubernetes/README.md#preparing-older-snapshots-for-faster-report-pages).
-The Compose command creates a separate temporary container using the optional snapshot-refresh service
-configuration; include your usual override files and allocate sufficient memory.
-This processes saved data without
-contacting NSX. New snapshots receive the updated indexes automatically. Until old
-snapshots are refreshed, historical analysis can still read their original DFW data.
 
-
-### Environment and workspace pages
-
-Environment directories and the workspace overview batch latest-snapshot and active-job
-lookups. Freshness timestamps are selected in the environment query, so adding rows
-does not add a separate set of queries per environment. Snapshot lists select only the
-small summary values displayed on the page, rather than transferring coverage-key
-arrays with every row. Collections, progress polling and notifications exclude report
-bodies, job configuration and unused diagnostic payloads.
-
-Prepared snapshot coverage reads unknown records and the required report metadata;
-legacy unindexed snapshots retain their original fallback. Findings pages check whether
-reviews are already synchronized before fetching report evidence, and defer evidence
-on list rows. Comparison selectors load only snapshot IDs and timestamps. Comparing
-two snapshots still requires examining both configurations, but unrelated report sections
-are excluded. The first findings synchronization and legacy coverage can still be costly
-on large snapshots; ordinary environment navigation does not perform these analyses.
-
-These query changes need no additional migration beyond the existing release migrations.
-They require updating/restarting the web application image. Regression tests check the
-absence of large payload fields on listing routes, constant directory query counts, and
-coverage equivalence with the original report.
-
-### VM inventory
-
-Inventory → VMs lists saved VM names and identities, power states, assigned tag counts
-and groups referencing those tags. The details panel shows scoped tags, related groups,
-firewall rules (including disabled rules), configured services, and the VM fields NSX
-returned, such as external/compute identities and host or guest information where available.
-
-The collector reuses the VM list already retrieved for tag analysis; no per-VM API calls
-are added. Table rows are indexed in PostgreSQL with pagination, search, sorting, CSV
-export and on-demand evidence. The complete VM list is excluded from shared tag metadata.
-
-Relations are configuration evidence, not resolved VM membership or effective policy.
-Group metadata tag assignments are excluded from VM-to-rule relationships. Other grouping
-methods, including static membership and IP criteria, are not resolved by this view.
-Services are those configured on related rules; they are not observed VM traffic.
-
-After deploying, run `python manage.py index_snapshots --refresh` for existing reports to
-receive the new tab and renderer. Older snapshots can show only VMs recorded in their
-tag assignments and display a limitation notice. A new collection saves the complete
-returned VM inventory, including untagged VMs. Incomplete or sampled inventory is labelled.
-
-VM fields follow the [Broadcom NSX VM inventory API](https://developer.broadcom.com/xapis/nsx-t-data-center-rest-api/latest/method_ListAllVirtualMachines.html);
-fields absent from NSX are not inferred.
-
-
-### Refresh memory usage
-
-Index construction now receives structured row references directly from report preparation.
-It no longer embeds the entire inventory in HTML and JSON-decodes that inventory again.
-Only the layout is rendered; expanded database records are inserted in batches of at most
-50, and panel links in batches of 1,000. Refresh logs the current snapshot, inserted record
-counts and elapsed time. Each snapshot remains one transaction, including replacement of
-its old index; a failed refresh rolls back that snapshot's index.
-
-Run large refreshes in a separate maintenance Job, not inside the live web container.
-The snapshot JSON and derived relationship data still occupy memory, so this is not a
-fixed-memory streaming reader and no universal memory limit can be guaranteed. Use the
-updated application build in the maintenance Job: version 0.5.2 does not contain this fix.
-
-Refresh also deletes the old derived index directly in PostgreSQL before rebuilding,
-inside the same snapshot transaction. Ordinary ORM cascade deletion can materialize
-all old evidence records when delete-signal listeners are registered, even when those
-listeners do not act on index records. The SQL deletion removes panel/record links first
-and does not delete source snapshots or history projections. Progress messages distinguish
-old-index deletion from preparation and insertion, helping locate any remaining memory peak.
-
-### Diagnose preparation-stage OOMs
-
-Index preparation now emits rows to the database as they are produced, and generates
-VM relationship rows one VM at a time. It no longer retains a complete expanded VM
-relationship list during refresh. Source snapshot JSON, lookup maps, layout strings
-and ordinal/panel mappings still consume memory; this is not a fixed-memory JSON reader.
-
-`stage=load_report_start` and `stage=load_report_complete` bracket JSON loading.
-Further checkpoints identify history projection, layout preparation, row insertion and
-presentation saving. `peak_rss_mib` is the process lifetime high-water RSS in MiB,
-not current usage or total pod usage. An abrupt stop after a start checkpoint helps
-locate the next operation to investigate.
-
-To isolate a failing snapshot in the separate maintenance Job, use the updated build
-and replace its command with:
-
-```yaml
-command: [python, manage.py, index_snapshots, --refresh, --snapshot, YOUR-SNAPSHOT-UUID]
-```
-
-The `--snapshot` option is not present in build `2398e23`. Refreshing one snapshot
-leaves other indexes unchanged. Keep the Job logs on failure. A synthetic Python
-allocation comparison with 1,000 VMs and 100 related rules per VM measured 24.61 MiB
-for the materialized VM list versus 0.18 MiB for incremental consumption, excluding
-source report allocation and database inserts. This is not a production memory guarantee.
-
-For the temporary container/Job lifecycle and collection stop controls, see
-[snapshot maintenance](snapshot-maintenance.md).
-
-### Environment analysis tabs (development)
-
-Environment snapshot and collection lists use small database projections and page
-queries. Collection history has an environment/time index for recent-job lookups.
-
-- **Compare snapshots** opens with selectors only. Select **Compare snapshots** to
-  queue a pair for background preparation in the comparison worker lane. The page
-  returns immediately; refresh results after preparation. The worker reads the two
-  saved configuration projections and can take time for large inventories. Results are saved in PostgreSQL,
-  shared across web pods and paginated in SQL on subsequent requests. Selector choices
-  are also paginated (100 snapshots per page); older snapshots remain selectable.
-  Cached differences consume database storage and cascade when either snapshot is
-  deleted by retention. Saving a changed source report invalidates its comparisons.
-- **Finding reviews** reads persisted findings without synchronizing or locking the
-  environment during GET requests. Collection workers continue to synchronize findings
-  when saving a full snapshot. Older installations without a baseline need a new full
-  collection. Review POST requests retain locking and revision checks. Opening a finding
-  no longer fetches its complete source snapshot, and saved evidence is loaded only
-  when the user selects **Load saved finding evidence**.
-- **Collection coverage** filters compact indexed statuses, counts issues in PostgreSQL,
-  and retrieves detailed notes only for the visible page. Snapshot-level errors remain
-  included. Observation gaps still use timestamps within the selected window; these
-  queries do not load snapshot payloads. Unprepared legacy snapshots show an explicit
-  maintenance notice instead of loading a full report in the page request.
-
-Apply migrations `0022` and `0023` before deploying this build. They add shared comparison
-storage and pagination indexes; creating indexes can take time on a large existing
-history. No refresh is required for already indexed snapshots to use these changes.
-
-### Prepared coverage summaries (development)
-
-Migration `0024` adds small coverage summaries and issue rows. New collections prepare
-these from the already-loaded report in the worker, in the same transaction as the
-snapshot index. Coverage browsing reads the stored issue count and only the requested
-page of plain-text issue rows. It no longer extracts fields from report JSON, scans
-inventory JSON statuses or sorts every inventory record before showing a page.
-
-After migration and rollout, either run a new collection or prepare missing coverage
-for an existing snapshot using the separate maintenance container/Job:
-
-```sh
-python manage.py index_snapshots --snapshot YOUR-SNAPSHOT-UUID
-```
-
-Omit `--refresh`: existing inventory indexes are reused. Omitting `--snapshot` prepares
-all snapshots missing derived data. This backfill still loads each source report once,
-so use the [maintenance window and resource guidance](snapshot-maintenance.md). It is
-not run by the schema migration or a page request. Until prepared, older snapshots show
-an explicit coverage-pending message, never a misleading zero-issues result.
-
-The wider page review also removes snapshot joins from live collection polling and
-stops extracting snapshot summaries on collection-list pages. Notifications request
-their coverage indicator explicitly. First uncached comparisons and historical activity
-assessments still involve larger calculations; their existing saved-result caches apply.
-
-### VM relationship details
-
-VM relationship dialogs open without fetching expanded evidence. Tags, groups and
-deduplicated rules load on expansion in pages of 25. Rule details and their complete
-“via group” relationships are fetched separately; raw VM metadata loads only when
-requested. The browser retains at most 30 responses, bounded to approximately 2 MB
-of serialized text, for the current page. Large responses are not cached.
-
-Existing prepared snapshots use this interface without a refresh. PostgreSQL extracts
-only the requested relationship page; it may still decompress and scan the selected
-VM record's JSONB arrays, particularly when deduplicating legacy rule references.
-The application does not retrieve or parse the whole snapshot. New collections store
-each related rule once per VM while preserving all related group paths.
-
-### Throttling and sustained collection rate
-
-Collection requests start at 10 requests/second with no initial burst. All collection
-threads share that pacing gate, in addition to the existing adaptive concurrency
-limit. HTTP 429 halves the rate (minimum 0.5/second), starts a shared cooldown and
-reduces concurrency. Simultaneous rejections during a cooldown do not repeatedly
-halve the rate. Successful traffic can grow above the starting rate: after at least 20 successful
-attempts and 10 seconds, the rate rises by 25% (at least 1 request/second), up to
-40/second. After throttling, growth waits until 30 seconds beyond the shared
-cooldown. These are conservative application tuning
-values, not advertised NSX limits.
-
-Retries honor numeric or HTTP-date `Retry-After` headers and otherwise use exponential
-backoff plus randomness. Existing environment retry counts remain the attempt cap;
-each request also has a 60-second retry budget. Waiting for adaptive concurrency,
-shared pacing or a shared HTTP 429 cooldown does not consume that request budget.
-The shared cooldown honors `Retry-After` once, without an additional per-request
-sleep. All waits remain bounded by the collection's overall deadline, and the
-worker's overall timeout and Stop collection supervisor remain effective. Reaching
-that collection deadline aborts the collection instead of recording subsequent
-membership checks as unknown; earlier saved snapshots remain available. Optional
-bulk statistics still fall back without retries, but their 429 responses also cool
-down other requests.
-
-Compatibility-search visibility and unsupported extended-identity membership are
-separate coverage limitations, not pacing failures. The collector preserves those
-limitations when the available endpoints cannot verify the evidence; resolving a
-request timeout does not make unsupported membership checks complete.
-
-The collection worker supervises five independent subprocess lanes: at most one
-collection across all environments, one finding-review indexing/recalculation task,
-one snapshot comparison, and one read-only deletion preview. Confirmed deletion runs in its own lane alongside collection. PostgreSQL
-session advisory locks enforce each lane across worker replicas, including while a
-recalculation is superseded by newly saved criteria. The work queues are independent;
-a recalculation and a comparison can run alongside a collection. Publication for the same environment
-still briefly serializes on its environment lock, and a newly saved snapshot can
-cause recalculation to retry against the new history. Separate Analyzer databases
-do not share these limits. Stop old worker replicas before starting the upgraded
-workers so older concurrency behavior cannot overlap the new limits.
-
-Logs show shared cooldowns, rate recovery, retry exhaustion and a final pacing
-summary; successful report performance metadata includes throttled attempt counts,
-final request rate and aggregate thread wait time. A failed membership request stays
-unknown through the existing coverage handling; it is never classified as empty.
-Validate the defaults with a representative full collection and monitor coverage,
-429 counts and elapsed time before changing limits. More retries or higher NSX API
-limits are not a substitute for sustainable request pacing.
-
-
-### Reducing membership calls and measuring progress
-
-Membership probes try the last successful endpoint from the previous snapshot first,
-then endpoints suggested by the current group member types, then every remaining
-supported endpoint. Previous evidence is only an ordering hint: NSX is queried anew.
-A positive result ends the check; negative checks are never skipped merely because
-the group definition is unchanged. Failed checks remain unknown unless another
-endpoint provides positive membership evidence.
-
-Request progress logs every 30 seconds of response activity include completed and
-failed attempts, measured interval throughput, configured rate, throttling count,
-and aggregate pacing wait. Aggregate wait sums waiting time across threads; it is
-not collection wall-clock time. Group membership progress logs include completed
-and total groups and elapsed seconds. Existing phase heartbeats continue when
-requests are blocked; progress messages are emitted on request/group completion.
-Rate-increase messages appear only when the configured rate actually changes.
-
-The 40 requests/second ceiling is a conservative application bound, not a guaranteed
-NSX capacity. Shared clients or expensive endpoints can still trigger throttling.
-Roll out to the collection workers and start a new collection to use this behavior;
-already-running collectors retain their previous rate policy.
-
-## Snapshot write efficiency
-
-New indexes store structured evidence once per record instead of duplicating the full
-JSON in CSV/display columns. CSV export reconstructs that column on demand. Existing
-indexes remain readable without a refresh. Evidence-column filters on new records
-search PostgreSQL's JSON text representation; JSON key order/formatting may differ
-from the former serialized column. General evidence search is unchanged. Tag records
-retain their resolved export evidence in the structured record.
-
-Index writes use up to 500 records and an estimated 4 MiB payload budget per batch.
-The budget is based on serialized evidence with a multiplier for derived fields; it
-is an estimate, not a hard memory bound. A single oversized record is written alone.
-Finding updates and their review events use batches of 100 under the existing
-transaction and environment lock. Ownership and review history are preserved; relevant evidence changes invalidate
-pending approvals. The current workflow uses approvals, not acknowledgements or due dates.
-
-Logs report index preparation plus insertion time, insertion time separately, finding
-synchronization time and final snapshot commit time. Compare those stages and overall
-collection duration on representative environments; these changes do not increase
-NSX API request rates. Existing snapshots only gain the storage savings if explicitly
-rebuilt; normal retention replaces them over time without a mass refresh.
-
-### Shared VM relationship definitions
-
-Migration `0027_snapshotvmrule` adds shared rule definitions keyed by snapshot and
-rule path. New VM index records retain rule references and per-VM group provenance;
-rule details, including configured services, are stored once per related rule per
-snapshot instead of repeated in every VM record. Lists remain paginated. Full rule
-details, evidence-column filters and CSV exports reconstruct the original evidence
-only when requested. General evidence-search text remains materialized for searching,
-so the index still retains some repeated text.
-
-Apply migrations before starting the updated application and workers. The migration
-creates a new table; it does not rebuild existing snapshots. Old indexes remain
-readable. New collections gain the reduced relationship payload automatically;
-manual targeted refresh can rebuild older indexes if needed. Shared records are
-deleted with their snapshot and replaced atomically during an index refresh.
-
-## Applying a snapshot comparison
-
-The first comparison of a pair queues background work to compute and cache its differences;
-PostgreSQL now returns only the fields used by comparison. Large resolved membership
-arrays, references and counter statistics are excluded before transfer to the web
-process. Legacy `objects` data is loaded only when full group/service inventory is
-not available. Missing evidence remains distinct from empty evidence.
-
-Subsequent visits reuse the existing paginated comparison cache. This optimization
-also applies to old snapshots without reindexing or a schema migration. It reduces
-transfer and Python processing; PostgreSQL must still read the stored snapshot JSON
-and the first comparison still examines all compared objects. Logs expose
-`projection_seconds`, `compare_seconds`, and `persist_seconds` for measurement.
-
-## Overlapped retrieval and prior-run hints
-
-Search, firewall and membership retrieval now overlap for normal multi-worker
-collections. All use the same client request pacing and adaptive concurrency gate;
-the 40 requests/second ceiling is unchanged. Testing and single-worker runs remain
-sequential. `parallel_retrieval` is wall-clock duration; individual overlapping phase
-durations must not be added together. Membership and reference processing now have
-separate timings.
-
-Nested scope analysis reuses bounded, successfully analyzed subtrees within one
-collection. Cycle/depth checks remain enforced and API membership evidence is never
-cached between collections. Prior-run data is projected in PostgreSQL to membership
-hints, statistics backoff and rule identity/hit-history fields, excluding full
-inventory and statistics payloads. No schema migration or historical refresh is
-required. Gains depend on API latency and available capacity below the shared limit.
-
-
-### Reading object evidence
-
-Group, service, firewall and VM drawers use Overview, Relationships and Technical
-details tabs. Overview shows saved object facts; relationship warnings explain
-what the snapshot does and does not verify. The selected tab is remembered for
-that object type while the report remains open.
-
-Technical details are read-only, with line numbers, highlighting, Copy, Wrap and
-Expand controls. Large values initially display 200 lines; Show more loads the
-next batch. Copy includes the complete value, including undisplayed lines.
-
-VM tags, groups, rules and services open the specific saved object's evidence
-inside the drawer. Back restores the previous drawer, including expanded sections
-and relationship pages, without changing table filters, sorting or pagination.
-An object absent from the saved index produces an error with Retry; it does not
-redirect to an unrelated list. VM relationships stay paginated and technical VM
-data loads only when its section opens. Failed requests can be retried inline.
-These relationships describe configuration, not verified effective policy.
-
-Finding reviews now use a [configurable approval workflow](finding-review-workflow.md).
-Review lists defer saved evidence and approval payloads; notification queries
-retrieve only event metadata. Full evidence is read for the selected finding or
-an explicit history export.
-
-## Where to find collection statistics
-
-Inventory and Firewall pages focus on collected objects and findings. Open
-**Collections → Diagnostics** on the relevant collection to inspect request
-statistics, retries, concurrency and stage timings (Operator or Administrator
-access required). Request statistics are available while the source snapshot is
-retained; live or interrupted work may require worker logs.
-
-Main pages retain current collection activity, status, Stop controls and warnings
-about stale data or limited evidence. Detailed methodology and technical errors
-are expandable. Percentages indicate completed phases, not time remaining.
-Finding-review recalculation outcomes remain available in **Administration →
-Finding review criteria**; completed recalculations no longer occupy the review
-queue. This presentation change does not alter logs, audit records or coverage.
-
-### Everyday pages and advanced tools
-
-Inventory and Firewall headers show one data timestamp, mark historical/testing/
-imported snapshots, and keep incomplete-coverage warnings visible. Collection
-request details are removed from these pages, including older saved reports; use
-**Collections → Diagnostics** instead. Administrators also find saved-report
-maintenance guidance there. No recollection or index rebuild is required for the
-header cleanup. Version and build information remains under **Administration**.
-
-Tables keep **Search**, **Filters** and **Sort** accessible. **More options** holds
-Columns, advanced search and Export. Evidence shows the condition and relationships
-first; paths and counter-check timestamps are in Technical details. Review queues
-show owner names; assignment selectors retain email/provider details to distinguish
-accounts. Empty queues offer an explanation of review criteria. Configure criteria
-under **Administration → Finding review criteria**.
-
-## Large tag and scope relationships
-
-Tag evidence opens with a small summary. VM assignments, group conditions, group
-assignments, other resources and firewall references load only when expanded,
-25 records at a time. Scope evidence uses the same paging for its tags. Condition
-definitions are fetched in pages and formatted only when an individual definition
-is opened. Use Previous/Next to inspect all results; the page limit does not remove
-relationships from the saved snapshot.
-
-This applies to existing indexed snapshots without recollecting or refreshing the
-index. The browser no longer downloads or renders the entire relationship set on
-opening a tag/scope. PostgreSQL slices the requested section before returning it.
-Large JSON collections can still take database time to scan; this change bounds
-response size and browser rendering, rather than promising constant query time.
-Standalone/unindexed legacy reports retain their original evidence renderer.
-
-## Indexed tag and scope relationships
-
-Newly prepared snapshots store tag/scope relationships as indexed rows. Each request
-reads at most 26 rows (25 displayed plus a next-page check), using the relationship
-position index rather than sorting a large JSON document on every page. Existing
-snapshots retain the bounded JSON fallback until explicitly reindexed or replaced
-by a new collection. No historical snapshots are rebuilt by migrations.
-
-The additional index uses database space and is deleted with its snapshot. Retention
-uses SQL deletion for derived relationship rows rather than loading each into Python.
-The source evidence is retained for compatibility and audit inspection.
-
-## Background comparisons and service health
-
-The comparison worker lease uses a distinct advisory-lock ID from finding-review
-task claiming. An earlier three-lane development build reused that claim-lock ID,
-which could block recalculations for the lifetime of the comparison worker.
-Stop old worker pods before starting the corrected build so their session locks
-are released and old/new comparison leases cannot run together.
-
-Comparisons have a dedicated, leased worker lane and run in a supervised subprocess.
-One collection, one finding-review indexing/recalculation task and one comparison
-can run simultaneously. Each lane processes its own queue; comparisons no longer
-wait behind recalculations. Completed
-pairs are reused; failed pairs show Retry comparison. An interrupted running pair can
-be picked up when the exclusive lane restarts. Retention may remove a queued pair if
-its source snapshot expires; select another retained pair in that case.
-
-Administration → Operations → System health displays collection, recalculation, comparison and
-scheduler heartbeats. Each progressing loop reports at most once every 15 seconds;
-a report older than 180 seconds is marked Not reporting. These are supervisor activity
-signals, not proof of collection progress or database disk health. Scheduler cleanup
-may delay its next report. Kubernetes readiness probes and Docker healthchecks read
-local heartbeat files; they do not restart services automatically or query PostgreSQL.
-
-
-## Inventory changes during collection
-
-Creating or deleting objects while the collector pages through NSX inventory can
-change its reported count. A count mismatch now retries only that inventory query
-from its first page, twice, with 2- and 4-second delays. Each attempt discards the
-previous attempt's results and deduplicates objects by Policy path or ID. Requests
-continue through the normal shared NSX rate limiter.
-
-If the final attempt still disagrees, the collection finishes with **coverage
-warnings**. Inventory remains available to browse. Open its report and **Coverage**
-to see the affected endpoints; worker logs include attempt, received and reported
-counts, and duplicate counts. No percentage of missing objects is silently accepted.
-Failed requests, invalid responses, repeated cursors and deadline exhaustion remain
-retrieval errors and retain their existing error/unknown-coverage handling.
-
-Inventory warnings use conservative per-finding evidence scopes. Dedicated VM inventory
-warnings pause empty-group/tag evidence, while unaffected findings may advance only
-with their required evidence complete. Group membership warnings are scoped to their
-target. Firewall inventory inconsistencies also block unused-object reference checks.
-Unclassified warnings remain blocking for all findings. Publication and history replay
-preserve affected decisions without counting partial observations. Verified changes
-and normal observation/freshness criteria still apply. Snapshot comparisons and
-retention continue to use conservative complete-inventory baselines.
-
-Allow changes to settle, then collect again. A verified collection resumes normal
-finding evaluation. Persistent mismatches in a quiet environment warrant checking
-NSX search health and API visibility. This verification checks counts and duplicate
-identities; it cannot guarantee a transactionally consistent NSX snapshot or detect
-every same-count replacement of an object.
-
-
-### Repeated search coverage warnings
-
-Search requests use ascending `path` sorting to reduce page overlap caused by
-unspecified ordering. If NSX rejects sorting with HTTP 400, the collector retries
-the same query without sorting before trying a compatibility query. The parameters
-are documented in the [NSX Search API](https://developer.broadcom.com/xapis/nsx-t-data-center-rest-api/latest/method_QuerySearch.html).
-Sorting reduces one source of instability; it does not freeze the search index.
-
-Duplicate detection distinguishes resource type and origin site, plus the full
-Policy path or parent-scoped ID. Objects with the same short ID in different types
-or parents are not automatically duplicates. Identical repeats are deduplicated,
-and pagination continues until the unique count matches NSX's reported total or
-the cursor ends. Raw rows, including repeats, no longer cause an early stop.
-Conflicting versions of the same object, duplicates without a reported total,
-and missing results still retry and produce coverage warnings if unresolved. For example,
-38,399 received versus 38,409 reported is still an unverified inventory; the small
-percentage alone does not make it safe for unused-object approval. Run a new
-collection after changes settle. Existing snapshots retain their original coverage
-warnings; a software update does not retroactively verify them.
-
-Conflicting-version warnings include up to three object identities and up to
-20 changed top-level field names per object. Field values are not included.
-Use these diagnostics to distinguish configuration changes from runtime or
-metadata differences before changing the verification rules. Outside the seven-field VM runtime exception described above, a difference in
-any field still triggers verification retries; diagnostics do not waive coverage
-warnings or approval safeguards.
-
-Configuration reference searches now exclude `VirtualMachine`,
-`VirtualNetworkInterface`, and `GenericPolicyRealizedResource` in the NSX query.
-This avoids mixing frequently changing runtime inventory and realization records
-with configuration consumers. Exclusion happens before pagination, so the count
-check uses the filtered query's reported total. VM tag assignments still use the
-dedicated VM inventory endpoint, with its verification checks intact. Search
-coverage records the excluded types; configuration conflicts continue to warn.
-
-
-## Collection performance details
-
-Open **Collections → Diagnostics** to see retrieval phase times, request/retry and
-throttling counts, aggregate pacing wait, and endpoint costs. Membership endpoints
-are measured separately. Phase and request times overlap; do not sum them as elapsed
-collection time. Older snapshots may lack these metrics. The saved publication timeline
-includes `wait_for_environment_lock` to distinguish contention from evidence processing.
-
-Collection reuses its in-memory report for finding synchronization only when it still
-matches the latest snapshot of that environment. Other callers retain the database
-fallback. Recalculation prepares restoration evidence before taking the environment
-lock, then rechecks snapshot, policy and restoration state before writing. Approval
-recovery reads historical evidence in bulk instead of querying each snapshot separately.
-These changes preserve freshness, coverage verification and atomic publication.
-
-Compare the phase times for equivalent inventory sizes before changing concurrency.
-Automatic request limits and fresh membership checks remain in effect. There is no
-assumed speedup percentage: NSX latency, throttling and database resources determine
-the improvement in each environment.
-
-
-## Membership-heavy collections and fair scheduling
-
-The shared request limiter serves waiting requests in FIFO order. A worker finishing
-one request cannot take a new slot ahead of an already queued firewall, search or
-membership request. This improves fairness; it does not reserve capacity for a lane
-or remove the overall rate limiter and adaptive backoff.
-
-Set **Maximum concurrent NSX requests** under **Edit environment → Advanced request
-settings** (default **8**, valid range **1–32**). This is saved per environment in
-the database and captured when a collection is queued. Existing queued or running
-collections keep their captured settings; older queued jobs without this setting
-use eight. No ConfigMap, environment variable or worker restart is needed. Start with the
-unchanged default, then compare equivalent full collections at 12 and 16 if NSX
-latency and throttling remain healthy. This is a ceiling, not a guaranteed number
-of active requests; adaptive concurrency still starts at at most two. Do not assume
-a proportional speedup or raise it to compensate for incomplete evidence.
-
-New snapshots record the collecting worker's version, full build revision, build
-time and configured ceiling. **Collections → Diagnostics → Collecting worker**
-shows that saved identity, independently of the web app footer. Older snapshots
-show “Not recorded”; they are not relabelled with the current worker's build.
-
-**Membership workload** reports logical probes, groups checked, the distribution
-of probes per group (including zero-call explicit-member groups), result categories
-and endpoint response counts. Logical probes exclude internal HTTP retries. A
-response with no members is not proof of emptiness; all existing verification
-rules remain intact. Request capacity wait is reported separately per endpoint
-family and is cumulative across workers, not additional elapsed time.
-
-Bulk-counter fallback details distinguish missing identity, unmapped/ambiguous
-identity, incomplete nested counters, invalid counters, missing/duplicate scope
-counters, HTTP errors and cooldown. Counts represent affected rules. These codes
-contain no raw response values and do not relax counter completeness checks.
-
-
-### Type-specific membership probes and fresh evidence
-
-Simple flat Condition expressions with one known member type now omit only
-inapplicable endpoints. VirtualMachine conditions keep VM, IP and logical-port
-checks; Segment conditions keep switch, IP and logical-port checks; VIF and
-SegmentPort conditions keep IP and logical-port checks. Mixed types, nested or
-path expressions, extended identity criteria and uncertain definitions retain all
-four probes. Diagnostics show typed-plan groups and omitted probes.
-
-This follows Broadcom's endpoint applicability documentation for
-[VM members](https://developer.broadcom.com/xapis/nsx-t-data-center-rest-api/latest/method_GetGroupVMMembers.html),
-[logical-switch members](https://developer.broadcom.com/xapis/nsx-t-data-center-rest-api/latest/method_GetGroupLSMembers.html)
-and [effective logical-port members](https://developer.broadcom.com/xapis/nsx-t-data-center-rest-api/latest/method_GetGroupLPMembers.html).
-A VM without an IP is still found by the VM probe. Every required negative probe
-must succeed without an unexplained continuation cursor. Prior empty results are
-never reused as current evidence; previous positive endpoints only guide ordering.
-Approval evidence continues to use the latest full evaluated collection.
-
-Bulk policy responses lacking an unambiguous rule identity receive a 30-minute
-cooldown before another bulk attempt. Individual rule counters are still fetched
-fresh on every collection. Internal realized IDs are not guessed to be policy IDs:
-Broadcom's [RuleStatistics schema](https://developer.broadcom.com/xapis/nsx-t-data-center-rest-api/latest/types_RuleStatistics.html)
-allows multiple realized rules per policy rule. Existing completeness checks and
-per-rule fallback remain. This reduces repeated unsuccessful bulk attempts but
-does not eliminate individual requests when identities are unavailable.
-
-Finding publication advances observations, eligibility, workflow state and snapshot
-assessments as before, but rewrites the JSON evidence only when its fingerprint
-changes. Publication remains atomic. No historical snapshots or approvals are
-silently repurposed to speed up collection.
-
-
-### Validating a potential VM-only shortcut
-
-**Collections → Diagnostics → VM membership check comparison** counts results
-for simple VM-only definitions using the existing requests. It separates agreement,
-a negative VM response followed by positive IP/port evidence, incomplete follow-up,
-and cases where the VM check was not reached. No additional requests are made and
-no group paths or member identities are stored in these counters.
-
-A prior positive endpoint hint can stop the probes before the VM request; that
-case is not counted as agreement. Empty pages with a continuation cursor and
-invalid counts are not accepted as negative evidence in the comparison. Even zero
-disagreements in one collection do not prove that a VM-only shortcut is safe.
-Finding and approval decisions retain all applicable fresh checks.
-
-The collector already uses one shared bounded urllib3 connection pool with TLS
-connection reuse, validated by an HTTPS integration test. This diagnostic update
-does not increase worker count or concurrency and does not promise a further
-collection-time reduction. The next collection can provide evidence to assess
-whether further probe reduction is appropriate.
-
-### Request scheduling and indexing
-
-Firewall counter tasks can use spare capacity up to the configured worker count;
-all HTTP requests still pass through the same shared concurrency and pacing
-limits. This does not increase the configured concurrent NSX requests or require
-additional worker replicas. Bulk policy probes remain limited to one active probe.
-
-Tag and scope relationships are inserted in bounded batches shared across snapshot
-records, reducing small database inserts. Snapshot publication remains atomic.
-
-Collection diagnostics include group counts and unique paths per domain. Identical
-repeated group paths are probed once; conflicting definitions fail collection.
-Compare these counts before comparing collection durations across builds.
-
-Bulk counter parsing accepts exact rule paths and maps statistics internal_rule_id
-to the system-assigned numeric Rule.rule_id within the same policy (or an explicit
-internal_rule_id if supplied). User-supplied object IDs and display names are never
-used as internal-ID mappings. Duplicate and conflicting mappings require fallback. Missing or conflicting mappings retain individual-rule
-fallback. The NSX 4.2 response format with internal_rule_id strings and numeric
-Rule.rule_id values is supported without extra mapping requests. Existing bulk
-failure cooldowns expire normally before that policy is tried again.
-
-### Restricted VM membership fast path
-
-Local groups containing exactly one VirtualMachine Name or Tag EQUALS condition
-can use a fresh VM membership response with an explicit result_count of zero,
-an empty results list and no cursor. This establishes VM membership for that
-restricted definition; effective IP/port checks are omitted and recorded in notes.
-Remote, mixed, nested, extended and other conditions keep their full probe plan.
-Missing counts, cursors, scope limitations and failures cannot use the shortcut.
-No historical negative membership cache is used.
-
-Approximately 5% of eligible paths receive full checks, rotating daily in UTC;
-Sunday uses full checks for every group. A verification discrepancy reruns every
-shortcut result before publication and disables shortcuts in subsequent collections.
-Sampling detects discrepancies but is not proof that all endpoints always agree.
-The diagnostics distinguish shortcut results, full verification and rechecks.
-
-Inventory scope diagnostics compare audited group paths with the previous usable
-snapshot from the same manager, showing added/removed counts and up to ten samples.
-They identify changes in collected paths, not the administrative cause of a change.
-Actual speed improvements must be measured on a new deployed collection of a
-comparable workload; offline tests do not establish production duration.
+## Historical measurements
+
+These figures are dated regression evidence from synthetic fixtures or specific test
+environments. They are not production latency or duration predictions; measure your own
+environment with a new collection of a comparable workload.
+
+| Date | Scenario | Result | Source |
+| --- | --- | --- | --- |
+| 2026-11-10 | Synthetic: two network groups sharing 44 segments, 605 ports, 844 IP entries, three VMs | 49 reads when 44 segment inventories must be fetched; 5 when search already supplies port configuration. Identical VM relationships in both modes. Mock call counts. | [network-membership-2026-11-10.json](performance/network-membership-2026-11-10.json) |
+| 2026-11-10 | Synthetic: 12 network groups with one compatibility recovery, 3 and 3,000 VMs | 38 network requests in both cases, one shared VIF inventory, no segment inventory reads; healthy phase stays at 5 requests | [attachment-reference-fixes-2026-11-10.json](performance/attachment-reference-fixes-2026-11-10.json) |
+| 2026-11-10 | Synthetic browser acceptance of network membership | Zero direct VM members, two attached VMs, member totals, paging and saved firewall references without live membership requests | [network-membership-browser-2026-11-10.json](performance/network-membership-browser-2026-11-10.json) |
+| 2026-11-10 | Synthetic browser acceptance of current references | Empty current association cache keeps the saved attachment-based rule with its timestamp, without a live membership POST | [attachment-reference-browser-2026-11-10.json](performance/attachment-reference-browser-2026-11-10.json) |
+| 2026-11-11 | Synthetic: 3,000 VMs, no network-group criteria | Three VIF pages instead of 3,000 per-VM requests | — |
+| 2026-11-11 | Synthetic browser acceptance of VIF address capture | Subnet group and firewall rule found after full collection, zero live membership requests | [vif-address-browser-2026-11-11.json](performance/vif-address-browser-2026-11-11.json) |
+| 2026-11-11 | Local synthetic IP-reference benchmark: 10,000 groups, 3,000 VMs | 0.573 s initial index build; 5.497 ms median over 20 warm lookups; seven queries per lookup; no NSX calls | [ip-reference-benchmark-2026-11-11.json](performance/ip-reference-benchmark-2026-11-11.json) |
+| 2026-11-11 | Synthetic browser acceptance of IP references | Four IP group matches and six firewall references while the confirmed group count stays at one | [ip-reference-browser-2026-11-11.json](performance/ip-reference-browser-2026-11-11.json) |
+| Undated | Synthetic Python allocation: 1,000 VMs × 100 related rules during index refresh | 24.61 MiB materialized versus 0.18 MiB incremental, excluding source report and inserts | — |
+
+## Upgrade notes
+
+Apply migrations through the normal deployment step before starting matching web and
+worker versions, then start a new collection: running collectors keep their old
+behavior, and existing snapshots are never repaired retroactively.
+
+- `0018_snapshot_presentation`, `0019_snapshot_latest_index`: prepared report
+  presentation; run `index_snapshots` for older snapshots.
+- `0022`, `0023`: shared comparison storage and pagination indexes (index creation can
+  take time on a large history).
+- `0024`: coverage summaries; prepare older snapshots with `index_snapshots`.
+- `0027_snapshotvmrule`: shared VM rule definitions; old indexes stay readable.
+- `0067_saved_ip_references`: empty IP-reference cache tables; nothing is backfilled.
+- VIF address capture needs a collection with a corrected worker; older snapshots cannot
+  recover addresses by rebuilding caches.
+- Build `2398e23` lacks `index_snapshots --snapshot`, and version 0.5.2 lacks the
+  lower-memory refresh; use a current image for maintenance Jobs.

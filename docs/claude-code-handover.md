@@ -237,10 +237,14 @@ This handover updates GitHub documentation and does not rebuild the runtime imag
 6. Open review backlog from 13 November 2026. P2 items done on development: UI
    caveats and "audit" wording, Reviews terminology, task-based in-app help
    (`feature_guide()` in `collector.py`), GitHub doc corrections and live collection
-   progress counts. Still open: restructure the long `finding-review-workflow.md`
-   and `collection-performance.md` guides; measure phase times before overlapping
-   the network phase with other collection work; index snapshots outside the
-   publish transaction (needs UI handling of "index not ready"). P3 — warm-start pacing, collection CPU clean-ups, shared page header/empty
+   progress counts. Also done: restructured `finding-review-workflow.md` and
+   `collection-performance.md`; browsing index built after publication (status
+   `indexing`, background rebuild on failure); warm-start pacing; parallel VIF read;
+   chart colour tokens; more pages on the shared page header. Still open: measure
+   real phase times before moving the whole network phase earlier; unify the two
+   reference passes in collection; the remaining hand-written page headings and
+   empty states. The standalone report shell in `collector.py` is not dead code: the
+   workspace splits it into fragments. Earlier P3 notes for reference — warm-start pacing, collection CPU clean-ups, shared page header/empty
    state components, theme tokens for chart colours and removal of the dead
    standalone report code.
 7. Update this baseline when significant code or publication state changes. Track

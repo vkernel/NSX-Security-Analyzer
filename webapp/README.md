@@ -524,5 +524,5 @@ are needed for a new setup. See [Keycloak authentication setup](../docs/keycloak
 
 Approved NSX object deletion is available through a separate administrator preview and
 explicit confirmation workflow. Collection remains read-only. See
-[deletion workflow](../docs/finding-review-workflow.md#delete-approved-objects-from-nsx)
+[deletion workflow](../docs/finding-review-workflow.md#deletion-from-nsx)
 for supported targets, permissions, verification limits and partial-result handling.
