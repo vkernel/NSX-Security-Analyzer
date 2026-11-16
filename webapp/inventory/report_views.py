@@ -177,6 +177,12 @@ def snapshot_data(request, pk):
                 result = read(pk, int(request.GET.get('page', '0')), query=request.GET.get('q', ''),
                               category=request.GET.get('category', ''), action=request.GET.get('action', ''),
                               policy=request.GET.get('policy', ''))
+            elif op == 'service-list':
+                from .catalog_views import services
+                result = services(pk, int(request.GET.get('page', '0')), view=request.GET.get('view', ''), query=request.GET.get('q', ''))
+            elif op == 'tag-scopes':
+                from .catalog_views import scopes
+                result = scopes(pk, request.GET.get('scope') if 'scope' in request.GET else None)
             elif op == 'policy-order':
                 from .policy_order import read
                 result = read(pk, int(request.GET.get('page', '0')))

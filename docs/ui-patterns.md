@@ -167,3 +167,16 @@ request cancelled) and five step cards marked done, current or not started.
 `deletion.detail` derives them from the same state the page already used for
 its step markers; forms, permissions, deadlines, live revalidation and the
 confirmation dialog are unchanged. A cancelled preview has no current step.
+
+## Services and Tags & scopes overviews
+
+The Services and Scopes pages open in an "Overview" layout (`catalog-views.js`);
+"Sortable table" switches back to the server table and the choice is remembered.
+`op=service-list` and `op=tag-scopes` (`inventory/catalog_views.py`) read saved
+records only. Services show entries from the saved definition, Custom or
+Predefined, saved rule references and observations: Not referenced (saved usage
+candidate), Broad port range (no port or more than 1,000 ports), Nested service.
+Built-in services are not assessed and show no rule count. Scopes list their
+values with VM, group-definition and other counts; values that differ only in
+case, values with group definitions but no VMs, and VM-only values are flagged.
+Names open the shared evidence drawer.

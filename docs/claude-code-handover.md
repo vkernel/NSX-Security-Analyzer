@@ -114,11 +114,12 @@ drawer beside the list on wide screens (`inventory-dock.js`); report views as
 chip links; Firewall Rules and Policies in NSX order with a policy panel
 (`rule-order.js`, `rule_order.py`, `policy_order.py`); a page per collection
 with a result view once completed (`collection_detail.py`); deletion requests
-with a stage title and step cards (presentation only). New snapshots record a VM count in `Snapshot.summary['vms']`; older
+with a stage title and step cards (presentation only); Services and Tags & scopes
+overviews (`catalog-views.js`, `catalog_views.py`). New snapshots record a VM count in `Snapshot.summary['vms']`; older
 ones show it as not recorded. `load_demo_data` builds synthetic environments by
 running the real collector against an in-process fake NSX on `*.example.invalid`.
 Still to build:
-Services and Tags, References page, Segmentation and Naming
+References page, Segmentation and Naming
 panels, My work, Rule proposal, Get started, Notifications, Preferences, sign-in
 and change-password screens. Group list count columns (direct VMs, interfaces,
 IP matches, rules) need collection-time projections and are not built.
@@ -177,7 +178,7 @@ before changing format schemas, job lifecycle or deployment requirements.
 ## Verification baseline
 
 The published application baseline passed these checks on 13 November 2026. The
-unpublished redesign work on `development` passed 1,057 Django tests and 127
+unpublished redesign work on `development` passed 1,060 Django tests and 130
 JavaScript tests on 16 November 2026; no new image was published for it.
 
 | Check | Result |
