@@ -16,7 +16,14 @@ window.addEventListener('pagehide',()=>clearTimeout(timer));check();})();
   });
   document.querySelectorAll('[data-connection-source]').forEach(e=>{e.hidden=id!==null&&e.dataset.connectionSource!==id&&e.dataset.connectionDestination!==id;});
   const status=document.querySelector('[data-application-status]');if(status)status.textContent=id===null?'All displayed applications':`Connections involving ${label}`;
+  document.querySelectorAll('[data-application-card]').forEach(c=>c.setAttribute('aria-pressed',String(c.dataset.applicationCard===id)));
  }
+ // Application cards select an application in place; pressing the selected card shows all connections again.
+ document.querySelectorAll('[data-application-card]').forEach(card=>card.addEventListener('click',()=>{
+  const id=card.dataset.applicationCard,active=card.getAttribute('aria-pressed')==='true';
+  focus(active?null:id,active?'':card.querySelector('strong').textContent.trim());
+  if(!active&&window.matchMedia&&!window.matchMedia('(min-width: 1100px)').matches)document.getElementById('application-connections')?.scrollIntoView({block:'start'});
+ }));
  nodes.forEach(node=>node.addEventListener('click',event=>{event.preventDefault();const id=node.dataset.application;const detail=document.getElementById(`application-${id}`);if(detail){focus(id,detail.querySelector('summary').textContent.trim());if(window.WorkspacePanels?.openSection)window.WorkspacePanels.openSection(detail,node);else detail.querySelector('summary').click();}}));
  document.querySelector('[data-clear-application]')?.addEventListener('click',()=>focus(null,''));focus(null,'');
  const search=document.querySelector('[data-group-search]');

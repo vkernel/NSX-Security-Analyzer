@@ -193,3 +193,13 @@ page). Excluded fields read NOT, a policy Applied To is labelled as applying to
 every rule in the policy, and nested references name the containing group.
 Field chips filter the rows; other referencing objects are listed below. VM and
 tag references stay in their evidence drawers.
+
+## Segmentation and Naming
+
+Segmentation shows application cards (groups and configured connections per
+application) above the applications list and a sticky "Configured connections"
+panel. A card selects that application in place with the same focus logic as
+the map; pressing it again shows every connection. The map, VM-to-VM rules and
+security matrix are unchanged. Naming compliance shows its outcomes as count
+cards with a short explanation each; "Review needed" is drawn as a separate,
+dashed queue because it may include compliant names.

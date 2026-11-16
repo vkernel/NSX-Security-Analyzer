@@ -134,7 +134,10 @@ def workspace(request, pk=None):
         row['url']=rule_base+quote_plus(row['path'])
         row['object_url']=object_base+quote_plus(row['path'])
     application_scopes=sorted({t['scope'] for g in data.get('group_catalog',[]) for t in g['evidence']['tags']})
+    edges=data.get('applications', {}).get('edges', [])
     for app in data.get('applications', {}).get('nodes', []):
+        # Configured connections touching this application, for its card (internal ones included).
+        app['connection_count']=sum(1 for e in edges if app['id'] in (e['source']['id'], e['destination']['id']))
         for group in app['groups'][:50]:
             group['url']=object_base+quote_plus(group['path'])
         app['matrix_url']='?'+urlencode({'snapshot':str(snap.pk),'tab':'matrix','groups':[g['path'] for g in app['groups'][:12]]},doseq=True)

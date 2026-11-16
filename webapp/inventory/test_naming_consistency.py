@@ -173,3 +173,10 @@ class NamingConsistencyTests(TestCase):
             self.assertEqual(naming.queue_counts(rows),naming.queue_counts(first))
             self.assertEqual(rows[0]['coverage_status'],first[0]['coverage_status'])
             self.assertEqual(rows[0]['policy_stamp'],first[0]['policy_stamp'])
+
+    def test_outcome_cards_explain_each_count_and_mark_the_review_queue_separate(self):
+        response=self.client.get(self.url,{'tab':'compliant'})
+        self.assertContains(response,'class="page-tabs naming-outcomes"')
+        self.assertContains(response,'Match the active policy')
+        self.assertContains(response,'class="naming-outcome is-separate"')
+        self.assertContains(response,'Separate queue · may include compliant names')

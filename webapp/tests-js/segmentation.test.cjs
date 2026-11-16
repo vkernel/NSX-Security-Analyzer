@@ -52,3 +52,14 @@ test('map selection retains the actual activating node as the evidence drawer fo
  w.WorkspacePanels={openSection:(section,trigger)=>{actual={section,trigger};}};
  const node=d.querySelector('[data-application]');node.click();assert.equal(actual.section,d.getElementById('application-0'));assert.equal(actual.trigger,node);w.close();
 });
+test('application cards focus connections in place and a second press shows all again',()=>{
+ const dom=page(`<p data-application-status></p><button data-clear-application></button><button data-application-card="0" aria-pressed="false"><strong>Portal</strong></button><button data-application-card="1" aria-pressed="false"><strong>Data</strong></button><section id="application-connections"><details data-connection-source="0" data-connection-destination="1"></details><details data-connection-source="1" data-connection-destination="2"></details><details data-connection-source="2" data-connection-destination="3"></details></section>`);
+ const d=dom.window.document,cards=d.querySelectorAll('[data-application-card]');
+ cards[0].click();
+ assert.equal(cards[0].getAttribute('aria-pressed'),'true');assert.equal(cards[1].getAttribute('aria-pressed'),'false');
+ assert.equal(d.querySelectorAll('[data-connection-source]:not([hidden])').length,1);
+ assert.equal(d.querySelector('[data-application-status]').textContent,'Connections involving Portal');
+ cards[0].click();
+ assert.equal(cards[0].getAttribute('aria-pressed'),'false');assert.equal(d.querySelectorAll('[data-connection-source][hidden]').length,0);
+ dom.window.close();
+});

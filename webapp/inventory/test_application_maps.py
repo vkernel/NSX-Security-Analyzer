@@ -131,3 +131,11 @@ class ApplicationMapTests(TestCase):
             response=self.client.get(url)
         self.assertContains(response,'Reopen the application map',status_code=409)
         self.assertNotContains(response,'Lazy SQL rule',status_code=409)
+
+    def test_application_cards_count_their_configured_connections(self):
+        response=self.client.get(self.url,self.params)
+        nodes={node['name']:node for node in response.context['applications']['nodes']}
+        self.assertEqual(nodes['Portal']['connection_count'],1)
+        self.assertEqual(nodes['Data']['connection_count'],1)
+        self.assertContains(response,'data-application-card=',count=len(nodes))
+        self.assertContains(response,'id="application-connections"')
