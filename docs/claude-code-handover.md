@@ -30,15 +30,16 @@ requested. The remaining review backlog is listed under "Suggested next actions"
 | --- | --- |
 | Repository | [vkernel/NSX-Security-Analyzer](https://github.com/vkernel/NSX-Security-Analyzer) |
 | Branch | `development` |
-| Application commit | `5bf667c31508a2f1b0c93856b7da4188a1322040` |
+| Application commit | `5670ede802476c456ed98fd8f744cf7dce62dfbd` |
 | Application version | `0.5.3`; inspect the build revision as well as the version |
 | Mutable image | `vkernel/nsx-security-analyzer:development` |
-| Pinned image | `vkernel/nsx-security-analyzer:development-5bf667c` |
-| Published image digest | `sha256:b90b2cfa1e34a250bb9b5c368d24de2326ef4a79c3914cb1e16e8c3477eafcb0` |
+| Pinned image | `vkernel/nsx-security-analyzer:development-5670ede` |
+| Published image digest | `sha256:e120672cec944a3ef5949d240264bb334503e38cadde4a98277f6906153709e3` |
 | Platforms | `linux/amd64` and `linux/arm64` |
 | Latest migration | `0069_reference_exports` |
 
-These publication results were verified on 13 November 2026. Recheck mutable tags
+These publication results were verified on 16 November 2026 (build date
+`2026-11-16T08:51:59Z`). Recheck mutable tags
 and the remote branch before a later publication. The handover documentation is
 published separately from the application image. The running cluster's revision
 and migration state must be inspected before claiming that a rollout is complete.
@@ -101,7 +102,7 @@ unchanged, with its original collection times. Complete-empty direct membership
 must not erase a separately verified saved attachment. Retain identity validation,
 project/scope separation, pagination checks, partial positives and excluded fields.
 
-### Workspace redesign (unpublished, on `development`)
+### Workspace redesign (published in `development-5670ede`)
 
 The accepted redesign is being implemented screen by screen; see
 [UI patterns](ui-patterns.md) for each pattern. Done so far: grouped sidebar with
@@ -179,9 +180,11 @@ before changing format schemas, job lifecycle or deployment requirements.
 
 ## Verification baseline
 
-The published application baseline passed these checks on 13 November 2026. The
-unpublished redesign work on `development` passed 1,066 Django tests and 133
-JavaScript tests on 16 November 2026; no new image was published for it.
+The published application baseline (`5670ede`) passed 1,066 Django tests,
+133 JavaScript tests and 113 offline collector tests on 16 November 2026. Both
+registry platforms were pulled by digest: non-root user, build revision and
+date, fresh migrations to `0069`, system check and static assets passed. The
+table below records the earlier 13 November baseline checks.
 
 | Check | Result |
 | --- | --- |
