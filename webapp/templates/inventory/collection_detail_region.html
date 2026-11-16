@@ -1,0 +1,23 @@
+{% load workspace_time %}<div id="collection-status" data-live-region data-poll="{% if active %}true{% else %}false{% endif %}" class="collection-status">
+<section class="content-card collection-progress" aria-labelledby="collection-progress-title"><div class="content-card-body">
+<h2 id="collection-progress-title" class="visually-hidden">Progress</h2>
+<div class="collection-progress-line"><strong>{{ progress.percent }}%</strong><span>{{ progress.stage }}</span><small class="muted">{{ progress.completed }} of {{ progress.total }} phases · not a time estimate</small></div>
+<progress value="{{ progress.completed }}" max="{{ progress.total }}" aria-label="Collection progress" aria-valuetext="{{ progress.stage }}; {{ progress.completed }} of {{ progress.total }} phases complete">{{ progress.percent }}%</progress>
+<ol class="collection-phases">{% for phase in phases %}<li class="{{ phase.state }}"><span>{% if phase.state == 'done' %}Done{% elif phase.state == 'current' %}Running{% elif phase.state == 'stopped' %}Stopped here{% elif phase.state == 'skipped' %}Not run{% else %}Waiting{% endif %}</span><strong>{{ phase.label }}</strong></li>{% endfor %}</ol>
+{% if job.status == 'failed' %}<p class="notice">This collection stopped before publishing a snapshot. Earlier snapshots remain available.{% if job.error %} {{ job.error|truncatechars:300 }}{% endif %}</p>{% elif job.status == 'cancelled' %}<p class="notice">Stopped by an operator. Earlier snapshots remain available.</p>{% endif %}
+</div></section>
+<div class="content-split collection-split">
+<section class="content-card" aria-labelledby="collection-pacing-title"><div class="content-card-head"><h2 id="collection-pacing-title">Request pacing</h2>{% if user.is_superuser %}<a href="{% url 'environment-edit' environment.pk %}">Limits</a>{% endif %}</div>
+<div class="content-card-body"><dl class="collection-figures">
+<div><dt>Concurrency limit</dt><dd>{{ pacing.limits.concurrency|default:"Not recorded" }}</dd></div>
+<div><dt>Workers</dt><dd>{{ pacing.limits.workers|default:"Not recorded" }}</dd></div>
+{% if pacing.recorded %}<div><dt>Requests sent</dt><dd>{{ pacing.requests|default_if_none:"Not recorded" }}</dd></div>
+<div><dt>Retries</dt><dd>{{ pacing.retries|default_if_none:"Not recorded" }}</dd></div>
+<div><dt>Throttled (429)</dt><dd>{{ pacing.throttled|default_if_none:"Not recorded" }}</dd></div>
+<div><dt>Average rate</dt><dd>{% if pacing.rate is not None %}{{ pacing.rate }} requests/s{% else %}Not recorded{% endif %}</dd></div>{% endif %}
+</dl>{% if not pacing.recorded %}<p class="muted small">{% if active %}Request figures are saved with the snapshot when the collection finishes.{% else %}No request figures were saved for this collection.{% endif %}</p>{% elif pacing.phases %}<p class="muted small">Longest phases: {% for label, seconds in pacing.phases %}{{ label }} {{ seconds|floatformat:1 }} s{% if not forloop.last %} · {% endif %}{% endfor %}</p>{% endif %}</div></section>
+<section class="content-card" aria-labelledby="collection-coverage-title"><div class="content-card-head"><h2 id="collection-coverage-title">Coverage</h2>{% if snapshot %}<a href="{% url 'collection-coverage' environment.pk %}">Coverage details</a>{% endif %}</div>
+{% if coverage %}<ul class="overview-rows">{% for row in coverage.rows %}<li><span>{{ row.area }}</span>{% if row.detail %}<small>{{ row.detail }}</small>{% endif %}<span class="pill {{ row.tone }}">{{ row.state }}</span></li>{% endfor %}</ul>{% if not coverage.recorded %}<p class="content-card-note">Coverage was not recorded for this snapshot. Treat its evidence as unverified.</p>{% endif %}
+{% else %}<div class="content-card-body"><p class="muted small">{% if active %}Coverage is calculated from the published snapshot. Until then it is unknown, not complete.{% else %}No snapshot was published, so this collection has no coverage. The previous snapshot is kept.{% endif %}</p></div>{% endif %}</section>
+</div>
+</div>

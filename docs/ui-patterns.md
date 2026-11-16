@@ -135,3 +135,18 @@ the rule list. A missing policy scope is "Not recorded"; an empty one is the
 whole DFW. Selecting a policy shows its facts and rules beside the list; "Open in
 Rules" filters the rule list to that policy. Rule and object names open the
 shared evidence drawer.
+
+## Collection page
+
+`collections/<id>/` (`inventory/collection_detail.py`) shows one collection: the
+seven collector phases as cards (done, running, waiting, stopped here, not run),
+request pacing, coverage and the environment's ten most recent collections.
+While a collection is queued or running, only the `#collection-status` region is
+polled. Pacing figures (requests, retries, throttled attempts, average rate,
+longest phases) come from the published snapshot's saved performance record;
+from the saved collection configuration only the worker and concurrency limits
+are read, because it also holds encrypted credentials. Coverage comes from the
+coverage index and is "unknown, not complete" until a snapshot is published.
+Stop and Diagnostics stay staff-only through the shared controls. The
+collection tables link each row's request time to this page; the existing
+`collection-result` redirect is unchanged.

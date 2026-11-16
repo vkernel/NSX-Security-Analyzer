@@ -5,6 +5,7 @@ from django.utils.cache import patch_vary_headers
 
 FRAGMENTS = {
     'inventory/reviews.html':'inventory/reviews_region.html',
+    'inventory/collection_detail.html':'inventory/collection_detail_region.html',
     'inventory/findings.html':'inventory/finding_regions.html',
     'inventory/activity.html':'inventory/activity_region.html',
     'inventory/my_work.html':'inventory/cleanup_tasks.html',

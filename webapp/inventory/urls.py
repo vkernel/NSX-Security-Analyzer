@@ -1,6 +1,6 @@
 from django.urls import path
 from . import deletion_plan, approval_evidence, naming_views, segmentation_views, workload_views
-from . import current_membership, reference_exports, navigation_search
+from . import current_membership, reference_exports, navigation_search, collection_detail
 from . import storage_views, activity_views, authentication_settings, keycloak_settings, system_health, views, history_views, diagnostic_views, report_views, impact, transient, deletion, task_cancellation, bulk_actions
 
 urlpatterns = [
@@ -35,6 +35,7 @@ urlpatterns = [
     path('deletions/<uuid:pk>/', deletion.detail, name='deletion-detail'),
     path('administration/transient-emptiness/', transient.settings_view, name='transient-emptiness'),
     path("snapshots/<uuid:pk>/impact/", impact.impact_preview, name="impact-preview"),
+    path('collections/<uuid:pk>/', collection_detail.collection_detail, name='collection-detail'),
     path('collections/<uuid:pk>/result/', activity_views.collection_result, name='collection-result'),
     path('activity/', activity_views.activity, name='activity'),
     path('administration/environments/', views.environment_schedules, name='environment-schedules'),

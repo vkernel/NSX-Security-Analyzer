@@ -65,7 +65,7 @@ def relay_sections(context):
         active = 'segmentation'
     elif current in {'naming-compliance', 'naming-index'}:
         active = 'naming'
-    elif current in {'all-collections', 'collection-history', 'collection-result', 'collection-diagnostics'}:
+    elif current in {'all-collections', 'collection-history', 'collection-result', 'collection-diagnostics', 'collection-detail'}:
         active = 'collections'
     elif current == 'rule-history':
         active = 'firewall'

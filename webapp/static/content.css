@@ -248,3 +248,36 @@ body[data-theme] .rule-order-table .rule-order-name{align-items:flex-start}
 body[data-theme] .rule-order-table .rule-order-name>.evidence-object-link{display:block;width:auto;text-align:left}
 body[data-theme] .policy-detail .review-facts .evidence-object-link{display:inline;padding:0;margin:0;border:0;background:none;box-shadow:none;height:auto;min-height:0;color:var(--app-accent);font:inherit;text-align:left;cursor:pointer}
 body[data-theme] .policy-detail .review-facts .evidence-rule-field{display:flex;flex-direction:column;align-items:flex-start;gap:2px}
+
+/* One collection: progress phases, pacing and coverage. */
+.collection-head{display:flex;align-items:flex-end;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:16px}
+.collection-title{display:flex;align-items:center;gap:10px}
+.collection-title h1{margin:0}
+.collection-head p{margin:4px 0 0}
+.collection-actions{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.collection-actions form{margin:0}
+.collection-progress-line{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap}
+.collection-progress-line strong{font-size:22px;font-weight:600;font-variant-numeric:tabular-nums}
+.collection-progress-line small{margin-left:auto;font-size:12px}
+body[data-theme] .collection-progress progress{width:100%;height:8px;appearance:none;border:0;border-radius:999px;overflow:hidden;background:var(--app-surface-soft)}
+body[data-theme] .collection-progress progress::-webkit-progress-bar{background:var(--app-surface-soft);border-radius:999px}
+body[data-theme] .collection-progress progress::-webkit-progress-value{background:var(--ink);border-radius:999px}
+body[data-theme] .collection-progress progress::-moz-progress-bar{background:var(--ink);border-radius:999px}
+.collection-phases{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px;margin:0;padding:0;list-style:none}
+.collection-phases li{display:flex;flex-direction:column;gap:2px;padding:10px;border-radius:10px;border:1px dashed var(--line);font-size:13px;color:var(--muted);min-width:0}
+.collection-phases li span{font-size:12px}
+.collection-phases li strong{font-weight:500;overflow-wrap:break-word}
+.collection-phases li.done{border-style:solid;border-color:transparent;background:var(--app-surface-soft);color:var(--ink)}
+.collection-phases li.done span{color:var(--success-text)}
+.collection-phases li.current{border:1px solid var(--ink);background:var(--app-surface);color:var(--ink);box-shadow:var(--shadow-xs)}
+.collection-phases li.current span{color:var(--info-text)}
+.collection-phases li.stopped{border:1px solid var(--error-text);color:var(--ink)}
+.collection-phases li.stopped span{color:var(--error-text)}
+.collection-split{grid-template-columns:repeat(2,minmax(0,1fr))}
+@media(max-width:1000px){.collection-split{grid-template-columns:minmax(0,1fr)}}
+body[data-theme] .collection-figures{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;margin:0;padding:0;border:0;background:none}
+body[data-theme] .collection-figures>div{padding:0;border:0;background:none}
+body[data-theme] .collection-figures dt{margin:0;font-size:12px;font-weight:400;color:var(--muted)}
+body[data-theme] .collection-figures dd{margin:2px 0 0;font-size:16px;font-weight:600;font-variant-numeric:tabular-nums}
+body[data-theme] .collection-history-table tr[aria-current=true]>td{background:var(--app-surface-soft)}
+body[data-theme] .collection-history-table td small{display:block;font-size:12px;color:var(--muted)}
