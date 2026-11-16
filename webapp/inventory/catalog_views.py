@@ -105,3 +105,18 @@ def scopes(snapshot_id, scope=None):
                       'status': value['data__status'], 'notes': notes})
     result.update({'scope': scope, 'values': items, 'truncated': len(values) >= 1000})
     return result
+
+
+def reference_objects(snapshot_id, query, kind='group'):
+    """Groups or custom services whose name contains the query, for the References page picker."""
+    if kind not in ('group', 'custom_service'):
+        raise ValueError('References are available for groups and custom services.')
+    query = (query or '').strip()[:200]
+    rows = SnapshotRecord.objects.filter(snapshot_id=snapshot_id, view='inventory', data__kind=kind)
+    if query:
+        rows = rows.filter(Q(name__icontains=query) | Q(compact__path__icontains=query))
+    items = [{'name': row['name'], 'path': row['compact__path'], 'ordinal': row['ordinal'],
+              'references': len(row['data__referenced_by']) if isinstance(row['data__referenced_by'], list) else None,
+              'usage': row['data__usage']}
+             for row in rows.order_by('sort_name', 'ordinal').values('name', 'compact__path', 'ordinal', 'data__referenced_by', 'data__usage')[:20]]
+    return {'items': items}

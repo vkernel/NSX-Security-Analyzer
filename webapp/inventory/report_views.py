@@ -186,9 +186,14 @@ def snapshot_data(request, pk):
             elif op == 'policy-order':
                 from .policy_order import read
                 result = read(pk, int(request.GET.get('page', '0')))
+            elif op == 'reference-objects':
+                from .catalog_views import reference_objects
+                result = reference_objects(pk, request.GET.get('q', ''), request.GET.get('kind', 'group'))
             elif op == 'object-references':
                 from .object_references import read
-                result = read(pk, request.GET.get('path', ''), request.GET.get('section', 'firewall'), int(request.GET.get('page', '0')))
+                # full=1 returns up to 500 rows with every field entry, for the References page filters.
+                result = read(pk, request.GET.get('path', ''), request.GET.get('section', 'firewall'), int(request.GET.get('page', '0')),
+                              full=request.GET.get('full') == '1')
             elif op == 'group-members':
                 from .group_memberships import read
                 result = read(pk, request.GET.get('path', ''), request.GET.get('section', 'virtual-machines'), int(request.GET.get('page', '0')))

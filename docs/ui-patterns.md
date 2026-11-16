@@ -180,3 +180,16 @@ Built-in services are not assessed and show no rule count. Scopes list their
 values with VM, group-definition and other counts; values that differ only in
 case, values with group definitions but no VMs, and VM-only values are flagged.
 Names open the shared evidence drawer.
+
+## References page
+
+Firewall › References is a section of the snapshot report (`#object-references`,
+`object-references.js`), so the shared export control posts to the snapshot's
+own `reference-exports/` endpoint with its owner, quota, expiry and export lane.
+Pick Groups or Services, find an object (`op=reference-objects`, name or path),
+and the page lists one row per rule and field where the object is named, using
+`op=object-references` with `full=1` (up to 500 rules; the export includes every
+page). Excluded fields read NOT, a policy Applied To is labelled as applying to
+every rule in the policy, and nested references name the containing group.
+Field chips filter the rows; other referencing objects are listed below. VM and
+tag references stay in their evidence drawers.

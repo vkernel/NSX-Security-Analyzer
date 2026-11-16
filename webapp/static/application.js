@@ -108,7 +108,7 @@
     document.addEventListener('click',event=>{document.querySelectorAll('.topbar-actions details[open],.search-options[open],.column-layout[open],.table-filter-menu[open],.filter-control[open]').forEach(details=>{if(!event.composedPath().includes(details))details.open=false;});});
     const tabs=document.querySelector('.report-section-tabs');
     const inventory=[['VMs','all-vms'],['Groups','all-groups'],['Services','all-services'],['Tags','tags-all'],['Scopes','tags-scopes']];
-    const firewall=[['Summary','dfw-overview'],['Policies','dfw-policies'],['Rules','dfw-rules']];
+    const firewall=[['Summary','dfw-overview'],['Policies','dfw-policies'],['Rules','dfw-rules'],['References','object-references']];
     const filters={
       groups:[['All groups','all-groups'],['Unused groups','unused-groups'],['Empty groups','empty-groups'],['Membership unknown','unknown-membership']],
       services:[['All services','all-services'],['Unused services','unused-services']],
@@ -118,7 +118,7 @@
     };
     function reportNavigation(){
       if(!tabs)return;const id=location.hash.slice(1)||'overview';let kind=Object.keys(filters).find(key=>filters[key].some(([,anchor])=>anchor===id));
-      const isFirewall=['rules','policies'].includes(kind)||id==='dfw-overview',isHelp=['feature-guide','coverage','tags-coverage'].includes(id);
+      const isFirewall=['rules','policies'].includes(kind)||id==='dfw-overview'||id==='object-references',isHelp=['feature-guide','coverage','tags-coverage'].includes(id);
       const items=isHelp?[['User guide','feature-guide'],['Coverage & definitions','coverage'],['Tag coverage','tags-coverage']]:isFirewall?firewall:[['Overview','overview'],...inventory];
       tabs.replaceChildren();for(const [label,anchor] of items){const link=make('a',label);link.href='#'+anchor;if(id===anchor || (kind && filters[kind]?.some(([,value])=>value===id) && filters[kind][0][1]===anchor))link.setAttribute('aria-current','page');tabs.append(link);}
       if(isFirewall){const link=make('a','Historical activity');link.href='/environments/'+document.body.dataset.tableScope+'/rule-history/';tabs.append(link);}

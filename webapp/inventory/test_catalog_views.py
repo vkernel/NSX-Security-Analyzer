@@ -4,7 +4,7 @@ from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
 
-from .catalog_views import describe, scopes, services
+from .catalog_views import describe, reference_objects, scopes, services
 from .models import Environment, Snapshot, SnapshotRecord
 
 
@@ -72,3 +72,12 @@ class CatalogViewTests(TestCase):
         self.assertEqual(self.client.get(url, {'op': 'service-list', 'view': 'unreferenced'}).json()['count'], 1)
         self.assertEqual(len(self.client.get(url, {'op': 'tag-scopes', 'scope': 'env'}).json()['values']), 1)
         self.assertEqual(self.client.get(url, {'op': 'service-list', 'view': 'bad'}).status_code, 400)
+
+    def test_reference_object_picker_filters_by_kind_and_name(self):
+        names = [item['name'] for item in reference_objects(self.snapshot.pk, 'svc', 'custom_service')['items']]
+        self.assertEqual(names, ['svc-bundle', 'svc-old', 'svc-wide'])
+        wide = reference_objects(self.snapshot.pk, 'wide', 'custom_service')['items'][0]
+        self.assertEqual(wide['references'], 2)
+        self.assertEqual(reference_objects(self.snapshot.pk, 'svc', 'group')['items'], [])
+        with self.assertRaises(ValueError):
+            reference_objects(self.snapshot.pk, '', 'vm')

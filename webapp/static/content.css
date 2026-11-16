@@ -323,3 +323,27 @@ body[data-theme] .scope-list li>button[aria-pressed=true]{background:var(--app-s
 body[data-theme] .scope-main .catalog-stats{margin:0}
 body[data-theme] .scope-main .content-card{margin:0}
 body[data-theme] .scope-main .content-card>.table-scroll{border:0;border-radius:0}
+
+/* References page. */
+.object-references-panel [data-object-references]{display:flex;flex-direction:column;gap:12px}
+.reference-picker{display:flex;flex-direction:column;gap:8px}
+body[data-theme] .reference-picker input[type=search]{max-width:420px}
+.reference-suggestions{list-style:none;margin:0;padding:0;display:flex;flex-wrap:wrap;gap:6px}
+body[data-theme] .reference-suggestion{display:inline-flex;align-items:baseline;gap:6px;height:auto;min-height:0;padding:6px 10px;border:1px solid var(--line);border-radius:999px;background:var(--app-surface);box-shadow:none;color:var(--ink);font:inherit;font-size:13px;cursor:pointer}
+body[data-theme] .reference-suggestion small{font-size:12px;color:var(--muted)}
+body[data-theme] .reference-suggestion[aria-pressed=true]{border-color:var(--ink);background:var(--ink);color:var(--app-surface)}
+body[data-theme] .reference-suggestion[aria-pressed=true] small{color:inherit;opacity:.75}
+.reference-board{display:grid;grid-template-columns:minmax(0,1fr) minmax(260px,320px);gap:16px;align-items:start}
+.reference-board:has(>.reference-export[hidden]){grid-template-columns:minmax(0,1fr)}
+@media(max-width:1000px){.reference-board{grid-template-columns:minmax(0,1fr)}}
+.reference-main{display:flex;flex-direction:column;gap:12px;min-width:0}
+.reference-object{display:flex;flex-direction:column;gap:2px}
+body[data-theme] .reference-object .evidence-object-link{align-self:flex-start;padding:0;border:0;background:none;box-shadow:none;height:auto;min-height:0;color:var(--ink);font:inherit;font-size:16px;font-weight:600;cursor:pointer}
+.reference-object small{font-size:12px;color:var(--muted);overflow-wrap:anywhere}
+body[data-theme] .reference-export{margin:0;padding:16px;display:flex;flex-direction:column;gap:10px;position:sticky;top:76px}
+.reference-export h2{margin:0;font-size:15px;font-weight:600}
+.reference-export p{margin:0}
+body[data-theme] .reference-table{min-width:720px}
+body[data-theme] .reference-others{margin:0}
+body[data-theme] .reference-others .evidence-object-link{padding:0;border:0;background:none;box-shadow:none;height:auto;min-height:0;color:var(--app-accent);font:inherit;text-align:left;cursor:pointer}
+body[data-theme] .rule-order-table td .rule-order-name>button.evidence-object-link{width:auto;min-width:0;max-width:100%;text-align:left;justify-content:flex-start;text-align-last:left}

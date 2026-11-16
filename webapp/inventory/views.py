@@ -678,7 +678,7 @@ def workspace_section(request, section):
             return redirect('environment', pk=environment.pk)
         snapshot = Snapshot.objects.only("id").filter(environment_id=environment.pk).first()
         if snapshot and section in sections:
-            allowed = set(sections.values()) | {'overview','all-groups','unused-groups','empty-groups','unknown-membership','unused-services','empty-policies','zero-hit-rules','disabled-rules','unknown-statistics','empty-group-rules','dfw-scope-rules','tags-both','tags-vm_only','tags-group_only','tags-other_only','tags-unknown','coverage','tags-coverage'}
+            allowed = set(sections.values()) | {'overview','all-groups','unused-groups','empty-groups','unknown-membership','unused-services','empty-policies','zero-hit-rules','disabled-rules','unknown-statistics','empty-group-rules','dfw-scope-rules','tags-both','tags-vm_only','tags-group_only','tags-other_only','tags-unknown','coverage','tags-coverage','object-references'}
             panel = request.GET.get('panel')
             return redirect(reverse('snapshot',args=[snapshot.pk])+'?browse=1#'+(panel if panel in allowed else sections[section]))
     return render(request, 'inventory/section_empty.html', {'environment':environment,'section_name':section.title()})

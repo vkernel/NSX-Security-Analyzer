@@ -98,7 +98,7 @@ def relay_sections(context):
         'overview': [{'label': 'Workspace', 'links': [link('Overview', 'dashboard')]}],
         'environments': [{'label': 'Environments', 'links': [link('All environments', 'environment-directory')]}],
         'inventory': [{'label': 'Snapshot inventory', 'links': [report(label, panel, 'inventory') for label, panel in [('Overview', 'overview'), ('VMs', 'all-vms'), ('Groups', 'all-groups'), ('Services', 'all-services'), ('Tags', 'tags-all'), ('Scopes', 'tags-scopes')]]}],
-        'firewall': [{'label': 'Firewall configuration', 'links': [report(label, panel, 'firewall') for label, panel in [('Summary', 'dfw-overview'), ('Policies', 'dfw-policies'), ('Rules', 'dfw-rules')]]}],
+        'firewall': [{'label': 'Firewall configuration', 'links': [report(label, panel, 'firewall') for label, panel in [('Summary', 'dfw-overview'), ('Policies', 'dfw-policies'), ('Rules', 'dfw-rules'), ('References', 'object-references')]]}],
         'naming': [{'label': 'Naming work', 'links': [scoped('Naming review', 'naming-compliance')]}],
         'segmentation': [{'label': 'Segmentation views', 'links': [scoped('Applications', 'segmentation'), scoped('VM-to-VM rules', 'segmentation-pair')]}],
         'work': [{'label': 'Reviews', 'links': [link('Assigned to me' if staff else 'All findings', 'my-work')]}],
