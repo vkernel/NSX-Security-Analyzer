@@ -117,11 +117,11 @@ with a result view once completed (`collection_detail.py`); deletion requests
 with a stage title and step cards (presentation only); Services and Tags & scopes
 overviews (`catalog-views.js`, `catalog_views.py`); a References page under
 Firewall (`object-references.js`); Segmentation application cards and Naming
-outcome cards. New snapshots record a VM count in `Snapshot.summary['vms']`; older
+outcome cards; Get started and Notifications pages; a centered sign-in card. New snapshots record a VM count in `Snapshot.summary['vms']`; older
 ones show it as not recorded. `load_demo_data` builds synthetic environments by
 running the real collector against an in-process fake NSX on `*.example.invalid`.
-Still to build: My work, Rule proposal, Get started, Notifications, Preferences, sign-in
-and change-password screens. Group list count columns (direct VMs, interfaces,
+Still to build: Rule proposal restyle (My work is covered by the Reviews queues and
+Preferences by Personal settings). Group list count columns (direct VMs, interfaces,
 IP matches, rules) need collection-time projections and are not built.
 
 ### Interface and review workflow
@@ -178,7 +178,7 @@ before changing format schemas, job lifecycle or deployment requirements.
 ## Verification baseline
 
 The published application baseline passed these checks on 13 November 2026. The
-unpublished redesign work on `development` passed 1,063 Django tests and 133
+unpublished redesign work on `development` passed 1,066 Django tests and 133
 JavaScript tests on 16 November 2026; no new image was published for it.
 
 | Check | Result |

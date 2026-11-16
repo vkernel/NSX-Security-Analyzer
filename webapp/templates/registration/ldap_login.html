@@ -13,6 +13,7 @@
       <button class="button primary full-width" type="submit">Sign in</button>
     </form>
     <p class="login-note"><a href="{% url 'login' %}?next={{ next|urlencode }}">Back to sign-in options</a></p>
+    <p class="login-footnote">Directory passwords are managed by your organisation.</p>
   </div>
 </section>
 {% endblock %}

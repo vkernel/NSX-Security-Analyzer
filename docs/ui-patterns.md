@@ -203,3 +203,16 @@ the map; pressing it again shows every connection. The map, VM-to-VM rules and
 security matrix are unchanged. Naming compliance shows its outcomes as count
 cards with a short explanation each; "Review needed" is drawn as a separate,
 dashed queue because it may include compliant names.
+
+## Account pages and sign-in
+
+`get-started/` (`inventory/getting_started.py`) is a five-step checklist whose
+states come from the workspace: an environment exists, a non-testing collection
+succeeded, an application scope is set, a naming policy is enabled, a finding
+has an owner. Actions only appear for users who may take them.
+`notifications/` lists the same feed as the header menu (`notification_feed`)
+with the active notification settings; "Mark all as read" posts to the shared
+endpoint, which redirects for a plain form post and keeps its JSON contract for
+the header menu. Both are linked from the account menu. Sign-in, directory
+sign-in and password change use one centered card; providers, forms and
+validation are unchanged.

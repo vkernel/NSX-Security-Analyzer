@@ -1,6 +1,6 @@
 from django.urls import path
 from . import deletion_plan, approval_evidence, naming_views, segmentation_views, workload_views
-from . import current_membership, reference_exports, navigation_search, collection_detail
+from . import current_membership, reference_exports, navigation_search, collection_detail, getting_started
 from . import storage_views, activity_views, authentication_settings, keycloak_settings, system_health, views, history_views, diagnostic_views, report_views, impact, transient, deletion, task_cancellation, bulk_actions
 
 urlpatterns = [
@@ -68,6 +68,8 @@ urlpatterns = [
     path('api/preferences/interface/', views.interface_preferences, name='interface-preferences'),
     path('api/search/', navigation_search.navigation_search, name='navigation-search'),
     path('api/notifications/', views.notifications, name='notifications'),
+    path('notifications/', views.notifications_page, name='notifications-page'),
+    path('get-started/', getting_started.getting_started, name='getting-started'),
     path('api/notifications/read/', views.notifications_read, name='notifications-read'),
     path("administration/retention/", views.retention_settings, name="retention-settings"),
     path("settings/", views.website_settings, name="website-settings"),

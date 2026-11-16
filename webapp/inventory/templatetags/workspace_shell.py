@@ -75,7 +75,7 @@ def relay_sections(context):
         active = 'inventory'
     elif current in {'environment-directory', 'environment', 'findings', 'finding-detail', 'snapshot-comparison', 'collection-coverage'}:
         active = 'environments'
-    elif current == 'website-settings' or current == 'password-change':
+    elif current in {'website-settings', 'password-change', 'getting-started', 'notifications-page'}:
         active = 'personal'
     elif current == 'workspace-section':
         section = match.kwargs.get('section')
@@ -104,7 +104,8 @@ def relay_sections(context):
         'work': [{'label': 'Reviews', 'links': [link('Assigned to me' if staff else 'All findings', 'my-work')]}],
         'collections': [{'label': 'Collections', 'links': [link('All collections', 'all-collections')]}],
         'administration': [{'label': section['label'], 'links': section['links']} for section in admin_sections(context)] if staff else [],
-        'personal': [{'label': 'Personal settings', 'links': [link(title, 'website-settings', query={'section': key}) for key, title in [('appearance', 'Appearance'), ('tables', 'Tables'), ('dates', 'Dates & time'), ('updates', 'Live updates'), ('notifications', 'Notifications')]]}],
+        'personal': [{'label': 'Account', 'links': [link('Get started', 'getting-started'), link('Notifications', 'notifications-page')]},
+                     {'label': 'Personal settings', 'links': [link(title, 'website-settings', query={'section': key}) for key, title in [('appearance', 'Appearance'), ('tables', 'Tables'), ('dates', 'Dates & time'), ('updates', 'Live updates'), ('notifications', 'Notification settings')]]}],
         'help': [{'label': 'Help & coverage', 'links': [report(label, panel, 'help') for label, panel in [('User guide', 'feature-guide'), ('Coverage & definitions', 'coverage'), ('Tag coverage', 'tags-coverage')]]}],
     }
     if environment:

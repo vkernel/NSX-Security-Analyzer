@@ -1,0 +1,13 @@
+{% extends 'base.html' %}{% load workspace_time %}
+{% block title %}Notifications · NSX Security Analyzer{% endblock %}
+{% block content %}
+{% include 'components/page_header.html' with title='Notifications' description='Collection results and review tasks from the last days, as shown in the header menu.' only %}
+<div class="content-split notifications-split">
+<section class="content-card" aria-labelledby="notification-list-title"><div class="content-card-head"><h2 id="notification-list-title">Notifications <span class="muted">· {{ unread }} unread</span></h2>
+<form method="post" action="{% url 'notifications-read' %}" data-notifications-read>{% csrf_token %}<button class="button" type="submit"{% if not unread %} disabled{% endif %}>Mark all as read</button></form></div>
+<ul class="notification-page-list">{% for item in items %}<li class="{% if item.unread %}is-unread{% endif %}"><span class="notification-dot" aria-hidden="true"></span><a href="{{ item.url }}"><strong>{{ item.label }}</strong>{% if item.environment %}<small>{{ item.environment }}</small>{% endif %}</a><time datetime="{{ item.at }}">{% user_time item.at_value %}</time>{% if item.unread %}<span class="visually-hidden">Unread</span>{% endif %}</li>{% empty %}<li class="muted">No notifications in this window.</li>{% endfor %}</ul></section>
+<section class="content-card" aria-labelledby="notification-settings-title"><div class="content-card-head"><h2 id="notification-settings-title">Notification settings</h2><a href="{% url 'website-settings' %}?section=notifications">Change</a></div>
+<div class="content-card-body"><p class="muted small">{% if custom %}Your own notification settings.{% else %}Workspace defaults; you can use your own settings instead.{% endif %}</p>
+<ul class="overview-rows notification-kinds">{% for label, enabled in kinds %}<li><span>{{ label }}</span><span class="pill {% if enabled %}succeeded{% else %}neutral{% endif %}">{% if enabled %}On{% else %}Off{% endif %}</span></li>{% endfor %}<li><span>History window</span><span>{{ days }} day{{ days|pluralize }}</span></li></ul></div></section>
+</div>
+{% endblock %}

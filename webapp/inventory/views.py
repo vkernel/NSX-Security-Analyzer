@@ -555,6 +555,31 @@ def interface_preferences(request):
 @login_required
 @require_GET
 def notifications(request):
+    return JsonResponse(notification_feed(request))
+
+
+@login_required
+@require_GET
+def notifications_page(request):
+    """Full notification list; the same items, order and read state as the header menu."""
+    from datetime import datetime
+    from .usability import policy
+    feed = notification_feed(request)
+    for item in feed['items']:
+        item['at_value'] = datetime.fromisoformat(item['at'])
+    options, personal = policy(), preferences(request)
+    custom = personal.notification_override
+    kinds = [('Failed collections', personal.notification_failed if custom else options.notify_failed),
+             ('Completed collections', personal.notification_completed if custom else options.notify_completed),
+             ('New coverage issues', personal.notification_coverage if custom else options.notify_coverage),
+             ('Review tasks', personal.notification_reviews)]
+    if custom:
+        kinds.append(('Testing collections', personal.notification_testing))
+    return render(request, 'inventory/notifications.html', {**feed, 'custom': custom, 'kinds': kinds,
+        'days': personal.notification_days if custom else 30})
+
+
+def notification_feed(request):
     from django.db.models import Q
     from django.utils import timezone
     from .usability import policy
@@ -642,7 +667,7 @@ def notifications(request):
                           'environment': 'Database storage', 'at': stamp.isoformat(), 'unread': is_unread,
                           'url': reverse('system-health')})
     items.sort(key=lambda item: item['at'], reverse=True)
-    return JsonResponse({'items': items[:50], 'unread': unread})
+    return {'items': items[:50], 'unread': unread}
 
 
 @login_required
@@ -651,6 +676,9 @@ def notifications_read(request):
     from .models import UserPreferences
     from django.utils import timezone
     UserPreferences.objects.update_or_create(user=request.user, defaults={'notifications_seen_at': timezone.now()})
+    if request.content_type != 'application/json':
+        # Plain form post from the notifications page.
+        return redirect('notifications-page')
     return JsonResponse({'saved': True})
 
 
