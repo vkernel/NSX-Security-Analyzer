@@ -1,9 +1,28 @@
 """Bound concurrent NSX requests using observed latency and backpressure."""
 from collections import Counter, deque
 import math
+import logging
 import threading
 import time
 import urllib3
+
+LOG = logging.getLogger('inventory.collector')
+OVERLOAD_WINDOW = 5  # seconds; one reduction per burst of overload errors
+
+
+def request_category(path, params=None):
+    if path in ('/api/v1/fabric/vifs','/api/v1/fabric/virtual-machines') or '/segments/' in path and path.endswith('/ports'):
+        return 'network_attachment_inventory'
+    if path.endswith('/virtual-machine-group-associations'):
+        return 'vm_group_associations'
+    if path.endswith('/statistics'):
+        return 'rule_statistics' if '/rules/' in path else 'policy_statistics'
+    if '/members/' in path:
+        params = params or {}
+        size = params.get('page_size', 1)
+        shape = 'page' if params.get('cursor') or isinstance(size, int) and size > 1 else 'probe'
+        return 'membership/' + path.rsplit('/', 1)[-1] + '/' + shape
+    return 'search' if path.startswith('/search/') else 'inventory'
 
 
 class AdaptiveRequests:
@@ -24,6 +43,7 @@ class AdaptiveRequests:
         self.latencies = {}
         self.waiters = deque()
         self.queue_seconds = Counter()
+        self.last_report = clock()
 
     def acquire(self, deadline=None, endpoint='other'):
         queued = self.clock()
@@ -47,16 +67,19 @@ class AdaptiveRequests:
                     self.waiters.remove(ticket)
                     self.condition.notify_all()
 
-    def release(self, started, error=None, endpoint="other"):
+    def release(self, started, error=None, endpoint="other", local=False):
         elapsed = self.clock() - started
         with self.condition:
+            previous_limit = self.limit
             self.active -= 1
             # An optional bulk endpoint's read timeout is not by itself evidence
             # of manager-wide overload. Explicit backpressure still applies.
             cause = getattr(error, "__cause__", None)
-            optional_timeout = (endpoint == "policy_statistics" and
-                                isinstance(cause, (TimeoutError, urllib3.exceptions.ReadTimeoutError)))
-            overloaded = (error is not None and not optional_timeout and
+            optional_timeout = ((endpoint == "policy_statistics" or endpoint.startswith('membership/') and endpoint.endswith('/page'))
+                                and (isinstance(error, TimeoutError) or isinstance(cause, (TimeoutError, urllib3.exceptions.ReadTimeoutError))))
+            # Local deadline or budget errors never reached NSX and are not backpressure.
+            local = local or getattr(error, 'local', False) is True
+            overloaded = (error is not None and not optional_timeout and not local and
                           getattr(error, 'status_code', None) in (None, 429, 502, 503, 504))
             # Compare like endpoints. Statistics can be naturally slow without
             # indicating overload; one slow response must not serialize the audit.
@@ -67,7 +90,7 @@ class AdaptiveRequests:
             state["durations"].append(elapsed)
             state["maximum"] = max(state["maximum"], elapsed)
             if error is not None:
-                state["failures"][str(getattr(error, "status_code", None) or "transport_or_decode")] += 1
+                state["failures"]["local_budget" if local else str(getattr(error, "status_code", None) or "transport_or_decode")] += 1
             degraded = False
             if error is None:
                 slow = state["samples"] >= 4 and elapsed > max(state["baseline"] * 2, state["baseline"] + 2)
@@ -78,7 +101,8 @@ class AdaptiveRequests:
                 degraded = state["slow_streak"] >= 3
             else:
                 state["slow_streak"] = 0
-            if overloaded or (degraded and self.clock() - self.last_decrease >= 30):
+            # Simultaneous failures of one burst reduce the limit once, as the 429 pacer does.
+            if (overloaded and self.clock() - self.last_decrease >= OVERLOAD_WINDOW) or (degraded and self.clock() - self.last_decrease >= 30):
                 reduced = max(1, self.limit // 2)
                 self.decreases += int(reduced < self.limit)
                 self.limit = reduced
@@ -94,8 +118,19 @@ class AdaptiveRequests:
                     self.increases += 1
                     self.successes = 0
                     self.contended = False
-            elif not optional_timeout:
+            elif not optional_timeout and not local:
                 self.successes = 0
+            if self.limit != previous_limit:
+                LOG.info('NSX concurrency changed: previous=%d current=%d maximum=%d category=%s response_seconds=%.3f backpressure=%s latency_degraded=%s',
+                         previous_limit, self.limit, self.maximum, endpoint, elapsed, overloaded, degraded)
+            if self.clock()-self.last_report >= 30:
+                self.last_report = self.clock()
+                LOG.info('NSX concurrency progress: limit=%d maximum=%d active=%d waiting=%d endpoints=%s',
+                    self.limit, self.maximum, self.active, len(self.waiters),
+                    {key: {'requests': value['samples']+sum(value['failures'].values()),
+                           'failures': sum(value['failures'].values()),
+                           'p95_seconds': round(sorted(value['durations'])[math.ceil(len(value['durations'])*.95)-1], 3),
+                           'max_seconds': round(value['maximum'], 3)} for key, value in self.latencies.items()})
             self.condition.notify_all()
 
     def summary(self):
@@ -123,12 +158,12 @@ def adapt_requests(client, maximum=8):
     original = client._get
 
     def request(path, params=None):
-        endpoint = ("rule_statistics" if "/rules/" in path else "policy_statistics") if path.endswith("/statistics") else (
-            "membership/" + path.rsplit("/", 1)[-1] if "/members/" in path else "search" if path.startswith("/search/") else "inventory")
+        endpoint = request_category(path, params)
         queued_at = time.monotonic()
         phase_deadline = getattr(client.request_context, 'phase_deadline', None)
         started = controller.acquire(deadline=phase_deadline, endpoint=endpoint)
         error = None
+        sent = False
         try:
             # Queue time is not time spent attempting a request. The whole
             # collection deadline still bounds pacing and server cooldowns.
@@ -139,13 +174,14 @@ def adapt_requests(client, maximum=8):
                                                       getattr(client, 'request_deadline', float('inf')),
                                                       phase_deadline if phase_deadline is not None else float('inf'))
             started = controller.clock()
+            sent = True
             return original(path, params)
         except BaseException as exc:
             error = exc
             raise
         finally:
             pacer.result(error)
-            controller.release(started, error, endpoint)
+            controller.release(started, error, endpoint, local=not sent)
 
     # Limit each attempt; NSXClient.get releases the slot before retry backoff.
     client._get = request

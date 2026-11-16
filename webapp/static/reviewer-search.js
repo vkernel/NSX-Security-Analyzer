@@ -1,7 +1,9 @@
 document.addEventListener('DOMContentLoaded', () => {
   document.querySelectorAll('select[data-user-search]').forEach(select => {
     if (select.hasAttribute('data-reviewer-combobox')) {
-      const wrapper = document.createElement('div'); wrapper.className = 'reviewer-combobox';
+      const isFilter=select.hasAttribute('data-reviewer-filter');
+      const shortcuts=isFilter?[...select.options].filter(o=>!/^\d+$/.test(o.value)).map(o=>({id:o.value,label:o.textContent})):[];
+      const wrapper = document.createElement('div'); wrapper.className = 'reviewer-combobox';if(isFilter)wrapper.classList.add('reviewer-filter');
       const input = document.createElement('input'); input.type = 'text'; input.autocomplete = 'off';
       input.id = select.id + '-search'; input.placeholder = 'Search and select by name or email';
       input.setAttribute('role', 'combobox'); input.setAttribute('aria-autocomplete', 'list');
@@ -12,7 +14,7 @@ document.addEventListener('DOMContentLoaded', () => {
       const label = document.querySelector(`label[for="${select.id}"]`);
       if (label) label.htmlFor = input.id;
       const help = select.getAttribute('aria-describedby'); if (help) input.setAttribute('aria-describedby', help);
-      input.value = select.value ? select.selectedOptions[0].textContent : '';
+      input.value = select.value || isFilter ? select.selectedOptions[0].textContent : '';
       const status = document.createElement('small'); status.setAttribute('role', 'status');
       select.before(wrapper); wrapper.append(input, list, status); select.hidden = true;
       const selection = document.createElement('div'); selection.className = 'reviewer-selection'; selection.hidden = true;
@@ -20,14 +22,14 @@ document.addEventListener('DOMContentLoaded', () => {
       const change = document.createElement('button'); change.type = 'button'; change.className = 'button'; change.textContent = 'Change';
       selection.append(selectedLabel, change); wrapper.prepend(selection);
       const showSelection = () => { selectedLabel.textContent = input.value; selection.hidden = false; input.hidden = true; status.textContent = ''; };
-      change.addEventListener('click', () => { selection.hidden = true; input.hidden = false; input.value = ''; select.value = ''; select.dispatchEvent(new Event('change', {bubbles:true})); input.focus(); });
+      change.addEventListener('click', () => { selection.hidden = true; input.hidden = false; input.value = ''; if(!isFilter){select.value = ''; select.dispatchEvent(new Event('change', {bubbles:true}));} input.focus(); });
       const helpNode = select.closest('.form-field')?.querySelector(':scope > .helptext, :scope > small');
       if (helpNode && helpNode !== status && !wrapper.contains(helpNode)) {
         const disclosure = document.createElement('details'); disclosure.className = 'reviewer-help';
         const summary = document.createElement('summary'); summary.textContent = 'Who can be assigned?';
         helpNode.before(disclosure); disclosure.append(summary, helpNode);
       }
-      if (select.value) showSelection();
+      if (select.value || isFilter) showSelection();
       let timer, pending, generation = 0, active = -1, options = [];
       const close = () => { list.hidden = true; input.setAttribute('aria-expanded', 'false'); input.removeAttribute('aria-activedescendant'); active = -1; };
       const choose = item => {
@@ -48,7 +50,7 @@ document.addEventListener('DOMContentLoaded', () => {
           const response = await fetch(select.dataset.userSearch + '?q=' + encodeURIComponent(input.value), {signal:pending.signal, headers:{Accept:'application/json'}});
           if (!response.ok) throw new Error('Search unavailable. Try again.');
           const data = await response.json(); if (token !== generation) return;
-          options = data.items; list.replaceChildren();
+          options = [...shortcuts, ...data.items]; list.replaceChildren();
           options.forEach((item, index) => {
             const option = document.createElement('li'); option.id = list.id + '-' + index;
             option.setAttribute('role', 'option'); option.setAttribute('aria-selected', 'false');
@@ -61,13 +63,13 @@ document.addEventListener('DOMContentLoaded', () => {
           status.textContent = data.has_more ? 'First 20 matches. Refine your search.' : options.length ? 'Select a matching reviewer.' : 'No matching reviewers.';
         } catch (error) { if (error.name !== 'AbortError' && token === generation) status.textContent = error.message; }
       }
-      input.addEventListener('input', () => { select.value = ''; select.dispatchEvent(new Event('change', {bubbles:true})); ++generation; pending?.abort(); close(); clearTimeout(timer); timer = setTimeout(search, 250); });
-      input.addEventListener('focus', () => { if (!select.value) search(); });
+      input.addEventListener('input', () => { if(!isFilter){select.value = ''; select.dispatchEvent(new Event('change', {bubbles:true}));} ++generation; pending?.abort(); close(); clearTimeout(timer); timer = setTimeout(search, 250); });
+      input.addEventListener('focus', () => { if (!select.value || isFilter) search(); });
       input.addEventListener('blur', event => {
         ++generation; clearTimeout(timer); pending?.abort();
         // Keep the dialog stable until its button receives the click. Collapsing
         // results on mousedown would move Cancel/Close away from the pointer.
-        if (!event.relatedTarget?.closest('dialog')) close();
+        if (!event.relatedTarget?.closest('dialog')) {close();if(isFilter){input.value=select.selectedOptions[0]?.textContent||'Anyone';showSelection();}}
       });
       input.addEventListener('keydown', event => {
         if (event.key === 'Escape' && !list.hidden) { event.preventDefault(); event.stopPropagation(); close(); }

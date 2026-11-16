@@ -19,11 +19,22 @@ change after compatibility testing and feedback.
 | 3 | Change and traffic alerts | Notify on new communication paths, broad ALLOW rules, unexpected policy changes or missing exporters. |
 | Parallel | Enterprise access and accountability | Keycloak/OIDC, environment-scoped permissions and an audit trail of application changes. |
 
+## Delivered beyond the original plan
+
+- Administrator-confirmed NSX deletion of approved objects, with live revalidation,
+  reference cleanup and saved pre-deletion configuration (0.5.x).
+- Group naming policies and component proposals.
+- Configuration-based application segmentation and VM-to-VM rule investigation; an
+  observed-traffic dependency map remains future work (Priority 2).
+- Saved and current VM membership evidence, firewall references in configured NSX
+  order, and reference exports in five formats (development).
+- Keycloak and LDAPS authentication with Viewer, Operator and Administrator roles.
+
 ## Phase 1: History and review foundations — delivered in 0.2.0
 
 - Compare two saved snapshots and explain configuration changes.
-- Track findings through ownership and notes. The current development workflow replaces
-  legacy acknowledgement/review dates with configurable approvals and recorded completion.
+- Track findings through ownership and notes, with configurable approvals and recorded
+  completion (delivered in 0.5.x).
 - Reopen reviewed findings when relevant evidence changes.
 - Make incomplete collection, stale data and observation gaps visible.
 - Preserve unknown states rather than interpreting missing evidence as zero activity.

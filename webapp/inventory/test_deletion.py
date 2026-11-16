@@ -89,7 +89,7 @@ class DeletionTests(TestCase):
             DeletionBatch(environment=self.env, manager=self.env.manager, requested_by=self.user)
             for _ in range(25)])
         url = reverse('deletion-history', args=[self.env.pk])
-        response = self.client.get(url)
+        response = self.client.get(url, {'page_size': '25'})
         self.assertEqual(response.status_code, 200)
         self.assertEqual(len(response.context['page']), 25)
         self.assertContains(response, 'Page 1 of 2')
@@ -408,6 +408,52 @@ class DeletionTests(TestCase):
         self.assertContains(self.client.get(url), 'No pre-deletion configuration')
         self.assertEqual(self.client.get(url + '?download=1').status_code, 404)
 
+    def test_expired_preview_can_be_replaced_without_reusing_old_authorization(self):
+        self.batch.confirmed_at = None
+        self.batch.save()
+        self.item.verified_at = timezone.now() - timedelta(minutes=11)
+        self.item.save()
+        old = self.client.get(reverse('deletion-detail', args=[self.batch.pk]))
+        self.assertTrue(old.context['review_expired'])
+        self.assertEqual(old.context['verified_count'], 0)
+        self.assertFalse(old.context['can_confirm'])
+        self.assertNotContains(old, 'You can confirm execution.')
+        url = reverse('deletion-selection', args=[self.env.pk])
+        with patch.object(d, 'connection', side_effect=AssertionError('No NSX calls during selection')):
+            response = self.client.post(url, {'finding': self.finding.pk})
+        fresh = DeletionBatch.objects.exclude(pk=self.batch.pk).get()
+        self.assertRedirects(response, reverse('deletion-detail', args=[fresh.pk]), fetch_redirect_response=False)
+        self.item.refresh_from_db()
+        self.assertEqual(self.item.status, 'blocked')
+        self.assertIn('Superseded', self.item.message)
+        self.assertIsNone(fresh.confirmed_at)
+        self.assertEqual(fresh.status, 'preview_queued')
+        self.assertEqual(fresh.items.get().status, 'pending')
+        self.assertIsNone(fresh.items.get().verified_at)
+        # Repeated clicks find the genuinely active new request, never the expired one.
+        again = self.client.post(url, {'finding': self.finding.pk})
+        self.assertRedirects(again, reverse('deletion-detail', args=[fresh.pk]), fetch_redirect_response=False)
+        self.assertEqual(DeletionBatch.objects.count(), 2)
+
+    def test_new_preview_preserves_fresh_pending_and_executing_reservations(self):
+        url = reverse('deletion-selection', args=[self.env.pk])
+        cases = [('preview_ready', 'verified', False, 0), ('preview_ready', 'cleanup_review', False, 20),
+                 ('preview_queued', 'pending', False, 20), ('checking', 'validating', False, 20),
+                 ('queued', 'verified', True, 20), ('running', 'sending', True, 20)]
+        for batch_status, item_status, confirmed, age in cases:
+            with self.subTest(batch_status=batch_status, item_status=item_status):
+                self.batch.status = batch_status
+                self.batch.confirmed_at = timezone.now() if confirmed else None
+                self.batch.save()
+                self.item.status = item_status
+                self.item.verified_at = timezone.now() - timedelta(minutes=age)
+                self.item.save()
+                response = self.client.post(url, {'finding': self.finding.pk})
+                self.assertRedirects(response, reverse('deletion-detail', args=[self.batch.pk]), fetch_redirect_response=False)
+                self.assertEqual(DeletionBatch.objects.count(), 1)
+                self.item.refresh_from_db()
+                self.assertEqual(self.item.status, item_status)
+
     def test_selected_preview_rejects_changed_revision(self):
         url = reverse('deletion-selection', args=[self.env.pk])
         response = self.client.post(url, {'selected':f'{self.finding.pk}:{self.finding.revision+1}'})
@@ -430,14 +476,14 @@ class DeletionTests(TestCase):
 
     def test_finding_selection_has_contextual_delete_action(self):
         response = self.client.get(reverse('findings', args=[self.env.pk]) + '?review=ready')
-        self.assertContains(response, 'id="finding-selection-bar" hidden')
-        self.assertContains(response, 'id="delete-selected-open"')
-        self.assertContains(response, 'data-delete-eligible="true"')
-        self.assertContains(response, 'id="bulk-delete-preview"')
+        self.assertContains(response, 'data-bulk-toolbar="bulk-work" hidden')
+        self.assertContains(response, 'data-bulk-action="preview"')
+        self.assertContains(response, ' preview"')
+        self.assertContains(response, 'id="bulk-work"')
         self.assertNotContains(response, 'Delete selected from NSX — choose ready objects')
         self.client.force_login(get_user_model().objects.create_user('selection-operator', is_staff=True))
         response = self.client.get(reverse('findings', args=[self.env.pk]) + '?review=ready')
-        self.assertNotContains(response, 'id="delete-selected-open"')
+        self.assertNotContains(response, 'data-bulk-action="preview"')
 
     @patch.object(d, 'approvals_valid', new=lambda finding: {})
     def test_confirmation_rejects_expired_or_legacy_item_even_when_batch_is_fresh(self):
@@ -503,6 +549,159 @@ class DeletionTests(TestCase):
             search.return_value=([obj],{'mode':'explicit_types'})
             with self.assertRaises(ValidationError): d.validate_live(client,self.finding)
 
+    def test_read_only_batch_cache_reuses_search_but_never_failed_or_expired_evidence(self):
+        cache={'targets':[self.obj['path']]}
+        client=Mock(inventory_warnings=[],preview_dependency_cache=cache)
+        client.get.return_value=self.obj
+        with patch.object(d,'approvals_valid',return_value={}), patch.object(d.collector,'objects',return_value=[]), \
+             patch.object(d.collector,'verified_configuration_search',return_value=([self.obj],{'mode':'all_types'})) as search, \
+             patch.object(d.collector,'collect_references',wraps=d.collector.collect_references) as references:
+            d.validate_live(client,self.finding)
+            d.validate_live(client,self.finding)
+            self.assertEqual(search.call_count,1)
+            self.assertEqual(references.call_count,1)
+            cache['evidence']['completed']-=d.SCAN_REUSE_SECONDS+1
+            d.validate_live(client,self.finding)
+            self.assertEqual(search.call_count,2)
+            cache['evidence']['completed']-=d.SCAN_REUSE_SECONDS+1
+            search.side_effect=ValidationError('Search incomplete')
+            with self.assertRaises(ValidationError): d.validate_live(client,self.finding)
+            self.assertNotIn('evidence',cache)
+
+    def test_expired_standard_preview_refresh_retains_approvals_and_never_executes(self):
+        self.batch.status='preview_ready';self.batch.confirmed_at=None;self.batch.save()
+        self.item.verified_at=timezone.now()-timedelta(minutes=11);self.item.save()
+        approvals=self.finding.approvals.copy()
+        url=reverse('deletion-detail',args=[self.batch.pk])
+        with patch.object(d,'approvals_valid',return_value={}):
+            response=self.client.post(url,{'action':'refresh_verification'})
+            self.assertEqual(response.status_code,302)
+            self.item.refresh_from_db();self.batch.refresh_from_db()
+            self.assertTrue(self.item.verification['refresh_requested'])
+            self.assertEqual(self.batch.status,'preview_queued')
+            self.batch.status='checking';self.batch.save()
+            client=Mock(inventory_warnings=[],cleanup_plan=[],search_diagnostics={})
+            with patch.object(d,'connection') as connect, patch.object(d,'validate_live',return_value=self.obj), patch.object(d,'delete_once') as delete:
+                connect.return_value.__enter__.return_value=client
+                d.run(self.batch.pk)
+                delete.assert_not_called()
+        self.item.refresh_from_db();self.finding.refresh_from_db();self.batch.refresh_from_db()
+        self.assertEqual(self.item.status,'verified',self.item.message)
+        self.assertEqual(self.finding.approvals,approvals)
+        self.assertNotIn('refresh_requested',self.item.verification)
+        self.assertIn('timings',self.item.verification)
+        self.assertIsNone(self.batch.confirmed_at)
+
+    def test_execution_uses_a_fresh_run_scoped_scan_never_a_preview_cache(self):
+        # A preview cache is never handed to execution; run() builds a new one per run.
+        seen=[]
+        client=Mock(inventory_warnings=[],cleanup_plan=[])
+        def check(current,finding):
+            seen.append(current.preview_dependency_cache)
+            raise ValidationError('New references found during fresh execution check')
+        self.batch.status='running';self.batch.save()
+        with patch.object(d,'approvals_valid',return_value={}), patch.object(d,'connection') as connect, \
+             patch.object(d,'validate_live',side_effect=check), patch.object(d,'delete_once') as delete:
+            connect.return_value.__enter__.return_value=client
+            d.run(self.batch.pk)
+            delete.assert_not_called()
+        cache,=seen
+        self.assertTrue(cache['execution'])
+        self.assertNotIn('evidence',cache)
+        self.assertEqual((cache['targets'],cache['deleted']),([self.item.path],set()))
+        self.item.refresh_from_db()
+        self.assertEqual(self.item.status,'blocked')
+
+    @patch.object(d, 'approvals_valid', new=lambda finding: {})
+    def test_republication_without_relevant_change_does_not_block(self):
+        self.finding.revision+=1;self.finding.save()
+        d.guard(self.batch,self.finding,self.item)  # Same evidence, approvals and identity.
+        self.finding.evidence=dict(self.evidence,configuration=dict(self.evidence['configuration'],description='changed'))
+        with self.assertRaisesMessage(ValidationError,'The finding changed'):
+            d.guard(self.batch,self.finding,self.item)
+        self.finding.evidence=self.evidence
+        self.item.approved_evidence={}  # Not yet previewed: the exact revision is required.
+        with self.assertRaisesMessage(ValidationError,'The finding changed'):
+            d.guard(self.batch,self.finding,self.item)
+
+    def test_shared_scan_excludes_deleted_objects_and_orders_same_request_references(self):
+        rule={'resource_type':'Rule','path':'/infra/domains/default/security-policies/p/rules/r','services':[self.obj['path']]}
+        scan=([self.obj,rule],{'mode':'all_types'})
+        with patch.object(d,'approvals_valid',return_value={}), patch.object(d.collector,'objects',return_value=[]), \
+             patch.object(d.collector,'verified_configuration_search',return_value=scan) as search:
+            preview={'targets':[self.obj['path'],rule['path']],'deleted':set(),'execution':False}
+            client=Mock(inventory_warnings=[],preview_dependency_cache=preview); client.get.return_value=self.obj
+            self.assertEqual(d.validate_live(client,self.finding),self.obj)
+            self.assertEqual(client.batch_dependencies,[rule['path']])
+            self.assertIsNotNone(client.dependency_scanned_at)
+            execution={'targets':[self.obj['path']],'deleted':set(),'execution':True}
+            client=Mock(inventory_warnings=[],preview_dependency_cache=execution); client.get.return_value=self.obj
+            with self.assertRaisesMessage(ValidationError,'Referenced by: '+rule['path']):
+                d.validate_live(client,self.finding)
+            execution['deleted'].add(rule['path'])  # Deleted earlier in this run and verified absent.
+            self.assertEqual(d.validate_live(client,self.finding),self.obj)
+            self.assertEqual(search.call_count,2)  # The execution scan was reused within the window.
+
+    def test_execution_deletes_referencing_objects_first(self):
+        items=[Mock(path='/group', verification={'batch_dependencies':['/rule']}),
+               Mock(path='/child', verification={'batch_dependencies':['/group']}),
+               Mock(path='/rule', verification={})]
+        self.assertEqual([item.path for item in d.dependency_order(items)],['/rule','/group','/child'])
+        cycle=[Mock(path='/a', verification={'batch_dependencies':['/b']}), Mock(path='/b', verification={'batch_dependencies':['/a']})]
+        self.assertEqual([item.path for item in d.dependency_order(cycle)],['/a','/b'])
+
+    def test_objects_that_cannot_finish_before_authorization_ends_are_not_attempted(self):
+        self.batch.status='running';self.batch.confirmed_at=timezone.now()-timedelta(minutes=59,seconds=30);self.batch.save()
+        self.item.verified_at=self.batch.confirmed_at;self.item.save()
+        with patch.object(d,'connection') as connect, patch.object(d,'delete_once') as delete:
+            d.run(self.batch.pk)
+            connect.assert_not_called();delete.assert_not_called()
+        self.item.refresh_from_db();self.batch.refresh_from_db()
+        self.assertEqual(self.item.status,'not_attempted')
+        self.assertIn('No change was made in NSX',self.item.message)
+        self.assertEqual(self.batch.status,'completed')
+        response=self.client.get(reverse('deletion-detail',args=[self.batch.pk]))
+        self.assertContains(response,'Not attempted')
+        self.assertContains(response,'?remaining='+str(self.batch.pk))
+        self.assertContains(response,'0 deleted · 0 blocked · 1 not attempted')
+
+    def test_interrupted_execution_marks_untouched_objects_not_attempted(self):
+        self.batch.status='running';self.batch.save()
+        d.interrupted(self.batch.pk)
+        self.item.refresh_from_db()
+        self.assertEqual(self.item.status,'not_attempted')
+
+    @patch.object(d, 'approvals_valid', new=lambda finding: {})
+    def test_authorized_refresh_runs_for_the_whole_plan_and_stops_instead_of_looping(self):
+        from . import deletion_plan as plan
+        self.batch.status='preview_ready';self.batch.confirmed_at=None;self.batch.ticket='';self.batch.save()
+        self.item.verified_at=timezone.now()-timedelta(minutes=11);self.item.save()
+        def arm(refreshes):
+            items=list(self.batch.items.order_by('pk'))
+            self.batch.execution_intent={'state':'armed','actor_id':str(self.user.pk),'ticket':'CHG-auto','refreshes':refreshes,
+                'fingerprint':plan.fingerprint(self.batch,items),'expires_at':(timezone.now()+timedelta(minutes=30)).isoformat()}
+            self.batch.status='preview_ready';self.batch.save()
+        arm(0)
+        with patch.object(plan,'can_execute',return_value=True):
+            plan.maybe_schedule(self.batch.pk)
+            self.batch.refresh_from_db();self.item.refresh_from_db()
+            self.assertEqual((self.batch.status,self.item.status,self.batch.execution_intent['refreshes']),('preview_queued','pending',1))
+            self.item.status='verified';self.item.save()
+            arm(plan.MAX_AUTOMATIC_REFRESHES)
+            plan.maybe_schedule(self.batch.pk)
+        self.batch.refresh_from_db()
+        self.assertEqual(self.batch.execution_intent['state'],'stopped')
+        self.assertIn('Confirm a smaller set',self.batch.execution_intent['message'])
+        self.assertIsNone(self.batch.confirmed_at)
+
+    def test_deletion_reads_are_paced_with_bounded_retries(self):
+        from .credentials import encrypt_password
+        self.env.username='reader';self.env.password_ciphertext=encrypt_password('test-only');self.env.retries=5;self.env.save()
+        with d.connection(self.env) as client:
+            self.assertEqual(client.retries,d.READ_RETRIES)
+            self.assertTrue(hasattr(client,'request_pacer'))
+
+
 @override_settings(STORAGES={'staticfiles': {'BACKEND': 'django.contrib.staticfiles.storage.StaticFilesStorage'}})
 class RemainingWorkTests(TestCase):
     def setUp(self):
@@ -550,3 +749,32 @@ class RemainingWorkTests(TestCase):
         self.assertNotIn(self.finding.pk, active.values_list('pk', flat=True))
         history, _, _ = filtered_findings(request, self.env, {'review':'rejected'})
         self.assertIn(self.finding.pk, history.values_list('pk', flat=True))
+
+
+@override_settings(STORAGES={'staticfiles': {'BACKEND': 'django.contrib.staticfiles.storage.StaticFilesStorage'}})
+class DeletionPresentationTests(TestCase):
+    """Step cards and titles are presentation only; they follow the request state."""
+    def setUp(self):
+        from django.contrib.auth import get_user_model
+        from .models import Environment, DeletionBatch
+        self.admin = get_user_model().objects.create_superuser('deletion-view-admin', password='synthetic-only')
+        self.env = Environment.objects.create(name='Deletion view', slug='deletion-view', manager='https://deletion-view.invalid')
+        self.batch = DeletionBatch.objects.create(environment=self.env, requested_by=self.admin, manager=self.env.manager, status='checking')
+        self.client.force_login(self.admin)
+
+    def states(self):
+        from django.urls import reverse
+        response = self.client.get(reverse('deletion-detail', args=[self.batch.pk]))
+        self.assertEqual(response.status_code, 200)
+        return response, [step['state'] for step in response.context['deletion_steps']]
+
+    def test_steps_and_titles_follow_the_request(self):
+        response, states = self.states()
+        self.assertEqual(states, ['current', 'next', 'next', 'next', 'next'])
+        self.assertEqual(response.context['deletion_title'], 'Deletion preview')
+        self.assertContains(response, 'aria-current="step"', count=1)
+        self.batch.status = 'cancelled'; self.batch.save(update_fields=['status'])
+        response, states = self.states()
+        self.assertEqual(set(states), {'next'})
+        self.assertEqual(response.context['deletion_title'], 'Deletion request cancelled')
+        self.assertNotContains(response, 'aria-current="step"')

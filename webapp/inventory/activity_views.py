@@ -1,6 +1,8 @@
 """Read-only overview of independent background queues."""
+from .preferences import table_page_size
 from django.contrib.auth.decorators import login_required
-from django.shortcuts import render, get_object_or_404, redirect
+from django.shortcuts import get_object_or_404, redirect
+from .page_response import render
 from django.urls import reverse
 from django.views.decorators.http import require_GET
 from . import activity_feed
@@ -30,12 +32,12 @@ def activity(request):
         # Keep active work visible even when there are many recent completions.
         return list(query.filter(status__in=['queued', 'running', 'cancelling']).order_by(time_field)[:30]) + list(query.exclude(status__in=['queued', 'running', 'cancelling']).order_by('-' + time_field)[:30])
     if kind in ('', 'collection'):
-        rows = AuditJob.objects.select_related('environment', 'snapshot').only('id', 'environment__id', 'environment__name', 'snapshot__id', 'status', 'created_at', 'started_at', 'finished_at', 'progress_stage')
+        rows = AuditJob.objects.select_related('environment', 'snapshot').only('id', 'environment__id', 'environment__name', 'snapshot__id', 'status', 'created_at', 'started_at', 'finished_at', 'progress_stage', 'progress_completed')
         if selected: rows = rows.filter(environment_id=selected) if selected.isdecimal() and len(selected)<19 else rows.none()
         for job in limited(rows, 'created_at'):
             url = reverse('snapshot', args=[job.snapshot.pk]) if hasattr(job, 'snapshot') else reverse('environment', args=[job.environment_id])
-            tasks.append(dict(kind='Collection', environment=job.environment.name, status=job.status,
-                at=job.created_at, started=job.started_at, finished=job.finished_at, detail=job.progress_stage, url=url, link_label='View collection results' if hasattr(job, 'snapshot') else 'View environment collections'))
+            tasks.append(dict(kind='Collection', environment=job.environment.name, status=job.status, status_label=job.get_status_display(),
+                at=job.created_at, started=job.started_at, finished=job.finished_at, detail=job.progress['stage'], url=url, link_label='View collection results' if hasattr(job, 'snapshot') else 'View environment collections'))
     if kind in ('', 'review'):
         rows = FindingRecalculation.objects.select_related('environment').only('environment__id', 'environment__name', 'status', 'requested_at', 'started_at', 'finished_at', 'processed', 'total', 'error')
         if selected: rows = rows.filter(environment_id=selected) if selected.isdecimal() and len(selected)<19 else rows.none()
@@ -57,7 +59,7 @@ def activity(request):
         tasks += activity_feed.deletion_cards(request, options, selected, state == 'active')
     page = None
     if tab == 'audit':
-        page = Paginator(activity_feed.audit_rows(request, options, selected, kind), 50).get_page(request.GET.get('page'))
+        page = Paginator(activity_feed.audit_rows(request, options, selected, kind), table_page_size(request)).get_page(request.GET.get('page'))
         tasks = activity_feed.audit_cards(page)
     elif tab == 'all' and state != 'active':
         tasks += activity_feed.audit_cards(activity_feed.audit_rows(request, options, selected, kind).filter(action__startswith='finding.').exclude(action__startswith='finding.nsx_')[:100])

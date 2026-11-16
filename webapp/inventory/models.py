@@ -5,6 +5,7 @@ from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.core.validators import MaxValueValidator, MinValueValidator, RegexValidator
 from django.db import models
+from django.utils import timezone
 from django.core.serializers.json import DjangoJSONEncoder
 
 env_name = RegexValidator(r"^[A-Za-z_][A-Za-z0-9_]*$", "Use an environment variable name.")
@@ -44,7 +45,8 @@ class Environment(models.Model):
     enabled = models.BooleanField(default=True)
     sync_interval_minutes = models.PositiveIntegerField(default=60, choices=[
         (0, "Manual only"), (15, "Every 15 minutes"), (30, "Every 30 minutes"),
-        (60, "Every hour"), (360, "Every 6 hours"), (720, "Every 12 hours"),
+        (60, "Every hour"), (120, "Every 2 hours"), (180, "Every 3 hours"),
+        (240, "Every 4 hours"), (360, "Every 6 hours"), (480, "Every 8 hours"), (720, "Every 12 hours"),
         (1440, "Daily"), (10080, "Weekly")])
     next_sync_at = models.DateTimeField(null=True, blank=True, editable=False)
 
@@ -89,12 +91,19 @@ class AuditJob(models.Model):
     progress_completed = models.PositiveSmallIntegerField(default=0, validators=[MaxValueValidator(7)])
     progress_stage = models.CharField(max_length=150, default="Waiting for a collection worker")
 
+    def get_status_display(self):
+        # Collection labels also reach polling responses and bulk exports.
+        if self.status == self.Status.RUNNING:
+            return "Collecting"
+        return dict(self.Status.choices).get(self.status, self.status)
+
     @property
     def progress(self):
         completed = 7 if self.status == "succeeded" else min(self.progress_completed, 6)
         stage = (("Completed with coverage warnings" if self.progress_stage == "Completed with coverage warnings" else "Completed") if self.status == "succeeded" else
                  "Stopped · " + self.progress_stage if self.status == "failed" else self.progress_stage)
-        stage = stage.replace("Waiting for an audit worker", "Waiting for a collection worker")
+        if stage in ("Waiting for an audit worker", "Waiting for a collection worker"):
+            stage = "Waiting to start"
         return {"completed": completed, "total": 7, "percent": completed * 100 // 7, "stage": stage}
 
     class Meta:
@@ -114,6 +123,9 @@ class CollectionStopRequest(models.Model):
 
 
 class Snapshot(models.Model):
+    browsing_status = models.CharField(max_length=16, default='ready')
+    browsing_refreshed_at = models.DateTimeField(null=True)
+
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     environment = models.ForeignKey(Environment, on_delete=models.PROTECT, related_name="snapshots")
     job = models.OneToOneField(AuditJob, null=True, blank=True, on_delete=models.PROTECT, related_name="snapshot")
@@ -161,6 +173,13 @@ class UserPreferences(models.Model):
 
 
 class RetentionPolicy(models.Model):
+    browsing_days = models.PositiveIntegerField(default=0, validators=[MaxValueValidator(3650)])
+    cache_days = models.PositiveIntegerField(default=30, validators=[MaxValueValidator(3650)])
+    clear_legacy_html = models.BooleanField(default=False)
+    database_budget_gib = models.PositiveIntegerField(default=0, validators=[MaxValueValidator(1000000)])
+    storage_warning_percent = models.PositiveSmallIntegerField(default=80, validators=[MinValueValidator(1), MaxValueValidator(100)])
+    storage_forecast_days = models.PositiveSmallIntegerField(default=30, validators=[MinValueValidator(1), MaxValueValidator(365)])
+
     id = models.PositiveSmallIntegerField(primary_key=True, default=1, editable=False)
     enabled = models.BooleanField(default=True)
     snapshot_days = models.PositiveIntegerField(default=180, choices=[(0, 'Keep forever'), (91, '91 days'), (180, '180 days'), (365, '1 year'), (730, '2 years')])
@@ -313,7 +332,22 @@ class SnapshotPanel(models.Model):
         constraints = [models.UniqueConstraint(fields=['snapshot', 'slug'], name='snapshot_panel_unique')]
 
 
+class SnapshotSearchDocument(models.Model):
+    """Exact shared search text; immutable and independent of observation evidence."""
+    digest = models.CharField(max_length=64, unique=True)
+    text = models.TextField()
+
+
+class RetentionState(models.Model):
+    environment = models.OneToOneField(Environment, on_delete=models.CASCADE)
+    checked_at = models.DateTimeField(null=True)
+    completed_at = models.DateTimeField(null=True)
+    retry_at = models.DateTimeField(null=True)
+    status = models.CharField(max_length=32, default="pending")
+
+
 class SnapshotRecord(models.Model):
+    search_document = models.ForeignKey(SnapshotSearchDocument, null=True, on_delete=models.PROTECT)
     relationships_ready = models.BooleanField(default=False)
     snapshot = models.ForeignKey(Snapshot, on_delete=models.CASCADE)
     ordinal = models.PositiveIntegerField()
@@ -329,7 +363,173 @@ class SnapshotRecord(models.Model):
 
     class Meta:
         constraints = [models.UniqueConstraint(fields=['snapshot', 'ordinal'], name='snapshot_record_unique')]
-        indexes = [models.Index(fields=['snapshot', 'sort_name'], name='snapshot_record_name')]
+        indexes = [models.Index(fields=['snapshot', 'sort_name'], name='snapshot_record_name'),
+                   models.Index(fields=['snapshot', 'ordinal'], condition=models.Q(data__kind='group'), name='snapshot_group_projection'),
+                   models.Index(fields=['snapshot', 'ordinal'], condition=models.Q(data__configuration__rule__isnull=False), name='snapshot_rule_projection')]
+
+
+class SnapshotAnalysisIndex(models.Model):
+    """Disposable, versioned configuration projections shared by web workers."""
+    snapshot = models.OneToOneField(Snapshot, primary_key=True, on_delete=models.CASCADE, related_name='analysis_index')
+    version = models.PositiveIntegerField(default=0)
+    groups = models.JSONField(null=True)
+    rules = models.JSONField(null=True)
+    services = models.JSONField(null=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+
+class SnapshotApplicationMap(models.Model):
+    projection = models.ForeignKey(SnapshotAnalysisIndex, on_delete=models.CASCADE, related_name='application_maps')
+    cache_key = models.CharField(max_length=64)
+    version = models.PositiveIntegerField()
+    source_stamp = models.DateTimeField()
+    payload = models.JSONField(default=dict)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=['projection','cache_key'], name='snapshot_application_map_key')]
+
+
+class MembershipLookup(models.Model):
+    """Current NSX observation; never modifies immutable snapshot evidence."""
+    environment = models.ForeignKey(Environment, on_delete=models.CASCADE)
+    namespace = models.CharField(max_length=64)
+    kind = models.CharField(max_length=8)
+    key = models.CharField(max_length=64)
+    subject = models.JSONField(default=dict)
+    status = models.CharField(max_length=20, default='not_collected')
+    checked_at = models.DateTimeField(null=True)
+    expires_at = models.DateTimeField(null=True)
+    notes = models.JSONField(default=list)
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=['environment', 'namespace', 'kind', 'key'], name='membership_lookup_identity')]
+
+
+class MembershipRelation(models.Model):
+    environment = models.ForeignKey(Environment, on_delete=models.CASCADE)
+    namespace = models.CharField(max_length=64)
+    vm_key = models.CharField(max_length=64)
+    group_key = models.CharField(max_length=64)
+    vm = models.JSONField(default=dict)
+    group = models.JSONField(default=dict)
+    checked_at = models.DateTimeField()
+    present = models.BooleanField(default=True)
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=['environment', 'namespace', 'vm_key', 'group_key'], name='membership_relation_pair')]
+        indexes = [models.Index(fields=['environment', 'namespace', 'group_key'], name='membership_relation_group')]
+
+
+class GroupMembershipSession(models.Model):
+    """One bounded live paging traversal, separate from shared positive edges."""
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    lookup = models.ForeignKey(MembershipLookup, on_delete=models.CASCADE, related_name='group_sessions')
+    snapshot = models.ForeignKey(Snapshot, on_delete=models.CASCADE)
+    started_at = models.DateTimeField(auto_now_add=True)
+    checked_at = models.DateTimeField(null=True)
+    expires_at = models.DateTimeField()
+    invalidated = models.BooleanField(default=False)
+    cursor = models.TextField(blank=True)
+    cursor_history = models.JSONField(default=list)
+    loaded_count = models.PositiveIntegerField(default=0)
+    reported_count = models.PositiveIntegerField(null=True)
+    status = models.CharField(max_length=20, default='partial')
+    notes = models.JSONField(default=list)
+
+
+class GroupMembershipItem(models.Model):
+    session = models.ForeignKey(GroupMembershipSession, on_delete=models.CASCADE, related_name='items')
+    key = models.CharField(max_length=64)
+    position = models.PositiveIntegerField()
+    member = models.JSONField(default=dict)
+    checked_at = models.DateTimeField()
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=['session', 'key'], name='group_page_member_identity'),
+                       models.UniqueConstraint(fields=['session', 'position'], name='group_page_member_position')]
+
+
+class SnapshotVMMembership(models.Model):
+    snapshot = models.ForeignKey(Snapshot, on_delete=models.CASCADE)
+    record_id = models.PositiveBigIntegerField()
+    groups = models.JSONField(default=list)
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=['snapshot', 'record_id'], name='snapshot_vm_membership')]
+
+
+class ReferenceExport(models.Model):
+    """Short-lived, owner-only downloads, prepared outside the collection lane."""
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    snapshot = models.ForeignKey(Snapshot, on_delete=models.CASCADE)
+    requested_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
+    request_key = models.UUIDField(default=uuid.uuid4)
+    created_at = models.DateTimeField(auto_now_add=True)
+    started_at = models.DateTimeField(null=True)
+    finished_at = models.DateTimeField(null=True)
+    expires_at = models.DateTimeField()
+    status = models.CharField(max_length=12, default='queued', db_index=True)
+    options = models.JSONField(default=dict)
+    observation = models.JSONField(default=dict)
+    artifact = models.BinaryField(null=True, editable=False)
+    artifact_bytes = models.PositiveIntegerField(default=0)
+    content_bytes = models.PositiveIntegerField(default=0)
+    checksum = models.CharField(max_length=64, blank=True)
+    filename = models.CharField(max_length=180, blank=True)
+    content_type = models.CharField(max_length=100, blank=True)
+    error = models.CharField(max_length=1000, blank=True)
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=['requested_by','request_key'],name='reference_export_request')]
+        indexes = [models.Index(fields=['status','created_at'],name='reference_export_queue'),
+                   models.Index(fields=['expires_at'],name='reference_export_expiry')]
+
+
+class SnapshotIPReferenceIndex(models.Model):
+    """Disposable saved-address index, built lazily without collection/API work."""
+    snapshot = models.OneToOneField(Snapshot, primary_key=True, on_delete=models.CASCADE)
+    version = models.PositiveIntegerField(default=0)
+    metadata = models.JSONField(default=dict)
+
+
+class SnapshotIPReferenceRange(models.Model):
+    projection = models.ForeignKey(SnapshotIPReferenceIndex, on_delete=models.CASCADE)
+    scope = models.CharField(max_length=64)
+    family = models.PositiveSmallIntegerField()
+    lower = models.DecimalField(max_digits=39, decimal_places=0)
+    upper = models.DecimalField(max_digits=39, decimal_places=0)
+    group_path = models.TextField()
+    group_name = models.TextField()
+    entry = models.TextField()
+    via = models.JSONField(default=list)
+
+    class Meta:
+        indexes = [models.Index(fields=['projection','scope','family','lower'],name='ip_ref_range_lower'),
+                   models.Index(fields=['projection','scope','family','upper'],name='ip_ref_range_upper')]
+
+
+class SnapshotVMAddress(models.Model):
+    projection = models.ForeignKey(SnapshotIPReferenceIndex, on_delete=models.CASCADE)
+    record = models.ForeignKey(SnapshotRecord, on_delete=models.CASCADE)
+    scope = models.CharField(max_length=64)
+    family = models.PositiveSmallIntegerField()
+    address = models.DecimalField(max_digits=39, decimal_places=0)
+    ip = models.CharField(max_length=45)
+
+    class Meta:
+        indexes = [models.Index(fields=['projection','scope','family','address'],name='ip_ref_vm_address')]
+        constraints = [models.UniqueConstraint(fields=['projection','record','ip'],name='ip_ref_vm_identity')]
+
+
+class SnapshotNamingAssessment(models.Model):
+    snapshot = models.ForeignKey(Snapshot, on_delete=models.CASCADE)
+    simulation = models.BooleanField(default=False)
+    signature = models.CharField(max_length=64)
+    rows = models.JSONField(default=list)
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=['snapshot', 'simulation'], name='snapshot_naming_mode')]
 
 
 class SnapshotRecordPanel(models.Model):
@@ -377,6 +577,7 @@ class SnapshotHistoryData(models.Model):
 
 
 class SnapshotComparison(models.Model):
+    cache_accessed_at = models.DateTimeField(default=timezone.now)
     status = models.CharField(max_length=16, default='queued', db_index=True)
     error = models.CharField(max_length=255, blank=True)
     before = models.ForeignKey(Snapshot, on_delete=models.CASCADE, related_name='comparisons_before')
@@ -424,7 +625,14 @@ class KeycloakIdentity(models.Model):
         constraints = [models.UniqueConstraint(fields=["issuer", "subject"], name="unique_keycloak_identity")]
 
 
+class SharedSnapshotJSON(models.Model):
+    digest = models.CharField(max_length=64, unique=True)
+    data = models.JSONField()
+
+
 class SnapshotVMRule(models.Model):
+    payload = models.ForeignKey(SharedSnapshotJSON, null=True, on_delete=models.PROTECT)
+
     """Shared VM relationship definition; provenance stays on each VM edge."""
     snapshot = models.ForeignKey(Snapshot, on_delete=models.CASCADE)
     path = models.TextField()
@@ -496,6 +704,8 @@ class FindingRecalculation(models.Model):
     processed = models.PositiveIntegerField(default=0)
     total = models.PositiveIntegerField(default=0)
     eligible = models.PositiveIntegerField(default=0)
+    paused = models.PositiveIntegerField(default=0)
+    recalculated = models.PositiveIntegerField(default=0)
     error = models.CharField(max_length=255, blank=True)
 
 
@@ -519,6 +729,8 @@ class SnapshotFindingEvidenceIndex(models.Model):
 
 
 class SnapshotRelationship(models.Model):
+    payload = models.ForeignKey(SharedSnapshotJSON, null=True, on_delete=models.PROTECT)
+
     record = models.ForeignKey(SnapshotRecord, on_delete=models.CASCADE, related_name='relationships')
     section = models.CharField(max_length=32)
     position = models.PositiveIntegerField()
@@ -539,6 +751,7 @@ class InitialPasswordChange(models.Model):
 
 
 class DeletionBatch(models.Model):
+    execution_intent = models.JSONField(default=dict, blank=True)
     confirmed_actor_id = models.CharField(max_length=32, blank=True, default='')
     confirmed_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, on_delete=models.SET_NULL, related_name='confirmed_nsx_deletions')
     source_request = models.ForeignKey('self', null=True, blank=True, on_delete=models.SET_NULL, related_name='execution_requests')
@@ -590,3 +803,129 @@ class DeletionItem(models.Model):
 
     class Meta:
         constraints = [models.UniqueConstraint(fields=['batch', 'path'], name='unique_deletion_target')]
+
+
+class StorageMeasurement(models.Model):
+    day = models.DateField(unique=True)
+    database_bytes = models.PositiveBigIntegerField()
+    environments = models.JSONField(default=list)
+
+
+class FindingLiveCheck(models.Model):
+    """Latest bounded read-only evidence check; never an execution authorization."""
+    finding = models.OneToOneField(Finding, on_delete=models.CASCADE, related_name='live_check')
+    requested_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, on_delete=models.SET_NULL)
+    status = models.CharField(max_length=20, default='queued')
+    requested_at = models.DateTimeField(default=timezone.now)
+    finished_at = models.DateTimeField(null=True)
+    snapshot_id_text = models.CharField(max_length=40, blank=True)
+    revision = models.PositiveIntegerField(default=0)
+    progress = models.PositiveIntegerField(default=0)
+    message = models.CharField(max_length=500, blank=True)
+    result = models.JSONField(default=dict)
+
+
+class NamingPolicy(models.Model):
+    name = models.CharField(max_length=120)
+    environment = models.ForeignKey(Environment, null=True, blank=True, on_delete=models.CASCADE)
+    draft = models.JSONField(default=dict)
+    configuration = models.JSONField(default=dict)
+    enabled = models.BooleanField(default=False)
+    removed_at = models.DateTimeField(null=True, blank=True)
+    revision = models.PositiveIntegerField(default=0)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['name', 'pk']
+
+
+class NamingPolicyVersion(models.Model):
+    policy = models.ForeignKey(NamingPolicy, on_delete=models.CASCADE, related_name='versions')
+    revision = models.PositiveIntegerField()
+    action = models.CharField(max_length=24)
+    configuration = models.JSONField(default=dict)
+    actor = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, on_delete=models.SET_NULL)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-revision']
+        constraints = [models.UniqueConstraint(fields=['policy', 'revision'], name='naming_version_unique')]
+
+
+class NamingScopeBinding(models.Model):
+    draft_scopes = models.JSONField(default=dict)
+    policy = models.ForeignKey(NamingPolicy, on_delete=models.CASCADE, related_name='bindings')
+    environment = models.ForeignKey(Environment, on_delete=models.CASCADE)
+    scopes = models.JSONField(default=dict)
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=['policy', 'environment'], name='naming_binding_unique')]
+
+
+class NamingProposal(models.Model):
+    workflow = models.JSONField(default=dict, blank=True)
+    expires_at = models.DateField(null=True, blank=True)
+    environment = models.ForeignKey(Environment, on_delete=models.CASCADE)
+    group_path = models.CharField(max_length=512)
+    object_type = models.CharField(max_length=12, default="group")
+    exception_policy_stamp = models.CharField(max_length=64, blank=True)
+    reviewed_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, on_delete=models.SET_NULL, related_name="+")
+    tags = models.JSONField(default=dict)
+    baseline = models.CharField(max_length=64)
+    state = models.CharField(max_length=20, default='draft')
+    owner = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL, related_name='naming_assignments')
+    author = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, on_delete=models.SET_NULL, related_name='+')
+    note = models.CharField(max_length=500, blank=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=['environment', 'object_type', 'group_path'], name='naming_proposal_unique')]
+
+
+class SegmentationSettings(models.Model):
+    environment = models.OneToOneField(Environment, on_delete=models.CASCADE)
+    grouping_scope = models.CharField(max_length=255, blank=True)
+
+
+class SegmentationBoundary(models.Model):
+    environment = models.ForeignKey(Environment, on_delete=models.CASCADE)
+    name = models.CharField(max_length=200)
+    source = models.TextField()
+    destination = models.TextField()
+    enabled = models.BooleanField(default=True)
+
+
+class SegmentationReview(models.Model):
+    environment = models.ForeignKey(Environment, on_delete=models.CASCADE)
+    rule_path = models.TextField()
+    fingerprint = models.CharField(max_length=64)
+    owner = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL)
+    state = models.CharField(max_length=16, default='open', choices=[('open','Open'),('reviewed','Reviewed'),('exception','Accepted exception')])
+    note = models.TextField(blank=True)
+    expires_at = models.DateField(null=True, blank=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=['environment','rule_path'], name='segmentation_review_unique')]
+
+
+class SegmentationSavedView(models.Model):
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
+    environment = models.ForeignKey(Environment, on_delete=models.CASCADE)
+    name = models.CharField(max_length=100)
+    filters = models.JSONField(default=dict)
+
+
+class FirewallRuleProposal(models.Model):
+    """Local planning artifact. Never accepted by any NSX execution workflow."""
+    environment = models.ForeignKey(Environment, on_delete=models.CASCADE)
+    snapshot = models.ForeignKey(Snapshot, null=True, on_delete=models.SET_NULL)
+    creator = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name='firewall_proposals')
+    owner = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL, related_name='assigned_firewall_proposals')
+    name = models.CharField(max_length=200)
+    configuration = models.JSONField(default=dict)
+    justification = models.TextField()
+    state = models.CharField(max_length=12, default='draft', choices=[('draft','Draft'),('discarded','Discarded')])
+    revision = models.PositiveIntegerField(default=1)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)

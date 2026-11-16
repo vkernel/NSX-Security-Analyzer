@@ -152,11 +152,13 @@ class IndexedReportTests(TestCase):
             response = self.client.get(reverse('snapshot',args=[self.snapshot.pk]))
         self.assertEqual(redirect_response.status_code,302)
         self.assertEqual(response.status_code,200)
-        forbidden = ['"summary"','"report"','"html"','"password_ciphertext"','"ca_bundle_pem"']
+        forbidden = ['"report"','"html"','"password_ciphertext"','"ca_bundle_pem"']
         for query in queries:
             if query['sql'].startswith('SELECT'):
                 for field in forbidden:
                     self.assertNotIn(field, query['sql'])
+                # Individual summary keys may be extracted server-side; the full column is never transferred.
+                self.assertNotRegex(query['sql'], r'"summary"(?! -> )')
         self.assertEqual(len(response.context['history']),4)
 
     def test_signed_count_reuse_and_changed_search(self):

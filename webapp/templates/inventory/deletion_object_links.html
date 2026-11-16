@@ -1,6 +1,6 @@
 <details class="evidence-disclosure"><summary>Evidence &amp; history</summary><nav class="object-evidence-links" aria-label="Evidence for {{ item.name|default:item.path }}">
-{% if item.finding_id %}<a href="{% url 'finding-detail' object_environment item.finding_id %}">View finding</a>{% else %}<span class="muted">Finding no longer available</span>{% endif %}
+{% if item.finding_id %}<a data-record-panel href="{% url 'finding-detail' object_environment item.finding_id %}">View finding</a>{% else %}<span class="muted">Finding no longer available</span>{% endif %}
 {% if item.has_configuration %}<a data-configuration-view href="{% url 'deletion-configuration' item.pk %}">View saved configuration</a>{% else %}<span class="muted">No configuration saved for this attempt</span>{% endif %}
 {% if show_impact %}{% if item.finding.snapshot_id %}<a href="{% url 'impact-preview' item.finding.snapshot_id %}?path={{ item.path|urlencode }}&amp;finding={{ item.finding_id }}">View saved impact preview</a>{% else %}<span class="muted">Source snapshot no longer available</span>{% endif %}{% endif %}
-{% if item.has_cleanup %}<a href="{% url 'deletion-reference-cleanup' item.pk %}">View rule cleanup and outcomes</a>{% endif %}</nav>
+{% if item.has_cleanup %}<a data-record-panel href="{% url 'deletion-reference-cleanup' item.pk %}">View rule cleanup and outcomes</a>{% endif %}</nav>
 </details>

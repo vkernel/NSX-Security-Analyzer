@@ -123,9 +123,22 @@ one after 2 and then 4 seconds. Attempts are not merged. After three unsuccessfu
 attempts, the final deduplicated inventory may be saved with coverage warnings;
 it is available to browse, but finding evaluation and approval are paused for the
 environment. Existing finding presence and observation progress are not advanced.
-Historical recalculation skips these unverified snapshots. A later verified full
+Historical recalculation skips these unverified snapshots without erasing earlier
+verified observations. The next successful observation is compared with the last
+successful observation using the applicable maximum gap; skipped snapshots do not
+increase the observation count or refresh that timestamp. VDI monitoring uses its
+own configured maximum gap. Confirmed opposite evidence and meaningful object
+changes still restart the period. A later verified full
 collection is required to resume normal evaluation; rebuilding an index does not
 verify missing NSX evidence.
+
+After upgrading from a version that reset periods on every historical coverage
+warning, save **Administration → Finding review criteria** with the existing
+values to queue a replay of retained history. Unchanged criteria replay all finding
+types. Save each environment override separately if used. Recovery depends on
+retained evidence; it does not reconstruct deleted snapshots or restore invalidated
+approvals. Historical snapshot assessments remain unchanged; Finding reviews show
+the recalculated current eligibility.
 
 For example, `1237/1238 unique objects; 1 duplicate rows` on
 `/infra/realized-state/virtual-machines` means the response contains 1,237 distinct
@@ -133,7 +146,7 @@ VM identities against a reported total of 1,238. A duplicate does not fill the g
 The message does not establish whether the cause is inventory churn, page overlap
 or an inconsistent NSX count. VM runtime-only differences are tolerated for seven
 known fields, but missing identities, tag changes and count checks remain strict.
-See [verification details](collection-performance.md#diagnostics).
+See [verification details](collection-performance.md#inventory-changes-during-collection).
 
 This differs from the cross-check that every directly collected group/service path
 appears in configuration search. Persistent missing search paths after three
@@ -246,11 +259,15 @@ Testing data has a shorter lifetime because it is not a full audit. These are st
 values, not a guarantee of database capacity: collection frequency, snapshot size and
 environment count still determine storage requirements.
 
-The scheduler performs cleanup at most once per hour. Keep the scheduler running.
+The scheduler tracks cleanup per environment. Cleared environments are checked hourly;
+busy environments and remaining backlogs retry after one minute. Keep the scheduler running.
 The latest full snapshot and latest testing snapshot in each environment are always
 preserved, even after their retention period. Retained snapshots protect their source
 collection records. Environments with queued or running collections are skipped.
-Deletion occurs in batches, so a backlog can take multiple cleanup cycles.
+Deletion commits separately per environment, with at most two snapshots and 100 finished
+collection records per transaction. Cleanup is attempted before queuing the next automatic
+collection. The retention page shows expired counts even when an environment is busy,
+along with its last successful check. A backlog can take multiple cleanup cycles.
 
 Migration `0028` enables existing disabled policies once on upgrade. Existing retention
 periods, including “Keep forever”, are preserved. New policies use **180 / 7 / 180
@@ -317,9 +334,11 @@ build, or the mutable `development` tag for testing. Pin the same published buil
 for migration, web, worker and scheduler; changing only the web image does not
 update background processing. Release installation defaults are pinned to 0.5.3.
 
-The default `audit_worker --lane all` supervises three independent queues, allowing
-one collection, one finding-review indexing/recalculation and one comparison to run
-side by side. Extra tasks of each type wait. PostgreSQL leases enforce these limits
+The default `audit_worker --lane all` supervises six independent lanes: collection,
+finding-review indexing/recalculation, comparison, deletion preview, deletion
+execution and reference exports. One task per lane can run side by side; extra
+tasks of each type wait. See [reference exports](reference-exports.md) for the
+export lane and its retention limits. PostgreSQL leases enforce these limits
 across replicas; same-environment publication can briefly wait on a database lock.
 See System health for each lane's heartbeat and worker logs for actual progress.
 
@@ -360,7 +379,7 @@ Action dialogs, including diagnostic collection and table column filters, use a 
 
 Open **Activity** in the top bar to follow collections, finding review indexing and snapshot comparisons together. Filter by environment, task type or active/failed status. Each type has its own worker queue. The view is bounded to 30 active and 30 recent tasks per type (60 when filtering by status); finding indexing shows the latest task per environment. Comparison age is time since its original request, not measured processing duration.
 
-Activity, comparison preparation and finding recalculation status refresh while their page is visible, using your refresh interval. Updates pause inside a focused task region or an expanded detail to avoid interrupting reading. Collection state changes update in place instead of reloading the page, preserving snapshot selections. Follow **View collection result** when finished. Refresh the finding list after recalculation to load its new membership.
+Activity, comparison preparation and finding recalculation status refresh while their page is visible, using your refresh interval. Expanded details and focused fields retain their state while statuses update. Open confirmation dialogs keep their controls stable while background checks continue. Connection failures retry automatically with bounded backoff. Collection state changes update in place instead of reloading the page, preserving snapshot selections. Follow **View collection result** when finished. Finding and Activity lists offer **Show new results** when membership changes, preserving the current list and selection until accepted.
 
 ## Upgrading approval settings and confirmed deletion
 
@@ -391,7 +410,7 @@ its saved JSON for manual work in NSX. This administrator-only viewer never cont
 NSX. Keep downloads under the same access controls as inventory exports; they can
 include internal addresses, tags and policy details. A historical record is not proof
 of current absence: check NSX before recreating anything after an uncertain outcome.
-See [manual recreation guidance](finding-review-workflow.md#view-saved-configuration-for-manual-recreation).
+See [manual recreation guidance](finding-review-workflow.md#saved-deletion-configuration).
 
 ### Scoped verification upgrade
 
@@ -424,3 +443,104 @@ from an overlapping snapshot. A new identity at the same path can be reviewed.
 Preserve deletion records as durable evidence; incomplete identity cannot prove recreation.
 Historical snapshots remain unchanged and display a reminder that deletion history
 and finding reviews carry current decommissioning outcomes.
+
+### Bounded container logs
+
+The local and Docker Hub Compose installations now set `json-file` logging with
+`max-size: "10m"` and `max-file: "3"` for every service, including PostgreSQL and
+maintenance containers. Recreate containers to apply these settings; existing containers
+do not adopt new log options automatically. External log forwarding and application
+audit retention remain separate. See [Docker logging configuration](https://docs.docker.com/engine/logging/configure/).
+Kubernetes deployments must configure rotation through the cluster/container runtime;
+Docker Compose logging settings are not a Kubernetes volume-retention policy.
+
+Storage lifecycle settings, archival/rebuild behavior, compaction commands and budget
+alerts are described in [resource sizing](resource-sizing.md#detailed-browsing-retention-cache-expiry-and-capacity-alerts).
+
+## Evidence for approval
+
+Finding review details show saved group membership status and definition, custom
+service entries, firewall rule settings/statistics, policy rules and incoming
+references. Lists are searchable and paginated. Missing saved member lists and
+counters are labelled unavailable; tag relationships are never presented as
+resolved membership. Saved evidence includes its collection time and remains
+separate from the current-state check.
+
+Operators can choose **Verify current state** for a read-only check using the
+existing environment account. It runs in the deletion-preview worker lane after
+pending deletion previews, independently of collection. It reads current object
+configuration, group VM/IP/port/switch members where supported, policy rules,
+rule counters where applicable and broad configuration reference search. No
+configuration write or DELETE is sent. Reference search remains eventually
+consistent. Unsupported or denied endpoints remain incomplete; a read-only
+success does not demonstrate write permissions.
+
+Progress updates every three seconds without replacing the approval form or
+expanded evidence lists. Checks have a ten-minute execution deadline (or the
+shorter configured audit timeout); interrupted checks end with an explicit error.
+The latest check replaces the prior browsing result, retaining at most 2,000
+entries per list; pagination and searches apply to those retained entries. Counts
+refer to the complete response when pagination verification succeeds. Approvals
+record compact member identity fingerprints when a successful check is available,
+so subsequent checks can detect membership changes without duplicating full lists.
+
+A pending, incomplete or changed check blocks approval for the same saved snapshot.
+Detected changes invalidate existing approvals; a new collection and renewed review
+are required. A concurrently changed finding makes the check stale. Run a new
+check or collect fresh evidence; successful checks never extend observation periods
+or replace final deletion verification. After completion, the page automatically
+synchronizes server-evaluated decision controls. Draft reasons remain intact; a changed review revision requires reviewing the updated finding before approval. The page compares saved evidence with
+the latest owner approval, including an invalidated approval where retained.
+
+Apply migration **0054** before deploying matching web and worker images.
+
+
+### New snapshots: Preparing browsing data
+
+A collection publishes its snapshot and findings first, then builds the browsing index.
+Until that finishes the snapshot page shows **Preparing browsing data** (status
+`indexing`). If indexing fails or the collector is stopped or times out while
+indexing, the snapshot is queued for the background rebuild, which the comparison lane
+runs with `index_snapshots`. A snapshot left in `failed` can be rebuilt by an
+administrator from its page; no new collection is needed.
+
+### Deletion speed, time limits and "Not attempted"
+
+Each preview or execution run performs one full live dependency scan (all
+domains, groups, services and a complete NSX search) and reuses it for later
+objects of the same run for up to 120 seconds, then scans again. Object identity,
+configuration, condition checks and the final read immediately before DELETE stay
+per object. A preview's verification time is the time of the scan it used, so the
+ten-minute confirmation window starts when the dependency evidence was read.
+Reference cleanup always forces a fresh scan before the group is deleted.
+
+Objects that reference each other in one request no longer block each other in
+the preview. Execution deletes the referencing objects first (rules, then the
+groups and services they used, parents before nested groups). Objects verified
+absent earlier in the run are not counted as references. If a referencing object is
+not deleted, the live check blocks the object it referenced.
+
+Read-only verification requests use shared NSX pacing (Retry-After and 429
+cooldown) with up to two retries. DELETE and rule PUT requests are never retried.
+A later collection that republishes a finding without changing its identity,
+configuration, evidence or approvals no longer blocks a queued deletion.
+
+Before each object, the worker checks that it can finish before the one-hour
+execution authorization and the worker time limit end. Objects that cannot are
+marked **Not attempted** (no change was made in NSX) instead of failing, and the
+request offers **Preview remaining work**. A worker restart also marks untouched
+objects **Not attempted**. An armed automatic execution refreshes an expired plan
+at most twice, then stops and asks for a smaller set or manual confirmation.
+
+### Replacing an expired deletion preview
+
+A preview expires ten minutes after verification unless confirmed in time. Starting a new preview retires overlapping expired verification entries under a database lock, records the expiry in audit history, and queues fresh verification. It does not reuse the expired authorization or send NSX writes. Fresh previews, cleanup reviews, and queued/running executions still prevent duplicate requests.
+
+On older builds that redirect back to an expired preview, open **More actions & history → Cancel deletion request**, confirm cancellation, then create a fresh preview. Use this workaround only for the unconfirmed request showing **execution never started**; review outcomes before taking action on a request that has begun execution.
+
+
+### Naming policies
+
+Apply migrations **0055–0056** for group naming policies, version history, scope mappings and proposal ownership. See [Group naming policies](naming-policies.md) for activation, onboarding, evidence limitations and read-only guarantees. No automatic NSX/vCenter tag or name changes are introduced.
+
+Migration 0056 preserves earlier VM proposals as legacy records excluded from group assessment. Existing VM policies require review, saving as a group draft, preview and activation. Apply migrations before starting matching web and worker versions.

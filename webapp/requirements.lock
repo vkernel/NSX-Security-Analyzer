@@ -19,3 +19,6 @@ charset-normalizer==3.5.2
 idna==3.20
 ldap3==2.9.1
 pyasn1==0.6.1
+reportlab==5.1.0
+PyYAML==6.0.3
+pillow==13.0.0

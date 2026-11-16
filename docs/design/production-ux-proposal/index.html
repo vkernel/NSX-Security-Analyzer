@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Relay / Bridge · UX proposal</title>
+  <link rel="stylesheet" href="proposal.css"><script src="proposal.js" defer></script>
+</head>
+<body data-theme="light">
+  <a class="skip" href="#content">Skip to content</a>
+  <aside class="navigation">
+    <div class="rail">
+      <svg class="mark" viewBox="0 0 48 48" role="img" aria-label="NSX Security Analyzer"><g fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="square"><path d="M24 4 7 14v20l17 10 17-10V14Z"/><path d="M15 29V17h10v14h9"/><circle cx="15" cy="17" r="3"/><circle cx="34" cy="31" r="3"/></g></svg>
+      <button type="button" data-view="workspace"><svg><use href="#grid"/></svg>Overview</button>
+      <button type="button" data-view="inventory" aria-current="page"><svg><use href="#layers"/></svg>Inventory</button>
+      <button type="button" data-view="naming"><svg><use href="#tag"/></svg>Naming</button>
+      <a class="audit-link" href="../production-ux-audit-2026-11-03.md">Read audit ↗</a>
+    </div>
+    <div class="sections"><p>NSX Security Analyzer</p><h2 id="module-title">Inventory</h2><nav id="section-links" aria-label="Current module"></nav><small>Relay 04 · Bridge 06<br>Illustrative UX proposal</small></div>
+  </aside>
+  <header class="topbar">
+    <div class="context">
+      <button type="button" class="context-button" id="environment-trigger" popovertarget="environment-menu"><svg><use href="#layers"/></svg><span id="environment-name">Amsterdam</span><span class="chevron">⌄</span><span class="sr-only"> — change environment</span></button>
+      <span class="divider" aria-hidden="true"></span>
+      <button type="button" class="context-button snapshot-button" data-open="snapshots"><span class="snapshot-state">Latest snapshot</span><span id="snapshot-time">03 Nov, 12:21 UTC</span><span class="chevron">⌄</span></button>
+    </div>
+    <div class="utilities"><button type="button" id="theme-toggle" aria-label="Switch to dark mode" title="Switch to dark mode"><svg><use href="#moon"/></svg></button><span class="avatar" aria-label="Example user">A</span></div>
+    <div id="environment-menu" popover><label for="environment-search">Switch environment</label><input id="environment-search" type="search" placeholder="Find an environment"><div class="environment-options"><button type="button" data-environment="All environments" hidden>All environments</button><button type="button" data-environment="Amsterdam" aria-current="true">Amsterdam <span>Current</span></button><button type="button" data-environment="Rotterdam">Rotterdam</button><button type="button" data-environment="Zwolle">Zwolle</button></div><p id="environment-empty" hidden>No matching environments</p></div>
+  </header>
+  <main id="content" tabindex="-1">
+    <div class="proposal-note"><span>Design proposal · illustrative data</span><a href="../production-ux-audit-2026-11-03.md">Audit and implementation priorities ↗</a></div>
+    <div class="preview-tabs" role="group" aria-label="Preview a page"><button type="button" data-view="workspace">Workspace</button><button type="button" data-view="inventory" aria-pressed="true">Snapshot overview</button><button type="button" data-view="vms">VM list</button><button type="button" data-view="naming">Naming</button></div>
+    <div id="screen"></div>
+    <p class="credit">Design method: <a href="https://github.com/heydamir/unslop">Unslop by Damir Sokolovsky</a> · CC BY 4.0 · Preview only; no application or NSX connection</p>
+  </main>
+  <dialog class="drawer" aria-labelledby="drawer-title"><header><div><p id="drawer-kicker">Collection</p><h2 id="drawer-title"></h2></div><button type="button" id="drawer-close">Close</button></header><div id="drawer-content"></div></dialog>
+  <p class="status" role="status" hidden></p>
+  <svg class="icons" aria-hidden="true"><symbol id="grid" viewBox="0 0 24 24"><path d="M3 3h7v7H3zM14 3h7v7h-7zM3 14h7v7H3zM14 14h7v7h-7z"/></symbol><symbol id="layers" viewBox="0 0 24 24"><path d="m3 7 9-5 9 5-9 5-9-5Zm0 5 9 5 9-5M3 17l9 5 9-5"/></symbol><symbol id="tag" viewBox="0 0 24 24"><path d="M3 3h8l10 10-8 8L3 11V3Z"/><circle cx="7.5" cy="7.5" r="1"/></symbol><symbol id="moon" viewBox="0 0 24 24"><path d="M20 15A9 9 0 0 1 9 4a9 9 0 1 0 11 11Z"/></symbol><symbol id="sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 1v3m0 16v3M1 12h3m16 0h3M4 4l2 2m12 12 2 2M4 20l2-2M18 6l2-2"/></symbol></svg>
+</body>
+</html>

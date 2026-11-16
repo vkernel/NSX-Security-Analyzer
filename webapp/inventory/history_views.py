@@ -1,3 +1,4 @@
+from .preferences import table_page_size
 from . import page_queries
 """Environment-level history, coverage and review pages."""
 import json
@@ -8,13 +9,15 @@ from django.core.paginator import Paginator
 from django.db import transaction
 from django.db.models import Q
 from django.http import HttpResponseForbidden
-from django.shortcuts import get_object_or_404, redirect, render
+from django.shortcuts import get_object_or_404, redirect
+from .page_response import render
 from django.utils import timezone
 from django.views.decorators.http import require_GET, require_http_methods
 from .models import Environment, Finding, FindingEvent, DeletionItem
 from .forms import SnapshotComparisonForm, FindingReviewForm, BulkAssignmentForm
 from .findings import LABELS
 from .preferences import preferences
+from .page_response import status_request
 
 
 @login_required
@@ -33,7 +36,13 @@ def comparison(request, pk):
     if form.is_bound and form.is_valid():
         from .models import SnapshotComparison
         selected = form.cleaned_data
-        comparison_job, _ = SnapshotComparison.objects.get_or_create(before=selected['before'], after=selected['after'])
+        with transaction.atomic():
+            comparison_job, _ = SnapshotComparison.objects.get_or_create(before=selected['before'], after=selected['after'])
+            comparison_job = SnapshotComparison.objects.select_for_update().get(pk=comparison_job.pk)
+            comparison_job.cache_accessed_at = timezone.now()
+            if comparison_job.status == 'expired':
+                comparison_job.status = 'queued'
+            comparison_job.save(update_fields=['cache_accessed_at', 'status'])
         if comparison_job.ready:
             from django.db.models import Count
             rows = comparison_job.rows.all()
@@ -42,7 +51,7 @@ def comparison(request, pk):
             if change in change_choices: rows = rows.filter(data__status=change)
             elif change: rows = rows.none()
             rows = rows.values_list('data', flat=True)
-    page = Paginator(rows, preferences(request).page_size).get_page(request.GET.get('page'))
+    page = Paginator(rows, table_page_size(request)).get_page(request.GET.get('page'))
     for row in page:
         for difference in row.get('changes', []):
             difference['label'] = str(difference.get('field', '')).replace('_', ' ').capitalize()
@@ -62,19 +71,20 @@ def coverage(request, pk):
     environment = get_object_or_404(page_queries.environments(), pk=pk)
     days = int(request.GET.get('days', '30')) if request.GET.get('days', '30') in ('7', '30', '90') else 30
     result = dashboard(environment, days, lazy=True)
-    page = Paginator(result.pop('issues'), preferences(request).page_size).get_page(request.GET.get('page'))
+    page = Paginator(result.pop('issues'), table_page_size(request)).get_page(request.GET.get('page'))
     return render(request, 'inventory/coverage.html', {'environment': environment, 'coverage': result,
         'days': days, 'page': page, 'query_string': f'days={days}', 'failed_count': result['failed'].count(),
-        'gap_page': Paginator(result['gaps'], 25).get_page(request.GET.get('gap_page')),
+        'gap_page': Paginator(result['gaps'], table_page_size(request)).get_page(request.GET.get('gap_page')),
         'jobs': page_queries.jobs(result['failed'])[:20]})
 
 
-def filtered_findings(request, environment, params):
-    rows = environment.findings.filter(Q(present=True, qualification='eligible') | Q(workflow_state__in=['owner_review','second_review','ready','rejected','decommissioned'])).select_related('owner__keycloakidentity', 'owner__ldapidentity').defer('evidence', 'approvals')
-    if not params.get('review'):
+def filtered_findings(request, environment, params, *, include_history=False):
+    source = environment.findings if environment else Finding.objects
+    rows = source.filter(Q(present=True, qualification='eligible') | Q(workflow_state__in=['owner_review','second_review','ready','rejected','decommissioned'])).select_related('owner__keycloakidentity', 'owner__ldapidentity').defer('evidence', 'approvals')
+    if not params.get('review') and not include_history:
         rows = rows.exclude(workflow_state__in=['rejected', 'decommissioned'])
     if params.get('review') == 'suppressed':
-        rows = environment.findings.filter(qualification='suppressed').select_related('owner__keycloakidentity', 'owner__ldapidentity').defer('evidence', 'approvals')
+        rows = source.filter(qualification='suppressed').select_related('owner__keycloakidentity', 'owner__ldapidentity').defer('evidence', 'approvals')
     else:
         rows = rows.exclude(qualification='suppressed')
     from .forms import FindingFilterForm
@@ -85,7 +95,7 @@ def filtered_findings(request, environment, params):
     if form.is_valid():
         values = form.cleaned_data
         if values['q']:
-            rows = rows.filter(Q(name__icontains=values['q']) | Q(path__icontains=values['q']))
+            rows = rows.filter(Q(name__icontains=values['q']) | Q(path__icontains=values['q']) | Q(environment__name__icontains=values['q']))
         if values['kind']: rows = rows.filter(kind=values['kind'])
         if values['review'] and values['review'] != 'suppressed':
             rows = rows.filter(workflow_state=values['review'])
@@ -155,36 +165,8 @@ def findings(request, pk):
         for detail in skipped:
             messages.warning(request, detail)
         return redirect(request.get_full_path())
-    # Only findings that met the administration policy enter the review queue.
-    from django.db.models import Count
-    qualification_counts = list(environment.findings.values('qualification').annotate(total=Count('pk')).order_by('qualification'))
-    rows, form, query = filtered_findings(request, environment, request.GET)
-    page = Paginator(rows, preferences(request).page_size).get_page(request.GET.get('page'))
-    from .deletion import KINDS
-    from .evidence_coverage import snapshot_issues, relevant
-    latest = environment.snapshots.filter(testing=False, imported=False).only('pk', 'summary').first()
-    coverage = snapshot_issues(latest) if latest else []
-    release_eligible = 0
-    for row in page:
-        row.label = 'Prolonged empty VDI group' if row.qualification_reason.startswith('Prolonged empty VDI group') else LABELS.get(row.kind, row.kind)
-        row.can_assign = bool(request.user.is_staff and not row.owner_id and row.workflow_state != 'decommissioned')
-        row.can_release = bool(request.user.is_staff and row.owner_id and row.workflow_state != 'decommissioned'
-                               and (row.owner_id == request.user.pk or request.user.is_superuser))
-        row.verification_paused = bool(relevant(coverage, row.kind, row.path))
-        row.can_delete = bool(request.user.is_superuser and row.owner_id and row.workflow_state == 'ready' and row.kind in KINDS)
-        release_eligible += int(row.can_release)
-    params = request.GET.copy()
-    params.pop('page', None)
-    from .cleanup_tasks import tasks as cleanup_tasks
-    cleanup_queue = {'second_review': 'second', 'ready': 'ready', 'owner_review': 'assigned'}.get(request.GET.get('review'), request.GET.get('review') or None)
-    return render(request, 'inventory/findings.html', {'environment': environment, 'page': page,
-        'cleanup_tasks': cleanup_tasks(request.user, environment=environment.pk, query=query, queue=cleanup_queue),
-        'release_eligible': release_eligible, 'review_return': request.get_full_path(),
-        'show_release_controls': request.user.is_staff,
-        'assignment_form': BulkAssignmentForm(initial={'owner': request.user.pk}),
-        'filters_active': any(request.GET.get(key, '').strip() for key in ('q', 'kind', 'review', 'owner')),
-        'qualification_counts': qualification_counts, 'query': query, 'filter_form': form, 'query_string': params.urlencode(),
-        'recalculation': environment.finding_recalculation if hasattr(environment, 'finding_recalculation') else None})
+    from .reviews import workspace
+    return workspace(request, environment, legacy=True)
 
 
 @login_required
@@ -258,8 +240,11 @@ def finding_detail(request, pk, finding_id):
     facts = [(label, fact_labels.get(str(value), str(value).replace('_', ' '))) for label, value in facts]
     owner_label = user_label(finding.owner)
     owner_name, _, owner_detail = owner_label.partition(' · ')
-    page = Paginator(finding.events.select_related('actor__keycloakidentity', 'actor__ldapidentity').defer('details'), 20).get_page(request.GET.get('page'))
+    page = Paginator(finding.events.select_related('actor__keycloakidentity', 'actor__ldapidentity').defer('details'), table_page_size(request)).get_page(request.GET.get('page'))
+    from .approval_evidence import saved, SUPPORTED
+    approval_evidence = saved(finding) if finding.kind in SUPPORTED else None
     return render(request, 'inventory/finding_detail.html', {'environment': environment, 'finding': finding,
+        'approval_evidence': approval_evidence,
         'deletion_records': DeletionItem.objects.filter(finding=finding).exclude(before={}).select_related('batch').order_by('-pk') if request.user.is_superuser else [],
         'impact_supported': '/groups/' in finding.path or '/security-policies/' in finding.path,
         'review_return': review_return, 'review_navigation': navigation(request, environment, finding, review_return),
@@ -281,6 +266,8 @@ def finding_policy(request):
         return HttpResponseForbidden('Administrator access is required.')
     selected = request.GET.get('environment', '')
     environment = get_object_or_404(Environment, pk=selected) if selected else None
+    if status_request(request):
+        return render(request,'inventory/finding_policy.html',{'recalculations':FindingRecalculation.objects.filter(**({'environment':environment} if environment else {})).select_related('environment').defer('environment__password_ciphertext','environment__ca_certificate').order_by('-requested_at')[:20]})
     scope = str(environment.pk) if environment else 'global'
     saved = FindingPolicy.objects.filter(scope=scope).first()
     inherited = policy_for(environment) if environment else FindingPolicy.objects.filter(scope='global').first() or FindingPolicy()
@@ -308,7 +295,7 @@ def finding_policy(request):
                 affected = [environment.pk] if environment else Environment.objects.exclude(pk__in=FindingPolicy.objects.filter(environment__isnull=False).values('environment_id')).values_list('pk', flat=True)
                 queue(affected, kinds)
             from django.contrib import messages
-            messages.success(request, 'Criteria saved. Finding reviews are being recalculated from retained collection history by the worker; no new collection is required.')
+            messages.success(request, 'Criteria saved. Reviews are being recalculated from retained collection history; no new collection is required.')
             return redirect(request.get_full_path())
     return render(request, 'inventory/finding_policy.html', {'form': form, 'selected': selected,
         'environment': environment, 'overridden': bool(saved), 'environments': Environment.objects.only('pk', 'name').order_by('name'),
@@ -394,40 +381,8 @@ def reviewer_search(request):
 @login_required
 @require_GET
 def my_work(request):
-    if not request.user.is_staff:
-        return HttpResponseForbidden('Operator access required.')
-    queue = request.GET.get('queue', 'assigned')
-    if queue not in ('assigned', 'second', 'ready', 'unassigned'): queue = 'assigned'
-    rows = Finding.objects.exclude(qualification='suppressed').select_related('environment', 'owner__keycloakidentity', 'owner__ldapidentity').defer('evidence', 'approvals')
-    if queue == 'unassigned': rows = rows.filter(owner__isnull=True, present=True, qualification='eligible').exclude(workflow_state='decommissioned')
-    elif queue == 'assigned': rows = rows.filter(owner=request.user, workflow_state='owner_review')
-    elif queue == 'second':
-        rows = rows.filter(workflow_state='second_review', required_approvals=2, owner__isnull=False).exclude(owner=request.user).exclude(approvals__owner__actor_id=str(request.user.pk))
-    else: rows = rows.filter(workflow_state='ready', owner__isnull=False)
-    term = request.GET.get('q', '').strip()[:255]
-    if term: rows = rows.filter(Q(name__icontains=term) | Q(environment__name__icontains=term))
-    selected_environment = request.GET.get('environment', '')
-    if selected_environment:
-        rows = rows.filter(environment_id=selected_environment) if selected_environment.isdecimal() and len(selected_environment)<19 else rows.none()
-    from django.db.models import OuterRef, Subquery
-    assigned = FindingEvent.objects.filter(finding_id=OuterRef('pk'), details__action='assign').order_by('-created_at', '-pk')
-    rows = rows.annotate(assigned_at=Subquery(assigned.values('created_at')[:1]))
-    sort = request.GET.get('sort', 'oldest')
-    ordering = {'oldest': ['assigned_at', 'pk'], 'name': ['name', 'pk'], 'environment': ['environment__name', 'name', 'pk']}.get(sort, ['assigned_at', 'pk'])
-    page = Paginator(rows.order_by(*ordering), preferences(request).page_size).get_page(request.GET.get('page'))
-    from .finding_workflow import approval_readiness
-    from .deletion import permitted, KINDS
-    show_deletion_controls = queue == 'ready' and permitted(request.user)
-    for finding in page:
-        finding.can_release = bool(finding.owner_id and finding.workflow_state != 'decommissioned' and (finding.owner_id == request.user.pk or request.user.is_superuser))
-        finding.can_assign = not finding.owner_id and finding.workflow_state != 'decommissioned'
-        finding.can_delete = bool(show_deletion_controls and finding.owner_id and finding.kind in KINDS)
-        finding.readiness = approval_readiness(finding)
-        finding.approval_count = len([key for key in ('owner', 'second') if key in finding.approvals])
-
-    from urllib.parse import urlencode
-    from .cleanup_tasks import tasks as cleanup_tasks
-    return render(request, 'inventory/my_work.html', {'cleanup_tasks': cleanup_tasks(request.user, environment=selected_environment, query=term, queue=queue), 'page': page, 'show_deletion_controls': show_deletion_controls, 'review_return': request.get_full_path(), 'queue': queue, 'query': term, 'environments': Environment.objects.only('pk','name'), 'work_environment': selected_environment, 'sort': sort, 'query_string': urlencode({'queue': queue, 'q': term, 'environment':selected_environment, 'sort':sort})})
+    from .reviews import workspace
+    return workspace(request)
 
 
 @login_required

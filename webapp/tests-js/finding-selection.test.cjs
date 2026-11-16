@@ -18,8 +18,8 @@ function setup() {
 }
 test('select all enables assignment, validates reviewer and submits selected revisions', () => {
   const dom=setup(), w=dom.window, d=w.document;
-  const all=d.getElementById('finding-select-all'); all.checked=true; all.dispatchEvent(new w.Event('change'));
-  assert.equal(d.getElementById('finding-selection-count').textContent,'2 selected');
+  const all=d.getElementById('finding-select-all'); all.checked=true; all.dispatchEvent(new w.Event('change',{bubbles:true}));
+  assert.equal(d.getElementById('finding-selection-count').textContent,'2 selected on this page');
   assert.equal(d.getElementById('release-open').disabled,true);
   d.getElementById('assign-open').click();
   assert.equal(d.getElementById('finding-assignment-dialog').open,true);
@@ -37,7 +37,7 @@ test('select all enables assignment, validates reviewer and submits selected rev
 test('mixed owned and unassigned selection cannot bulk assign', () => {
   const dom=setup(), w=dom.window, d=w.document;
   const boxes=d.querySelectorAll('[name="selected"]'); boxes[1].dataset.assignEligible='false';
-  boxes.forEach(box=>{box.checked=true;box.dispatchEvent(new w.Event('change'));});
+  boxes.forEach(box=>{box.checked=true;box.dispatchEvent(new w.Event('change',{bubbles:true}));});
   assert.equal(d.getElementById('assign-open').disabled,true);
   dom.window.close();
 });

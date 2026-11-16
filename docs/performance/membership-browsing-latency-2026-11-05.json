@@ -1,0 +1,107 @@
+{
+  "syntheticOnly": true,
+  "before": [
+    {
+      "cacheStale": false,
+      "alreadyCachedGroups": 4,
+      "rowsReturned": 4,
+      "appRequests": [
+        "GET"
+      ],
+      "millisecondsUntilResults": 23,
+      "assumedAppReadMilliseconds": 20,
+      "assumedNSXRefreshMilliseconds": 600
+    },
+    {
+      "cacheStale": true,
+      "alreadyCachedGroups": 4,
+      "rowsReturned": 4,
+      "appRequests": [
+        "GET",
+        "POST"
+      ],
+      "millisecondsUntilResults": 624,
+      "assumedAppReadMilliseconds": 20,
+      "assumedNSXRefreshMilliseconds": 600
+    }
+  ],
+  "after": [
+    {
+      "cacheStale": false,
+      "alreadyCachedGroups": 4,
+      "rowsReturned": 4,
+      "appRequests": [
+        "GET"
+      ],
+      "millisecondsUntilResults": 23,
+      "assumedAppReadMilliseconds": 20,
+      "assumedNSXRefreshMilliseconds": 600
+    },
+    {
+      "cacheStale": true,
+      "alreadyCachedGroups": 4,
+      "rowsReturned": 4,
+      "appRequests": [
+        "GET",
+        "POST"
+      ],
+      "millisecondsUntilResults": 23,
+      "assumedAppReadMilliseconds": 20,
+      "assumedNSXRefreshMilliseconds": 600
+    }
+  ],
+  "browser": {
+    "syntheticVMs": 1200,
+    "simulatedNSXResponseDelayMs": 1200,
+    "firstCachedGroupsMs": 72,
+    "refreshedGroupsMs": 1380,
+    "cachedGroupsShownBeforeRefresh": true,
+    "staleLabelVisible": true,
+    "groupRefreshRequests": [
+      "POST"
+    ],
+    "errors": []
+  },
+  "backendReview": {
+    "syntheticLiveGroup": {
+      "members": 10000,
+      "nsxPagesBeforeResponse": 10,
+      "assumedNSXPageMilliseconds": 40,
+      "elapsedMilliseconds": 462.7,
+      "status": "complete",
+      "displayRows": 25
+    },
+    "existingSyntheticCache": {
+      "vmInventory": 1200,
+      "milliseconds": 2.8,
+      "queries": 3,
+      "groupsReturned": 4
+    },
+    "syntheticFirewall": {
+      "rules": 3239,
+      "times": [
+        {
+          "milliseconds": 33.95,
+          "queries": 3,
+          "rowsReturned": 25
+        },
+        {
+          "milliseconds": 51.77,
+          "queries": 3,
+          "rowsReturned": 25
+        },
+        {
+          "milliseconds": 31.55,
+          "queries": 3,
+          "rowsReturned": 25
+        }
+      ],
+      "compactPathExpressionIndex": false
+    }
+  },
+  "limits": [
+    "Not a production NSX latency prediction.",
+    "Cold large-group checks still fetch all available pages before responding.",
+    "No production data used."
+  ]
+}

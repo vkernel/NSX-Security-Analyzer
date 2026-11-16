@@ -1,0 +1,419 @@
+{
+  "page_states": [
+    {
+      "name": "dashboard",
+      "url": "/"
+    },
+    {
+      "name": "environment-directory",
+      "url": "/environments/"
+    },
+    {
+      "name": "administration",
+      "url": "/administration/"
+    },
+    {
+      "name": "environment-schedules",
+      "url": "/administration/environments/"
+    },
+    {
+      "name": "all-collections",
+      "url": "/collections/"
+    },
+    {
+      "name": "activity",
+      "url": "/activity/"
+    },
+    {
+      "name": "my-work",
+      "url": "/my-work/"
+    },
+    {
+      "name": "testing-data",
+      "url": "/environments/testing-data/"
+    },
+    {
+      "name": "environment-new",
+      "url": "/environments/new/"
+    },
+    {
+      "name": "workspace-policy",
+      "url": "/administration/collection-policy/"
+    },
+    {
+      "name": "retention-settings",
+      "url": "/administration/retention/"
+    },
+    {
+      "name": "authentication-settings",
+      "url": "/administration/authentication/"
+    },
+    {
+      "name": "keycloak-settings",
+      "url": "/administration/keycloak/"
+    },
+    {
+      "name": "system-health",
+      "url": "/administration/health/"
+    },
+    {
+      "name": "audit-log",
+      "url": "/administration/audit/"
+    },
+    {
+      "name": "finding-policy",
+      "url": "/administration/finding-policy/"
+    },
+    {
+      "name": "review-approvals",
+      "url": "/administration/review-approvals/"
+    },
+    {
+      "name": "transient-emptiness",
+      "url": "/administration/transient-emptiness/"
+    },
+    {
+      "name": "password-change",
+      "url": "/account/password/"
+    },
+    {
+      "name": "naming-policies",
+      "url": "/administration/naming/"
+    },
+    {
+      "name": "settings-appearance",
+      "url": "/settings/?section=appearance"
+    },
+    {
+      "name": "settings-tables",
+      "url": "/settings/?section=tables"
+    },
+    {
+      "name": "settings-dates",
+      "url": "/settings/?section=dates"
+    },
+    {
+      "name": "settings-updates",
+      "url": "/settings/?section=updates"
+    },
+    {
+      "name": "settings-notifications",
+      "url": "/settings/?section=notifications"
+    },
+    {
+      "name": "environment",
+      "url": "/environments/1/"
+    },
+    {
+      "name": "environment-edit",
+      "url": "/environments/1/edit/"
+    },
+    {
+      "name": "environment-delete",
+      "url": "/environments/1/delete/"
+    },
+    {
+      "name": "collection-history",
+      "url": "/environments/1/collections/"
+    },
+    {
+      "name": "rule-history",
+      "url": "/environments/1/rule-history/"
+    },
+    {
+      "name": "snapshot-comparison",
+      "url": "/environments/1/compare/"
+    },
+    {
+      "name": "collection-coverage",
+      "url": "/environments/1/coverage/"
+    },
+    {
+      "name": "findings",
+      "url": "/environments/1/findings/"
+    },
+    {
+      "name": "deletion-history",
+      "url": "/environments/1/deletions/history/"
+    },
+    {
+      "name": "deletion-selection",
+      "url": "/environments/1/deletions/"
+    },
+    {
+      "name": "segmentation",
+      "url": "/environments/1/segmentation/"
+    },
+    {
+      "name": "segmentation-pair",
+      "url": "/environments/1/segmentation/workloads/"
+    },
+    {
+      "name": "naming-compliance",
+      "url": "/environments/1/naming/"
+    },
+    {
+      "name": "findings-unassigned",
+      "url": "/environments/1/findings/?review=unassigned"
+    },
+    {
+      "name": "findings-second_review",
+      "url": "/environments/1/findings/?review=second_review"
+    },
+    {
+      "name": "findings-ready",
+      "url": "/environments/1/findings/?review=ready"
+    },
+    {
+      "name": "findings-rejected",
+      "url": "/environments/1/findings/?review=rejected"
+    },
+    {
+      "name": "findings-decommissioned",
+      "url": "/environments/1/findings/?review=decommissioned"
+    },
+    {
+      "name": "findings-suppressed",
+      "url": "/environments/1/findings/?review=suppressed"
+    },
+    {
+      "name": "segmentation-matrix",
+      "url": "/environments/1/segmentation/?tab=matrix"
+    },
+    {
+      "name": "segmentation-priorities",
+      "url": "/environments/1/segmentation/?tab=priorities"
+    },
+    {
+      "name": "segmentation-settings",
+      "url": "/environments/1/segmentation/?tab=settings"
+    },
+    {
+      "name": "pair-populated",
+      "url": "/environments/1/segmentation/workloads/?snapshot=fbbfac0f-c8aa-487b-bd16-a8d632407aa2&source=%2Finfra%2Fvirtual-machines%2Faudit-database&destination=%2Finfra%2Fvirtual-machines%2Faudit-web&protocol=TCP&port=443"
+    },
+    {
+      "name": "pair-needs-assessment",
+      "url": "/environments/1/segmentation/workloads/?snapshot=fbbfac0f-c8aa-487b-bd16-a8d632407aa2&source=%2Finfra%2Fvirtual-machines%2Faudit-database&destination=%2Finfra%2Fvirtual-machines%2Faudit-web&protocol=TCP&port=443&status=unresolved"
+    },
+    {
+      "name": "proposal-new",
+      "url": "/environments/1/segmentation/proposals/new/?snapshot=fbbfac0f-c8aa-487b-bd16-a8d632407aa2&source=%2Finfra%2Fvirtual-machines%2Faudit-database&destination=%2Finfra%2Fvirtual-machines%2Faudit-web&protocol=TCP&port=443"
+    },
+    {
+      "name": "proposal-saved",
+      "url": "/environments/1/segmentation/proposals/1/"
+    },
+    {
+      "name": "policy-edit",
+      "url": "/administration/naming/1/"
+    },
+    {
+      "name": "policy-new",
+      "url": "/administration/naming/?new=1"
+    },
+    {
+      "name": "policy-duplicate",
+      "url": "/administration/naming/?duplicate=1"
+    },
+    {
+      "name": "policies-removed",
+      "url": "/administration/naming/?show=removed"
+    },
+    {
+      "name": "naming-compliant",
+      "url": "/environments/1/naming/?tab=compliant"
+    },
+    {
+      "name": "naming-exceptions",
+      "url": "/environments/1/naming/?tab=exceptions"
+    },
+    {
+      "name": "naming-all",
+      "url": "/environments/1/naming/?tab=all"
+    },
+    {
+      "name": "deletion-detail",
+      "url": "/deletions/b8b4a9f5-2c1d-49ce-b49b-967d6ae24132/"
+    },
+    {
+      "name": "deletion-plan",
+      "url": "/deletions/b8b4a9f5-2c1d-49ce-b49b-967d6ae24132/plan/"
+    },
+    {
+      "name": "deletion-configuration",
+      "url": "/deletion-items/2/configuration/"
+    },
+    {
+      "name": "deletion-reference-cleanup",
+      "url": "/deletion-items/2/reference-cleanup/"
+    },
+    {
+      "name": "collection-result",
+      "url": "/collections/13f00cd9-3001-4f33-9553-dbd31aa7109b/result/"
+    },
+    {
+      "name": "collection-diagnostics",
+      "url": "/collections/13f00cd9-3001-4f33-9553-dbd31aa7109b/diagnostics/"
+    },
+    {
+      "name": "task-cancel",
+      "url": "/tasks/deletion/b8b4a9f5-2c1d-49ce-b49b-967d6ae24132/cancel/"
+    },
+    {
+      "name": "impact-preview",
+      "url": "/snapshots/fbbfac0f-c8aa-487b-bd16-a8d632407aa2/impact/?path=%2Finfra%2Fdomains%2Fdefault%2Fgroups%2Fweb"
+    },
+    {
+      "name": "snapshot-overview",
+      "url": "/snapshots/fbbfac0f-c8aa-487b-bd16-a8d632407aa2/#overview"
+    },
+    {
+      "name": "snapshot-all-vms",
+      "url": "/snapshots/fbbfac0f-c8aa-487b-bd16-a8d632407aa2/#all-vms"
+    },
+    {
+      "name": "snapshot-all-groups",
+      "url": "/snapshots/fbbfac0f-c8aa-487b-bd16-a8d632407aa2/#all-groups"
+    },
+    {
+      "name": "snapshot-all-services",
+      "url": "/snapshots/fbbfac0f-c8aa-487b-bd16-a8d632407aa2/#all-services"
+    },
+    {
+      "name": "snapshot-tags-all",
+      "url": "/snapshots/fbbfac0f-c8aa-487b-bd16-a8d632407aa2/#tags-all"
+    },
+    {
+      "name": "snapshot-tags-scopes",
+      "url": "/snapshots/fbbfac0f-c8aa-487b-bd16-a8d632407aa2/#tags-scopes"
+    },
+    {
+      "name": "snapshot-dfw-overview",
+      "url": "/snapshots/fbbfac0f-c8aa-487b-bd16-a8d632407aa2/#dfw-overview"
+    },
+    {
+      "name": "snapshot-dfw-policies",
+      "url": "/snapshots/fbbfac0f-c8aa-487b-bd16-a8d632407aa2/#dfw-policies"
+    },
+    {
+      "name": "snapshot-dfw-rules",
+      "url": "/snapshots/fbbfac0f-c8aa-487b-bd16-a8d632407aa2/#dfw-rules"
+    },
+    {
+      "name": "snapshot-feature-guide",
+      "url": "/snapshots/fbbfac0f-c8aa-487b-bd16-a8d632407aa2/#feature-guide"
+    },
+    {
+      "name": "snapshot-coverage",
+      "url": "/snapshots/fbbfac0f-c8aa-487b-bd16-a8d632407aa2/#coverage"
+    },
+    {
+      "name": "snapshot-tags-coverage",
+      "url": "/snapshots/fbbfac0f-c8aa-487b-bd16-a8d632407aa2/#tags-coverage"
+    },
+    {
+      "name": "empty-inventory",
+      "url": "/workspace/inventory/?environment=2"
+    },
+    {
+      "name": "empty-environments",
+      "url": "/workspace/environments/?environment=2"
+    },
+    {
+      "name": "empty-firewall",
+      "url": "/workspace/firewall/?environment=2"
+    },
+    {
+      "name": "empty-help",
+      "url": "/workspace/help/?environment=2"
+    },
+    {
+      "name": "empty-segmentation",
+      "url": "/environments/2/segmentation/"
+    },
+    {
+      "name": "empty-naming-compliance",
+      "url": "/environments/2/naming/"
+    },
+    {
+      "name": "empty-findings",
+      "url": "/environments/2/findings/"
+    },
+    {
+      "name": "empty-environment",
+      "url": "/environments/2/"
+    },
+    {
+      "name": "admin:auth_user_changelist",
+      "url": "/admin/auth/user/"
+    },
+    {
+      "name": "admin:auth_user_add",
+      "url": "/admin/auth/user/add/"
+    },
+    {
+      "name": "admin:auth_group_changelist",
+      "url": "/admin/auth/group/"
+    },
+    {
+      "name": "admin:auth_group_add",
+      "url": "/admin/auth/group/add/"
+    },
+    {
+      "name": "admin-user-edit",
+      "url": "/admin/auth/user/2/change/"
+    },
+    {
+      "name": "admin-user-delete",
+      "url": "/admin/auth/user/2/delete/"
+    },
+    {
+      "name": "snapshot-archived",
+      "url": "/snapshots/ccc8e8af-7543-4c35-9b52-f31f956ba61a/"
+    },
+    {
+      "name": "removed-policy-detail",
+      "url": "/administration/naming/2/"
+    },
+    {
+      "name": "ldap-settings",
+      "url": "/administration/authentication/?provider=ldap"
+    },
+    {
+      "name": "bulk-confirmation-template",
+      "url": "/__style-audit__/bulk-review/"
+    },
+    {
+      "name": "finding-detail-unused-group",
+      "url": "/environments/1/findings/1/"
+    },
+    {
+      "name": "approval-recovery",
+      "url": "/environments/1/findings/1/recover-approval/"
+    },
+    {
+      "name": "finding-detail-unused-service",
+      "url": "/environments/1/findings/2/"
+    }
+  ],
+  "themes": [
+    "light",
+    "dark"
+  ],
+  "viewports": {
+    "desktop": [
+      1440,
+      1000
+    ],
+    "mobile_light": [
+      390,
+      844
+    ],
+    "mobile_dark": [
+      320,
+      844
+    ]
+  },
+  "synthetic_data": true
+}

@@ -40,8 +40,8 @@ class InterfaceConsistencyTests(TestCase):
 
     def test_findings_empty_and_filtered_states_differ(self):
         url = reverse('findings', args=[self.env.pk])
-        self.assertContains(self.client.get(url), 'No findings ready for review')
-        self.assertContains(self.client.get(url, {'q':'nonexistent'}), 'No matching findings')
+        self.assertContains(self.client.get(url), 'No matching tasks')
+        self.assertContains(self.client.get(url, {'q':'nonexistent'}), 'No matching tasks')
         self.assertContains(self.client.get(url, {'kind':'invalid'}), 'Check your filters')
         self.assertContains(self.client.get(reverse('my-work'), {'q':'nonexistent'}), 'No matching tasks')
 

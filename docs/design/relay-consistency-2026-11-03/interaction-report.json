@@ -1,0 +1,92 @@
+{
+  "checks": [
+    "light: saved report evidence, technical viewer and filter dialog use active theme",
+    "light: populated firewall-rule evidence drawer retains tabs and theme",
+    "light: naming component drawer matches page theme",
+    "light: historical report style isolation keeps fixed navigation and square section panel",
+    "light: 320/390 px metrics, paths and mobile navigation remain contained",
+    "dark: saved report evidence, technical viewer and filter dialog use active theme",
+    "dark: populated firewall-rule evidence drawer retains tabs and theme",
+    "dark: naming component drawer matches page theme",
+    "dark: historical report style isolation keeps fixed navigation and square section panel",
+    "dark: 320/390 px metrics, paths and mobile navigation remain contained",
+    "Both sign-in forms and all three error templates checked in both themes at 1440/390/320 px",
+    "Viewer shell preserves permission-aware navigation"
+  ],
+  "metrics": [
+    {
+      "name": "environment",
+      "theme": "light",
+      "width": 390,
+      "scrollWidth": 390
+    },
+    {
+      "name": "collection-coverage",
+      "theme": "light",
+      "width": 390,
+      "scrollWidth": 390
+    },
+    {
+      "name": "rule-history",
+      "theme": "light",
+      "width": 390,
+      "scrollWidth": 390
+    },
+    {
+      "name": "environment",
+      "theme": "light",
+      "width": 320,
+      "scrollWidth": 320
+    },
+    {
+      "name": "collection-coverage",
+      "theme": "light",
+      "width": 320,
+      "scrollWidth": 320
+    },
+    {
+      "name": "rule-history",
+      "theme": "light",
+      "width": 320,
+      "scrollWidth": 320
+    },
+    {
+      "name": "environment",
+      "theme": "dark",
+      "width": 390,
+      "scrollWidth": 390
+    },
+    {
+      "name": "collection-coverage",
+      "theme": "dark",
+      "width": 390,
+      "scrollWidth": 390
+    },
+    {
+      "name": "rule-history",
+      "theme": "dark",
+      "width": 390,
+      "scrollWidth": 390
+    },
+    {
+      "name": "environment",
+      "theme": "dark",
+      "width": 320,
+      "scrollWidth": 320
+    },
+    {
+      "name": "collection-coverage",
+      "theme": "dark",
+      "width": 320,
+      "scrollWidth": 320
+    },
+    {
+      "name": "rule-history",
+      "theme": "dark",
+      "width": 320,
+      "scrollWidth": 320
+    }
+  ],
+  "anonymousStates": 30,
+  "errors": []
+}

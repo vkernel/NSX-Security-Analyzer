@@ -1,5 +1,5 @@
 {% extends 'base.html' %}{% load admin_sections %}{% block title %}Administration · NSX Security Analyzer{% endblock %}{% block content %}
-<div class="page-heading"><div><h1>Administration</h1><p class="lead">Configure access, finding reviews and collection operations.</p></div><a class="button primary" href="{% url 'environment-new' %}">Add environment</a></div>
+{% if user.is_staff %}{% url 'environment-new' as heading_action %}{% endif %}{% include 'components/page_header.html' with title='Administration' description='Configure access, finding reviews and collection operations.' action_url=heading_action action_label='Add environment' action_primary=True only %}
 {% admin_sections as sections %}<div class="settings-directory">{% for section in sections %}<section><h2>{{ section.label }}</h2><ul>{% for link in section.links %}<li><a href="{{ link.url }}">{{ link.label }} <span aria-hidden="true">→</span></a></li>{% endfor %}</ul></section>{% endfor %}</div>
 <details class="application-version"><summary>Application version</summary><p>Version {{ application_version }} · Build <code>{{ application_build }}</code></p><p class="muted">Built: {{ application_built_at }}</p></details>
 {% endblock %}

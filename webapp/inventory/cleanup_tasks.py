@@ -10,7 +10,8 @@ def tasks(user, *, environment=None, query='', queue=None):
     if not permitted(user) or queue in ('unassigned', 'rejected', 'decommissioned', 'suppressed'): return []
     rows = DeletionItem.objects.filter(cleanup_results=[]).exclude(cleanup_plan=[]).filter(
         status__in=['cleanup_review', 'cleanup_recheck', 'verified'],
-        batch__status__in=['preview_ready', 'preview_queued', 'checking']).select_related('batch__environment', 'batch__requested_by', 'finding').order_by('-pk')
+        batch__status__in=['preview_ready', 'preview_queued', 'checking']).select_related('batch__environment', 'batch__requested_by', 'finding').defer(
+            'finding__evidence','finding__approvals','before','approved_evidence','verification','approvals').order_by('-pk')
     if queue == 'second':
         rows = rows.filter(status='cleanup_review', batch__status='preview_ready', batch__confirmed_at__isnull=True).exclude(cleanup_approvals=[])
     elif queue in ('assigned', 'ready'):
@@ -47,7 +48,7 @@ def tasks(user, *, environment=None, query='', queue=None):
             from django.utils import timezone
             if not item.verified_at or timezone.now() - item.verified_at >= timedelta(minutes=10):
                 label = 'Confirmation expired — revalidate'
-        result.append({'item': item, 'label': label, 'second': second, 'summary': summary(item.cleanup_plan),
+        result.append({'item': item, 'label': label, 'second': second, 'eligible': eligible, 'summary': summary(item.cleanup_plan),
                        'approvals': len(actors), 'required': requirement(item.finding) if item.finding else 2,
                        'action_label': 'Revalidate plan' if label == 'Confirmation expired — revalidate' else 'Review second approval' if second else 'View progress' if item.status == 'cleanup_recheck' or str(user.pk) in actors and review else 'Confirm execution' if item.status == 'verified' and eligible else 'Review plan',
                        'url': reverse('deletion-reference-cleanup', args=[item.pk]),

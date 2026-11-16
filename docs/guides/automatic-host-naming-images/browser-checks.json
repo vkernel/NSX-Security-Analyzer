@@ -1,0 +1,29 @@
+{
+  "eligible": 150,
+  "compliant": 149,
+  "nameDiffers": 1,
+  "excluded": 5,
+  "errors": [],
+  "layouts": [
+    {
+      "width": 1440,
+      "theme": "light",
+      "overflow": false
+    },
+    {
+      "width": 390,
+      "theme": "light",
+      "overflow": false
+    },
+    {
+      "width": 1440,
+      "theme": "dark",
+      "overflow": false
+    },
+    {
+      "width": 390,
+      "theme": "dark",
+      "overflow": false
+    }
+  ]
+}

@@ -33,7 +33,11 @@ class RequestPacer:
             while True:
                 now = self.clock()
                 ready = max(self.next_request, self.cooldown)
+                if self.deadline is not None and now >= self.deadline:
+                    raise CollectionDeadlineExceeded('Collection time limit reached while waiting for NSX pacing')
                 if max(now, ready) >= deadline:
+                    if self.deadline is None or deadline < self.deadline:
+                        raise TimeoutError('Request phase time budget reached while waiting for NSX pacing')
                     raise CollectionDeadlineExceeded('Collection time limit reached while waiting for NSX request pacing; earlier saved snapshots remain available')
                 if now >= ready:
                     self.next_request = now + 1 / self.rate

@@ -1,0 +1,27 @@
+{
+  "date": "2026-11-03",
+  "data": "Isolated synthetic fixture; no live NSX calls",
+  "django_postgresql": {
+    "tests": 787,
+    "passed": true
+  },
+  "javascript": {
+    "tests": 56,
+    "passed": true
+  },
+  "collector": {
+    "tests": 112,
+    "skipped_optional": 9,
+    "passed": true
+  },
+  "browser_route_states": 279,
+  "additional_layout_checks": 36,
+  "focused_workflows": 14,
+  "templates_compiled": 109,
+  "migration_changes": false,
+  "local_docker_build": "passed",
+  "followup_validation": "../production-ux-acceptance-2026-11-03/validation.json",
+  "acceptance_basis": "Synthetic inventories, explicitly confirmed by the user",
+  "requested_acceptance_status": "complete",
+  "publication_status_at_validation": "not published"
+}

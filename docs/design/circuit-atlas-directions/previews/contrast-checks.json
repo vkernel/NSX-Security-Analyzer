@@ -1,0 +1,112 @@
+[
+  {
+    "concept": "relay",
+    "contrast": {
+      "body": 15.79,
+      "muted": 8.19,
+      "accent": 9.75,
+      "navigation": 10.67,
+      "active_navigation": 11.07,
+      "primary_button": 9.28
+    }
+  },
+  {
+    "concept": "northstar",
+    "contrast": {
+      "body": 12.99,
+      "muted": 5.54,
+      "accent": 6.7,
+      "navigation": 6.07,
+      "active_navigation": 6.7,
+      "primary_button": 6.7
+    }
+  },
+  {
+    "concept": "ion",
+    "contrast": {
+      "body": 15.75,
+      "muted": 8.46,
+      "accent": 9.63,
+      "navigation": 11.28,
+      "active_navigation": 11.21,
+      "primary_button": 9.28
+    }
+  },
+  {
+    "concept": "strata",
+    "contrast": {
+      "body": 11.85,
+      "muted": 5.52,
+      "accent": 4.86,
+      "navigation": 5.34,
+      "active_navigation": 4.64,
+      "primary_button": 4.86
+    }
+  },
+  {
+    "concept": "vector",
+    "contrast": {
+      "body": 12.48,
+      "muted": 5.7,
+      "accent": 6.58,
+      "navigation": 11.02,
+      "active_navigation": 12.62,
+      "primary_button": 6.58
+    }
+  },
+  {
+    "concept": "beacon",
+    "contrast": {
+      "body": 15.12,
+      "muted": 8.47,
+      "accent": 8.81,
+      "navigation": 10.86,
+      "active_navigation": 10.62,
+      "primary_button": 9.17
+    }
+  },
+  {
+    "concept": "gridline",
+    "contrast": {
+      "body": 11.98,
+      "muted": 5.1,
+      "accent": 5.47,
+      "navigation": 5.5,
+      "active_navigation": 5.47,
+      "primary_button": 5.47
+    }
+  },
+  {
+    "concept": "forge",
+    "contrast": {
+      "body": 12.17,
+      "muted": 5.94,
+      "accent": 5.52,
+      "navigation": 10.25,
+      "active_navigation": 7.73,
+      "primary_button": 5.52
+    }
+  },
+  {
+    "concept": "aperture",
+    "contrast": {
+      "body": 15.51,
+      "muted": 8.56,
+      "accent": 9.09,
+      "navigation": 11.16,
+      "active_navigation": 10.43,
+      "primary_button": 9.07
+    }
+  },
+  {
+    "concept": "nexus",
+    "contrast": {
+      "body": 11.34,
+      "muted": 5.61,
+      "accent": 5.5,
+      "navigation": 10.47,
+      "active_navigation": 9.24,
+      "primary_button": 5.5
+    }
+  }
+]

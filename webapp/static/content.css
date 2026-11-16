@@ -1,0 +1,495 @@
+/* Page content from the accepted redesign: framed cards, KPI tiles, status tones.
+   Loaded after nav-shell.css; colours come from design-system.css tokens. */
+
+/* KPI tiles */
+body[data-theme] .operational-summary.kpi-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;border:0;margin:0 0 20px;padding:0}
+body[data-theme] .kpi-grid>.kpi-card{display:flex;flex-direction:column;gap:2px;min-width:0;padding:14px 16px;border:1px solid var(--line);border-radius:14px;background:var(--app-surface);box-shadow:var(--shadow-xs);color:var(--ink);text-decoration:none}
+body[data-theme] .kpi-grid>.kpi-card:last-child{border-right:1px solid var(--line)}
+body[data-theme] .kpi-grid>.kpi-card:hover{border-color:var(--muted);text-decoration:none}
+body[data-theme] .kpi-grid>.kpi-card span{font-size:13px;color:var(--muted)}
+body[data-theme] .kpi-grid>.kpi-card strong{order:2;font-size:28px;line-height:1.2;font-weight:600;font-variant-numeric:tabular-nums}
+body[data-theme] .kpi-grid>.kpi-card small{order:3;font-size:12px;color:var(--muted)}
+body[data-theme] .kpi-grid>.kpi-card.metric-error strong{color:var(--error-text)}
+body[data-theme] .kpi-grid>.kpi-card.metric-warning strong{color:var(--warning-text)}
+body[data-theme] .kpi-grid>.kpi-card.metric-active strong{color:var(--info-text)}
+@media(max-width:1000px){body[data-theme] .operational-summary.kpi-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:520px){body[data-theme] .operational-summary.kpi-grid{grid-template-columns:minmax(0,1fr)}}
+
+/* Framed content cards with an inner heading row */
+body[data-theme] .content-card{border:1px solid var(--line);border-radius:14px;background:var(--app-surface);box-shadow:var(--shadow-xs);overflow:hidden;margin:0 0 20px;min-width:0}
+body[data-theme] .content-card>.content-card-head{display:flex;align-items:baseline;justify-content:space-between;gap:12px;flex-wrap:wrap;margin:0;padding:12px 16px;border-bottom:1px solid var(--line)}
+body[data-theme] .content-card>.content-card-head h2{margin:0;font-size:15px;font-weight:600}
+body[data-theme] .content-card>.content-card-head a{font-size:13px;color:var(--muted)}
+body[data-theme] .content-card>.table-scroll,body[data-theme] .content-card .recent-collections-wrap{margin:0;border:0;border-radius:0;box-shadow:none}
+body[data-theme] .content-card table{margin:0;border:0}
+body[data-theme] .content-card thead th{background:var(--app-surface-soft);font-size:12px;font-weight:500;color:var(--muted)}
+body[data-theme] .content-card .poll-status:empty{display:none}
+.content-card-body{padding:14px 16px;display:flex;flex-direction:column;gap:12px}
+.content-card-body>p{margin:0}
+.content-split{display:grid;grid-template-columns:minmax(0,1.6fr) minmax(280px,1fr);gap:16px;align-items:start}
+.content-split>.content-card{margin-bottom:20px}
+@media(max-width:1100px){.content-split{grid-template-columns:minmax(0,1fr)}}
+
+/* Status tones shared by bars, legends and pills */
+.tone-ok{background:var(--success-text)}.tone-info{background:var(--info-text)}.tone-warn{background:var(--warning-text)}.tone-bad{background:var(--error-text)}.tone-neutral{background:var(--muted)}
+.qualification-bar{display:flex;height:10px;border-radius:999px;overflow:hidden;background:var(--app-surface-soft);gap:2px}
+.qualification-bar>span{display:block;min-width:4px;height:100%}
+body[data-theme] .qualification-legend{display:grid;gap:6px;margin:0;padding:0;border:0;background:none}
+body[data-theme] .qualification-legend>div{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:0;border:0;background:none;font-size:13px}
+body[data-theme] .qualification-legend dt{display:flex;align-items:center;gap:8px;margin:0;font-weight:400;color:var(--ink)}
+body[data-theme] .qualification-legend dd{margin:0;font-size:14px;line-height:20px;font-weight:600;font-variant-numeric:tabular-nums}
+.legend-swatch{width:8px;height:8px;border-radius:2px;flex:none}
+body[data-theme] .overview-findings{padding:0;border:1px solid var(--line);border-radius:14px;background:var(--app-surface)}
+
+/* Pills: text plus a soft tone background, never colour alone */
+body[data-theme] .workspace-main .pill{display:inline-flex;align-items:center;gap:6px;padding:1px 8px;border-radius:999px;border:0;font-size:12px;font-weight:500;line-height:20px;white-space:nowrap;background:var(--app-surface-soft);color:var(--ink)}
+body[data-theme] .workspace-main .pill:is(.completed,.complete,.succeeded,.success,.ok,.allow,.compliant){background:var(--success-bg);color:var(--success-text)}
+body[data-theme] .workspace-main .pill:is(.failed,.error,.drop,.reject,.rejected){background:var(--error-bg);color:var(--error-text)}
+body[data-theme] .workspace-main .pill:is(.running,.queued,.info,.active){background:var(--info-bg);color:var(--info-text)}
+body[data-theme] .workspace-main .pill:is(.review,.warning,.partial,.stale){background:var(--warning-bg);color:var(--warning-text)}
+body[data-theme] .workspace-main .pill:is(.cancelled,.neutral,.paused){background:var(--app-surface-soft);color:var(--muted)}
+
+/* Review stages as cards: done, current and next are distinguishable without colour. */
+body[data-theme] .workspace-main ol.review-progress{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:8px;margin:12px 0 20px;padding:0;list-style:none;counter-reset:none}
+body[data-theme] .workspace-main ol.review-progress>li{display:flex;flex-direction:column;align-items:flex-start;gap:4px;margin:0;padding:10px 12px;border:1px dashed var(--line);border-radius:10px;background:transparent;font-size:13px;font-weight:500;color:var(--muted);min-width:0}
+body[data-theme] .workspace-main ol.review-progress>li::before,body[data-theme] .workspace-main ol.review-progress>li::after{display:none}
+body[data-theme] .workspace-main ol.review-progress>li>span{display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;background:var(--app-surface-soft);color:var(--muted);font-size:12px;font-weight:600}
+body[data-theme] .workspace-main ol.review-progress>li.done{border-style:solid;background:var(--app-surface-soft);color:var(--ink)}
+body[data-theme] .workspace-main ol.review-progress>li.done>span{background:var(--success-bg);color:var(--success-text)}
+body[data-theme] .workspace-main ol.review-progress>li.current{border:1px solid var(--ink);background:var(--app-surface);color:var(--ink);box-shadow:var(--shadow-xs)}
+body[data-theme] .workspace-main ol.review-progress>li.current>span{background:var(--ink);color:var(--app-surface)}
+
+/* Snapshot overview charts: cards wrap before legends get too narrow to read. */
+body[data-theme] .report-content .overview-composition .overview-charts{grid-template-columns:repeat(auto-fit,minmax(300px,1fr))}
+@container (max-width:420px){body[data-theme] .report-content .usage-summary .chart-legend{grid-template-columns:minmax(0,1fr)}}
+body[data-theme] .report-content .overview-composition .snapshot-chart{container-type:inline-size}
+body[data-theme] .report-content .usage-summary .chart-legend a{grid-template-columns:8px minmax(0,1fr) auto 48px;word-break:normal;overflow-wrap:normal}
+
+/* Reviews: a two-line task list with the selected task's summary beside it. */
+.review-board{display:grid;grid-template-columns:minmax(0,1.5fr) minmax(320px,1fr);gap:16px;align-items:start}
+@media(max-width:1099px){.review-board{grid-template-columns:minmax(0,1fr)}}
+body[data-theme] .review-board>.review-list{margin:0}
+body[data-theme] .review-board .review-task-table{min-width:0;width:100%;table-layout:auto}
+body[data-theme] .review-board .review-task-table tbody tr{border-top:1px solid var(--line)}
+body[data-theme] .review-board .review-task-table tbody tr:first-child{border-top:0}
+body[data-theme] .review-board .review-task-table td{padding:10px 14px;vertical-align:top;border:0;background:transparent}
+body[data-theme] .review-board .review-task-table tbody tr:hover{background:var(--app-surface-soft)}
+body[data-theme] .review-board .review-task-table tbody tr[aria-current=true]{background:var(--app-surface-soft);box-shadow:inset 3px 0 0 var(--ink)}
+body[data-theme] .review-board .review-task-table td.review-select{width:36px;padding-right:0}
+.review-item-line{display:flex;align-items:center;gap:8px;min-width:0}
+.review-kind{flex:none;width:26px;font-size:12px;font-weight:600;color:var(--muted);text-decoration:none;cursor:help}
+body[data-theme] .review-item-name{min-width:0;font-weight:500;color:var(--ink);overflow-wrap:anywhere;text-decoration:none}
+body[data-theme] .review-item-name:hover{text-decoration:underline}
+.review-item-meta{display:flex;flex-wrap:wrap;gap:4px 12px;margin-top:4px;padding-left:34px;font-size:12px;color:var(--muted)}
+.review-item-meta>span:first-child{flex:1 1 180px}
+body[data-theme] .review-board .review-stage{width:1%;text-align:right;white-space:nowrap}
+.review-stage small{display:block;margin-top:4px;font-size:12px;color:var(--warning-text)}
+.review-details{position:sticky;top:76px;min-width:0}
+@media(max-width:1099px){.review-details{position:static}}
+body[data-theme] .review-detail{margin:0;padding:16px;display:flex;flex-direction:column;gap:14px}
+.review-detail:focus{outline:none}.review-detail:focus-visible{outline:2px solid var(--ink);outline-offset:2px}
+.review-detail-head{display:flex;align-items:flex-start;gap:8px}
+.review-detail-head>div{flex:1;min-width:0}
+.review-detail-head h2{margin:0;font-size:16px;font-weight:600;overflow-wrap:anywhere}
+.review-detail-head p{margin:2px 0 0;font-size:13px;color:var(--muted)}
+body[data-theme] .review-facts{display:grid;grid-template-columns:max-content minmax(0,1fr);gap:8px 16px;margin:0;font-size:13px;border:0;padding:0;background:none}
+body[data-theme] .review-facts dt{color:var(--muted);font-weight:400;margin:0}
+body[data-theme] .review-facts dd{margin:0;overflow-wrap:anywhere}
+.review-facts dd small{display:block;color:var(--muted)}
+.review-steps{padding:12px;border-radius:12px;background:var(--app-surface-soft);display:flex;flex-direction:column;gap:8px}
+.review-steps strong{font-size:13px;font-weight:600}
+.review-steps ol{list-style:none;margin:0;padding:0;display:grid;gap:8px}
+.review-steps li{display:flex;align-items:center;gap:10px;font-size:13px;color:var(--muted)}
+.review-steps li>span[aria-hidden]{width:20px;height:20px;flex:none;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-size:11px;font-weight:600;border:1px solid var(--line)}
+.review-steps li.done{color:var(--ink)}
+.review-steps li.done>span[aria-hidden]{background:var(--ink);border-color:var(--ink);color:var(--app-surface)}
+.review-steps li.current{color:var(--ink);font-weight:500}
+.review-steps li.current>span[aria-hidden]{border:1.5px solid var(--ink);color:var(--ink)}
+.review-detail-actions{display:flex;flex-wrap:wrap;gap:8px}
+body[data-theme] .review-detail .notice,body[data-theme] .review-detail p.small{margin:0}
+body[data-theme] .review-detail-actions.cleanup-task-actions{flex-direction:row;min-width:0}
+body[data-theme] .review-board .review-task-table thead th{padding:8px 14px;text-align:left;border:0;border-bottom:1px solid var(--line)}
+body[data-theme] .review-board .review-task-table thead th:last-child{text-align:right}
+.review-context{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.review-context a{font-size:13px;color:var(--muted)}
+body[data-theme] .review-detail-actions.cleanup-task-actions{align-items:flex-start}
+body[data-theme] .review-detail .review-facts dd{font-weight:400;font-size:13px}
+body[data-theme] .review-board .review-task-table a.review-item-name{text-decoration:none}
+body[data-theme] .review-board .review-task-table a.review-item-name:hover{text-decoration:underline}
+
+/* Inventory overview: saved-projection summary ahead of the report's own charts. */
+.inventory-overview{display:flex;flex-direction:column;gap:16px;margin:0 0 24px}
+body[data-theme] .inventory-overview .operational-summary.kpi-grid{grid-template-columns:repeat(5,minmax(0,1fr));margin:0}
+@media(max-width:1200px){body[data-theme] .inventory-overview .operational-summary.kpi-grid{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media(max-width:640px){body[data-theme] .inventory-overview .operational-summary.kpi-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.overview-callout{display:flex;align-items:flex-start;gap:12px;padding:12px 14px;border-radius:12px;border:1px solid var(--warning-text);background:var(--warning-bg);color:var(--warning-text)}
+.overview-callout>div{flex:1;min-width:0}
+.overview-callout p{margin:2px 0 0;font-size:13px}
+body[data-theme] .overview-callout a{font-size:13px;font-weight:500;color:inherit;white-space:nowrap}
+.inventory-overview-split{grid-template-columns:repeat(2,minmax(0,1fr))}
+@media(max-width:1000px){.inventory-overview-split{grid-template-columns:minmax(0,1fr)}}
+body[data-theme] .inventory-overview .content-card{margin:0}
+body[data-theme] .overview-rows{list-style:none;margin:0;padding:0}
+body[data-theme] .overview-rows li{display:flex;align-items:center;gap:12px;margin:0;padding:10px 16px;border-top:1px solid var(--line);font-size:14px}
+body[data-theme] .overview-rows li:first-child{border-top:0}
+.overview-rows li>span:first-child{flex:1;min-width:0}
+.overview-rows small{font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums}
+.content-card-note{margin:0;padding:10px 16px;border-top:1px solid var(--line);font-size:12px;color:var(--muted)}
+/* The report's finding categories become the "Needs attention" list. */
+body[data-theme] .overview-attention nav.cards{display:flex;flex-direction:column;gap:0;margin:0;padding:0;border:0;grid-template-columns:none}
+body[data-theme] .overview-attention nav.cards>a{display:flex;align-items:center;gap:12px;margin:0;padding:10px 16px;border:0;border-top:1px solid var(--line);border-radius:0;box-shadow:none;background:transparent;color:var(--ink);text-decoration:none;min-height:0}
+body[data-theme] .overview-attention nav.cards>a:first-child{border-top:0}
+body[data-theme] .overview-attention nav.cards>a:hover{background:var(--app-surface-soft)}
+body[data-theme] .overview-attention nav.cards>a span{flex:1;min-width:0;font-weight:500;font-size:14px}
+body[data-theme] .overview-attention nav.cards>a b{order:2;font-weight:600;font-size:14px;font-variant-numeric:tabular-nums}
+body[data-theme] .overview-attention nav.cards>a::after{content:'›';order:3;color:var(--muted)}
+body[data-theme] .overview-attention>details,body[data-theme] .overview-attention>p{margin:0;padding:10px 16px;border-top:1px solid var(--line);font-size:12px;color:var(--muted)}
+.change-tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px}
+.change-tiles>div{padding:10px 12px;border-radius:10px;background:var(--app-surface-soft)}
+.change-tiles>div>span{font-size:12px;color:var(--muted)}
+.change-tiles p{display:flex;gap:10px;margin:2px 0 0;font-variant-numeric:tabular-nums}
+.change-tiles .added{color:var(--success-text)}.change-tiles .removed{color:var(--error-text)}
+.change-tiles p span{color:var(--muted)}
+.change-tiles small{display:block;font-size:12px;color:var(--warning-text)}
+body[data-theme] .overview-attention nav.cards>a.card{flex-direction:row;align-items:center;justify-content:flex-start;text-align:left}
+body[data-theme] .overview-attention nav.cards>a.card>span{text-align:left}
+body[data-theme] .report-content .overview-composition:not(:has(.overview-findings-list)){display:block}
+body[data-theme] .report-content .overview-composition:not(:has(.overview-findings-list)) .overview-charts{grid-template-columns:repeat(auto-fit,minmax(300px,1fr))}
+
+/* Groups and VMs: the evidence drawer docks beside the list on wide screens. */
+@media(min-width:1280px){
+}
+body[data-theme] .report-content tr[aria-current=true]>td{background:var(--app-surface-soft)}
+body[data-theme] .report-content tr[aria-current=true]>td:first-child{box-shadow:inset 3px 0 0 var(--ink)}
+.inventory-filter-chips{display:flex;flex-wrap:wrap;gap:8px;margin:0}
+body[data-theme] .inventory-filter-chips a{display:inline-flex;align-items:center;gap:6px;height:30px;padding:0 12px;border:1px solid var(--line);border-radius:999px;background:var(--app-surface);color:var(--ink);font-size:13px;text-decoration:none}
+body[data-theme] .inventory-filter-chips a:hover{border-color:var(--muted)}
+body[data-theme] .inventory-filter-chips a[aria-current=page]{background:var(--ink);border-color:var(--ink);color:var(--app-surface)}
+.inventory-filter-chips span{font-size:12px;font-variant-numeric:tabular-nums;opacity:.75}
+/* While docked, the list keeps names and states; qualification detail and the Inspect column live in the panel. */
+@media(min-width:1280px){
+  body.evidence-docked .report-content :is(#all-groups,#empty-groups,#unused-groups,#unknown-membership,#all-vms) .row-qualification,
+  body.evidence-docked .report-content :is(#all-groups,#empty-groups,#unused-groups,#unknown-membership,#all-vms) .inventory-evidence-column{display:none}
+  body.evidence-docked .report-content :is(#all-groups,#empty-groups,#unused-groups,#unknown-membership,#all-vms) code.path{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:block}
+}
+body[data-theme] .table-tools:has(>.report-view-selector .inventory-filter-chips){flex-wrap:wrap}
+body[data-theme] .table-tools>.report-view-selector:has(.inventory-filter-chips){order:-1;flex:1 0 100%;width:100%}
+@media(min-width:1280px){
+}
+
+/* Firewall rules in NSX order: category and policy heading rows, saved configuration cells. */
+body[data-theme] #dfw-rules.rule-order-active>.table-widget{display:none}
+.rule-order{display:flex;flex-direction:column;gap:12px;margin:0 0 16px}
+.rule-order-body{display:flex;flex-direction:column;gap:12px}
+.rule-order-modes{display:inline-flex;align-self:flex-start;padding:2px;border:1px solid var(--line);border-radius:10px;background:var(--app-surface-soft)}
+body[data-theme] .rule-order-modes button{height:30px;padding:0 12px;border:0;border-radius:8px;background:transparent;color:var(--muted);font:inherit;font-size:13px;box-shadow:none}
+body[data-theme] .rule-order-modes button[aria-pressed=true]{background:var(--app-surface);color:var(--ink);box-shadow:var(--shadow-xs);font-weight:500}
+.rule-order-tools{display:flex;flex-wrap:wrap;align-items:center;gap:8px}
+body[data-theme] .rule-order-tools input[type=search]{flex:1 1 240px;min-width:0;max-width:360px}
+body[data-theme] .rule-order-tools select{width:auto}
+.rule-order-status{margin-left:auto;font-size:13px;color:var(--muted)}
+body[data-theme] .rule-order-views .report-view-selector{margin:0}
+body[data-theme] .rule-order-scroll{border:1px solid var(--line);border-radius:14px;background:var(--app-surface);overflow:auto}
+body[data-theme] .rule-order-table{width:100%;min-width:980px;table-layout:auto;border-collapse:collapse;margin:0;border:0;font-size:13px}
+body[data-theme] .rule-order-table thead th{position:sticky;top:0;z-index:1;padding:8px 12px;text-align:left;font-size:12px;font-weight:500;color:var(--muted);background:var(--app-surface-soft);border:0;border-bottom:1px solid var(--line);white-space:nowrap}
+body[data-theme] .rule-order-table td{padding:8px 12px;vertical-align:top;text-align:left;border:0;border-top:1px solid var(--line);overflow-wrap:break-word}
+body[data-theme] .rule-order-table td:first-child{width:56px;font-variant-numeric:tabular-nums;color:var(--muted)}
+body[data-theme] .rule-order-table tr.rule-order-heading th{padding:8px 12px;text-align:left;border:0;border-top:1px solid var(--line);font-weight:400}
+body[data-theme] .rule-order-table tr.rule-order-heading[data-level=category] th{background:var(--app-surface-soft);font-size:13px}
+body[data-theme] .rule-order-table tr.rule-order-heading[data-level=policy] th{padding-left:24px;font-size:13px}
+.rule-order-heading th strong{font-weight:600;margin-right:8px}
+.rule-order-heading th small{margin-right:8px;font-size:12px;color:var(--muted)}
+.rule-order-heading th small+small::before{content:'· ';}
+.rule-order-name{display:flex;flex-direction:column;gap:2px;min-width:160px}
+.rule-order-name small{font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums}
+body[data-theme] .rule-order-table tr.is-disabled td{color:var(--muted)}
+body[data-theme] .rule-order-table tr.is-disabled td:not(:first-child){opacity:.75}
+.rule-order-pager{display:flex;align-items:center;gap:8px;justify-content:flex-end;font-size:13px;color:var(--muted)}
+.rule-order-pager span{margin-right:auto}
+.rule-order-note{margin:0;font-size:12px;color:var(--muted)}
+body[data-theme] .rule-order-table td:first-child{width:1%;white-space:nowrap}
+body[data-theme] .rule-order-table .evidence-object-link{display:inline;width:auto;height:auto;min-height:0;margin:0;padding:0;border:0;background:transparent;box-shadow:none;color:var(--app-accent);font:inherit;text-align:left;overflow-wrap:break-word;cursor:pointer}
+body[data-theme] .rule-order-table .evidence-object-link:hover{text-decoration:underline}
+body[data-theme] .rule-order-table .rule-order-name>.evidence-object-link{font-weight:500;color:var(--ink)}
+body[data-theme] .rule-order-table .evidence-status{display:inline-flex;white-space:nowrap;padding:1px 8px}
+body[data-theme] .rule-order-table .evidence-rule-field{display:flex;flex-direction:column;align-items:flex-start;gap:2px}
+body[data-theme] .rule-order-table .evidence-rule-field>small{font-size:11px;color:var(--muted)}
+body[data-theme] .rule-order-table .evidence-more{padding:0;border:0;background:none;box-shadow:none;color:var(--muted);font-size:12px;height:auto;min-height:0}
+/* Policies in NSX order with the selected policy beside the list. */
+.policy-board{display:grid;grid-template-columns:minmax(0,1.6fr) minmax(300px,1fr);gap:16px;align-items:start}
+.policy-board:has(>.policy-detail[hidden]){grid-template-columns:minmax(0,1fr)}
+@media(max-width:1099px){.policy-board{grid-template-columns:minmax(0,1fr)}}
+body[data-theme] .policy-order-table{min-width:640px}
+body[data-theme] .policy-order-table tbody tr[aria-current=true]>td{background:var(--app-surface-soft)}
+body[data-theme] .policy-order-table tbody tr[aria-current=true]>td:first-child{box-shadow:inset 3px 0 0 var(--ink)}
+.policy-flags{display:flex;flex-wrap:wrap;gap:4px}
+body[data-theme] .policy-detail{position:sticky;top:76px;margin:0;padding:16px;display:flex;flex-direction:column;gap:14px}
+@media(max-width:1099px){body[data-theme] .policy-detail{position:static}}
+.policy-detail:focus{outline:none}.policy-detail:focus-visible{outline:2px solid var(--ink);outline-offset:2px}
+.policy-detail-head small{font-size:12px;color:var(--muted)}
+.policy-detail-head h2{margin:2px 0 0;font-size:16px;font-weight:600;overflow-wrap:anywhere}
+.policy-rules h3{margin:0 0 8px;font-size:13px;font-weight:600}
+.policy-rules ol{list-style:none;margin:0;padding:0;display:grid;gap:6px}
+.policy-rules li{display:flex;align-items:center;gap:8px;font-size:13px;min-width:0}
+.policy-rules li.is-disabled{color:var(--muted)}
+.policy-rules li small{font-size:12px;color:var(--muted)}
+.policy-rule-order{width:40px;flex:none;font-variant-numeric:tabular-nums;color:var(--muted)}
+body[data-theme] .policy-rules .evidence-object-link{flex:1;min-width:0;padding:0;border:0;background:none;box-shadow:none;height:auto;min-height:0;color:var(--ink);text-align:left;font:inherit;cursor:pointer}
+body[data-theme] .policy-rules .evidence-object-link:hover{text-decoration:underline}
+body[data-theme] .rule-order-policy{height:30px;padding:0 10px;border:1px solid var(--ink);border-radius:999px;background:var(--ink);color:var(--app-surface);font-size:13px}
+body[data-theme] #dfw-policies.rule-order-active>.table-widget{display:none}
+body[data-theme] .rule-order-table .rule-order-name{align-items:flex-start}
+body[data-theme] .rule-order-table .rule-order-name>.evidence-object-link{display:block;width:auto;text-align:left}
+body[data-theme] .policy-detail .review-facts .evidence-object-link{display:inline;padding:0;margin:0;border:0;background:none;box-shadow:none;height:auto;min-height:0;color:var(--app-accent);font:inherit;text-align:left;cursor:pointer}
+body[data-theme] .policy-detail .review-facts .evidence-rule-field{display:flex;flex-direction:column;align-items:flex-start;gap:2px}
+
+/* One collection: progress phases, pacing and coverage. */
+.collection-head{display:flex;align-items:flex-end;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:16px}
+.collection-title{display:flex;align-items:center;gap:10px}
+.collection-title h1{margin:0}
+.collection-head p{margin:4px 0 0}
+.collection-actions{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.collection-actions form{margin:0}
+.collection-progress-line{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap}
+.collection-progress-line strong{font-size:22px;font-weight:600;font-variant-numeric:tabular-nums}
+.collection-progress-line small{margin-left:auto;font-size:12px}
+body[data-theme] .collection-progress progress{width:100%;height:8px;appearance:none;border:0;border-radius:999px;overflow:hidden;background:var(--app-surface-soft)}
+body[data-theme] .collection-progress progress::-webkit-progress-bar{background:var(--app-surface-soft);border-radius:999px}
+body[data-theme] .collection-progress progress::-webkit-progress-value{background:var(--ink);border-radius:999px}
+body[data-theme] .collection-progress progress::-moz-progress-bar{background:var(--ink);border-radius:999px}
+.collection-phases{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px;margin:0;padding:0;list-style:none}
+.collection-phases li{display:flex;flex-direction:column;gap:2px;padding:10px;border-radius:10px;border:1px dashed var(--line);font-size:13px;color:var(--muted);min-width:0}
+.collection-phases li span{font-size:12px}
+.collection-phases li strong{font-weight:500;overflow-wrap:break-word}
+.collection-phases li.done{border-style:solid;border-color:transparent;background:var(--app-surface-soft);color:var(--ink)}
+.collection-phases li.done span{color:var(--success-text)}
+.collection-phases li.current{border:1px solid var(--ink);background:var(--app-surface);color:var(--ink);box-shadow:var(--shadow-xs)}
+.collection-phases li.current span{color:var(--info-text)}
+.collection-phases li.stopped{border:1px solid var(--error-text);color:var(--ink)}
+.collection-phases li.stopped span{color:var(--error-text)}
+.collection-split{grid-template-columns:repeat(2,minmax(0,1fr))}
+@media(max-width:1000px){.collection-split{grid-template-columns:minmax(0,1fr)}}
+body[data-theme] .collection-figures{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;margin:0;padding:0;border:0;background:none}
+body[data-theme] .collection-figures>div{padding:0;border:0;background:none}
+body[data-theme] .collection-figures dt{margin:0;font-size:12px;font-weight:400;color:var(--muted)}
+body[data-theme] .collection-figures dd{margin:2px 0 0;font-size:16px;font-weight:600;font-variant-numeric:tabular-nums}
+body[data-theme] .collection-history-table tr[aria-current=true]>td{background:var(--app-surface-soft)}
+body[data-theme] .collection-history-table td small{display:block;font-size:12px;color:var(--muted)}
+body[data-theme] .collection-status .collection-result-cards{margin:0 0 16px}
+body[data-theme] .collection-next .overview-rows li>span:first-child{flex:none;min-width:52px;justify-content:center}
+body[data-theme] .collection-next .overview-rows li>span:last-child{flex:1;min-width:0}
+
+/* Deletion request: stage title, step cards, summary tiles and a framed results table. */
+.deletion-context{margin:0 0 4px;font-size:13px;color:var(--muted);text-transform:none;letter-spacing:0}
+body[data-theme] .workspace-main ol.deletion-steps>li small{font-size:12px;font-weight:400;color:var(--muted)}
+body[data-theme] .deletion-summary{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin:0 0 16px;padding:0;border:0;background:none}
+body[data-theme] .deletion-summary>div{display:flex;flex-direction:column;gap:2px;padding:14px 16px;border:1px solid var(--line);border-radius:14px;background:var(--app-surface);box-shadow:var(--shadow-xs)}
+body[data-theme] .deletion-summary>div span{font-size:13px;color:var(--muted)}
+body[data-theme] .deletion-summary>div strong{font-size:24px;font-weight:600;font-variant-numeric:tabular-nums}
+body[data-theme] .deletion-progress-card{border:1px solid var(--line);border-radius:14px;background:var(--app-surface);box-shadow:var(--shadow-xs);padding:16px;margin:0 0 16px}
+body[data-theme] .deletion-progress-card.operation-state-warning{border-color:var(--warning-text)}
+body[data-theme] .deletion-progress-card h2{margin:0 0 8px;font-size:16px;font-weight:600}
+body[data-theme] #deletion-progress>.table-scroll{border:1px solid var(--line);border-radius:14px;background:var(--app-surface);box-shadow:var(--shadow-xs);overflow:auto}
+body[data-theme] .deletion-results{margin:0;border:0}
+body[data-theme] .deletion-results thead th{background:var(--app-surface-soft);font-size:12px;font-weight:500;color:var(--muted)}
+
+/* Services and Tags & scopes overviews. */
+body[data-theme] #all-services.rule-order-active>.table-widget,body[data-theme] #tags-scopes.rule-order-active>.table-widget{display:none}
+.catalog-cards{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
+@media(max-width:900px){.catalog-cards{grid-template-columns:repeat(2,minmax(0,1fr))}}
+body[data-theme] .catalog-cards>button.kpi-card{display:flex;flex-direction:column;align-items:flex-start;gap:2px;height:auto;min-height:0;padding:14px 16px;border:1px solid var(--line);border-radius:14px;background:var(--app-surface);box-shadow:var(--shadow-xs);color:var(--ink);font:inherit;text-align:left;cursor:pointer}
+body[data-theme] .catalog-cards>button.kpi-card span{font-size:13px;color:var(--muted)}
+body[data-theme] .catalog-cards>button.kpi-card strong{font-size:24px;font-weight:600;font-variant-numeric:tabular-nums}
+body[data-theme] .catalog-cards>button.kpi-card small{font-size:12px;color:var(--muted)}
+body[data-theme] .catalog-cards>button.kpi-card[aria-pressed=true]{border-color:var(--ink);box-shadow:inset 0 0 0 1px var(--ink)}
+body[data-theme] .catalog-table{min-width:720px}
+.scope-board{display:grid;grid-template-columns:minmax(200px,260px) minmax(0,1fr);gap:16px;align-items:start}
+@media(max-width:900px){.scope-board{grid-template-columns:minmax(0,1fr)}}
+body[data-theme] .scope-list{margin:0;padding:10px;display:flex;flex-direction:column;gap:8px;position:sticky;top:76px;max-height:calc(100vh - 100px)}
+@media(max-width:900px){body[data-theme] .scope-list{position:static;max-height:320px}}
+.scope-list ul{list-style:none;margin:0;padding:0;overflow:auto;display:grid;gap:2px}
+body[data-theme] .scope-list li>button{display:flex;align-items:center;justify-content:space-between;gap:8px;width:100%;height:auto;min-height:0;padding:8px 10px;border:0;border-radius:8px;background:transparent;box-shadow:none;color:var(--ink);font:inherit;font-size:13px;text-align:left;cursor:pointer}
+body[data-theme] .scope-list li>button:hover{background:var(--app-surface-soft)}
+body[data-theme] .scope-list li>button[aria-pressed=true]{background:var(--app-surface-soft);box-shadow:inset 3px 0 0 var(--ink);font-weight:500}
+.scope-list li>button span{min-width:0;overflow-wrap:anywhere}
+.scope-list li>button small{flex:none;font-size:12px;color:var(--muted)}
+.scope-main{display:flex;flex-direction:column;gap:16px;min-width:0}
+body[data-theme] .scope-main .catalog-stats{margin:0}
+body[data-theme] .scope-main .content-card{margin:0}
+body[data-theme] .scope-main .content-card>.table-scroll{border:0;border-radius:0}
+
+/* References page. */
+.object-references-panel [data-object-references]{display:flex;flex-direction:column;gap:12px}
+.reference-picker{display:flex;flex-direction:column;gap:8px}
+body[data-theme] .reference-picker input[type=search]{max-width:420px}
+.reference-suggestions{list-style:none;margin:0;padding:0;display:flex;flex-wrap:wrap;gap:6px}
+body[data-theme] .reference-suggestion{display:inline-flex;align-items:baseline;gap:6px;height:auto;min-height:0;padding:6px 10px;border:1px solid var(--line);border-radius:999px;background:var(--app-surface);box-shadow:none;color:var(--ink);font:inherit;font-size:13px;cursor:pointer}
+body[data-theme] .reference-suggestion small{font-size:12px;color:var(--muted)}
+body[data-theme] .reference-suggestion[aria-pressed=true]{border-color:var(--ink);background:var(--ink);color:var(--app-surface)}
+body[data-theme] .reference-suggestion[aria-pressed=true] small{color:inherit;opacity:.75}
+.reference-board{display:grid;grid-template-columns:minmax(0,1fr) minmax(260px,320px);gap:16px;align-items:start}
+.reference-board:has(>.reference-export[hidden]){grid-template-columns:minmax(0,1fr)}
+@media(max-width:1000px){.reference-board{grid-template-columns:minmax(0,1fr)}}
+.reference-main{display:flex;flex-direction:column;gap:12px;min-width:0}
+.reference-object{display:flex;flex-direction:column;gap:2px}
+body[data-theme] .reference-object .evidence-object-link{align-self:flex-start;padding:0;border:0;background:none;box-shadow:none;height:auto;min-height:0;color:var(--ink);font:inherit;font-size:16px;font-weight:600;cursor:pointer}
+.reference-object small{font-size:12px;color:var(--muted);overflow-wrap:anywhere}
+body[data-theme] .reference-export{margin:0;padding:16px;display:flex;flex-direction:column;gap:10px;position:sticky;top:76px}
+.reference-export h2{margin:0;font-size:15px;font-weight:600}
+.reference-export p{margin:0}
+body[data-theme] .reference-table{min-width:720px}
+body[data-theme] .reference-others{margin:0}
+body[data-theme] .reference-others .evidence-object-link{padding:0;border:0;background:none;box-shadow:none;height:auto;min-height:0;color:var(--app-accent);font:inherit;text-align:left;cursor:pointer}
+body[data-theme] .rule-order-table td .rule-order-name>button.evidence-object-link{width:auto;min-width:0;max-width:100%;text-align:left;justify-content:flex-start;text-align-last:left}
+
+/* Segmentation: application cards beside the configured connections. */
+.application-cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:10px;margin:16px 0}
+body[data-theme] .application-card{display:flex;flex-direction:column;align-items:flex-start;gap:2px;height:auto;min-height:0;padding:12px 14px;border:1px solid var(--line);border-radius:12px;background:var(--app-surface);box-shadow:var(--shadow-xs);color:var(--ink);font:inherit;text-align:left;cursor:pointer}
+body[data-theme] .application-card:hover{border-color:var(--muted)}
+body[data-theme] .application-card[aria-pressed=true]{border-color:var(--ink);box-shadow:inset 0 0 0 1px var(--ink)}
+.application-card strong{font-weight:600;overflow-wrap:anywhere}
+.application-card span{font-size:13px;color:var(--muted)}
+.application-card small{font-size:12px;color:var(--muted)}
+@media(min-width:1100px){
+  body[data-theme] .application-overview .application-details{display:grid;grid-template-columns:minmax(0,1fr) minmax(320px,1.1fr);gap:16px;align-items:start}
+  body[data-theme] .application-overview .application-connections{position:sticky;top:76px;max-height:calc(100vh - 100px);overflow:auto}
+}
+body[data-theme] .application-overview .application-details>section{border:1px solid var(--line);border-radius:14px;background:var(--app-surface);box-shadow:var(--shadow-xs);padding:14px 16px;margin:0}
+
+/* Naming: outcome counts as cards; the review queue is visibly separate. */
+body[data-theme] .workspace-main nav.naming-outcomes{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin:12px 0 16px;padding:0;border:0}
+body[data-theme] .workspace-main nav.naming-outcomes>a.naming-outcome{display:grid;grid-template-columns:1fr auto;align-items:baseline;gap:2px 8px;padding:12px 14px;margin:0;border:1px solid var(--line);border-radius:12px;background:var(--app-surface);box-shadow:var(--shadow-xs);color:var(--ink);text-decoration:none;min-height:0}
+body[data-theme] .workspace-main nav.naming-outcomes>a.naming-outcome::after{display:none}
+body[data-theme] .workspace-main nav.naming-outcomes>a.naming-outcome .naming-outcome-label{font-size:13px;color:var(--muted);font-weight:500}
+body[data-theme] .workspace-main nav.naming-outcomes>a.naming-outcome .tab-count{grid-row:2;grid-column:1/-1;justify-self:start;padding:0;border:0;background:none;color:var(--ink);font-size:24px;font-weight:600;font-variant-numeric:tabular-nums}
+body[data-theme] .workspace-main nav.naming-outcomes>a.naming-outcome small{grid-column:1/-1;font-size:12px;color:var(--muted)}
+body[data-theme] .workspace-main nav.naming-outcomes>a.naming-outcome[aria-current=page]{border-color:var(--ink);box-shadow:inset 0 0 0 1px var(--ink)}
+body[data-theme] .workspace-main nav.naming-outcomes>a.naming-outcome.is-separate{border-style:dashed}
+body[data-theme] .workspace-main nav.naming-outcomes>a.naming-outcome,body[data-theme] .workspace-main nav.naming-outcomes>a.naming-outcome small{white-space:normal;overflow:visible;text-overflow:clip}
+
+/* Sign-in and password change: one centered card, brand on top. */
+body[data-theme] .login-panel{grid-template-columns:minmax(0,1fr);width:min(420px,100%);min-height:0;border-radius:16px;box-shadow:var(--shadow-xs)}
+body[data-theme] .login-panel .login-brand{flex-direction:row;align-items:center;justify-content:flex-start;gap:12px;padding:24px 32px 0;background:transparent;border:0}
+body[data-theme] .login-panel .login-brand img{width:200px}
+body[data-theme] .login-panel :is(.login-brand-message,.login-brand-caption){display:none}
+body[data-theme] .login-panel .login-content{padding:20px 32px 28px}
+body[data-theme] .login-panel .login-content h1{font-size:24px;font-weight:600}
+body[data-theme] .login-panel .login-content .lead{margin-bottom:20px}
+.login-footnote{margin:12px 0 0;font-size:12px;color:var(--muted);text-align:center}
+body[data-theme] .password-change-card{max-width:460px;margin:24px auto}
+body[data-theme] .password-change-card h1{margin:0;font-size:22px;font-weight:600}
+
+/* Get started checklist. */
+.start-steps{list-style:none;margin:16px 0;padding:0;display:flex;flex-direction:column;gap:10px;max-width:860px}
+.start-steps>li{display:flex;align-items:center;gap:14px;padding:14px 16px;border:1px dashed var(--line);border-radius:14px;background:var(--app-surface)}
+.start-steps>li.done{border-style:solid;background:var(--app-surface-soft)}
+.start-steps>li.current{border:1px solid var(--ink);box-shadow:var(--shadow-xs)}
+.start-step-mark{flex:none;width:28px;height:28px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-size:13px;font-weight:600;border:1px solid var(--line);color:var(--muted)}
+.start-steps>li.done .start-step-mark{background:var(--ink);border-color:var(--ink);color:var(--app-surface)}
+.start-steps>li.current .start-step-mark{border:1.5px solid var(--ink);color:var(--ink)}
+.start-steps>li>div{flex:1;min-width:0}
+.start-steps>li strong{display:block;font-weight:600}
+.start-steps>li p{margin:2px 0 0;font-size:13px;color:var(--muted)}
+.start-steps>li>.button,.start-steps>li>.pill{flex:none}
+@media(max-width:600px){.start-steps>li{flex-wrap:wrap}.start-steps>li>.button{margin-left:42px}}
+
+/* Notifications page. */
+.notifications-split{grid-template-columns:minmax(0,1.6fr) minmax(260px,1fr)}
+body[data-theme] .notification-page-list{list-style:none;margin:0;padding:0}
+body[data-theme] .notification-page-list>li{display:flex;align-items:center;gap:12px;margin:0;padding:10px 16px;border-top:1px solid var(--line)}
+body[data-theme] .notification-page-list>li:first-child{border-top:0}
+.notification-dot{flex:none;width:8px;height:8px;border-radius:50%;background:transparent}
+.notification-page-list>li.is-unread .notification-dot{background:var(--info-text)}
+body[data-theme] .notification-page-list a{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px;color:var(--ink);text-decoration:none}
+body[data-theme] .notification-page-list a:hover strong{text-decoration:underline}
+.notification-page-list a strong{font-weight:500}
+.notification-page-list>li:not(.is-unread) a strong{font-weight:400;color:var(--muted)}
+.notification-page-list a small{font-size:12px;color:var(--muted)}
+.notification-page-list time{flex:none;font-size:12px;color:var(--muted);white-space:nowrap}
+body[data-theme] .content-card-head form{margin:0}
+body[data-theme] .notification-page-list a :is(strong,small){text-decoration:none}
+
+/* Rule proposal: proposed rule fields beside the notes. */
+.proposal-board{display:grid;grid-template-columns:minmax(0,1.5fr) minmax(260px,1fr);gap:16px;align-items:start;margin:0 0 16px}
+@media(max-width:1000px){.proposal-board{grid-template-columns:minmax(0,1fr)}}
+body[data-theme] .proposal-board .content-card{margin:0}
+body[data-theme] .proposal-board .pair-proposal-preview{padding:0}
+body[data-theme] .proposal-fields{padding:14px 16px}
+body[data-theme] .proposal-fields dd{font-weight:400;overflow-wrap:anywhere}
+body[data-theme] .proposal-note{margin:0 0 12px}
+body[data-theme] .workspace-main .review-task-table td a.review-item-name:not(.button):not([role=button]){text-decoration:none}
+body[data-theme] .workspace-main .review-task-table td a.review-item-name:not(.button):not([role=button]):hover{text-decoration:underline}
+body[data-theme] .workspace-main .notification-page-list li>a:not(.button):not([role=button]){text-decoration:none}
+
+
+/* Docked evidence panel: docked (resizable), wide and full-screen modes. */
+@media(min-width:1280px){
+  body.snapshot-page.evidence-docked .workspace-main{padding-right:calc(var(--dock-width,460px) + 32px)}
+  body.snapshot-page.evidence-docked.evidence-docked-wide .workspace-main{padding-right:calc(min(1180px,62vw) + 32px)}
+  body.snapshot-page.evidence-docked.evidence-docked-full .workspace-main{padding-right:calc(var(--dock-width,460px) + 32px)}
+  body[data-theme] #detail-dialog.is-docked[open]{position:fixed;inset:72px 16px 16px auto;margin:0;width:var(--dock-width,460px);max-width:none;max-height:none;height:auto;z-index:20;display:flex;flex-direction:column;overflow:hidden;border:1px solid var(--line);border-radius:14px;background:var(--app-surface);box-shadow:var(--shadow-xs);padding:0}
+  body[data-theme] #detail-dialog.is-docked.mode-wide[open]{width:min(1180px,62vw)}
+  body[data-theme] #detail-dialog.is-docked.mode-full[open]{inset:8px;width:auto;z-index:60;box-shadow:0 12px 40px rgba(0,0,0,.18)}
+  body[data-theme] #detail-dialog.is-docked[open] .dialog-heading{flex:none;display:flex;align-items:center;flex-wrap:wrap;gap:8px;padding:12px 16px;border-bottom:1px solid var(--line)}
+  body[data-theme] #detail-dialog.is-docked[open] .dialog-heading h2{flex:1 1 200px;min-width:0;margin:0;font-size:16px;overflow-wrap:anywhere}
+  body[data-theme] #detail-dialog.is-docked[open] .evidence-expand{display:none}
+  body[data-theme] #detail-dialog.is-docked[open]>.evidence-context{flex:none;margin:0;padding:8px 16px 0;font-size:12px;color:var(--muted)}
+  body[data-theme] #detail-dialog.is-docked[open] #detail-body{flex:1;min-height:0;overflow:auto;padding:0 16px 16px;container:evidence/inline-size}
+  body[data-theme] #detail-dialog.is-docked[open] #detail-body>.evidence-tabs{position:sticky;top:0;z-index:3;margin:0 -16px 12px;padding:8px 16px 0;background:var(--app-surface);border-bottom:1px solid var(--line)}
+  .evidence-resize{position:absolute;left:-4px;top:0;bottom:0;width:8px;cursor:col-resize;z-index:4}
+  .evidence-resize::after{content:'';position:absolute;left:3px;top:50%;width:2px;height:40px;margin-top:-20px;border-radius:2px;background:var(--line)}
+  .evidence-resize:hover::after,.evidence-resize:focus-visible::after{background:var(--ink)}
+  .evidence-resize:focus-visible{outline:none}
+}
+.evidence-modes{display:inline-flex;padding:2px;border:1px solid var(--line);border-radius:10px;background:var(--app-surface-soft)}
+body[data-theme] .evidence-modes button{height:28px;min-height:0;padding:0 10px;border:0;border-radius:8px;background:transparent;box-shadow:none;color:var(--muted);font:inherit;font-size:12px}
+body[data-theme] .evidence-modes button[aria-pressed=true]{background:var(--app-surface);color:var(--ink);box-shadow:var(--shadow-xs);font-weight:500}
+body[data-theme] .evidence-new-tab{font-size:12px;color:var(--muted)}
+/* Coverage notes collapse; one toolbar row for categories and export; tabs wrap instead of scrolling. */
+body[data-theme] #detail-dialog .evidence-about{margin:0 0 10px;font-size:13px}
+body[data-theme] #detail-dialog .evidence-about>summary{cursor:pointer;font-size:12px;color:var(--muted)}
+body[data-theme] #detail-dialog .evidence-about>p{margin:6px 0 0}
+#detail-dialog .evidence-about:not(:has(>p:not([hidden]))){display:none}
+body[data-theme] #detail-dialog.is-docked .evidence-reference-tables{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px}
+body[data-theme] #detail-dialog.is-docked .evidence-reference-tables>.reference-export-toolbar{order:2;margin:0 0 0 auto}
+body[data-theme] #detail-dialog.is-docked .evidence-reference-tables>.evidence-category-tabs{order:1;flex:1 1 260px;flex-wrap:wrap;overflow:visible;margin:0;padding:0 0 8px}
+body[data-theme] #detail-dialog.is-docked .evidence-reference-tables>:not(.reference-export-toolbar):not(.evidence-category-tabs){order:3;flex:1 1 100%;min-width:0}
+body[data-theme] #detail-dialog.is-docked .evidence-membership-source{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:0 0 10px}
+
+/* Firewall references: the Category column repeats the heading rows, so it is hidden visually there. */
+body[data-theme] #detail-dialog .evidence-firewall-table:has(tr.evidence-group-row) tr:not(.evidence-group-row)>:first-child{display:none}
+/* Wide and full screen: header row and rule name stay visible while scrolling. */
+@media(min-width:1280px){
+  body[data-theme] #detail-dialog.is-docked:is(.mode-wide,.mode-full) .evidence-firewall-table{table-layout:auto;min-width:1100px}
+  body[data-theme] #detail-dialog.is-docked.mode-full .evidence-table-scroll:has(.evidence-firewall-table){max-height:calc(100vh - 240px);overflow:auto}
+  body[data-theme] #detail-dialog.is-docked:is(.mode-wide,.mode-full) .evidence-firewall-table thead th{position:sticky;top:0;z-index:2;background:var(--app-surface-soft)}
+  body[data-theme] #detail-dialog.is-docked:is(.mode-wide,.mode-full) .evidence-firewall-table td[data-label=Name]{position:sticky;left:0;z-index:1;background:var(--app-surface);box-shadow:1px 0 0 var(--line)}
+}
+/* Narrow docked panel: one card per rule instead of eleven columns. */
+@container evidence (max-width: 760px){
+  #detail-dialog .evidence-firewall-table{display:block;min-width:0!important;width:100%;border:0}
+  #detail-dialog .evidence-firewall-table caption,#detail-dialog .evidence-firewall-table thead{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%)}
+  #detail-dialog .evidence-firewall-table tbody{display:block}
+  #detail-dialog .evidence-firewall-table tr{display:block}
+  body #detail-dialog .evidence-table-scroll .evidence-firewall-table tr.evidence-group-row>th:first-child{display:block;width:auto;padding:8px 0 4px;border:0;background:none;text-align:left}
+  #detail-dialog .evidence-firewall-table tr:not(.evidence-group-row){display:grid;grid-template-columns:96px minmax(0,1fr);gap:4px 10px;margin:0 0 8px;padding:10px 12px;border:1px solid var(--line);border-radius:10px;background:var(--app-surface)}
+  #detail-dialog .evidence-firewall-table tr:not(.evidence-group-row)>td{display:contents}
+  #detail-dialog .evidence-firewall-table tr:not(.evidence-group-row)>td::before{content:attr(data-label);font-size:12px;color:var(--muted);padding-top:2px}
+  #detail-dialog .evidence-firewall-table tr:not(.evidence-group-row)>td>*{min-width:0;overflow-wrap:anywhere}
+  #detail-dialog .evidence-firewall-table tr:not(.evidence-group-row)>td[data-label=Category]{display:none}
+  #detail-dialog .evidence-firewall-table tr:not(.evidence-group-row)>td[data-label=Name]::before{display:none}
+  #detail-dialog .evidence-firewall-table tr:not(.evidence-group-row)>td[data-label=Name]>*{grid-column:1/-1;font-weight:600}
+}
+
+/* Export dialog: categories with column presets, context and raw options, preview. */
+body[data-theme] .reference-export-dialog{width:min(560px,calc(100vw - 32px))}
+body[data-theme] .reference-export-categories{display:flex;flex-direction:column;gap:8px;margin:12px 0;padding:12px;border:1px solid var(--line);border-radius:12px}
+body[data-theme] .reference-export-categories legend{padding:0 4px;font-size:13px;font-weight:600}
+.reference-export-category{display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;gap:6px 10px}
+.reference-export-category>label{font-size:14px}
+body[data-theme] .reference-export-category select{width:auto;font-size:13px}
+.reference-export-columns{grid-column:1/-1;display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:4px 12px;padding:8px 0 4px 26px}
+.reference-export-columns>div,.reference-export-check{display:flex;align-items:center;gap:6px;font-size:13px}
+.reference-export-columns label{font-size:13px;font-weight:400}
+.reference-export-check{margin:8px 0}
+.reference-export-preview{margin:8px 0;font-size:13px;color:var(--muted)}

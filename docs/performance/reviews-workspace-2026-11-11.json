@@ -1,0 +1,16 @@
+{
+  "synthetic": true,
+  "inventoryFindings": 3000,
+  "sharedEnvironmentAndPersonalQueues": true,
+  "singleMixedTaskTable": true,
+  "mixedBulkSelectionPrevented": true,
+  "independentSecondApproval": true,
+  "drawerReturnScopePreserved": true,
+  "bulkActionConfirmation": true,
+  "largeQueuePageSize": 25,
+  "viewerReadOnly": true,
+  "desktopOverflow": false,
+  "mobileOverflow": false,
+  "nsxMembershipRequests": 0,
+  "browserErrors": []
+}

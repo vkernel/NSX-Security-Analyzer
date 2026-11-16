@@ -1,0 +1,37 @@
+{
+  "synthetic": true,
+  "groupsPerEnvironment": 600,
+  "initial": {
+    "attention": "150",
+    "compliant": "450",
+    "exceptions": "0",
+    "review": "10",
+    "all": "600"
+  },
+  "afterDraft": {
+    "attention": "150",
+    "compliant": "450",
+    "exceptions": "0",
+    "review": "10",
+    "all": "600"
+  },
+  "provisional": {
+    "attention": "150",
+    "compliant": "450",
+    "exceptions": "0",
+    "review": "10",
+    "all": "600"
+  },
+  "unavailable": {
+    "attention": "—",
+    "compliant": "—",
+    "exceptions": "—",
+    "review": "—",
+    "all": "—"
+  },
+  "reviewRetainsCompliantNames": true,
+  "draftPreviewQualified": true,
+  "switchingQueueClearsOutcome": true,
+  "mobilePageOverflow": false,
+  "browserErrors": []
+}

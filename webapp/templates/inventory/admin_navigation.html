@@ -1,5 +1,5 @@
 {% load admin_sections %}{% admin_sections as sections %}
 <div class="admin-navigation">
 <nav class="admin-tabs" aria-label="Administration categories"><a href="{% url 'administration' %}" {% if request.resolver_match.url_name == 'administration' %}aria-current="page"{% endif %}>Overview</a>{% for section in sections %}<a href="{{ section.url }}" {% if section.active %}aria-current="location"{% endif %}>{{ section.label }}</a>{% endfor %}</nav>
-{% for section in sections %}{% if section.active %}<nav class="admin-subtabs" aria-label="Administration pages">{% for link in section.links %}<a href="{{ link.url }}" {% if link.active %}aria-current="page"{% endif %}>{{ link.label }}</a>{% endfor %}</nav>{% endif %}{% endfor %}
+{% for section in sections %}{% if section.active and section.links|length > 1 %}<nav class="admin-subtabs" aria-label="Administration pages">{% for link in section.links %}<a href="{{ link.url }}" {% if link.active %}aria-current="page"{% endif %}>{{ link.label }}</a>{% endfor %}</nav>{% endif %}{% endfor %}
 </div>

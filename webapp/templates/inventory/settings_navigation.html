@@ -1,0 +1,1 @@
+<nav data-section-navigation class="settings-navigation" aria-label="Settings categories">{% for key,title in settings_sections %}<a href="?section={{ key }}" {% if settings_section == key %}aria-current="page"{% endif %}>{{ title }}</a>{% endfor %}</nav>

@@ -1,101 +1,57 @@
-/* Progressive enhancement: native selects remain available without JavaScript. */
+/* Context navigation: one document request, with native choices as fallback. */
 document.addEventListener('DOMContentLoaded', () => {
-  for (const id of ['environment-switcher', 'snapshot-switcher']) {
-    const select = document.getElementById(id);
-    if (!select || select.dataset.enhanced === 'true') continue;
-    select.dataset.enhanced = 'true';
-    if (select.hasAttribute('data-scope-navigation')) {
-      const status = select.parentElement.querySelector('.scope-status');
-      const retry = document.createElement('button'); retry.type = 'button'; retry.className = 'button scope-retry'; retry.textContent = 'Retry'; retry.hidden = true; status.after(retry);
-      const original = select.value;
-      let controller, pendingTarget, generation = 0;
-      const reset = () => { select.value = original; };
-      const navigate = async () => {
-        const target = pendingTarget;
-        const attempt = ++generation;
-        controller?.abort(); controller = new AbortController();
-        const timer = setTimeout(() => controller.abort(), 10000);
-        retry.hidden = true; status.textContent = 'Checking selected environment…';
-        try {
-          const response = await fetch(target.href, {credentials:'same-origin', cache:'no-store', signal:controller.signal, headers:{'X-Environment-Check':'1'}});
-          if (!response.ok || new URL(response.url || target.href).origin !== location.origin || /\/login\//.test(response.url)) throw new Error('unavailable');
-          if (attempt !== generation) return;
-          status.textContent = 'Opening selected environment…';
-          const navigation = window.WorkspaceNavigation?.start(response.url || target.href);
-          try { location.assign(target.href); }
-          catch (error) { window.WorkspaceNavigation?.cancel(navigation); throw error; }
-          // Keep the destination marker while a slow page loads; it cannot affect another URL.
-          setTimeout(() => { reset(); status.textContent = ''; }, 500);
-        } catch (error) {
-          if (attempt !== generation) return;
-          reset(); status.textContent = 'Could not open that environment. Your current page is unchanged.';
-          retry.hidden = false;
-        } finally { clearTimeout(timer); }
-      };
-      select.addEventListener('change', () => {
-        const option = select.selectedOptions[0];
-        if (!option?.dataset.url) return;
-        pendingTarget = new URL(option.dataset.url, location.origin);
-        if (select.dataset.browsing === 'true' && location.hash) pendingTarget.searchParams.set('panel', location.hash.slice(1));
-        navigate();
-      });
-      retry.addEventListener('click', navigate);
-      window.addEventListener('pageshow', event => { if (event.persisted) { reset(); status.textContent = ''; retry.hidden = true; } });
-      window.addEventListener('pagehide', () => { ++generation; controller?.abort(); });
-    }
-    const caption = id === 'environment-switcher' ? 'Environment' : 'Snapshot';
-    const root = document.createElement('details');
-    root.className = 'workspace-switcher';
-    const trigger = document.createElement('summary');
-    trigger.setAttribute('aria-expanded', 'false');
-    trigger.setAttribute('aria-label', caption + ': ' + select.selectedOptions[0]?.textContent);
-    trigger.textContent = select.selectedOptions[0]?.textContent || 'Select ' + caption.toLowerCase();
-    const panel = document.createElement('div'); panel.className = 'switcher-panel';
-    const search = document.createElement('input'); search.type = 'search';
-    search.placeholder = 'Find ' + (caption === 'Environment' ? 'an environment' : 'a snapshot');
-    search.setAttribute('aria-label', search.placeholder);
-    const list = document.createElement('div'); list.className = 'switcher-options';
-    const empty = document.createElement('p'); empty.textContent = 'No matches'; empty.hidden = true;
-    for (const option of select.options) {
-      if (!option.value && !option.dataset.url) continue;
-      const button = document.createElement('button'); button.type = 'button';
-      button.textContent = option.textContent;
-      if (option.selected) button.setAttribute('aria-current', 'true');
-      button.addEventListener('click', () => {
-        select.value = option.value;
-        root.open = false; select.dispatchEvent(new Event('change', {bubbles:true}));
-      });
-      list.append(button);
-    }
-    search.addEventListener('input', () => {
-      const term = search.value.trim().toLocaleLowerCase();
-      for (const button of list.children) button.hidden = !button.textContent.toLocaleLowerCase().includes(term);
-      empty.hidden = Array.from(list.children).some(button => !button.hidden);
-    });
-    root.addEventListener('toggle', () => {
-      trigger.setAttribute('aria-expanded', String(root.open));
-      if (root.open) {
-        document.querySelectorAll('.workspace-switcher').forEach(other => {if (other !== root) other.open = false;});
-        search.focus();
-      }
-    });
-    root.addEventListener('keydown', event => {
-      if (event.key === 'Escape') {root.open = false; trigger.focus(); event.preventDefault();}
-      if (['ArrowDown','ArrowUp'].includes(event.key) && root.open) {
-        const targets = [search,...Array.from(list.children).filter(button => !button.hidden)];
-        const direction = event.key === 'ArrowDown' ? 1 : -1;
-        targets[(targets.indexOf(document.activeElement) + direction + targets.length) % targets.length].focus();
-        event.preventDefault();
-      }
-    });
-    document.addEventListener('click', event => {if (!root.contains(event.target)) root.open = false;});
-    // Safari does not focus buttons on pointer clicks. Closing on focusout can
-    // remove the option between pointer-down and click, cancelling navigation.
-    document.addEventListener('focusin', event => {
-      if (!root.contains(event.target)) root.open = false;
-    });
-    panel.append(search,list,empty); root.append(trigger,panel); select.after(root); select.hidden = true;
-    const label = select.parentElement.querySelector('label');
-    label.removeAttribute('for');
+  const select = document.getElementById('environment-switcher');
+  if (!select || select.dataset.enhanced === 'true') return;
+  select.dataset.enhanced = 'true';
+  const status = select.parentElement.querySelector('.scope-status');
+  const original = select.value;
+  const root = document.createElement('details'); root.className = 'workspace-switcher';
+  const trigger = document.createElement('summary');
+  trigger.setAttribute('aria-expanded', 'false');
+  trigger.setAttribute('aria-label', 'Change environment: ' + select.selectedOptions[0]?.textContent);
+  const selectedLabel=document.createElement('span');selectedLabel.className='context-selected';selectedLabel.textContent=select.selectedOptions[0]?.textContent||'Choose environment';trigger.append(selectedLabel);
+  const panel = document.createElement('div'); panel.className = 'switcher-panel';
+  const label = document.createElement('label'); label.textContent = 'Switch environment';
+  const search = document.createElement('input'); search.type = 'search'; search.placeholder = 'Find an environment';
+  search.setAttribute('aria-label', 'Find an environment'); label.append(search);
+  const list = document.createElement('div'); list.className = 'switcher-options';
+  const empty = document.createElement('p'); empty.textContent = 'No matching environments'; empty.hidden = true;
+  const recent = [], other = [];
+  for (const option of select.options) {
+    const button = document.createElement('button'); button.type = 'button';button.textContent = option.textContent;
+    if (option.selected) button.setAttribute('aria-current','true');
+    button.addEventListener('click', () => {select.value = option.value;root.open = false;select.dispatchEvent(new Event('change',{bubbles:true}));});
+    const rank = Number(option.dataset.recentRank);
+    if (Number.isInteger(rank) && rank > 0 && !option.selected) recent.push({button,rank});
+    else other.push(button);
   }
+  if (recent.length) {
+    for (const [title,buttons] of [['Recently visited',recent.sort((a,b)=>a.rank-b.rank).map(item=>item.button)],['All other environments',other]]) {
+      if(!buttons.length)continue;
+      const group=document.createElement('section'),heading=document.createElement('h3');group.className='switcher-group';group.setAttribute('aria-label',title);heading.textContent=title;group.append(heading,...buttons);list.append(group);
+    }
+  } else list.append(...other);
+  const buttons=[...list.querySelectorAll('button')];
+  select.addEventListener('change', () => {
+    const option = select.selectedOptions[0]; if (!option?.dataset.url) return;
+    const target = new URL(option.dataset.url, location.origin);if(target.origin !== location.origin)return;
+    if(select.dataset.browsing === 'true' && location.hash) {
+      if(target.pathname.startsWith('/snapshots/'))target.hash = location.hash;
+      else target.searchParams.set('panel',location.hash.slice(1));
+    }
+    if (status) status.textContent = 'Opening ' + option.textContent + '…';
+    const stamp = window.WorkspaceNavigation?.start(target.href);
+    try { location.assign(target.href); }
+    catch (_) {window.WorkspaceNavigation?.cancel(stamp);select.value=original;if(status)status.textContent='Unable to navigate. Choose the environment again or use Environments.';}
+  });
+  search.addEventListener('input',()=>{const term=search.value.trim().toLocaleLowerCase();for(const b of buttons)b.hidden=!b.textContent.toLocaleLowerCase().includes(term);for(const group of list.querySelectorAll('.switcher-group'))group.hidden=![...group.querySelectorAll('button')].some(b=>!b.hidden);empty.hidden=buttons.some(b=>!b.hidden);});
+  root.addEventListener('toggle',()=>{trigger.setAttribute('aria-expanded',String(root.open));if(root.open&&(document.activeElement===trigger||!root.contains(document.activeElement)))search.focus();});
+  root.addEventListener('keydown',event=>{
+    if(event.key==='Escape'){root.open=false;trigger.focus();event.preventDefault();}
+    if(['ArrowDown','ArrowUp'].includes(event.key)&&root.open){const targets=[search,...buttons.filter(b=>!b.hidden)],delta=event.key==='ArrowDown'?1:-1;targets[(targets.indexOf(document.activeElement)+delta+targets.length)%targets.length].focus();event.preventDefault();}
+  });
+  document.addEventListener('click',e=>{if(!root.contains(e.target))root.open=false;});
+  document.addEventListener('focusin',e=>{if(!root.contains(e.target))root.open=false;});
+  window.addEventListener('pageshow',e=>{if(e.persisted){select.value=original;if(status)status.textContent='';}});
+  panel.append(label,list,empty);root.append(trigger,panel);select.after(root);select.hidden=true;
 });

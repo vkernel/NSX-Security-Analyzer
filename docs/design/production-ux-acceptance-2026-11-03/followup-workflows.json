@@ -1,0 +1,90 @@
+{
+  "fixture": {
+    "environment": 3,
+    "snapshot": "89133cd1-3fd3-470e-b091-2db3a59d7c1c",
+    "groups": 10839,
+    "vms": 4075,
+    "services": 1528,
+    "rules": 3239,
+    "policies": 133,
+    "preparation_seconds": 6.431,
+    "synthetic": true
+  },
+  "results": [
+    {
+      "name": "Policy summary identifies affected policies and filters their queue",
+      "passed": true
+    },
+    {
+      "name": "Recent environments use unique searchable keyboard-accessible choices",
+      "passed": true
+    },
+    {
+      "name": "large-naming stays bounded on the production-sized synthetic inventory",
+      "passed": true,
+      "firstVisitMs": 899,
+      "repeatVisitMs": 245,
+      "rendered": 20,
+      "limit": 20,
+      "responseBytes": 56577
+    },
+    {
+      "name": "large-vms stays bounded on the production-sized synthetic inventory",
+      "passed": true,
+      "firstVisitMs": 298,
+      "repeatVisitMs": 269,
+      "rendered": 25,
+      "limit": 25,
+      "responseBytes": 107255
+    },
+    {
+      "name": "large-groups stays bounded on the production-sized synthetic inventory",
+      "passed": true,
+      "firstVisitMs": 281,
+      "repeatVisitMs": 268,
+      "rendered": 25,
+      "limit": 25,
+      "responseBytes": 107623
+    },
+    {
+      "name": "large-rules stays bounded on the production-sized synthetic inventory",
+      "passed": true,
+      "firstVisitMs": 265,
+      "repeatVisitMs": 273,
+      "rendered": 25,
+      "limit": 25,
+      "responseBytes": 107959
+    },
+    {
+      "name": "large-map stays bounded on the production-sized synthetic inventory",
+      "passed": true,
+      "firstVisitMs": 369,
+      "repeatVisitMs": 165,
+      "rendered": 12,
+      "limit": 12,
+      "responseBytes": 150721
+    },
+    {
+      "name": "large-matrix stays bounded on the production-sized synthetic inventory",
+      "passed": true,
+      "firstVisitMs": 311,
+      "repeatVisitMs": 378,
+      "rendered": 50,
+      "limit": 50,
+      "responseBytes": 30485
+    },
+    {
+      "name": "Large naming queue search, pagination and policy summary agree",
+      "passed": true
+    },
+    {
+      "name": "Mobile recent-environment and policy summaries stay within 320px in both themes",
+      "passed": true,
+      "themes": [
+        "light",
+        "dark"
+      ],
+      "width": 320
+    }
+  ]
+}

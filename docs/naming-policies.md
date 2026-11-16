@@ -1,0 +1,177 @@
+# Group naming policies and component proposals
+
+Naming compliance assesses **NSX group display names**, not VM names. VM tags/scopes are evidence for building a group name. This workflow never renames objects or changes tags, membership expressions, rules or references in NSX/vCenter. Naming decisions are separate from deletion approvals.
+
+## Group types and evidence
+
+| Type | Definition | Naming source |
+|---|---|---|
+| Dynamic | Membership conditions | Positive VM Tag EQUALS conditions with scope and value; simple AND combinations can supply components directly, even for empty groups. |
+| Static | Explicit IP/MAC addresses, object paths or external IDs; also an empty expression list | Reviewed component values. Explicit member VM tags appear as suggestions, never automatic naming inputs. |
+| Mixed / nested | Conditions plus explicit members, or references to other groups | Reviewed component values. Nested definition evidence is shown with cycle/missing-definition warnings. |
+| Unknown | Missing or unsupported definition | Explicit review; never assumed to be an empty static group. |
+
+Classification uses the saved configuration, not current resolved membership. An empty dynamic group remains dynamic. OR, nested condition logic, extended expressions, unsupported conditions and mixed definitions require review before a name is generated. Conflicting values never select an arbitrary tag.
+
+## Configure policies
+
+Open **Administration → Naming policies**. Choose a global default or environment, then choose **Dynamic**, **Static**, **Mixed / nested** or **All group types**.
+
+Add ordered components and move them up/down. Sources are definition tag/reviewed scope values, fixed text, group path suffix, and group type. Each component supports required/optional values, case, allowed characters, maximum length and exact value mappings. Separators may be hyphens, underscores, dots or empty. Missing optional values do not add spare separators.
+
+For a type prefix, use the Group type source with mappings such as `dynamic=DGR`, `static=SGR`, `mixed=MGR`. These are examples; prefixes are entirely configurable. A template might produce `DGR-RTM-CTX-PRD` from type, location, application and environment. It does not need to reproduce every membership condition in the name.
+
+Use **Choose existing scope** to search collected scopes. The selector shows how many group definitions and VMs use each scope, labels VM-only suggestions, and compares availability across environments for global policies. Select a scope before choosing its tag values in category filters, the mapping builder or static-group proposals. **Enter a new scope/value manually** keeps new environments supported.
+
+Expand **Build a value mapping**, choose a collected value such as Production, enter PRD and select **Add / update mapping**. The editable mapping text remains available. Choosing suggestions never marks a proposal reviewed or changes NSX.
+
+The **Live naming example** updates as components, mappings or order change. It evaluates an example from up to 100 saved groups in the selected environment (the first environment for a global draft), using saved draft scope bindings. It is illustrative; the full impact preview remains required for policy precedence and collisions. Complete required form fields first.
+
+Suggestions come from ready, retained full snapshots and are cached for two minutes. Coverage warnings and missing collections are shown. Search returns up to 50 matches, from at most 10,000 scope/value pairs per environment; a limit warning is explicit. Manual values remain allowed.
+
+Tag/scope names and mapping keys match case-sensitively. With mappings configured, unmapped values are invalid. Environment scope mappings let a logical field such as Application use `Application` in Rotterdam and `AppCode` in Amsterdam. Suggestions come from saved scopes; free-text entry supports new environments before tagging exists.
+
+Matching environment policies precede global policies. Within that scope, a matching group-type policy precedes an all-type default; category rules then precede generic rules. A category is an exact scope value before mapping. Multiple remaining matches are ambiguous. A nonmatching local policy does not hide a matching global default.
+
+## Preview and activate
+
+Saving creates a draft/version. Active rules and mappings remain unchanged until **Preview affected groups**, impact acknowledgement and activation. The preview compares old/new names and outcomes, with up to 40 examples. Inventory, mapping or policy changes invalidate the preview. Configuration/version changes and proposal actions are audited.
+
+Previous versions can be opened as drafts, saved, previewed and activated; review their environment mappings separately. Disabling a policy may expose a global default or leave groups without a policy.
+
+## Group naming compliance
+
+Name outcomes and review progress are independent. **Needs attention**, **Compliant**
+and **Exceptions** partition the evaluated names; **Review needed** is a separate
+queue that can include a compliant name. A stale workflow does not remove a name
+from Compliant. Policy previews, the queues and exports use the same name outcomes.
+Review-needed counts are shown separately and must not be added to environment totals.
+
+Reviews fingerprint the winning active policy configuration and effective tag scope
+mappings for each group. Saving a draft, editing a draft mapping, renaming a policy,
+or changing an unrelated active policy does not invalidate a current review or
+exception. Changing relevant active rules, the group evidence, or an exception's
+expiry still requires review. Unchanged legacy fingerprints remain recognized;
+legacy fingerprints that cannot be verified conservatively require renewed review.
+No existing review history is rewritten and no schema migration is required.
+
+Coverage quality is displayed separately. With inventory warnings, matching names
+are labelled **Name matches (provisional)** and do not establish confirmed compliance
+or resolve an awaiting-verification workflow. A policy preview uses **Name matches
+(draft)** and identifies its source collection. Archived, unprepared or missing
+evidence shows **Assessment unavailable** and dashes instead of zero-compliant counts.
+Restore or collect source evidence before exporting an unavailable assessment.
+The CSV includes the displayed outcome and an `evidence_quality` column.
+
+Queue links preserve search, group type, policy and owner filters. Switching to a
+different queue clears the outcome filter so a previous Name differs filter cannot
+silently empty the Compliant queue. The selected queue's count matches its table;
+the other queue counts describe the results their links open.
+
+The [synthetic browser verification](performance/naming-consistency-2026-11-11.json)
+uses 600 groups per environment. It confirms unchanged active counts after a draft
+save, a separate review queue, qualified provisional/draft matches, unavailable
+counts shown as dashes, and usable mobile layout without JavaScript errors.
+
+Use **Naming compliance** in the left menu. Filter by group type, outcome, policy, owner or search. Each row shows current name, group path/type, proposed name and the evidence behind every component. Expand evidence for definition tags, explicit addresses/members, nested definitions and member VM tag suggestions. Group metadata tags are not treated as membership conditions.
+
+Duplicate proposals are checked case-insensitively against other groups' current and proposed names in the same environment. Names occupied by another group remain collisions even when that group might later be renamed.
+
+## Reviewed values and exceptions
+
+For static, mixed, untagged or otherwise ambiguous groups:
+
+1. Select groups and enter scope/value proposals explicitly. Member suggestions never become accepted values automatically.
+2. Optionally assign an operator and import drafts using UTF-8 CSV columns `group_path,scope,value`.
+3. Inspect **Simulate draft component values**. Complex definitions continue to require review.
+4. Mark selected proposals reviewed. Reviewed values now supply naming components in normal assessment; every component identifies whether its source is a definition tag, reviewed value or draft simulation.
+5. Apply any eventual changes externally using your approved process. This application performs no rename or tagging operation.
+
+CSV imports require known current group paths, are limited to 1 MB / 1,000 rows, and reject invalid imports atomically. Bulk page selection is limited to 100 groups. Value changes reset review. A changed group name, identity or definition makes proposals stale; reject/clear them before preparing fresh values. Changing a static member's VM tags does not automatically change its reviewed naming values.
+
+Administrators can select **Accept naming exception with reason** for intentional names or groups outside the convention. The reason and reviewer appear in the row; an exception is distinct from compliance and never grants deletion approval. Group or naming-policy/mapping changes invalidate the exception. Reject/clear removes it from current assessment while preserving audit history.
+
+## Deployment and storage
+
+Apply migrations **0055 and 0056** before starting matching web/worker versions. Earlier VM proposals are preserved as legacy records and excluded from group assessment. Existing VM policies are not automatically repurposed: review group type/components, save a group draft, preview and activate.
+
+Assessment uses the latest retained full, non-test, non-imported snapshot. Archived browsing data must be restored. Missing/warning coverage is explicit; saved evidence is not a live NSX check. Nested supporting evidence is bounded to 100 unique definitions and 30 levels, with an explicit limit message.
+
+Results are calculated on request rather than duplicated per collection. Persisted data is policies/version history, scope mappings, and one proposal/exception per environment/group. List pages contain 50 rows; collision checks include all groups in the environment.
+
+
+### Remove a policy
+
+An administrator can open a policy, expand **Remove policy**, acknowledge the impact and confirm. Removal stops assessment by that policy and hides it from the current list. Another matching policy may take over; otherwise affected groups have no applicable naming policy. NSX objects, group names and tags are unchanged.
+
+**Removed policies** retains read-only versions, configurations and the removal actor/time in history. Removed policies cannot be edited or reactivated. Use **Disable policy** instead if you intend to activate it again later. A concurrent change requires reloading before removal. Deploy migration `0059_naming_policy_removal` before using this feature.
+
+### Guided editing
+
+Choose **New policy** from the overview, or open an existing policy. Follow Choose scope → Build name → Preview impact → Activate. The illustrative name preview remains visible on desktop; component issues appear beside their component. Save the draft before previewing full impact. Optional environment mappings and version history are expandable.
+
+
+## Match a VDI scope with any user value
+
+Open **Naming compliance → Naming policies**, edit the VDI policy, and choose
+**1. Scope**. Set **Match condition** to **Scope exists — any value**. Select
+**Category field** from the dropdown of tag components (for example `VDI user — VDI_Gebruiker`).
+The category-value field and picker are hidden and not submitted in Scope exists mode. Under **2. Name components**, set that
+component's source to **Definition tag / reviewed scope value** and its default
+scope to `VDI_Gebruiker`. Scope spelling is case-sensitive; active environment scope
+mappings are respected. This matches any nonempty observed value in that scope.
+
+Use fixed text `SZ-TRD_VDI00-C-P0_VDI-DC_POL` as the first component with the extended
+character format, followed by the required VDI user component with digits-only format,
+and use a hyphen separator. Leave value mappings empty for arbitrary user IDs.
+Save the draft, preview affected groups, then activate it. Draft edits alone do not
+change assessments.
+
+Keep the general dynamic-group policy's Category field/value blank as the fallback.
+Environment-specific policies still precede global policies, and group-type policies
+precede all-type policies. Within that priority, exact category matches precede
+scope-exists matches, which precede general defaults. Equally specific matches are
+reported as ambiguous; no policy is chosen by name or creation order. Existing policies
+without a Match condition retain their previous exact-category behavior.
+
+Filtering by either conflicting policy includes ambiguous groups. Outcome filters
+still apply; use **Show all outcomes and policies** in an empty result to clear them.
+The impact preview warns explicitly when activation would turn compliant groups into
+ambiguous groups. No NSX tags, memberships or names are changed by these settings.
+
+## Duplicate a policy
+
+Select **Duplicate policy** in the policy list, or **Duplicate saved draft** while
+editing. This opens a new form populated from the saved draft, with a suggested copy
+name and editable environment. Nothing is created until **Save draft**. The new policy
+is inactive and requires its own impact preview and activation. Unsaved editor changes,
+environment scope bindings, activation state and version history are not copied.
+
+## Naming remediation work
+
+The default **Needs attention** tab lists naming issues, expired exceptions and work
+whose policy or group definition changed. **Compliant**, **Exceptions**, and **All groups**
+keep those views separate. Common issues are grouped by outcome and applicable policies
+so an administrator can fix a shared policy before editing many objects. Current and
+proposed names highlight changed text; the evidence panel explains every component.
+
+Select up to 100 rows in the current environment to assign an operator, record reviewed
+values, accept an exception or update progress. Confirmation lists selected names grouped
+by policy. Validation is atomic: if any selected record is invalid, nothing is saved.
+CSV exports include owner, progress, ticket and exception expiry. Existing policy impact
+previews show before/after outcome counts and newly ambiguous groups before activation.
+
+Progress is Unassigned, In review, Change prepared, Awaiting verification, or Resolved.
+Prepared/awaiting work requires an owner, a determinable proposed name and a change ticket.
+No action renames NSX objects. After external work, choose Awaiting verification. A later
+full collection must show the expected compliant name, complete coverage, and unchanged
+policy and definition before the UI reports Resolved. Simulation and reviewed component
+values alone cannot resolve work. Resolution is derived from current evidence rather than
+an operator checkbox; a later regression reopens the assessment. Objects missing from the
+latest inventory are not assumed resolved. Notes and assignments remain stored.
+
+Group-definition or policy changes mark tracked work as needing review. Operators can
+review the new evidence and update progress again; notes and ownership are preserved.
+Exceptions require an administrator, reason, owner and expiry date. Legacy exceptions
+without an expiry must be reviewed again. Expired or invalidated exceptions return to
+Needs attention. Migration 0061 adds workflow and expiry fields; apply it before deployment.

@@ -1,0 +1,44 @@
+{
+  "syntheticVMs": 1200,
+  "savedGroups": 2,
+  "currentGroups": 4,
+  "automaticNSXRequests": 1,
+  "explicitRefreshRequests": 1,
+  "categoryTabs": [
+    "Groups",
+    "Firewall rules"
+  ],
+  "vmMembersRemoved": true,
+  "tagCandidatesRemoved": true,
+  "firewallFields": true,
+  "servicesInspection": true,
+  "sharedInverse": true,
+  "snapshotUnchanged": true,
+  "errors": [],
+  "checks": [
+    {
+      "width": 1440,
+      "theme": "light",
+      "overflow": false,
+      "drawerOverflow": false
+    },
+    {
+      "width": 390,
+      "theme": "light",
+      "overflow": false,
+      "drawerOverflow": false
+    },
+    {
+      "width": 1440,
+      "theme": "dark",
+      "overflow": false,
+      "drawerOverflow": false
+    },
+    {
+      "width": 390,
+      "theme": "dark",
+      "overflow": false,
+      "drawerOverflow": false
+    }
+  ]
+}

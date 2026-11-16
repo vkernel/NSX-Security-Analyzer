@@ -1,0 +1,8 @@
+{% extends 'base.html' %}
+{% block title %}Get started · NSX Security Analyzer{% endblock %}
+{% block content %}
+{% include 'components/page_header.html' with title='Get started' description='Set up the workspace in a few steps. Each step is checked against the current workspace.' only %}
+<p class="muted">{{ complete }} of {{ steps|length }} steps done.</p>
+<ol class="start-steps">{% for step in steps %}<li class="{{ step.state }}"{% if step.state == 'current' %} aria-current="step"{% endif %}><span class="start-step-mark" aria-hidden="true">{% if step.done %}✓{% else %}{{ step.number }}{% endif %}</span><div><strong>{{ step.title }}</strong><p>{{ step.text }}</p></div><span class="visually-hidden">{% if step.done %}Done{% elif step.state == 'current' %}Next step{% else %}Not started{% endif %}</span>{% if step.done %}<span class="pill succeeded">Done</span>{% elif step.action %}<a class="button{% if step.state == 'current' %} primary{% endif %}" href="{{ step.url }}">{{ step.action }}</a>{% else %}<span class="pill neutral">Ask an administrator</span>{% endif %}</li>{% endfor %}</ol>
+<p class="muted small">Collection only reads from NSX. Findings become reviewable after enough snapshots have been observed; nothing is changed in NSX without a separate approval and deletion workflow.</p>
+{% endblock %}

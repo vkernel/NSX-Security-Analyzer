@@ -1,0 +1,12 @@
+{
+  "overall": "Needs attention\n2\nCompliant\n3\nExceptions\n0\nAll groups\n5",
+  "policy": "Needs attention\n1\nCompliant\n2\nExceptions\n0\nAll groups\n3",
+  "policyKept": true,
+  "compliantRows": 2,
+  "example": "Naming count regression (synthetic) · SZ-TZW-EXT-HST-10.128.196.150 → SZ-TZW-EXT-HST-10.128.196.150\n\nCompliant\n\nComponent breakdown and sample limits",
+  "preview": "Preview impact\n\nPreview uses the latest retained full collection for each affected environment. No tags, group names or NSX objects will be modified.\n\nPreview affected groups\nNaming count regression (synthetic)\n\nThis draft policy · 3 matching groups\n\nCompliant: 2\nNeeds attention: 1\nExceptions: 0\n\nCounts use the draft rules and current reviewed values. Matching includes policy conflicts. Active rules remain unchanged until activation.\n\nEnvironment totals after this draft · 5 groups\nEnvironment before / after qualification\nExamples of environment impact (up to 40)\nEnvironment / group\tPrevious proposal\tDraft proposal\tOutcome\nNaming count regression (synthetic)\nSZ-TZW-EXT-HST-10.128.196.153\tSZ-TZW-EXT-HST-10.128.196.154\tSZ-TZW-EXT-HST-10.128.196.154\tName differs\nNaming count regression (synthetic)\nSZ-TZW-EXT-UNKNOWN-10.128.196.155\tUnavailable\tUnavailable\tNo applicable policy\n2 rows shown\nActivate reviewed policy\n I reviewed the impact and want to activate this read-only assessment policy.Activate policy\nDisable assessment policy",
+  "missingValueHelp": [
+    "Address: Prepare and review a value for naming/missing-address in Naming compliance → All groups. (observed: Missing)"
+  ],
+  "errors": []
+}

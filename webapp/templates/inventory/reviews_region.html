@@ -1,0 +1,47 @@
+{% load workspace_time review_identity %}
+<div id="review-results" data-live-region data-poll="{% if has_cleanup %}true{% else %}false{% endif %}">
+<template data-review-totals>{% for entry in queue_links %}<span data-review-count="{{ entry.key }}">{{ entry.count }}</span>{% endfor %}</template>
+<div class="review-board" data-review-board data-selected="{{ selected_key }}">
+<section class="review-list content-card" aria-label="Review tasks">
+<div class="table-scroll" tabindex="0" role="region" aria-label="Review tasks table"><table class="review-task-table"><caption class="visually-hidden">{{ queue_label }} · {{ scope_label }}</caption>
+<thead><tr>{% if user.is_staff %}<th>{% if has_findings %}<input type="checkbox" data-bulk-all="bulk-work" aria-label="Select findings on this page">{% elif has_cleanup %}<input type="checkbox" data-bulk-all="bulk-cleanup" aria-label="Select cleanup plans on this page">{% endif %}</th>{% endif %}<th>Finding / task</th><th>Stage</th></tr></thead>
+<tbody>{% for item in page %}<tr data-review-task="{{ item.review_kind }}" data-review-key="{{ item.key }}"{% if item.key == selected_key %} aria-current="true"{% endif %}>
+{% if user.is_staff %}<td class="review-select">{% if item.review_kind == 'finding' %}<input type="checkbox" data-review-kind="finding" data-bulk-choice="bulk-work" data-environment="{{ item.environment_id }}" data-bulk-allowed="export{% if item.can_assign %} assign_me assign{% endif %}{% if item.can_release %} release reassign{% endif %}{% if item.can_delete %} preview{% endif %}" value="{{ item.pk }}:{{ item.revision }}" aria-label="Select {{ item.name }} in {{ item.environment.name }}">{% else %}<input type="checkbox" data-review-kind="cleanup" data-bulk-choice="bulk-cleanup" data-bulk-allowed="cancel export" value="{{ item.pk }}" aria-label="Select {{ item.name }} cleanup">{% endif %}</td>{% endif %}
+<td class="review-item"><span class="review-item-line"><abbr class="review-kind" title="{{ item.task_label }}">{{ item.kind_code }}</abbr><a class="review-item-name" data-review-select="{{ item.key }}" aria-controls="review-detail-{{ item.key }}" href="?{% if selection_query %}{{ selection_query }}&amp;{% endif %}selected={{ item.key }}#review-detail-{{ item.key }}">{{ item.name }}</a></span>
+<span class="review-item-meta"><span>{% if item.review_kind == 'finding' and item.qualification_reason %}{{ item.qualification_reason }}{% else %}{{ item.task_label }}{% endif %}</span><span>{{ item.environment.name }}</span><span>{% if item.owner %}{{ item.owner|review_name }}{% else %}Unassigned{% endif %}</span></span></td>
+<td class="review-stage"><span class="pill {{ item.tone }}">{{ item.stage }}</span>{% if item.review_kind == 'finding' and item.readiness.status == 'blocked' %}<small>Review required</small>{% endif %}</td>
+</tr>{% empty %}<tr><td colspan="{% if user.is_staff %}3{% else %}2{% endif %}" class="empty-state">
+{% if filter_form.errors %}<strong>Check your filters</strong><p>One or more filter values are invalid.</p>{% elif filters_active or work_environment %}<strong>No matching tasks</strong><p>Try another search, task type or environment.</p>{% else %}<strong>{% if queue == 'assigned' %}No reviews assigned to you{% elif queue == 'unassigned' %}No unassigned findings{% elif queue == 'second' %}No tasks awaiting your second approval{% elif queue == 'ready' %}No tasks ready for cleanup{% else %}No findings ready for review{% endif %}</strong><p>Review tasks appear when they meet the configured criteria.</p>{% endif %}
+</td></tr>{% endfor %}</tbody></table></div>
+{% include 'inventory/history_pagination.html' %}
+</section>
+{% if page.object_list %}<div class="review-details">{% for item in page %}
+<article class="review-detail content-card" id="review-detail-{{ item.key }}" data-review-detail="{{ item.key }}" aria-labelledby="review-detail-title-{{ item.key }}" tabindex="-1"{% if item.key != selected_key %} hidden{% endif %}>
+<header class="review-detail-head"><div><h2 id="review-detail-title-{{ item.key }}">{{ item.name }}</h2><p>{{ item.task_label }} · {{ item.environment.name }}</p></div><span class="pill {{ item.tone }}">{{ item.stage }}</span></header>
+{% if item.review_kind == 'finding' %}
+<dl class="review-facts">
+<dt>Finding</dt><dd>{{ item.qualification_reason|default:item.task_label }}</dd>
+<dt>Observed</dt><dd>{{ item.observation_count }} successful observation{{ item.observation_count|pluralize }} over {{ item.observation_days }} day{{ item.observation_days|pluralize }}{% if item.required_days %} (criteria: {{ item.required_days }} day{{ item.required_days|pluralize }}){% endif %}</dd>
+<dt>Qualification</dt><dd>{{ item.get_qualification_display }}{% if not item.present %} · no longer currently observed{% endif %}</dd>
+<dt>Assigned to</dt><dd>{% if item.owner %}{{ item.owner|review_name }}{% else %}Unassigned{% endif %}{% if item.assignment_notice %}<small>{{ item.assignment_notice }}</small>{% endif %}</dd>
+<dt>Approvals</dt><dd>{{ item.approval_count }} / {{ item.required_approvals }} recorded</dd>
+<dt>Updated</dt><dd>{% user_time item.task_updated %}</dd>
+</dl>
+{% if item.readiness.status == 'blocked' %}<p class="notice">Review required · {{ item.readiness.message }}</p>{% endif %}
+<div class="review-steps"><strong>Decommissioning steps</strong><ol>{% for step in item.steps %}<li class="{{ step.state }}"><span aria-hidden="true">{% if step.state == 'done' %}✓{% else %}{{ step.number }}{% endif %}</span>{{ step.label }}<span class="visually-hidden"> · {% if step.state == 'done' %}done{% elif step.state == 'current' %}current step{% else %}not started{% endif %}</span></li>{% endfor %}</ol>{% if item.workflow_state == 'rejected' %}<p class="muted small">This review was rejected. Open it to reopen with a reason.</p>{% endif %}</div>
+<div class="review-detail-actions"><a class="button primary" data-record-panel data-review-link href="{{ item.review_url }}">{{ item.next_action }}</a><a class="button" href="{{ item.review_url }}">Open full review</a></div>
+<p class="muted small">Coverage, saved references and current evidence are checked on the review itself.{% if item.required_approvals == 2 %} With four-eyes, a different operator or administrator gives the second approval.{% endif %} Deletion then needs an administrator's preview, which revalidates live against NSX before anything is deleted.</p>
+{% else %}
+<dl class="review-facts">
+<dt>Task</dt><dd>Firewall reference cleanup</dd>
+<dt>Stage</dt><dd>{{ item.stage }}</dd>
+<dt>Requested by</dt><dd>{% if item.owner %}{{ item.owner|review_name }}{% else %}Unknown{% endif %}</dd>
+<dt>Approvals</dt><dd>{{ item.task.approvals }} / {{ item.task.required }} recorded</dd>
+<dt>Updated</dt><dd>{% user_time item.task_updated %}</dd>
+</dl>
+<div class="review-detail-actions cleanup-task-actions"><a class="button primary review-task-action" href="{{ item.review_url }}">{{ item.next_action }}</a><details><summary class="button">More</summary><nav aria-label="Related cleanup records"><a href="{% url 'task-cancel' 'cleanup' item.pk %}">Cancel cleanup plan</a><a href="{% url 'deletion-detail' item.task.item.batch_id %}">View deletion request</a>{% if item.task.item.finding_id %}<a data-record-panel href="{% url 'finding-detail' item.environment_id item.task.item.finding_id %}?return_to={{ review_return|urlencode }}">View original finding</a>{% endif %}</nav></details></div>
+<p class="muted small">Cleanup changes saved rule references only after approval and live revalidation.</p>
+{% endif %}
+</article>{% endfor %}</div>{% endif %}
+</div>
+</div>

@@ -1,8 +1,14 @@
 """Explicit, admin-confirmed deletion. No force, redirect, cascade or DELETE retry."""
+from .preferences import table_page_size
 from contextlib import contextmanager
 from datetime import timedelta
 import json
 import re
+import time
+import threading
+from concurrent.futures import ThreadPoolExecutor
+from contextlib import nullcontext
+from django.db import close_old_connections, connections, connection as database_connection
 from urllib.parse import quote
 import urllib3
 from django.contrib.auth.decorators import login_required
@@ -10,6 +16,7 @@ from django.core.exceptions import ValidationError
 from django.core.paginator import Paginator
 from django.db.models import Count, Q, Prefetch, Case, When, Value, BooleanField
 from django.db import transaction
+from django.conf import settings
 from django.http import HttpResponse, HttpResponseForbidden
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
@@ -20,6 +27,10 @@ from .models import DeletionBatch, DeletionItem, Environment, Finding
 from .finding_workflow import approval_readiness, review_fingerprint, coverage_changed, event
 from .audit_events import record
 
+READ_RETRIES = 2
+# A live dependency scan is reused by later objects of the same run for at most
+# this long; per-object identity, condition and pre-DELETE reads stay fresh.
+SCAN_REUSE_SECONDS = 120
 KINDS = {'unused', 'unused_service', 'empty_group', 'zero_hits', 'disabled', 'empty_policy'}
 PATTERNS = {
     'Group': r'/infra/domains/[^/]+/groups/[^/]+',
@@ -52,8 +63,12 @@ def connection(env):
     if not env.enabled: raise ValidationError('The environment is paused.')
     if not env.username or not env.password_ciphertext: raise ValidationError('Environment credentials are missing.')
     client = collector.NSXClient(env.manager, env.username, decrypt_password(env.password_ciphertext),
-        timeout=min(env.timeout, 30), retries=0, insecure=env.insecure,
+        timeout=min(env.timeout, 30), retries=min(env.retries, READ_RETRIES), insecure=env.insecure,
         ca_data=env.ca_certificate or None, ca_bundle=None if env.ca_certificate else env.ca_bundle or None)
+    # Read-only GETs share adaptive pacing (Retry-After, 429 cooldown) and bounded
+    # retries. DELETE and rule PUT requests are sent separately and never retried.
+    from .concurrency import adapt_requests
+    adapt_requests(client, maximum=4)
     try: yield client
     finally: client.close()
 
@@ -87,6 +102,7 @@ def current_object(client, path):
 
 def validate_live(client, finding):
     """Read-only preflight, repeated for each target immediately before execution."""
+    identity_started = time.monotonic()
     client.direct_membership_verified = False
     client.cleanup_plan = []
     readiness = approvals_valid(finding)
@@ -111,20 +127,68 @@ def validate_live(client, finding):
         configuration = {'rule': configuration, 'policy': {k: parent.get(k) for k in ('scope','category','sequence_number','stateful')}}
     if not evidence.get('configuration') or configuration != clean(evidence['configuration']):
         raise ValidationError('Configuration differs from approved evidence. Collect again and repeat review.')
-    domains = collector.objects(client, '/infra/domains')
-    groups = [g for d in domains for g in collector.objects(client, d['path'] + '/groups')]
-    services = collector.objects(client, '/infra/services')
-    resources, coverage = collector.verified_configuration_search(client, groups, services)
+    started = time.monotonic()
+    client.__dict__.setdefault('deletion_timings', {})['identity_approval_seconds'] = round(started - identity_started, 3)
+    cache = getattr(client, 'preview_dependency_cache', None)
+    with cache.get("lock", nullcontext()) if isinstance(cache, dict) else nullcontext():
+        cached = cache.get('evidence') if isinstance(cache, dict) else None
+        # run() supplies this cache for one preview or execution run only; it is never
+        # retained across jobs. A scan is shared for SCAN_REUSE_SECONDS. Identity,
+        # condition and the final pre-DELETE reads remain per object and fresh.
+        reused = bool(cached and time.monotonic() - cached['completed'] < SCAN_REUSE_SECONDS)
+        progress = client.__dict__.get('verification_progress')
+        if progress: progress('Checking incoming references' + (' using this request’s shared scan.' if reused else ' with a full live dependency scan.'))
+        if reused:
+            # Consumers only read these inventory records. Keep one copy per job
+            # rather than cloning the full environment for each object.
+            groups, services, resources, coverage = cached['data']
+            client.dependency_scanned_at = cached['scanned_at']
+        else:
+            if isinstance(cache, dict): cache.pop('evidence', None)
+            scanned_at = timezone.now()
+            domains = collector.objects(client, '/infra/domains')
+            groups = [g for d in domains for g in collector.objects(client, d['path'] + '/groups')]
+            services = collector.objects(client, '/infra/services')
+            resources, coverage = collector.verified_configuration_search(client, groups, services)
+            client.dependency_scanned_at = scanned_at
+            if (isinstance(cache, dict) and coverage.get('mode') == 'all_types'
+                    and not coverage.get('errors') and not coverage.get('failed')
+                    and not getattr(client, 'inventory_warnings', [])):
+                cache['evidence'] = {'completed': time.monotonic(), 'scanned_at': scanned_at, 'data': (groups, services, resources, coverage)}
+        entry = cache.get('evidence') if isinstance(cache, dict) else None
     client.search_diagnostics = coverage
+    timings = client.__dict__.setdefault('deletion_timings', {})
+    timings['dependency_seconds'] = round(time.monotonic() - started, 3)
+    timings['shared_preview_scan'] = reused
+    if progress: progress('Checking object condition and membership; dependency search completed.')
+    condition_started = time.monotonic()
     if coverage.get('mode') != 'all_types' or coverage.get('errors') or coverage.get('failed'):
         raise ValidationError('Live dependency coverage is incomplete. Automated deletion is blocked; manual verification cannot override this.')
     if not any(r.get('path') == finding.path for r in resources):
         raise ValidationError('The live search index does not contain the target object.')
-    refs = collector.collect_references(resources + groups + services, [obj])[finding.path]
+    if entry is not None and not obj.get('remote_path') and finding.path in cache.get('targets', ()):
+        with cache.get('lock', nullcontext()):
+            if 'references' not in entry:
+                entry['references'] = collector.collect_references(resources + groups + services, [{'path': path} for path in cache['targets']])
+            refs = entry['references'][finding.path]
+    else:
+        refs = collector.collect_references(resources + groups + services, [obj])[finding.path]
+    # Objects deleted earlier in this run were verified absent; a shared scan or a
+    # lagging search index can still list them, so they are not references.
+    deleted = set(cache.get('deleted', ())) if isinstance(cache, dict) else set()
+    refs = set(refs) - deleted
+    client.batch_dependencies = []
+    if isinstance(cache, dict) and not cache.get('execution'):
+        # In a preview, references from other objects of the same request become an
+        # execution order: those objects are deleted first. Execution re-checks live
+        # references and blocks this object if any of them was not deleted.
+        others = set(cache.get('targets', ())) - {finding.path}
+        client.batch_dependencies = sorted(refs & others)
+        refs -= others
     cleanup_allowed = finding.kind == 'empty_group' and getattr(client, 'allow_reference_cleanup', False) is True
     if refs and not cleanup_allowed:
         raise ValidationError('Referenced by: ' + ', '.join(sorted(refs)[:10]))
-    children = [r['path'] for r in resources if r.get('path', '').startswith(finding.path + '/')]
+    children = [r['path'] for r in resources if r.get('path', '').startswith(finding.path + '/') and r['path'] not in deleted]
     if kind != 'Service' and children: raise ValidationError('The object has child configuration; cascading deletion is blocked.')
     if kind == 'Service' and any(not p.startswith(finding.path + '/service-entries/') for p in children):
         raise ValidationError('Unsupported service child configuration exists.')
@@ -150,6 +214,7 @@ def validate_live(client, finding):
     if refs:
         from .reference_cleanup import build_plan
         client.cleanup_plan = build_plan(client, obj, refs, resources + groups + services)
+    timings['condition_reference_seconds'] = round(time.monotonic() - condition_started, 3)
     return obj
 
 
@@ -179,9 +244,23 @@ def guard(batch, finding, item):
     if actor: actor.refresh_from_db()
     if not permitted(actor): raise ValidationError('The responsible administrator is no longer authorized.')
     if batch.environment.manager != batch.manager: raise ValidationError('The configured NSX Manager changed. Create a new preview.')
-    if not finding or finding.environment_id != batch.environment_id or finding.path != item.path or finding.revision != item.revision:
+    if not finding or finding.environment_id != batch.environment_id or finding.path != item.path or not unchanged(finding, item):
         raise ValidationError('The finding changed. Create a new preview.')
     approvals_valid(finding)
+
+
+def unchanged(finding, item):
+    """A later collection republishes every observed finding and raises its revision.
+    Only a change to approved identity, configuration, evidence or approvals matters."""
+    if finding.revision == item.revision:
+        return True
+    approved = item.approved_evidence
+    if not approved or not item.approvals:
+        return False  # Not yet previewed: the exact selected revision is required.
+    evidence = finding.evidence
+    return (all(evidence.get(key) == approved.get(key) for key in ('unique_id', 'created_at', 'configuration'))
+            and review_fingerprint(finding.kind, evidence) == review_fingerprint(finding.kind, approved)
+            and finding.approvals == item.approvals)
 
 
 def execution_authorized(batch, item):
@@ -196,11 +275,17 @@ def execution_authorized(batch, item):
     if (not item.verified_at or batch.confirmed_at < item.verified_at
             or batch.confirmed_at - item.verified_at > timedelta(minutes=10)):
         raise ValidationError('Preview expired before confirmation. Create a new preview.')
+    if batch.execution_intent.get('state') == 'queued':
+        from django.utils.dateparse import parse_datetime
+        deadline = parse_datetime(batch.execution_intent.get('expires_at', ''))
+        if not deadline or timezone.now() >= deadline:
+            raise ValidationError('Automatic execution authorization expired. Review and confirm again.')
     if timezone.now() - batch.confirmed_at > timedelta(hours=1):
         raise ValidationError('Execution authorization expired after one hour. Create a new preview and confirm again.')
 
 
-def process_item(item, execute=False):
+def process_item(item, execute=False, preview_cache=None):
+    started = time.monotonic()
     batch = item.batch
     from .execution_policy import executor
     actor = executor(batch) if execute else batch.requested_by
@@ -208,7 +293,7 @@ def process_item(item, execute=False):
         return
     if execute and not DeletionItem.objects.filter(pk=item.pk, status='verified').update(status='validating'):
         return
-    rechecking = not execute and item.status == 'cleanup_recheck'
+    rechecking = not execute and (item.status == 'cleanup_recheck' or item.verification.get('refresh_requested') is True)
     old_plan, old_before = item.cleanup_plan, item.before
     old_decisions = item.cleanup_approvals
     sent = False
@@ -219,19 +304,33 @@ def process_item(item, execute=False):
         if execute:
             execution_authorized(batch, item)
         with connection(batch.environment) as client:
+            client.preview_dependency_cache = preview_cache
+            client.deletion_timings = {}
+            def progress(message):
+                DeletionItem.objects.filter(pk=item.pk).exclude(status='cancelled').update(message=message)
+            client.verification_progress = progress
+            progress('Checking current identity, configuration and approval eligibility.')
             client.allow_reference_cleanup = finding.kind == 'empty_group'
             obj = validate_live(client, finding)
             if obj is None:
                 item.status, item.message = 'already_absent', 'Already absent in NSX; no deletion sent and no review marked decommissioned.'
+                if isinstance(preview_cache, dict):
+                    preview_cache.setdefault('deleted', set()).add(item.path)
             elif not execute:
-                from .reference_cleanup import plan_difference
-                if rechecking and (obj != old_before or plan_difference(old_plan, getattr(client, 'cleanup_plan', None))):
-                    raise ValidationError('Cleanup plan or object changed. Create a new preview and obtain renewed cleanup approvals.')
+                from .reference_cleanup import plan_difference, configuration
                 if rechecking:
+                    from .reference_cleanup import changed_fields
+                    changes = changed_fields(configuration(old_before), configuration(obj), 'object.') + plan_difference(old_plan, getattr(client, 'cleanup_plan', None))
+                    if changes:
+                        item.verification['refresh_changes'] = changes
+                        raise ValidationError('Cleanup plan or object changed: ' + ', '.join(changes[:20]) + '. Create a new preview and obtain renewed cleanup approvals when required.')
+                if rechecking and old_plan:
                     from .reference_cleanup import validate_approvals
                     validate_approvals(item)
-                item.before, item.approved_evidence, item.approvals = obj, finding.evidence, finding.approvals
-                item.verified_at = timezone.now()
+                item.before, item.approved_evidence, item.approvals = old_before if rechecking else obj, finding.evidence, finding.approvals
+                # Dependency evidence is only as fresh as the live scan it came from.
+                scanned_at = client.__dict__.get('dependency_scanned_at')
+                item.verified_at = min(timezone.now(), scanned_at) if scanned_at else timezone.now()
                 item.verification = {
                     'Membership verification': 'Explicit zero VM, IP and port members; retained qualified history' if getattr(client, 'direct_membership_verified', False) is True else 'Standard finding-specific live checks',
                     'Identity and configuration': 'Matches approved evidence',
@@ -244,10 +343,17 @@ def process_item(item, execute=False):
                                   'empty_policy':'Fresh rule inventory confirmed empty'}[finding.kind],
                 }
                 from .related_decommission import related_findings
+                dependencies = client.__dict__.get('batch_dependencies') or []
+                if dependencies:
+                    item.verification['batch_dependencies'] = dependencies
+                    item.verification['Execution order'] = (f'Referenced only by {len(dependencies)} other object(s) in this request. '
+                        'They are deleted first; this object is blocked if any of them is not deleted.')
                 item.verification['Related findings'] = [
                     {'id': row.pk, 'kind': {'unused': 'Unused group', 'unused_service': 'Unused custom service'}.get(row.kind, row.kind.replace('_', ' ').capitalize()), 'name': row.name}
                     for row in related_findings(finding)]
                 item.status, item.message = 'verified', 'Ready for confirmation. Required live checks passed; explicit execution authorization is still required.'
+                if rechecking:
+                    item.message = 'Verification refreshed; unchanged approvals retained. Ready for explicit execution confirmation.'
                 plan = getattr(client, 'cleanup_plan', None)
                 if isinstance(plan, list) and plan:
                     deleted_paths = [row['path'] for row in plan if row.get('action') == 'delete_rule']
@@ -264,7 +370,8 @@ def process_item(item, execute=False):
                         item.message = 'Cleanup approved and fresh live verification passed. Confirm execution within ten minutes.'
 
             else:
-                if obj != item.before: raise ValidationError('Object changed after preview. Create a new preview.')
+                from .reference_cleanup import configuration
+                if configuration(obj) != configuration(item.before): raise ValidationError('Object changed after preview. Create a new preview.')
                 from .reference_cleanup import validate_approvals, apply_plan
                 plan = getattr(client, 'cleanup_plan', None)
                 if item.cleanup_plan:
@@ -299,6 +406,9 @@ def process_item(item, execute=False):
                             raise ValidationError('Group is no longer verified empty; reference cleanup stopped.')
                     apply_plan(client, item, authorize_cleanup)
                     client.allow_reference_cleanup = False
+                    if isinstance(preview_cache, dict):
+                        with preview_cache['lock']:
+                            preview_cache.pop('evidence', None)  # Rules changed: rescan, never reuse.
                     if validate_live(client, finding) != obj:
                         raise ValidationError('Group changed after reference cleanup; deletion stopped.')
                 elif isinstance(plan, list) and plan:
@@ -345,6 +455,8 @@ def process_item(item, execute=False):
                         from .related_decommission import close_related
                         close_related(finding, actor, deletion_item=item)
                         item.status, item.message = 'deleted', 'Deleted from NSX and absence verified.'
+                        if isinstance(preview_cache, dict):
+                            preview_cache.setdefault('deleted', set()).add(item.path)
                         # Commit deletion evidence with review closure under the
                         # environment lock, before publication can proceed.
                         item.finished_at = timezone.now()
@@ -372,6 +484,9 @@ def process_item(item, execute=False):
                    'missing_services', 'error', 'http_status', 'pagination_attempts')
         item.verification = {**item.verification,
             'search_diagnostics': {key: diagnostics[key] for key in allowed if key in diagnostics}}
+    timing = client.__dict__.get('deletion_timings', {}) if client is not None else {}
+    item.verification = {**item.verification, 'timings': {**timing, 'total_seconds': round(time.monotonic() - started, 3), 'phase': 'execution' if execute else 'preview'}}
+    item.verification.pop('refresh_requested', None)
     item.finished_at = timezone.now()
     with transaction.atomic():
         # Serialize with cancellation; stale read-only results must never revive a plan.
@@ -382,7 +497,8 @@ def process_item(item, execute=False):
         item.save()
     record('nsx.deletion_' + item.status, 'DeletionItem', item.pk, actor=actor.pk if actor else '',
            details={'batch':str(batch.pk), 'name':item.name, 'path':item.path, 'environment_id':batch.environment_id,
-                    'ticket':batch.ticket, 'http_status':item.http_status, 'message':item.message})
+                    'ticket':batch.ticket, 'http_status':item.http_status, 'message':item.message,
+                    'timings':item.verification.get('timings', {})})
 
 
 def claim(*, preview=False):
@@ -394,22 +510,107 @@ def claim(*, preview=False):
         return batch
 
 
+# Leave room to finish one object and save its outcome before a hard limit.
+DEADLINE_MARGIN_SECONDS = 60
+
+
+def dependency_order(items):
+    """Objects that reference others in the request are deleted first. A cycle keeps
+    the remaining order; live checks then block whatever is still referenced."""
+    paths = {item.path for item in items}
+    ordered, done, pending = [], set(), list(items)
+    while pending:
+        ready = [item for item in pending if all(path in done or path not in paths
+                 for path in item.verification.get('batch_dependencies', []))]
+        if not ready:
+            ordered.extend(pending)
+            break
+        for item in ready:
+            ordered.append(item)
+            done.add(item.path)
+            pending.remove(item)
+    return ordered
+
+
+def remaining_time_reason(batch, execute, started, durations):
+    """Why the next object cannot finish in time, or ''. Estimated from this run."""
+    needed = max(durations, default=0) * 1.25 + DEADLINE_MARGIN_SECONDS
+    worker = settings.AUDIT_TIMEOUT - (time.monotonic() - started)
+    if worker < needed:
+        return 'the worker time limit would be reached before this object could finish'
+    if execute and batch.confirmed_at:
+        limits = [batch.confirmed_at + timedelta(hours=1)]
+        if batch.execution_intent.get('state') == 'queued':
+            from django.utils.dateparse import parse_datetime
+            expires = parse_datetime(batch.execution_intent.get('expires_at', '') or '')
+            if expires:
+                limits.append(expires)
+        if (min(limits) - timezone.now()).total_seconds() < needed:
+            return 'the one-hour execution authorization would end before this object could finish'
+    return ''
+
+
+def not_attempted(item, execute, reason):
+    """Untouched objects stay distinct from objects that failed a check."""
+    message = ('Not attempted: ' + reason + '. No change was made in NSX. Use "Preview remaining work" to check it again.'
+               if execute else 'Not checked: ' + reason + '. Refresh verification or create a new preview.')
+    statuses = ['verified'] if execute else ['pending', 'verified', 'cleanup_recheck']
+    if DeletionItem.objects.filter(pk=item.pk, status__in=statuses).update(
+            status='not_attempted', message=message, finished_at=timezone.now()):
+        record('nsx.deletion_not_attempted', 'DeletionItem', item.pk, actor='',
+               details={'batch': str(item.batch_id), 'path': item.path, 'environment_id': item.batch.environment_id, 'reason': reason})
+
+
 def run(pk):
     batch = DeletionBatch.objects.select_related('environment','requested_by').get(pk=pk)
     if batch.status not in ('checking','running'): return
     execute = batch.status == 'running'
     record('nsx.deletion_execution_started' if execute else 'nsx.deletion_preview_started',
            'DeletionBatch', batch.pk, actor='', details={'environment_id':batch.environment_id, 'ticket':batch.ticket})
-    rechecking = not execute and batch.items.filter(status='cleanup_recheck').exists()
+    rechecking = not execute and (batch.items.filter(status='cleanup_recheck').exists() or batch.items.filter(verification__refresh_requested=True).exists())
+    work = []
     for item in batch.items.select_related('finding').order_by('pk'):
-        if rechecking and item.status not in ('cleanup_recheck', 'verified'): continue
+        if rechecking and item.status not in ('cleanup_recheck', 'verified') and not item.verification.get('refresh_requested'): continue
         if rechecking and item.status == 'verified' and item.cleanup_plan:
             item.status = 'cleanup_recheck'
         if DeletionBatch.objects.filter(pk=pk, status__in=['cancelling', 'cancelled']).exists(): break
         if item.status in ('cancelled', 'delegated'): continue
         item.batch = batch
         if execute and item.status != 'verified': continue
-        process_item(item, execute)
+        work.append(item)
+    if execute:
+        work = dependency_order(work)
+    # One live dependency scan is shared by the objects of this run (bounded by
+    # SCAN_REUSE_SECONDS). Objects verified absent in this run are tracked so a
+    # reused scan or lagging search index does not count them as references.
+    preview_cache = {'lock': threading.RLock(), 'deleted': set(), 'execution': execute,
+                     'targets': [item.path for item in work] if execute else list(batch.items.values_list('path', flat=True))}
+    durations = []
+    started = time.monotonic()
+
+    def attempt(item):
+        reason = remaining_time_reason(batch, execute, started, durations)
+        if reason:
+            not_attempted(item, execute, reason)
+            return
+        began = time.monotonic()
+        process_item(item, execute, preview_cache=preview_cache)
+        durations.append(time.monotonic() - began)
+
+    # Three independent read-only targets at most; NSX mutations stay ordered.
+    if not execute and len(work) > 1 and database_connection.vendor == 'postgresql' and not database_connection.in_atomic_block:
+        def preview(item):
+            close_old_connections()
+            try:
+                item.batch = DeletionBatch.objects.select_related('environment','requested_by').get(pk=pk)
+                attempt(item)
+            finally:
+                connections.close_all()
+        with ThreadPoolExecutor(max_workers=3, thread_name_prefix='deletion-preview') as pool:
+            list(pool.map(preview, work))
+    else:
+        for item in work:
+            attempt(item)
     with transaction.atomic():
         locked = DeletionBatch.objects.select_for_update().get(pk=pk)
         if locked.status in ('cancelling', 'cancelled'):
@@ -420,7 +621,10 @@ def run(pk):
         batch.status = 'completed' if execute else 'preview_ready'
         if execute: batch.finished_at = timezone.now()
         else: batch.checked_at = timezone.now()
-        batch.save()
+        batch.save(update_fields=['status', 'finished_at'] if execute else ['status', 'checked_at'])
+    if not execute:
+        from .deletion_plan import maybe_schedule
+        maybe_schedule(batch.pk)
     record('nsx.deletion_execution_finished' if execute else 'nsx.deletion_preview_finished',
            'DeletionBatch', batch.pk, actor='', details={'environment_id':batch.environment_id, 'ticket':batch.ticket,
            'message':'Processing finished; individual object outcomes determine whether deletion succeeded.'})
@@ -431,10 +635,31 @@ def interrupted(pk):
     batch = DeletionBatch.objects.filter(pk=pk, status__in=['checking','running']).first()
     if not batch: return
     batch.items.filter(status='sending').update(status='uncertain', message='Worker stopped after deletion intent was recorded. Verify NSX before retrying.')
+    # Objects the worker never started are not failures: no change was made.
+    untouched = ['verified'] if batch.status == 'running' else ['pending']
+    batch.items.filter(status__in=untouched).update(status='not_attempted', finished_at=timezone.now(),
+        message='Not attempted: the worker stopped before this object. No change was made in NSX. Use "Preview remaining work" to check it again.')
     batch.items.filter(status__in=['pending','verified','validating','cleanup_review','cleanup_recheck']).update(status='blocked', message='Worker interrupted; create a new preview.')
     batch.items.exclude(cleanup_results=[]).exclude(status='deleted').update(status='uncertain', message='Worker interrupted after reference cleanup began. Review per-rule outcomes in NSX before a new preview. No automatic retry.')
     batch.status = 'interrupted'; batch.finished_at = timezone.now(); batch.save()
 
+
+
+def timing_summary(timings):
+    """One readable line from recorded phase timings."""
+    if not isinstance(timings, dict) or timings.get('total_seconds') is None:
+        return ''
+    parts = [f"{timings['total_seconds']:.0f}s in total"]
+    if timings.get('dependency_seconds') is not None:
+        parts.append(f"reference check {timings['dependency_seconds']:.0f}s" + (' (shared scan)' if timings.get('shared_preview_scan') else ''))
+    if timings.get('condition_reference_seconds') is not None:
+        parts.append(f"condition checks {timings['condition_reference_seconds']:.0f}s")
+    return ' · '.join(parts)
+
+
+def remaining_label(deadline):
+    minutes = max(0, int((deadline - timezone.now()).total_seconds() // 60))
+    return 'less than a minute left' if minutes < 1 else f'{minutes} min left'
 
 @login_required
 @require_GET
@@ -446,7 +671,7 @@ def history(request, pk):
     outcome = request.GET.get('outcome', '')
     object_type = request.GET.get('type', '')
     outcomes = {'cancelled': 'Cancelled', 'deleted': 'Deleted', 'blocked': 'Blocked', 'already_absent': 'Already absent',
-                'failed': 'Failed', 'uncertain': 'Uncertain', 'verified': 'Verified',
+                'failed': 'Failed', 'uncertain': 'Uncertain', 'verified': 'Verified', 'not_attempted': 'Not attempted',
                 'pending': 'Pending', 'cleanup_review': 'Awaiting cleanup approval', 'cleanup_recheck': 'Revalidating approved cleanup', 'cleanup_rejected': 'Cleanup rejected', 'validating': 'Rechecking live evidence', 'sending': 'Deleting'}
     types = {'Group': 'Group', 'Service': 'Custom service', 'Rule': 'Firewall rule', 'SecurityPolicy': 'Security policy'}
     matches = DeletionItem.objects.filter(batch__environment=env)
@@ -464,7 +689,7 @@ def history(request, pk):
         blocked_count=Count('items', filter=Q(items__status='blocked')),
         attention_count=Count('items', filter=Q(items__status__in=['failed', 'uncertain'])),
     ).prefetch_related(Prefetch('items', queryset=DeletionItem.objects.annotate(has_configuration=Case(When(before={}, then=Value(False)), default=Value(True), output_field=BooleanField()), has_cleanup=Case(When(cleanup_plan=[], then=Value(False)), default=Value(True), output_field=BooleanField())).defer('before', 'approved_evidence', 'approvals', 'verification', 'cleanup_plan', 'cleanup_approvals', 'cleanup_results').order_by('pk'), to_attr='history_items')).order_by('-created_at')
-    page = Paginator(batches, 25).get_page(request.GET.get('page'))
+    page = Paginator(batches, table_page_size(request)).get_page(request.GET.get('page'))
     for batch in page:
         for item in batch.history_items:
             try:
@@ -504,7 +729,7 @@ def selection(request, pk):
             raise Http404('Invalid source request')
         remaining_ids = set(source.items.exclude(status__in=['deleted', 'already_absent', 'delegated', 'cancelled'])
             .filter(finding__isnull=False).exclude(path__in=source.items.filter(status__in=['deleted', 'already_absent']).values('path')).exclude(verification__has_key='Cleanup parent item').values_list('finding_id', flat=True))
-        if source.status not in ('completed', 'cancelled'):
+        if source.status not in ('completed', 'cancelled', 'interrupted'):
             error = 'The original request is still active. Wait for its outcome before preparing remaining work.'
             remaining_ids = set()
 
@@ -533,6 +758,23 @@ def selection(request, pk):
                 elif any(row.pk in revisions and row.revision != revisions[row.pk] for row in rows):
                     error = 'Some selected findings changed. Refresh the finding reviews page and select again.'
                 else:
+                    # The display deadline must also release duplicate-preview reservations.
+                    # Serialize with confirmation and cleanup revalidation (batch before item).
+                    paths = [row.path for row in rows]
+                    candidates = DeletionBatch.objects.filter(environment=env, status='preview_ready',
+                        confirmed_at__isnull=True, items__path__in=paths,
+                        items__status='verified').values_list('pk', flat=True)
+                    for prior in DeletionBatch.objects.select_for_update().filter(pk__in=candidates).order_by('pk'):
+                        if prior.status != 'preview_ready' or prior.confirmed_at:
+                            continue
+                        expired_items = prior.items.filter(path__in=paths, status='verified',
+                            verified_at__lte=timezone.now() - timedelta(minutes=10))
+                        retired = list(expired_items.values_list('pk', flat=True))
+                        if retired:
+                            expired_items.update(status='blocked', message='Preview expired before confirmation. '
+                                'Superseded when a new preview was requested; no execution was started.')
+                            record('nsx.deletion_preview_expired', 'DeletionBatch', prior.pk, actor=request.user.pk,
+                                details={'environment_id': env.pk, 'item_ids': retired, 'reason': 'new_preview_requested'})
                     existing = DeletionItem.objects.filter(batch__environment=env, path__in=[row.path for row in rows],
                         batch__status__in=['preview_queued', 'checking', 'preview_ready', 'queued', 'running'],
                         status__in=['pending', 'verified', 'cleanup_review', 'cleanup_recheck', 'validating', 'sending']).filter(Q(batch__confirmed_at__isnull=True) | Q(batch__status__in=['queued', 'running'])).order_by('-pk').first()
@@ -566,6 +808,27 @@ def detail(request, pk):
         if request.method == 'POST':
             from .execution_policy import can_execute
             from .reference_cleanup import validate_approvals
+            if request.POST.get('action') == 'refresh_verification':
+                candidates = list(batch.items.filter(status__in=['verified', 'not_attempted']).select_related('finding'))
+                candidates = [item for item in candidates if can_execute(request.user, item)]
+                if batch.status != 'preview_ready' or batch.confirmed_at or not candidates:
+                    return HttpResponse('Only eligible executors can refresh an unconfirmed approved request.', status=409)
+                try:
+                    for item in candidates:
+                        guard(batch, item.finding, item)
+                        if item.cleanup_plan: validate_approvals(item)
+                except ValidationError as exc:
+                    return HttpResponse('; '.join(exc.messages), status=409)
+                for item in candidates:
+                    item.verification = {**item.verification, 'refresh_requested': True}
+                    item.status = 'cleanup_recheck' if item.cleanup_plan else 'pending'
+                    item.message = 'Refreshing live verification. Existing approvals are retained only if the plan is unchanged.'
+                    item.save(update_fields=['verification', 'status', 'message'])
+                batch.status = 'preview_queued'
+                batch.save(update_fields=['status'])
+                record('nsx.deletion_verification_refresh_requested', 'DeletionBatch', batch.pk,
+                       actor=request.user.pk, details={'count': len(candidates), 'environment_id': batch.environment_id})
+                return redirect('deletion-detail', pk=batch.pk)
             ticket = request.POST.get('ticket','').strip()
             verified = list(batch.items.filter(status='verified').select_related('finding'))
             eligible = [item for item in verified if can_execute(request.user, item)]
@@ -575,7 +838,7 @@ def detail(request, pk):
                 error = 'Preview is unavailable or execution has already been queued.'
             elif not selected or (requested and set(requested) != {str(item.pk) for item in selected}):
                 error = 'You are not eligible to confirm the selected objects under the current execution settings. Review the next steps below.'
-            elif any(not item.verified_at or timezone.now() - item.verified_at > timedelta(minutes=10) for item in selected):
+            elif any(not item.verified_at or timezone.now() - item.verified_at >= timedelta(minutes=10) for item in selected):
                 error = 'One or more selected object previews expired. Revalidate the plan or create a fresh preview.'
             elif not ticket or len(ticket) > 255 or request.POST.get('confirm') != 'yes':
                 error = 'Provide a change ticket and explicitly confirm permanent deletion.'
@@ -588,6 +851,9 @@ def detail(request, pk):
                 except ValidationError as exc:
                     error = '; '.join(exc.messages)
                 if not error:
+                    if batch.execution_intent.get('state') == 'armed':
+                        batch.execution_intent = {**batch.execution_intent, 'state': 'replaced_by_manual_confirmation'}
+                        batch.save(update_fields=['execution_intent'])
                     target = batch
                     if len(selected) != len(verified) or batch.items.filter(status__in=['cleanup_review', 'cleanup_recheck']).exists():
                         target = DeletionBatch.objects.create(environment=batch.environment, manager=batch.manager,
@@ -626,37 +892,49 @@ def detail(request, pk):
         item.related_findings = item.verification.get('Related findings', [])
         item.search_diagnostics_json = json.dumps(item.verification.get('search_diagnostics', {}), indent=2)
     counts = {status: sum(item.status == status for item in items) for status in
-              ('pending', 'verified', 'validating', 'sending', 'deleted', 'blocked', 'already_absent', 'failed', 'uncertain', 'cleanup_review', 'cleanup_recheck', 'cleanup_rejected', 'cancelled')}
+              ('pending', 'verified', 'validating', 'sending', 'deleted', 'blocked', 'already_absent', 'failed', 'uncertain', 'cleanup_review', 'cleanup_recheck', 'cleanup_rejected', 'cancelled', 'not_attempted')}
     active = batch.status in ('preview_queued', 'checking', 'queued', 'running', 'cancelling')
     execution = bool(batch.confirmed_at)
-    done = sum(counts[status] for status in ('deleted', 'blocked', 'already_absent', 'failed', 'uncertain'))
+    done = sum(counts[status] for status in ('deleted', 'blocked', 'already_absent', 'failed', 'uncertain', 'not_attempted'))
     if not execution:
         done += counts['verified'] + counts['cleanup_review']
     for item in items:
         item.display_status = {'pending': 'Waiting for verification', 'verified': 'Ready to confirm' if not execution else 'Waiting for live checks',
             'cleanup_review': 'Awaiting cleanup approval', 'cleanup_recheck': 'Revalidating approved cleanup', 'cleanup_rejected': 'Cleanup rejected', 'validating': 'Rechecking live evidence', 'sending': 'Deleting and verifying absence',
             'cancelled': 'Cancelled', 'deleted': 'Deleted', 'blocked': 'Blocked', 'already_absent': 'Already absent',
-            'failed': 'Deletion failed', 'uncertain': 'Outcome needs verification'}.get(item.status, item.status)
+            'failed': 'Deletion failed', 'uncertain': 'Outcome needs verification',
+            'not_attempted': 'Not attempted' if execution else 'Not checked'}.get(item.status, item.status)
+        item.timing_summary = timing_summary(item.verification.get('timings'))
+    refresh_allowed = batch.status == 'preview_ready' and not execution and any(
+        item.status == 'not_attempted' or item.status == 'verified' and item.execution_allowed for item in items)
+    for item in items:
+        if (batch.status == 'preview_ready' and not execution and item.status == 'verified'
+                and item.verified_at and timezone.now() - item.verified_at >= timedelta(minutes=10)):
+            item.display_status = 'Preview expired'
+            item.execution_allowed = False
+            item.execution_guidance = ''
+            item.message = 'Verification needs refreshing. No changes were attempted. Refresh this request; approvals remain valid if the approved plan is unchanged.'
+    ready_count = sum(item.status == 'verified' and item.display_status != 'Preview expired' for item in items)
     confirmation_items = [item for item in items if item.execution_allowed]
     stamps = [item.verified_at for item in (confirmation_items or items) if item.status == 'verified' and item.verified_at]
     deadline = (batch.confirmed_at + timedelta(hours=1) if execution else
                 min(stamps) + timedelta(minutes=10) if stamps else None)
     if batch.status in ('cancelled', 'cancelling'): deadline = None
     expired = bool(deadline and timezone.now() >= deadline)
-    review_expired = expired and not execution and batch.status == 'preview_ready' and not counts['cleanup_review']
+    review_expired = expired and not execution and batch.status == 'preview_ready' and not counts['cleanup_review'] and not ready_count
     if review_expired:
         for item in items:
             if item.status == 'verified':
                 item.display_status = 'Preview expired'
-                item.message = 'Review window ended before execution confirmation. No changes were attempted for this object. Create a new preview.'
-    heading = 'Preview expired — execution never started' if review_expired else batch.status_label
+                item.message = 'Verification needs refreshing. No changes were attempted. Refresh this request; approvals remain valid if the approved plan is unchanged.'
+    heading = 'Verification expired — approvals retained pending recheck' if review_expired else batch.status_label
     if counts['cleanup_recheck'] and not execution:
         heading = 'Revalidating approved cleanup'
     elif counts['cleanup_review'] and not execution:
         heading = 'Awaiting cleanup approvals'
     if batch.status == 'completed':
         heading = f"{counts['deleted']} deleted · {counts['blocked']} blocked"
-        for key, label in [('already_absent', 'already absent'), ('failed', 'failed'), ('uncertain', 'uncertain')]:
+        for key, label in [('already_absent', 'already absent'), ('not_attempted', 'not attempted'), ('failed', 'failed'), ('uncertain', 'uncertain')]:
             if counts[key]:
                 heading += f" · {counts[key]} {label}"
     if any(item.partial_cleanup for item in items): heading = 'Partially completed — review remaining operations'
@@ -666,17 +944,31 @@ def detail(request, pk):
     rule_deletes = sum(row.get('action') == 'delete_rule' for item in confirmation_items for row in item.cleanup_plan)
     context = {'batch':batch, 'environment':batch.environment, 'items':items, 'counts':counts,
         'status_label':heading, 'active':active, 'execution':execution, 'done_count':done, 'total_count':len(items),
-        'review_expired': review_expired, 'poll_active': active or bool(batch.status == 'preview_ready' and ((deadline and not expired) or counts['cleanup_review'])),
+        'can_refresh_verification': refresh_allowed and any(item.display_status in ('Preview expired', 'Not checked') for item in items), 'review_expired': review_expired, 'poll_active': active or bool(batch.status == 'preview_ready' and ((deadline and not expired) or counts['cleanup_review'])),
         'deadline':deadline, 'expired':expired, 'updated_at':timezone.now(),
+        'deadline_remaining': remaining_label(deadline) if deadline and not expired else '',
         'elapsed_label':f'{max(0, elapsed) // 60}m {max(0, elapsed) % 60}s',
         'latest_snapshot':latest, 'inventory_warnings':warnings, 'inventory_blocked':bool(latest and latest.summary.get('inventory_warnings')),
-        'error':error, 'verified_count':counts['verified'], 'confirmation_items': confirmation_items, 'eligible_count': len(confirmation_items), 'ineligible_count': counts['verified'] - len(confirmation_items),
+        'error':error, 'verified_count':ready_count, 'confirmation_items': confirmation_items, 'eligible_count': len(confirmation_items), 'ineligible_count': ready_count - len(confirmation_items),
         'cleanup_count':sum(len(item.cleanup_plan) for item in confirmation_items),
         'cleanup_rule_deletes':rule_deletes,
         'confirmation_object_count':len(confirmation_items) + rule_deletes,
         'cleanup_rule_updates':sum(row.get('action') != 'delete_rule' for item in confirmation_items for row in item.cleanup_plan),
         'can_cancel': batch.status in ('preview_queued', 'checking', 'preview_ready', 'queued'),
         'can_confirm':batch.status=='preview_ready' and bool(confirmation_items) and not confirmation_expired}
+    # Presentation only: which step of the flow this request is in. Permissions and checks are unchanged.
+    step = (4 if execution and not active else 3 if execution else 1 if counts['cleanup_review'] else
+            2 if batch.status == 'preview_ready' else 0)
+    labels = [('Verify', 'Read-only live verification'), ('Approve', 'Reference cleanup approvals'),
+              ('Confirm', 'Ticket and permanent-deletion check'), ('Execute', 'Fresh live checks before each change'),
+              ('Results', 'Check every object outcome')]
+    stopped = batch.status in ('cancelled', 'cancelling') and not execution
+    context['deletion_steps'] = [{'number': index + 1, 'label': label, 'note': note,
+                                  # A cancelled preview has no current step; nothing was deleted.
+                                  'state': 'next' if stopped else 'done' if index < step else 'current' if index == step else 'next'}
+                                 for index, (label, note) in enumerate(labels)]
+    context['deletion_title'] = ('Deletion request cancelled' if stopped else
+                                 ('Deletion preview', 'Cleanup approvals', 'Confirm deletion', 'Deleting objects', 'Deletion result')[step])
     template = 'inventory/deletion_progress.html' if request.GET.get('fragment') == '1' and request.method == 'GET' else 'inventory/deletion_detail.html'
     response = render(request, template, context)
     response['Cache-Control'] = 'no-store'
@@ -724,6 +1016,11 @@ def reference_cleanup(request, pk):
     error = ''
     # Lock batch before item, matching confirmation, to avoid approving a queued request.
     initial = get_object_or_404(DeletionItem, pk=pk)
+    from .review_navigation import return_url
+    review_return = return_url(request, initial.batch.environment_id) if request.GET.get('return_to') else ''
+    def return_to_cleanup():
+        from urllib.parse import urlencode
+        return redirect(request.path + ('?' + urlencode({'return_to':review_return}) if review_return else ''))
     with transaction.atomic():
         batch = DeletionBatch.objects.select_for_update(of=('self',)).select_related('environment', 'requested_by').get(pk=initial.batch_id)
         item = get_object_or_404(DeletionItem.objects.select_for_update(of=('self',)).select_related('finding'), pk=pk)
@@ -746,7 +1043,7 @@ def reference_cleanup(request, pk):
                     batch.status = 'preview_queued'; batch.save(update_fields=['status'])
                     record('nsx.deletion_cleanup_revalidation_requested', 'DeletionItem', item.pk, actor=request.user.pk,
                            details={'environment_id': batch.environment_id, 'batch': str(batch.pk), 'path': item.path})
-                    return redirect('deletion-reference-cleanup', pk=pk)
+                    return return_to_cleanup()
                 if not available: raise ValidationError('Cleanup preview expired or is no longer available. Create a new preview.')
                 if request.POST.get('action') == 'reject':
                     reason = request.POST.get('reason', '').strip()[:2000]
@@ -757,7 +1054,7 @@ def reference_cleanup(request, pk):
                     item.save(update_fields=['status', 'message', 'finished_at'])
                     record('nsx.deletion_cleanup_rejected', 'DeletionItem', item.pk, actor=request.user.pk,
                            details={'environment_id': batch.environment_id, 'batch': str(batch.pk), 'path': item.path, 'message': item.message})
-                    return redirect('deletion-reference-cleanup', pk=pk)
+                    return return_to_cleanup()
                 guard(batch, item.finding, item)
                 if item.status != 'cleanup_review':
                     raise ValidationError('This plan already has its required approvals. Return to the deletion request.')
@@ -778,17 +1075,23 @@ def reference_cleanup(request, pk):
                     except ValidationError:
                         item.cleanup_approvals = decisions
                         raise
-                    item.status = 'cleanup_recheck'
-                    item.message = 'Required cleanup approvals recorded. Fresh live verification is queued; no changes have been authorized.'
-                    batch.status = 'preview_queued'
-                    batch.save(update_fields=['status'])
+                    if item.verified_at and timezone.now() - item.verified_at < timedelta(minutes=10):
+                        item.status = 'verified'
+                        item.message = 'Required cleanup approvals recorded; preview checks are still fresh. Confirm execution; live checks repeat before changes.'
+                    else:
+                        item.status = 'cleanup_recheck'
+                        item.message = 'Required cleanup approvals recorded. Refreshing verification; unchanged approvals will be retained.'
+                        batch.status = 'preview_queued'
+                        batch.save(update_fields=['status'])
                 else:
                     item.message = 'Your cleanup approval is recorded. A different administrator must provide the remaining approval.'
                 item.save(update_fields=['cleanup_approvals', 'status', 'message'])
                 record('nsx.deletion_cleanup_approved', 'DeletionItem', item.pk, actor=request.user.pk,
                        details={'environment_id': batch.environment_id, 'batch': str(batch.pk), 'path': item.path,
                                 'fingerprint': digest, 'required_approvals': required_count})
-                return redirect('deletion-reference-cleanup', pk=pk)
+                from .deletion_plan import maybe_schedule
+                maybe_schedule(batch.pk)
+                return return_to_cleanup()
             except ValidationError as exc:
                 error = '; '.join(exc.messages)
     revalidating = item.status == 'cleanup_recheck' and batch.status in ('preview_queued', 'checking')
@@ -836,6 +1139,7 @@ def reference_cleanup(request, pk):
     template = ('inventory/reference_cleanup_progress.html' if request.method == 'GET' and request.GET.get('fragment') == '1'
                 else 'inventory/reference_cleanup.html')
     response = render(request, template, {'item': item, 'batch': batch,
+        'review_return': review_return,
         'active': active, 'executing': executing, 'waiting': waiting, 'phase_label': phase_label,
         'approved_by_me': approved_by_me, 'is_requester': batch.requested_by_id == request.user.pk, 'eligible_executor': can_execute(request.user, item),
         'phase_message': phase_message, 'review_expired': review_expired, 'closed': closed or item.status in ('cleanup_rejected', 'cancelled'), 'deadline': deadline,

@@ -1,0 +1,26 @@
+{
+  "checks": [
+    "Arctic / naming: image and selection loaded",
+    "Arctic / segmentation: image and selection loaded",
+    "Arctic / login: image and selection loaded",
+    "Glacier / naming: image and selection loaded",
+    "Glacier / segmentation: image and selection loaded",
+    "Glacier / login: image and selection loaded",
+    "Alloy / naming: image and selection loaded",
+    "Alloy / segmentation: image and selection loaded",
+    "Alloy / login: image and selection loaded",
+    "Paper / naming: image and selection loaded",
+    "Paper / segmentation: image and selection loaded",
+    "Paper / login: image and selection loaded",
+    "Clay / naming: image and selection loaded",
+    "Clay / segmentation: image and selection loaded",
+    "Clay / login: image and selection loaded",
+    "Bridge / naming: image and selection loaded",
+    "Bridge / segmentation: image and selection loaded",
+    "Bridge / login: image and selection loaded",
+    "Share URL restores palette, screen and light-only view",
+    "390 px: no page overflow",
+    "320 px: no page overflow"
+  ],
+  "errors": []
+}

@@ -13,7 +13,7 @@ from .forms import BulkAssignmentForm
 from .audit_events import record
 
 ACTIONS = {
-    'findings': {'assign_me': 'Assign to me', 'reassign': 'Reassign owner', 'release': 'Return to unassigned', 'export': 'Export selected evidence', 'preview': 'Preview deletion from NSX'},
+    'findings': {'assign_me': 'Assign to me', 'assign': 'Assign owner', 'reassign': 'Reassign owner', 'release': 'Return to unassigned', 'export': 'Export selected evidence', 'preview': 'Preview deletion from NSX'},
     'cleanup': {'cancel': 'Cancel selected cleanup plans', 'export': 'Export selected plans'},
     'history': {'export': 'Export selected outcomes', 'configurations': 'Download saved configurations'},
     'collections': {'cancel': 'Cancel queued collections', 'export': 'Export selected diagnostics'},
@@ -77,7 +77,7 @@ def bulk(request, kind):
     form = BulkAssignmentForm(request.POST if request.POST.get('confirm') else None, initial={'owner': request.user.pk})
     context = {'kind': kind, 'action': action, 'title': ACTIONS[kind][action], 'rows': rows, 'back': back, 'assignment_form': form,
                'snapshot_id': request.POST.get('snapshot', ''), 'reason': request.POST.get('reason', ''),
-               'needs_reason': action in ('release', 'reassign', 'cancel'), 'needs_owner': action == 'reassign'}
+               'needs_reason': action in ('release', 'reassign', 'cancel'), 'needs_owner': action in ('assign', 'reassign')}
     if kind == 'inventory' and action in ('compare', 'reviews'):
         for row in rows:
             obj = row['object']
@@ -123,7 +123,7 @@ def bulk(request, kind):
         reason = request.POST.get('reason', '').strip()
         if context['needs_reason'] and not 1 <= len(reason) <= 2000:
             context['error'] = 'Provide a reason of 1–2000 characters.'
-        elif action == 'reassign' and not form.is_valid():
+        elif action in ('assign', 'reassign') and not form.is_valid():
             context['error'] = 'Choose an active operator or administrator.'
         else:
             results = []
@@ -142,6 +142,9 @@ def bulk(request, kind):
                             if action == 'assign_me':
                                 if current.owner_id: raise ValidationError('Already assigned; existing owner retained.')
                                 decide(current, request.user, 'assign', '', owner=request.user)
+                            elif action == 'assign':
+                                if current.owner_id: raise ValidationError('Already assigned; existing owner retained.')
+                                decide(current, request.user, 'assign', '', owner=form.cleaned_data['owner'])
                             elif action == 'release': decide(current, request.user, 'unassign', reason)
                             elif action == 'reassign':
                                 if not current.owner_id: raise ValidationError('No longer assigned; use Assign owner.')

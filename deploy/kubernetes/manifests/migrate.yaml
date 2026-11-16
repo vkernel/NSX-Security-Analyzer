@@ -9,7 +9,8 @@ metadata:
     argocd.argoproj.io/sync-wave: "-1"
 spec:
   backoffLimit: 1
-  activeDeadlineSeconds: 900
+  # Allow concurrent index builds over retained snapshots to finish.
+  activeDeadlineSeconds: 3600
   template:
     metadata:
       labels:

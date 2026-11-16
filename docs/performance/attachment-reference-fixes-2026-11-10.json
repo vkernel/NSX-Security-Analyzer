@@ -1,0 +1,29 @@
+{
+  "synthetic": true,
+  "scope": "Network phase request counts only; no production runtime prediction.",
+  "healthy": {
+    "network_requests": 5,
+    "all_collection_get_calls": 10,
+    "empty_response_checks": 0
+  },
+  "scale": [
+    {
+      "vms": 3,
+      "groups": 12,
+      "requests": 38,
+      "compatibility_recoveries": 1,
+      "segment_inventories": 0,
+      "vif_reads": 1,
+      "vm_0_related_groups": 12
+    },
+    {
+      "vms": 3000,
+      "groups": 12,
+      "requests": 38,
+      "compatibility_recoveries": 1,
+      "segment_inventories": 0,
+      "vif_reads": 1,
+      "vm_0_related_groups": 12
+    }
+  ]
+}

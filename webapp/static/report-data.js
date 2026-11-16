@@ -24,7 +24,7 @@
     if (['25','50','100'].includes(document.body.dataset.reportPageSize)) size.value=document.body.dataset.reportPageSize;
     const policy=['dfw-policies','empty-policies'].includes(panel), tags=panel.startsWith('tags-'), scopes=panel==='tags-scopes';
     const dfw=policy || ['dfw-rules','zero-hit-rules','disabled-rules','unknown-statistics','empty-group-rules','dfw-scope-rules'].includes(panel);
-    const keys = panel==='all-vms' ? ['name','power_state','tag_count','group_count',null] : scopes ? ['name','tag_count','vm_count','group_count','other_count',null] : tags ? ['name','status','vm_count','group_count','other_count',null]
+    const keys = panel==='all-vms' ? ['name','power_state','tag_count','resolved_group_count',null] : scopes ? ['name','tag_count','vm_count','group_count','other_count',null] : tags ? ['name','status','vm_count','group_count','other_count',null]
       : dfw ? ['name',policy?'category':'policy_name',policy?'status':'hit_status',policy?'rule_count':'hit_count',null]
       : ['name','kind','usage','membership',null];
     const permitted = [...new Set([...keys.filter(Boolean),'path',...(dfw && !policy?['category','rule_id','policy_rule_id']:[]),...(tags&&!scopes?['scope']:[]),...(!dfw&&!tags&&panel!=='all-vms'?['method','references']:[])])];
@@ -33,6 +33,7 @@
     function params(op='rows') { return {op,panel,count_token:countToken,q:search.value,mode:mode.value,syntax:syntax.value,evidence:evidence.checked?'1':'0',size:size.value,sort:sort.value,order:order.value,page,filters:JSON.stringify([...filters])}; }
     const getValues=async (index,text,signal)=> {const result=await window.reportData(payload,{...params('values'),column:index,value:text},signal);getValues.message=result.message || '';return result.values;};
     getValues.remote=true;
+    if(panel==='all-vms'){const header=widget.querySelectorAll('thead th')[3];if(header?.firstChild?.nodeType===3)header.firstChild.textContent='Resolved groups ';}
     const filters=columnFilters(widget.querySelector('table'),()=>{page=0;lastParams=null;refresh();},getValues);
     const headers=[];
     widget.querySelectorAll('thead th').forEach((header,index)=>{
@@ -50,7 +51,10 @@
       fragment.querySelector('form').id = bulkId;
       widget.prepend(fragment);
       // Append a selection column so existing filter/sort column indices stay stable.
+      widget.querySelector('table').classList.add('inventory-bulk-table');
+      widget.querySelector('thead th:last-child').classList.add('inventory-evidence-column');
       const header = document.createElement('th'), all = document.createElement('input');
+      header.className='inventory-selection-column';
       all.type='checkbox';all.dataset.bulkAll=bulkId;all.setAttribute('aria-label','Select objects on this page');header.append(all);
       widget.querySelector('thead tr').append(header);
     }
@@ -70,15 +74,24 @@
         countToken=result.count_token || '';page=result.page;lastParams=JSON.stringify(params());
         result.rows.forEach(row=>{rowPool[row.id]=row;shown.push(row.id);});
         tbody.innerHTML=shown.map(id=>renderRow(id)).join('');
+        if(panel==='all-vms') [...tbody.rows].forEach((tr,index)=>{
+          const data=result.rows[index].data,cell=tr.cells[3];if(!cell)return;
+          const state=data.resolved_membership_status==='unavailable'?'Unavailable':'Not collected';
+          cell.textContent=data.resolved_group_count==null?state:data.resolved_membership_status==='partial'?data.resolved_group_count+' confirmed; total unknown':data.resolved_group_count;
+          cell.title='Resolved VM memberships saved during collection; '+(data.resolved_membership_status||'not collected').replaceAll('_',' ');
+        });
         if (inventory && document.getElementById(bulkId)) {
           [...tbody.rows].forEach((tr,index)=>{
             const row=result.rows[index], cell=document.createElement('td'), box=document.createElement('input');
+            tr.cells[4]?.classList.add('inventory-evidence-column');
+            cell.className='inventory-selection-column';
             box.type='checkbox';box.value=String(row.id);box.dataset.bulkChoice=bulkId;box.dataset.bulkAllowed='export compare reviews';
             box.setAttribute('aria-label','Select '+(row.data.name || 'object'));cell.append(box);tr.append(cell);
           });
           document.dispatchEvent(new Event('bulk:updated'));
         }
-        status.textContent=result.count?`${page*Number(size.value)+1}–${Math.min((page+1)*Number(size.value),result.count)} of ${result.count}`:'0 results';
+        status.textContent=result.count?`Showing ${page*Number(size.value)+1}–${Math.min((page+1)*Number(size.value),result.count)} of ${result.count} matching objects`:'0 matching objects';
+        if(Number.isInteger(result.total)&&result.total!==result.count)status.textContent+=` · ${result.total} total in this view`;
         previous.disabled=page===0;next.disabled=(page+1)*Number(size.value)>=result.count;empty.hidden=result.count!==0;
         headers.forEach(({header,button,key})=>{const active=sort.value===key;button.textContent=active?(order.value==='asc'?'▲':'▼'):'↕';if(active)header.setAttribute('aria-sort',order.value==='asc'?'ascending':'descending');else header.removeAttribute('aria-sort');});
         widget.dispatchEvent(new Event('table-render'));
@@ -104,7 +117,7 @@
   const cache = new Map(); let cacheBytes = 0;
   const make = (tag, text) => { const node=document.createElement(tag); if(text!=null)node.textContent=text; return node; };
   async function load(id, section, page=0, path='') {
-    const params={op:'vm-relationships',id,section,page,path}, key=JSON.stringify(params);
+    const params={op:'vm-relationships',id,section,page,path,context:section==='related_rules'?'1':'0'}, key=JSON.stringify(params);
     if(cache.has(key))return cache.get(key).value;
     const value=await window.reportData(null,params), bytes=JSON.stringify(value).length*2;
     if(bytes<500000){while(cache.size && (cache.size>=30 || cacheBytes+bytes>2000000)){const first=cache.keys().next().value;cacheBytes-=cache.get(first).bytes;cache.delete(first);}cache.set(key,{value,bytes});cacheBytes+=bytes;}
@@ -127,42 +140,54 @@
       button.onclick=()=>window.openRelatedEvidence(body,query,label);
       return button;
     }
-    function paged(parent,section,label,path='') {
-      const box=make('details'), title=make('summary',label), content=make('div');box.dataset.evidenceSection='relationships';box.append(title,content);parent.append(box);
-      let loaded=false, busy=false, version=0;
-      async function render(page=0) {
-        const sequence=++version;busy=true;window.evidenceState(content,'Loading relationships…');
-        try {
-          const data=await load(id,section,page,path);
-          if(sequence!==version || body.evidenceGeneration!==generation)return;
-          content.replaceChildren();loaded=true;
-          if(!data.items.length)window.evidenceState(content,'No relationships recorded in this snapshot.');
-          data.items.forEach(item=>{
-            if(section==='related_rules'){
-              const rule=make('details'), caption=make('summary',item.name || item.path), detail=make('div');rule.append(caption,detail);content.append(rule);
-              let ready=false, loading=false;
-              const show=async()=>{
-                if(ready || loading)return;loading=true;window.evidenceState(detail,'Loading rule…');
-                try {
-                  const response=await load(id,'rule',0,item.path);if(body.evidenceGeneration!==generation)return;
-                  const ruleData=response.details;
-                  detail.replaceChildren(relationLink(item,'rules'),make('p','Action: '+(ruleData.action || 'Unknown')+' · '+(ruleData.disabled?'Disabled':'Enabled')),make('h3','Configured services'));
-                  const services=make('ul');(ruleData.services || []).forEach(service=>{const li=make('li');if(service==='ANY' || service.path==='ANY')li.textContent='Any service';else li.append(relationLink(service,'services'));services.append(li);});
-                  if(!services.children.length)services.append(make('li','No configured services recorded.'));
-                  detail.append(services);paged(detail,'via_groups','Related groups for this rule',item.path);ready=true;
-                }catch(error){window.evidenceState(detail,error.message,show);}finally{loading=false;}
-              };
-              rule.addEventListener('toggle',()=>{if(rule.open)show();});
-            } else {const itemNode=make('p');itemNode.append(relationLink(item,section));if(typeof item==='object')itemNode.append(make('code',item.path || item.scope || ''));content.append(itemNode);}
-          });
-          if(page || data.has_next){const previous=make('button','Previous'), next=make('button','Next');previous.type=next.type='button';previous.disabled=page===0;next.disabled=!data.has_next;
-          previous.onclick=()=>render(page-1);next.onclick=()=>render(page+1);content.append(previous,make('span',' Page '+(page+1)+' '),next);}
-        }catch(error){if(body.evidenceGeneration===generation)window.evidenceState(content,error.message,()=>render(page));}finally{busy=false;}
-      }
-      box.addEventListener('toggle',()=>{if(box.open&&!loaded&&!busy)render();});
+    const object=(item,section)=>{
+      const query=section==='tags'?{view:'tags',tag:item.tag,scope:item.scope||''}:{path:typeof item==='string'?item:item.path};
+      return window.evidenceObject(body,item,query);
+    };
+    const table=(section,label,columns,path='')=>window.evidenceTable({title:label,columns,current,wide:section==='related_rules',countLabel:section==='ip_groups'?'matches':'confirmed',load:page=>load(id,section,page,path)});
+    const tags=table('tags','Assigned tags',[{label:'Scope',cell:item=>item.scope||'(empty scope)'},{label:'Value',cell:item=>object(item,'tags')}]);
+    const assigned=make('details'),assignedTitle=make('summary','Assigned tags');assigned.dataset.evidenceSection='overview';assigned.dataset.evidenceLazy='true';assigned.append(assignedTitle,tags.panel);assigned.addEventListener('toggle',()=>{if(assigned.open)tags.show();});body.append(assigned);
+    if(summary.network_membership_version===1){const counts=make('p',(summary.direct_group_count??'Unknown')+' direct VM groups · '+(summary.network_group_count??'Unknown')+' network groups. Related groups count each group once.');counts.className='evidence-note';counts.dataset.evidenceSection='overview';body.append(counts);}
+    const source=window.membershipSource(body,{kind:'vm',id},{automatic:true,initialSource:summary.network_membership_version===1||summary.resolved_membership_status==='complete'?'saved':null});
+    const describe=(data,firewall=false)=>{
+      if(firewall&&!data.items.length&&data.ip_status&&!['complete','not_applicable'].includes(data.ip_status))return {...data,empty_message:'No references established from the available evidence. Saved IP/subnet coverage is incomplete; missing references remain unknown.'};
+      if(!data.items.length)data={...data,empty_message:data.status==='complete'?(firewall?'No saved firewall rules reference this VM’s confirmed groups.':data.source==='saved_snapshot'?'No confirmed group memberships were saved for this VM.':'NSX returned no group associations for this VM.'):
+        ['current_nsx','current_with_saved_network','current_with_saved_references'].includes(data.source)?'VM membership is not established. Refresh to check current NSX.':'Membership was not fully collected in this snapshot. Select Current NSX to check this VM.'};
+      return data;
+    };
+    const resolved=window.evidenceTable({title:summary.network_membership_version===1?'Related groups':'Confirmed groups',current,columns:[{label:'Group',cell:item=>object(item,'groups')},{label:'Membership',cell:item=>window.evidenceBadge(item.membership_basis==='network_attachment'?'Interface attachment':item.membership_basis==='direct_and_network'?'Direct VM + interface':'Direct VM')},...(summary.network_membership_version===1?[{label:'Via',cell:window.networkAttachmentCell}]:[])],load:async page=>describe(await source.load('',page,()=>load(id,'resolved_groups',page)))});
+    source.register(resolved);source.panel.dataset.evidenceSection='relationships';body.append(source.panel);
+    const ruleDetail=make('section');ruleDetail.className='evidence-rule-inspection';ruleDetail.hidden=true;ruleDetail.tabIndex=-1;let inspection=0;
+    async function inspect(item,trigger){
+      const token=++inspection,scroll=body.closest('dialog').scrollTop;ruleDetail.hidden=false;rules.panel.dataset.inspecting='true';
+      const header=make('header'),heading=make('h3',item.name||item.path),close=make('button','Back to rules'),detail=make('div');close.type='button';close.onclick=()=>{++inspection;ruleDetail.hidden=true;delete rules.panel.dataset.inspecting;body.closest('dialog').scrollTop=scroll;trigger?.focus({preventScroll:true});};header.append(heading,close);ruleDetail.replaceChildren(header,detail);window.evidenceState(detail,'Loading rule references…');ruleDetail.focus({preventScroll:true});
+      try{
+        const response=source.isCurrent()?await window.reportData(null,{op:'current-member-rule',id,path:item.path}):await load(id,'confirmed_rule',0,item.path);if(!current()||token!==inspection)return;
+        const data=response.details;
+        const facts=make('p');facts.className='evidence-rule-facts';facts.append(window.evidenceBadge(data.action,'action'),window.evidenceBadge(data.disabled===true?'Disabled':data.disabled===false?'Enabled':null));
+        const sequence=data.configuration?.rule?.sequence_number??data.sequence_number,context=[data.policy_name,data.category,sequence!=null?'Sequence '+sequence:''].filter(Boolean).join(' · ');if(context)facts.append(make('span',context));
+        const link=relationLink(item,'rules');link.textContent='Open rule record';
+        const services=window.evidenceTable({title:'Configured services',current:()=>current()&&token===inspection,columns:[{label:'Service',cell:service=>service==='ANY'||service.path==='ANY'?'Any service':object(service,'services')}],load:async page=>({items:(data.services||[]).slice(page*25,(page+1)*25),has_next:(page+1)*25<(data.services||[]).length})});
+        const via=window.evidenceTable({title:'Related groups for this rule',current,columns:[{label:'Group',cell:group=>object(data.membership_evidence?.[typeof group==='string'?group:group.path]||group,'groups')},{label:'Evidence',cell:group=>{
+          const edge=data.membership_evidence?.[typeof group==='string'?group:group.path];
+          const root=make('div');root.className='evidence-reference-lines';
+          if(!edge||edge.membership_basis){
+            root.append(make('span',edge?.membership_basis==='network_attachment'?'Saved interface attachment':edge?.membership_basis==='direct_and_network'?'Direct VM + saved attachment':source.isCurrent()?'Current direct VM association':'Saved VM association'));
+          }
+          if(edge?.network_checked_at)root.append(make('small','Attachment collected '+(window.workspaceTimeText?window.workspaceTimeText(edge.network_checked_at):edge.network_checked_at)));
+          if(edge?.ip_matches?.length){root.append(window.evidenceBadge('IP/subnet match'),window.ipReferenceCell(edge));}
+          return root;
+        }}],load:async page=>Array.isArray(data.via_groups)?({items:data.via_groups.slice(page*25,page*25+25),has_next:data.via_groups.length>(page+1)*25}):load(id,'confirmed_via_groups',page,item.path)});
+        detail.replaceChildren(facts,link,services.panel,via.panel);services.show();via.show();
+      }catch(error){if(current()&&token===inspection)window.evidenceState(detail,error.message,()=>inspect(item,trigger));}
     }
-    const caveat=make('p','Configuration relationships only. Group references use tag conditions; resolved membership and effective policy are not verified.');caveat.dataset.evidenceSection='relationships';caveat.className='evidence-note';body.append(caveat);
-    paged(body,'tags','Assigned tags');paged(body,'related_groups','Groups referencing these tags');paged(body,'related_rules','Related rules and services');
+    const rules=window.evidenceTable({title:'Firewall references',current,wide:true,countLabel:'references',columns:window.firewallReferenceColumns(body,inspect),load:async page=>describe(await source.load('firewall',page,()=>load(id,'confirmed_rules',page)),true)});source.register(rules);
+    source.onChange(()=>{inspection++;ruleDetail.hidden=true;delete rules.panel.dataset.inspecting;});
+    rules.panel.append(ruleDetail);
+    const caveat=make('p','Current NSX refreshes direct VM associations only; interface attachments and IP/subnet matches remain saved evidence.');caveat.className='evidence-note';rules.panel.insertBefore(caveat,rules.panel.querySelector('.evidence-table-content'));
+    const network=table('network_groups','Saved network links',[{label:'Group',cell:item=>object(item,'groups')},{label:'Interface → port → segment',cell:window.networkAttachmentCell}]);
+    const ip=table('ip_groups','Saved IP/subnet matches',[{label:'Group',cell:item=>object(item,'groups')},{label:'VM address → group entry',cell:window.ipReferenceCell}]);
+    body.append(window.evidenceCategories([{...resolved,label:'Groups',exportSection:'resolved_groups'},...(summary.network_membership_version===1&&summary.network_membership_status!=='not_applicable'?[{...network,label:'Network links (saved)',exportSection:'network_groups'}]:[]),{...rules,label:'Firewall rules',exportSection:'confirmed_rules'},{...ip,label:'IP/subnet matches',exportSection:'ip_groups'}],{view:'vms',id}));
     const advanced=make('details'), title=make('summary','VM inventory details'), content=make('div');advanced.dataset.evidenceSection='technical';advanced.append(title,content);body.append(advanced);
     let ready=false,busy=false;
     const technical=async()=>{if(ready||busy)return;busy=true;window.evidenceState(content,'Loading technical details…');try{const response=await load(id,'vm');if(body.evidenceGeneration!==generation)return;content.replaceChildren(window.technicalEvidence(response.details));ready=true;}catch(error){window.evidenceState(content,error.message,technical);}finally{busy=false;}};
@@ -171,7 +196,7 @@
   };
   document.addEventListener('click',event=>{
     const button=event.target.closest('.detail-button[data-evidence-row]');
-    if(!button?.closest('[data-server-table="all-vms"]'))return;
+    if(!button || !(button.closest('[data-server-table="all-vms"]')||button.dataset.evidenceView==='vms'))return;
     event.preventDefault();event.stopImmediatePropagation();
     const dialog=document.getElementById('detail-dialog'),body=document.getElementById('detail-body');
     document.getElementById('detail-title').textContent=button.dataset.title;
@@ -198,47 +223,40 @@
     if(!dialog.open)dialog.showModal();
     const current=()=>dialog.open && dialog.reportRequest===token && body.evidenceGeneration===token;
     dialog.addEventListener('close',()=>{controller.abort();body.evidenceGeneration=null;button.isConnected&&button.focus({preventScroll:true});},{once:true});
-    const load=(section,page=0)=>window.reportData(null,{op:'tag-relationships',id,section,page},controller.signal);
+    const load=(section,page=0)=>window.reportData(null,{op:'tag-relationships',id,section,page,context:section==='firewall_references'?'1':'0'},controller.signal);
     async function start(){
       window.evidenceState(body,'Loading summary…');
       try{
         const summary=await load('summary');if(!current())return;body.replaceChildren();
-        const caveat=make('p','Visible configuration relationships only. Tags attached to groups are metadata, not proof of traffic matching. Search coverage and inventory gaps apply; absence of references does not establish non-use. Expand a section to load 25 records at a time.');caveat.dataset.evidenceSection='relationships';body.append(caveat);
+        const caveat=make('p','Visible configuration relationships only. Tags attached to groups are metadata, not proof of traffic matching. Search coverage and inventory gaps apply; absence of references does not establish non-use.');caveat.dataset.evidenceSection='relationships';caveat.className='evidence-note';body.append(caveat);
+        const object=(item,section)=>window.evidenceObject(body,item,section==='tags'?{view:'tags',tag:item.name,scope:summary.data.scope||''}:item?.path?.startsWith('/infra/')?{path:item.path}:null);
+        const categories=[];
         function paged(section,label,technical=false){
-          const box=make('details'),content=make('div');box.dataset.evidenceSection=technical?'technical':'relationships';box.append(make('summary',label),content);body.append(box);
-          let ready=false,busy=false,sequence=0;
-          async function render(page=0){
-            if(busy)return;busy=true;const version=++sequence;window.evidenceState(content,'Loading…');
-            try{
-              const result=await load(section,page);if(!current()||version!==sequence)return;
-              content.replaceChildren();ready=true;
-              for(const item of result.items){
-                if(section==='notes'){content.append(make('p',item));continue;}
-                if(technical){const detail=make('details');detail.append(make('summary','Condition definition'));detail.addEventListener('toggle',()=>{if(detail.open&&detail.childElementCount===1)detail.append(window.technicalEvidence(item));});content.append(detail);continue;}
-                const entry=make('div');entry.className='relationship-entry';
-                const name=item?.name || item?.path || 'Reference unavailable';
-                if(section==='tags' || (item?.path?.startsWith('/infra/')&&section!=='vms')){
-                  const link=make('button',name);link.type='button';link.className='evidence-object-link';
-                  link.onclick=()=>window.openRelatedEvidence(body,section==='tags'?{view:'tags',tag:item.name,scope:summary.data.scope || ''}:{path:item.path},name);entry.append(link);
-                }else entry.append(make('strong',name));
-                if(item?.path)entry.append(make('p',item.path));
-                if(section==='tags')entry.append(make('p',`${item.vm_count || 0} VMs · ${item.group_count || 0} groups · ${item.other_count || 0} other resources`));
-                if(item?.via_group)entry.append(make('p','Via group: '+item.via_group+' · '+(item.tag_use==='condition'?'Membership condition':'Tag attached to group')));
-                if(item?.disabled)entry.append(make('p','Disabled rule'));
-                if(item?.resource_type)entry.append(make('p',item.resource_type));content.append(entry);
-              }
-              if(!result.items.length)content.append(make('p','No relationships recorded.'));
-              const prev=make('button','Previous'),next=make('button','Next');prev.type=next.type='button';prev.disabled=page===0;next.disabled=!result.has_next;
-              prev.onclick=()=>render(page-1);next.onclick=()=>render(page+1);content.append(prev,make('span',' Page '+(page+1)+' '),next);
-            }catch(error){if(current()&&error.name!=='AbortError')window.evidenceState(content,error.message,()=>render(page));}finally{busy=false;}
+          if(technical){
+            const box=make('details'),content=make('div');box.dataset.evidenceSection='technical';box.append(make('summary',label),content);body.append(box);let ready=false,busy=false;
+            async function render(page=0){
+              if(busy)return;busy=true;window.evidenceState(content,'Loading definitions…');
+              try{
+                const result=await load(section,page);if(!current())return;content.replaceChildren();ready=true;
+                for(const item of result.items){const detail=make('details');detail.append(make('summary','Condition definition'));detail.addEventListener('toggle',()=>{if(detail.open&&detail.childElementCount===1)detail.append(window.technicalEvidence(item));});content.append(detail);}
+                if(!result.items.length)content.append(make('p','No definitions recorded.'));
+                const prev=make('button','Previous'),next=make('button','Next');prev.type=next.type='button';prev.disabled=!page;next.disabled=!result.has_next;prev.onclick=()=>render(page-1);next.onclick=()=>render(page+1);content.append(prev,make('span',' Page '+(page+1)+' '),next);
+              }catch(error){if(current())window.evidenceState(content,error.message,()=>render(page));}finally{busy=false;}
+            }
+            box.addEventListener('toggle',()=>{if(box.open&&!ready&&!busy)render();});return;
           }
-          box.addEventListener('toggle',()=>{if(box.open&&!ready&&!busy)render();});
+          let columns=[{label:section==='notes'?'Collection note':section==='vms'?'VM':'Object',cell:item=>section==='notes'?item:object(item,section)}];
+          if(section==='tags')columns=[{label:'Tag',cell:item=>object(item,section)},{label:'VMs',cell:item=>item.vm_count??'Not recorded'},{label:'Groups',cell:item=>item.group_count??'Not recorded'},{label:'Other',cell:item=>item.other_count??'Not recorded'}];
+          if(section==='other_assignments')columns.push({label:'Resource type',cell:item=>item.resource_type});
+          if(section==='firewall_references')columns=window.firewallReferenceColumns(body,item=>window.openRelatedEvidence(body,{path:item.path},item.name||item.path));
+          const table=window.evidenceTable({title:label,columns,current,wide:section==='firewall_references',load:page=>load(section,page)});categories.push({...table,label,...(section!=='notes'?{exportSection:section}:{})});
         }
         if(summary.view==='scopes')paged('tags','Tags in this scope');
         else{
-          paged('notes','Collection notes');paged('vms','VM assignments');paged('group_conditions','Group conditions');paged('group_assignments','Tags attached to groups');paged('other_assignments','Other resource assignments');paged('firewall_references','Firewall references');
+          paged('notes','Notes');paged('vms','VM assignments');paged('group_conditions','Group conditions');paged('group_assignments','Group tags');paged('other_assignments','Other resources');paged('firewall_references','Firewall rules');
           paged('condition_evidence','Matching condition definitions',true);paged('review_conditions','Conditions requiring review',true);
         }
+        body.append(window.evidenceCategories(categories,{view:summary.view,id}));
         window.workspaceEvidence?.(body,document.getElementById('detail-title'),{...summary.data,inventory_type:summary.view==='scopes'?'Scope':'Tag',evidence_summary_only:true});
 
       }catch(error){if(current()&&error.name!=='AbortError')window.evidenceState(body,error.message,start);}

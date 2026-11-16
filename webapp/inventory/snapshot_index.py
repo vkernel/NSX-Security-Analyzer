@@ -8,6 +8,7 @@ from time import perf_counter
 from html.parser import HTMLParser
 
 from django.db import transaction, connection
+from .storage import share_json
 from .models import Snapshot, SnapshotPanel, SnapshotPresentation, SnapshotRecord, SnapshotRecordPanel, SnapshotHistoryData, SnapshotVMRule
 
 LABELS = {'referenced':'Referenced', 'unused_candidate':'Unused candidate', 'empty':'Empty',
@@ -35,7 +36,7 @@ def flatten(value):
 def columns(view, row, include_evidence=True):
     identity = row.get('name', '') + '\n' + row.get('path', '')
     if view == 'vms':
-        values = [identity, row.get('power_state'), row.get('tag_count'), row.get('group_count')]
+        values = [identity, row.get('power_state'), row.get('tag_count'), row.get('resolved_group_count')]
     elif view in ('tags', 'scopes'):
         second = row.get('tag_count') if view == 'scopes' else LABELS.get(row.get('status'), row.get('status', ''))
         values = [identity, second, row.get('vm_count'), row.get('group_count'), row.get('other_count', 0)]
@@ -94,13 +95,15 @@ def tag_context(row, metadata):
 
 
 @transaction.atomic
-def clear_index(snapshot_id):
+def clear_index(snapshot_id, keep_coverage=False):
     """Delete disposable index rows in SQL, without ORM cascade materialization.
 
     These derived tables have no application audit events. Delete their
     dependent links first; keep source snapshots and history projections intact.
     """
     Snapshot.objects.select_for_update().only('pk').get(pk=snapshot_id)
+    from .analysis_index import invalidate
+    invalidate(snapshot_id)
     quote = connection.ops.quote_name
     panel = quote(SnapshotPanel._meta.db_table)
     record = quote(SnapshotRecord._meta.db_table)
@@ -108,8 +111,9 @@ def clear_index(snapshot_id):
     from .models import SnapshotCoverage, SnapshotCoverageIssue, SnapshotRelationship
     with connection.cursor() as cursor:
         cursor.execute(f'DELETE FROM {quote(SnapshotRelationship._meta.db_table)} WHERE record_id IN (SELECT id FROM {record} WHERE snapshot_id = %s)', [snapshot_id])
-        cursor.execute(f'DELETE FROM {quote(SnapshotCoverageIssue._meta.db_table)} WHERE coverage_id = %s', [snapshot_id])
-        cursor.execute(f'DELETE FROM {quote(SnapshotCoverage._meta.db_table)} WHERE snapshot_id = %s', [snapshot_id])
+        if not keep_coverage:
+            cursor.execute(f'DELETE FROM {quote(SnapshotCoverageIssue._meta.db_table)} WHERE coverage_id = %s', [snapshot_id])
+            cursor.execute(f'DELETE FROM {quote(SnapshotCoverage._meta.db_table)} WHERE snapshot_id = %s', [snapshot_id])
         cursor.execute(f'DELETE FROM {links} WHERE panel_id IN (SELECT id FROM {panel} WHERE snapshot_id = %s) OR record_id IN (SELECT id FROM {record} WHERE snapshot_id = %s)', [snapshot_id, snapshot_id])
         for model in (SnapshotPanel, SnapshotRecord, SnapshotPresentation, SnapshotVMRule):
             cursor.execute(f'DELETE FROM {quote(model._meta.db_table)} WHERE snapshot_id = %s', [snapshot_id])
@@ -145,8 +149,11 @@ def build(snapshot, rendered=None):
         if not rows: return
         write_started = perf_counter()
         if shared_rules:
+            share_json(shared_rules)
             SnapshotVMRule.objects.bulk_create(shared_rules, batch_size=100)
             shared_rules.clear()
+        from .storage import share_search
+        share_search(rows)
         SnapshotRecord.objects.bulk_create(rows, batch_size=500)
         from .tag_relationships import index_record
         relationship_batch = []
@@ -155,6 +162,7 @@ def build(snapshot, rendered=None):
                 index_record(record, metadata, relationship_batch)
         if relationship_batch:
             from .models import SnapshotRelationship
+            share_json(relationship_batch)
             SnapshotRelationship.objects.bulk_create(relationship_batch, batch_size=250)
         insert_seconds += perf_counter() - write_started
         batch_bytes = 0
@@ -171,11 +179,11 @@ def build(snapshot, rendered=None):
         if row.get('membership_definition'):
             compact['membership_definition'] = {'methods': row['membership_definition']['methods']}
         if row.get('last_positive_observation'): compact['last_positive_observation'] = row['last_positive_observation']
-        sorts = {key: row.get(key) for key in ['power_state','name','path','scope','category','policy_name','rule_count','hit_count','rule_id','policy_rule_id','vm_count','group_count','other_count','tag_count']}
+        sorts = {key: row.get(key) for key in ['resolved_group_count','power_state','name','path','scope','category','policy_name','rule_count','hit_count','rule_id','policy_rule_id','vm_count','group_count','other_count','tag_count']}
         for key in ['usage','membership','hit_status','status']: sorts[key] = LABELS.get(row.get(key), row.get(key))
         sorts.update(kind=row.get('inventory_type', row.get('kind', '')), method=flatten(row.get('membership_definition', {}).get('methods', [])), references=len(row.get('referenced_by', [])))
         extra = tag_context(row, metadata) if view == 'tags' else {}
-        stored = dict(row, resolved_tag_evidence=extra) if extra else row
+        stored = dict(row, _shared_tag_evidence=True) if extra else row
         if view == 'vms':
             edges = []
             for rule in row.get('related_rules', []):
@@ -184,6 +192,7 @@ def build(snapshot, rendered=None):
                         data={k:v for k,v in rule.items() if k not in ('via_group', 'via_groups')}))
                     rule_paths.add(rule['path'])
                     if len(shared_rules) >= 100:
+                        share_json(shared_rules)
                         SnapshotVMRule.objects.bulk_create(shared_rules, batch_size=100)
                         shared_rules.clear()
                 edges.append({k:v for k,v in rule.items() if k in ('path', 'name', 'via_group', 'via_groups')})
@@ -237,4 +246,9 @@ def build(snapshot, rendered=None):
                 for i in ids[offset:offset+1000]], batch_size=1000)
     checkpoint(snapshot.pk, "save_presentation_start")
     SnapshotPresentation.objects.create(snapshot=snapshot, shell=shell, tag_evidence=metadata)
+    from django.utils import timezone
+    Snapshot.objects.filter(pk=snapshot.pk).update(browsing_status="ready", browsing_refreshed_at=timezone.now())
+    from .analysis_index import prepare
+    snapshot.browsing_status = 'ready'
+    prepare(snapshot)
     checkpoint(snapshot.pk, "save_presentation_complete")

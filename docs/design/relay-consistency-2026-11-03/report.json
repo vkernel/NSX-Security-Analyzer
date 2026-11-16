@@ -1,0 +1,7136 @@
+[
+  {
+    "name": "dashboard",
+    "url": "/",
+    "theme": "light",
+    "width": 1440,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 1440,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "environment-directory",
+    "url": "/environments/",
+    "theme": "light",
+    "width": 1440,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 1440,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "administration",
+    "url": "/administration/",
+    "theme": "light",
+    "width": 1440,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 1440,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "environment-schedules",
+    "url": "/administration/environments/",
+    "theme": "light",
+    "width": 1440,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 1440,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "all-collections",
+    "url": "/collections/",
+    "theme": "light",
+    "width": 1440,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 1440,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "activity",
+    "url": "/activity/",
+    "theme": "light",
+    "width": 1440,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 1440,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "my-work",
+    "url": "/my-work/",
+    "theme": "light",
+    "width": 1440,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 1440,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "testing-data",
+    "url": "/environments/testing-data/",
+    "theme": "light",
+    "width": 1440,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 1440,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "environment-new",
+    "url": "/environments/new/",
+    "theme": "light",
+    "width": 1440,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 1440,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "workspace-policy",
+    "url": "/administration/collection-policy/",
+    "theme": "light",
+    "width": 1440,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 1440,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "retention-settings",
+    "url": "/administration/retention/",
+    "theme": "light",
+    "width": 1440,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 1440,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "authentication-settings",
+    "url": "/administration/authentication/",
+    "theme": "light",
+    "width": 1440,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 1440,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "keycloak-settings",
+    "url": "/administration/keycloak/",
+    "theme": "light",
+    "width": 1440,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 1440,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "system-health",
+    "url": "/administration/health/",
+    "theme": "light",
+    "width": 1440,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 1440,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "audit-log",
+    "url": "/administration/audit/",
+    "theme": "light",
+    "width": 1440,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 1440,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "finding-policy",
+    "url": "/administration/finding-policy/",
+    "theme": "light",
+    "width": 1440,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 1440,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "review-approvals",
+    "url": "/administration/review-approvals/",
+    "theme": "light",
+    "width": 1440,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 1440,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "transient-emptiness",
+    "url": "/administration/transient-emptiness/",
+    "theme": "light",
+    "width": 1440,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 1440,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "password-change",
+    "url": "/account/password/",
+    "theme": "light",
+    "width": 1440,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 1440,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "naming-policies",
+    "url": "/administration/naming/",
+    "theme": "light",
+    "width": 1440,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 1440,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "settings-appearance",
+    "url": "/settings/?section=appearance",
+    "theme": "light",
+    "width": 1440,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 1440,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "settings-tables",
+    "url": "/settings/?section=tables",
+    "theme": "light",
+    "width": 1440,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 1440,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "settings-dates",
+    "url": "/settings/?section=dates",
+    "theme": "light",
+    "width": 1440,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 1440,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "settings-updates",
+    "url": "/settings/?section=updates",
+    "theme": "light",
+    "width": 1440,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 1440,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "settings-notifications",
+    "url": "/settings/?section=notifications",
+    "theme": "light",
+    "width": 1440,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 1440,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "environment",
+    "url": "/environments/1/",
+    "theme": "light",
+    "width": 1440,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 1440,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "environment-edit",
+    "url": "/environments/1/edit/",
+    "theme": "light",
+    "width": 1440,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 1440,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "environment-delete",
+    "url": "/environments/1/delete/",
+    "theme": "light",
+    "width": 1440,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 1440,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "collection-history",
+    "url": "/environments/1/collections/",
+    "theme": "light",
+    "width": 1440,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 1440,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "rule-history",
+    "url": "/environments/1/rule-history/",
+    "theme": "light",
+    "width": 1440,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 1440,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "snapshot-comparison",
+    "url": "/environments/1/compare/",
+    "theme": "light",
+    "width": 1440,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 1440,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "collection-coverage",
+    "url": "/environments/1/coverage/",
+    "theme": "light",
+    "width": 1440,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 1440,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "findings",
+    "url": "/environments/1/findings/",
+    "theme": "light",
+    "width": 1440,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 1440,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "deletion-history",
+    "url": "/environments/1/deletions/history/",
+    "theme": "light",
+    "width": 1440,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 1440,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "deletion-selection",
+    "url": "/environments/1/deletions/",
+    "theme": "light",
+    "width": 1440,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 1440,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "segmentation",
+    "url": "/environments/1/segmentation/",
+    "theme": "light",
+    "width": 1440,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 1440,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "segmentation-pair",
+    "url": "/environments/1/segmentation/workloads/",
+    "theme": "light",
+    "width": 1440,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 1440,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "naming-compliance",
+    "url": "/environments/1/naming/",
+    "theme": "light",
+    "width": 1440,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 1440,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "findings-unassigned",
+    "url": "/environments/1/findings/?review=unassigned",
+    "theme": "light",
+    "width": 1440,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 1440,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "findings-second_review",
+    "url": "/environments/1/findings/?review=second_review",
+    "theme": "light",
+    "width": 1440,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 1440,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "findings-ready",
+    "url": "/environments/1/findings/?review=ready",
+    "theme": "light",
+    "width": 1440,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 1440,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "findings-rejected",
+    "url": "/environments/1/findings/?review=rejected",
+    "theme": "light",
+    "width": 1440,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 1440,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "findings-decommissioned",
+    "url": "/environments/1/findings/?review=decommissioned",
+    "theme": "light",
+    "width": 1440,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 1440,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "findings-suppressed",
+    "url": "/environments/1/findings/?review=suppressed",
+    "theme": "light",
+    "width": 1440,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 1440,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "segmentation-matrix",
+    "url": "/environments/1/segmentation/?tab=matrix",
+    "theme": "light",
+    "width": 1440,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 1440,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "segmentation-priorities",
+    "url": "/environments/1/segmentation/?tab=priorities",
+    "theme": "light",
+    "width": 1440,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 1440,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "segmentation-settings",
+    "url": "/environments/1/segmentation/?tab=settings",
+    "theme": "light",
+    "width": 1440,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 1440,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "pair-populated",
+    "url": "/environments/1/segmentation/workloads/?snapshot=fbbfac0f-c8aa-487b-bd16-a8d632407aa2&source=%2Finfra%2Fvirtual-machines%2Faudit-database&destination=%2Finfra%2Fvirtual-machines%2Faudit-web&protocol=TCP&port=443",
+    "theme": "light",
+    "width": 1440,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 1440,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "pair-needs-assessment",
+    "url": "/environments/1/segmentation/workloads/?snapshot=fbbfac0f-c8aa-487b-bd16-a8d632407aa2&source=%2Finfra%2Fvirtual-machines%2Faudit-database&destination=%2Finfra%2Fvirtual-machines%2Faudit-web&protocol=TCP&port=443&status=unresolved",
+    "theme": "light",
+    "width": 1440,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 1440,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "proposal-new",
+    "url": "/environments/1/segmentation/proposals/new/?snapshot=fbbfac0f-c8aa-487b-bd16-a8d632407aa2&source=%2Finfra%2Fvirtual-machines%2Faudit-database&destination=%2Finfra%2Fvirtual-machines%2Faudit-web&protocol=TCP&port=443",
+    "theme": "light",
+    "width": 1440,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 1440,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "proposal-saved",
+    "url": "/environments/1/segmentation/proposals/1/",
+    "theme": "light",
+    "width": 1440,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 1440,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "policy-edit",
+    "url": "/administration/naming/1/",
+    "theme": "light",
+    "width": 1440,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 1440,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "policy-new",
+    "url": "/administration/naming/?new=1",
+    "theme": "light",
+    "width": 1440,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 1440,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "policy-duplicate",
+    "url": "/administration/naming/?duplicate=1",
+    "theme": "light",
+    "width": 1440,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 1440,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "policies-removed",
+    "url": "/administration/naming/?show=removed",
+    "theme": "light",
+    "width": 1440,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 1440,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "naming-compliant",
+    "url": "/environments/1/naming/?tab=compliant",
+    "theme": "light",
+    "width": 1440,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 1440,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "naming-exceptions",
+    "url": "/environments/1/naming/?tab=exceptions",
+    "theme": "light",
+    "width": 1440,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 1440,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "naming-all",
+    "url": "/environments/1/naming/?tab=all",
+    "theme": "light",
+    "width": 1440,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 1440,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "deletion-detail",
+    "url": "/deletions/b8b4a9f5-2c1d-49ce-b49b-967d6ae24132/",
+    "theme": "light",
+    "width": 1440,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 1440,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "deletion-plan",
+    "url": "/deletions/b8b4a9f5-2c1d-49ce-b49b-967d6ae24132/plan/",
+    "theme": "light",
+    "width": 1440,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 1440,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "deletion-configuration",
+    "url": "/deletion-items/2/configuration/",
+    "theme": "light",
+    "width": 1440,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 1440,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "deletion-reference-cleanup",
+    "url": "/deletion-items/2/reference-cleanup/",
+    "theme": "light",
+    "width": 1440,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 1440,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "collection-result",
+    "url": "/collections/13f00cd9-3001-4f33-9553-dbd31aa7109b/result/",
+    "theme": "light",
+    "width": 1440,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 1440,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "collection-diagnostics",
+    "url": "/collections/13f00cd9-3001-4f33-9553-dbd31aa7109b/diagnostics/",
+    "theme": "light",
+    "width": 1440,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 1440,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "task-cancel",
+    "url": "/tasks/deletion/b8b4a9f5-2c1d-49ce-b49b-967d6ae24132/cancel/",
+    "theme": "light",
+    "width": 1440,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 1440,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "impact-preview",
+    "url": "/snapshots/fbbfac0f-c8aa-487b-bd16-a8d632407aa2/impact/?path=%2Finfra%2Fdomains%2Fdefault%2Fgroups%2Fweb",
+    "theme": "light",
+    "width": 1440,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 1440,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "snapshot-overview",
+    "url": "/snapshots/fbbfac0f-c8aa-487b-bd16-a8d632407aa2/#overview",
+    "theme": "light",
+    "width": 1440,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 1440,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "snapshot-all-vms",
+    "url": "/snapshots/fbbfac0f-c8aa-487b-bd16-a8d632407aa2/#all-vms",
+    "theme": "light",
+    "width": 1440,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 1440,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "snapshot-all-groups",
+    "url": "/snapshots/fbbfac0f-c8aa-487b-bd16-a8d632407aa2/#all-groups",
+    "theme": "light",
+    "width": 1440,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 1440,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "snapshot-all-services",
+    "url": "/snapshots/fbbfac0f-c8aa-487b-bd16-a8d632407aa2/#all-services",
+    "theme": "light",
+    "width": 1440,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 1440,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "snapshot-tags-all",
+    "url": "/snapshots/fbbfac0f-c8aa-487b-bd16-a8d632407aa2/#tags-all",
+    "theme": "light",
+    "width": 1440,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 1440,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "snapshot-tags-scopes",
+    "url": "/snapshots/fbbfac0f-c8aa-487b-bd16-a8d632407aa2/#tags-scopes",
+    "theme": "light",
+    "width": 1440,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 1440,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "snapshot-dfw-overview",
+    "url": "/snapshots/fbbfac0f-c8aa-487b-bd16-a8d632407aa2/#dfw-overview",
+    "theme": "light",
+    "width": 1440,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 1440,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "snapshot-dfw-policies",
+    "url": "/snapshots/fbbfac0f-c8aa-487b-bd16-a8d632407aa2/#dfw-policies",
+    "theme": "light",
+    "width": 1440,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 1440,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "snapshot-dfw-rules",
+    "url": "/snapshots/fbbfac0f-c8aa-487b-bd16-a8d632407aa2/#dfw-rules",
+    "theme": "light",
+    "width": 1440,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 1440,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "snapshot-feature-guide",
+    "url": "/snapshots/fbbfac0f-c8aa-487b-bd16-a8d632407aa2/#feature-guide",
+    "theme": "light",
+    "width": 1440,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 1440,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "snapshot-coverage",
+    "url": "/snapshots/fbbfac0f-c8aa-487b-bd16-a8d632407aa2/#coverage",
+    "theme": "light",
+    "width": 1440,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 1440,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "snapshot-tags-coverage",
+    "url": "/snapshots/fbbfac0f-c8aa-487b-bd16-a8d632407aa2/#tags-coverage",
+    "theme": "light",
+    "width": 1440,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 1440,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "empty-inventory",
+    "url": "/workspace/inventory/?environment=2",
+    "theme": "light",
+    "width": 1440,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 1440,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "empty-environments",
+    "url": "/workspace/environments/?environment=2",
+    "theme": "light",
+    "width": 1440,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 1440,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "empty-firewall",
+    "url": "/workspace/firewall/?environment=2",
+    "theme": "light",
+    "width": 1440,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 1440,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "empty-help",
+    "url": "/workspace/help/?environment=2",
+    "theme": "light",
+    "width": 1440,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 1440,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "empty-segmentation",
+    "url": "/environments/2/segmentation/",
+    "theme": "light",
+    "width": 1440,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 1440,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "empty-naming-compliance",
+    "url": "/environments/2/naming/",
+    "theme": "light",
+    "width": 1440,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 1440,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "empty-findings",
+    "url": "/environments/2/findings/",
+    "theme": "light",
+    "width": 1440,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 1440,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "empty-environment",
+    "url": "/environments/2/",
+    "theme": "light",
+    "width": 1440,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 1440,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "admin:auth_user_changelist",
+    "url": "/admin/auth/user/",
+    "theme": "light",
+    "width": 1440,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 1440,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "admin:auth_user_add",
+    "url": "/admin/auth/user/add/",
+    "theme": "light",
+    "width": 1440,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 1440,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "admin:auth_group_changelist",
+    "url": "/admin/auth/group/",
+    "theme": "light",
+    "width": 1440,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 1440,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "admin:auth_group_add",
+    "url": "/admin/auth/group/add/",
+    "theme": "light",
+    "width": 1440,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 1440,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "admin-user-edit",
+    "url": "/admin/auth/user/2/change/",
+    "theme": "light",
+    "width": 1440,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 1440,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "admin-user-delete",
+    "url": "/admin/auth/user/2/delete/",
+    "theme": "light",
+    "width": 1440,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 1440,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "snapshot-archived",
+    "url": "/snapshots/ccc8e8af-7543-4c35-9b52-f31f956ba61a/",
+    "theme": "light",
+    "width": 1440,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 1440,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "removed-policy-detail",
+    "url": "/administration/naming/2/",
+    "theme": "light",
+    "width": 1440,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 1440,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "ldap-settings",
+    "url": "/administration/authentication/?provider=ldap",
+    "theme": "light",
+    "width": 1440,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 1440,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "bulk-confirmation-template",
+    "url": "/__style-audit__/bulk-review/",
+    "theme": "light",
+    "width": 1440,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 1440,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "finding-detail-unused-group",
+    "url": "/environments/1/findings/1/",
+    "theme": "light",
+    "width": 1440,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 1440,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "approval-recovery",
+    "url": "/environments/1/findings/1/recover-approval/",
+    "theme": "light",
+    "width": 1440,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 1440,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "finding-detail-unused-service",
+    "url": "/environments/1/findings/2/",
+    "theme": "light",
+    "width": 1440,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 1440,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "dashboard",
+    "url": "/",
+    "theme": "dark",
+    "width": 1440,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 1440,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "environment-directory",
+    "url": "/environments/",
+    "theme": "dark",
+    "width": 1440,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 1440,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "administration",
+    "url": "/administration/",
+    "theme": "dark",
+    "width": 1440,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 1440,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "environment-schedules",
+    "url": "/administration/environments/",
+    "theme": "dark",
+    "width": 1440,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 1440,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "all-collections",
+    "url": "/collections/",
+    "theme": "dark",
+    "width": 1440,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 1440,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "activity",
+    "url": "/activity/",
+    "theme": "dark",
+    "width": 1440,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 1440,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "my-work",
+    "url": "/my-work/",
+    "theme": "dark",
+    "width": 1440,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 1440,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "testing-data",
+    "url": "/environments/testing-data/",
+    "theme": "dark",
+    "width": 1440,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 1440,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "environment-new",
+    "url": "/environments/new/",
+    "theme": "dark",
+    "width": 1440,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 1440,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "workspace-policy",
+    "url": "/administration/collection-policy/",
+    "theme": "dark",
+    "width": 1440,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 1440,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "retention-settings",
+    "url": "/administration/retention/",
+    "theme": "dark",
+    "width": 1440,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 1440,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "authentication-settings",
+    "url": "/administration/authentication/",
+    "theme": "dark",
+    "width": 1440,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 1440,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "keycloak-settings",
+    "url": "/administration/keycloak/",
+    "theme": "dark",
+    "width": 1440,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 1440,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "system-health",
+    "url": "/administration/health/",
+    "theme": "dark",
+    "width": 1440,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 1440,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "audit-log",
+    "url": "/administration/audit/",
+    "theme": "dark",
+    "width": 1440,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 1440,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "finding-policy",
+    "url": "/administration/finding-policy/",
+    "theme": "dark",
+    "width": 1440,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 1440,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "review-approvals",
+    "url": "/administration/review-approvals/",
+    "theme": "dark",
+    "width": 1440,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 1440,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "transient-emptiness",
+    "url": "/administration/transient-emptiness/",
+    "theme": "dark",
+    "width": 1440,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 1440,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "password-change",
+    "url": "/account/password/",
+    "theme": "dark",
+    "width": 1440,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 1440,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "naming-policies",
+    "url": "/administration/naming/",
+    "theme": "dark",
+    "width": 1440,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 1440,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "settings-appearance",
+    "url": "/settings/?section=appearance",
+    "theme": "dark",
+    "width": 1440,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 1440,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "settings-tables",
+    "url": "/settings/?section=tables",
+    "theme": "dark",
+    "width": 1440,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 1440,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "settings-dates",
+    "url": "/settings/?section=dates",
+    "theme": "dark",
+    "width": 1440,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 1440,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "settings-updates",
+    "url": "/settings/?section=updates",
+    "theme": "dark",
+    "width": 1440,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 1440,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "settings-notifications",
+    "url": "/settings/?section=notifications",
+    "theme": "dark",
+    "width": 1440,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 1440,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "environment",
+    "url": "/environments/1/",
+    "theme": "dark",
+    "width": 1440,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 1440,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "environment-edit",
+    "url": "/environments/1/edit/",
+    "theme": "dark",
+    "width": 1440,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 1440,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "environment-delete",
+    "url": "/environments/1/delete/",
+    "theme": "dark",
+    "width": 1440,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 1440,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "collection-history",
+    "url": "/environments/1/collections/",
+    "theme": "dark",
+    "width": 1440,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 1440,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "rule-history",
+    "url": "/environments/1/rule-history/",
+    "theme": "dark",
+    "width": 1440,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 1440,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "snapshot-comparison",
+    "url": "/environments/1/compare/",
+    "theme": "dark",
+    "width": 1440,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 1440,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "collection-coverage",
+    "url": "/environments/1/coverage/",
+    "theme": "dark",
+    "width": 1440,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 1440,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "findings",
+    "url": "/environments/1/findings/",
+    "theme": "dark",
+    "width": 1440,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 1440,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "deletion-history",
+    "url": "/environments/1/deletions/history/",
+    "theme": "dark",
+    "width": 1440,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 1440,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "deletion-selection",
+    "url": "/environments/1/deletions/",
+    "theme": "dark",
+    "width": 1440,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 1440,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "segmentation",
+    "url": "/environments/1/segmentation/",
+    "theme": "dark",
+    "width": 1440,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 1440,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "segmentation-pair",
+    "url": "/environments/1/segmentation/workloads/",
+    "theme": "dark",
+    "width": 1440,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 1440,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "naming-compliance",
+    "url": "/environments/1/naming/",
+    "theme": "dark",
+    "width": 1440,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 1440,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "findings-unassigned",
+    "url": "/environments/1/findings/?review=unassigned",
+    "theme": "dark",
+    "width": 1440,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 1440,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "findings-second_review",
+    "url": "/environments/1/findings/?review=second_review",
+    "theme": "dark",
+    "width": 1440,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 1440,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "findings-ready",
+    "url": "/environments/1/findings/?review=ready",
+    "theme": "dark",
+    "width": 1440,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 1440,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "findings-rejected",
+    "url": "/environments/1/findings/?review=rejected",
+    "theme": "dark",
+    "width": 1440,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 1440,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "findings-decommissioned",
+    "url": "/environments/1/findings/?review=decommissioned",
+    "theme": "dark",
+    "width": 1440,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 1440,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "findings-suppressed",
+    "url": "/environments/1/findings/?review=suppressed",
+    "theme": "dark",
+    "width": 1440,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 1440,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "segmentation-matrix",
+    "url": "/environments/1/segmentation/?tab=matrix",
+    "theme": "dark",
+    "width": 1440,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 1440,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "segmentation-priorities",
+    "url": "/environments/1/segmentation/?tab=priorities",
+    "theme": "dark",
+    "width": 1440,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 1440,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "segmentation-settings",
+    "url": "/environments/1/segmentation/?tab=settings",
+    "theme": "dark",
+    "width": 1440,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 1440,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "pair-populated",
+    "url": "/environments/1/segmentation/workloads/?snapshot=fbbfac0f-c8aa-487b-bd16-a8d632407aa2&source=%2Finfra%2Fvirtual-machines%2Faudit-database&destination=%2Finfra%2Fvirtual-machines%2Faudit-web&protocol=TCP&port=443",
+    "theme": "dark",
+    "width": 1440,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 1440,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "pair-needs-assessment",
+    "url": "/environments/1/segmentation/workloads/?snapshot=fbbfac0f-c8aa-487b-bd16-a8d632407aa2&source=%2Finfra%2Fvirtual-machines%2Faudit-database&destination=%2Finfra%2Fvirtual-machines%2Faudit-web&protocol=TCP&port=443&status=unresolved",
+    "theme": "dark",
+    "width": 1440,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 1440,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "proposal-new",
+    "url": "/environments/1/segmentation/proposals/new/?snapshot=fbbfac0f-c8aa-487b-bd16-a8d632407aa2&source=%2Finfra%2Fvirtual-machines%2Faudit-database&destination=%2Finfra%2Fvirtual-machines%2Faudit-web&protocol=TCP&port=443",
+    "theme": "dark",
+    "width": 1440,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 1440,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "proposal-saved",
+    "url": "/environments/1/segmentation/proposals/1/",
+    "theme": "dark",
+    "width": 1440,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 1440,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "policy-edit",
+    "url": "/administration/naming/1/",
+    "theme": "dark",
+    "width": 1440,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 1440,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "policy-new",
+    "url": "/administration/naming/?new=1",
+    "theme": "dark",
+    "width": 1440,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 1440,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "policy-duplicate",
+    "url": "/administration/naming/?duplicate=1",
+    "theme": "dark",
+    "width": 1440,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 1440,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "policies-removed",
+    "url": "/administration/naming/?show=removed",
+    "theme": "dark",
+    "width": 1440,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 1440,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "naming-compliant",
+    "url": "/environments/1/naming/?tab=compliant",
+    "theme": "dark",
+    "width": 1440,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 1440,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "naming-exceptions",
+    "url": "/environments/1/naming/?tab=exceptions",
+    "theme": "dark",
+    "width": 1440,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 1440,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "naming-all",
+    "url": "/environments/1/naming/?tab=all",
+    "theme": "dark",
+    "width": 1440,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 1440,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "deletion-detail",
+    "url": "/deletions/b8b4a9f5-2c1d-49ce-b49b-967d6ae24132/",
+    "theme": "dark",
+    "width": 1440,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 1440,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "deletion-plan",
+    "url": "/deletions/b8b4a9f5-2c1d-49ce-b49b-967d6ae24132/plan/",
+    "theme": "dark",
+    "width": 1440,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 1440,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "deletion-configuration",
+    "url": "/deletion-items/2/configuration/",
+    "theme": "dark",
+    "width": 1440,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 1440,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "deletion-reference-cleanup",
+    "url": "/deletion-items/2/reference-cleanup/",
+    "theme": "dark",
+    "width": 1440,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 1440,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "collection-result",
+    "url": "/collections/13f00cd9-3001-4f33-9553-dbd31aa7109b/result/",
+    "theme": "dark",
+    "width": 1440,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 1440,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "collection-diagnostics",
+    "url": "/collections/13f00cd9-3001-4f33-9553-dbd31aa7109b/diagnostics/",
+    "theme": "dark",
+    "width": 1440,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 1440,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "task-cancel",
+    "url": "/tasks/deletion/b8b4a9f5-2c1d-49ce-b49b-967d6ae24132/cancel/",
+    "theme": "dark",
+    "width": 1440,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 1440,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "impact-preview",
+    "url": "/snapshots/fbbfac0f-c8aa-487b-bd16-a8d632407aa2/impact/?path=%2Finfra%2Fdomains%2Fdefault%2Fgroups%2Fweb",
+    "theme": "dark",
+    "width": 1440,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 1440,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "snapshot-overview",
+    "url": "/snapshots/fbbfac0f-c8aa-487b-bd16-a8d632407aa2/#overview",
+    "theme": "dark",
+    "width": 1440,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 1440,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "snapshot-all-vms",
+    "url": "/snapshots/fbbfac0f-c8aa-487b-bd16-a8d632407aa2/#all-vms",
+    "theme": "dark",
+    "width": 1440,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 1440,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "snapshot-all-groups",
+    "url": "/snapshots/fbbfac0f-c8aa-487b-bd16-a8d632407aa2/#all-groups",
+    "theme": "dark",
+    "width": 1440,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 1440,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "snapshot-all-services",
+    "url": "/snapshots/fbbfac0f-c8aa-487b-bd16-a8d632407aa2/#all-services",
+    "theme": "dark",
+    "width": 1440,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 1440,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "snapshot-tags-all",
+    "url": "/snapshots/fbbfac0f-c8aa-487b-bd16-a8d632407aa2/#tags-all",
+    "theme": "dark",
+    "width": 1440,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 1440,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "snapshot-tags-scopes",
+    "url": "/snapshots/fbbfac0f-c8aa-487b-bd16-a8d632407aa2/#tags-scopes",
+    "theme": "dark",
+    "width": 1440,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 1440,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "snapshot-dfw-overview",
+    "url": "/snapshots/fbbfac0f-c8aa-487b-bd16-a8d632407aa2/#dfw-overview",
+    "theme": "dark",
+    "width": 1440,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 1440,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "snapshot-dfw-policies",
+    "url": "/snapshots/fbbfac0f-c8aa-487b-bd16-a8d632407aa2/#dfw-policies",
+    "theme": "dark",
+    "width": 1440,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 1440,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "snapshot-dfw-rules",
+    "url": "/snapshots/fbbfac0f-c8aa-487b-bd16-a8d632407aa2/#dfw-rules",
+    "theme": "dark",
+    "width": 1440,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 1440,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "snapshot-feature-guide",
+    "url": "/snapshots/fbbfac0f-c8aa-487b-bd16-a8d632407aa2/#feature-guide",
+    "theme": "dark",
+    "width": 1440,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 1440,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "snapshot-coverage",
+    "url": "/snapshots/fbbfac0f-c8aa-487b-bd16-a8d632407aa2/#coverage",
+    "theme": "dark",
+    "width": 1440,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 1440,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "snapshot-tags-coverage",
+    "url": "/snapshots/fbbfac0f-c8aa-487b-bd16-a8d632407aa2/#tags-coverage",
+    "theme": "dark",
+    "width": 1440,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 1440,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "empty-inventory",
+    "url": "/workspace/inventory/?environment=2",
+    "theme": "dark",
+    "width": 1440,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 1440,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "empty-environments",
+    "url": "/workspace/environments/?environment=2",
+    "theme": "dark",
+    "width": 1440,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 1440,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "empty-firewall",
+    "url": "/workspace/firewall/?environment=2",
+    "theme": "dark",
+    "width": 1440,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 1440,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "empty-help",
+    "url": "/workspace/help/?environment=2",
+    "theme": "dark",
+    "width": 1440,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 1440,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "empty-segmentation",
+    "url": "/environments/2/segmentation/",
+    "theme": "dark",
+    "width": 1440,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 1440,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "empty-naming-compliance",
+    "url": "/environments/2/naming/",
+    "theme": "dark",
+    "width": 1440,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 1440,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "empty-findings",
+    "url": "/environments/2/findings/",
+    "theme": "dark",
+    "width": 1440,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 1440,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "empty-environment",
+    "url": "/environments/2/",
+    "theme": "dark",
+    "width": 1440,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 1440,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "admin:auth_user_changelist",
+    "url": "/admin/auth/user/",
+    "theme": "dark",
+    "width": 1440,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 1440,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "admin:auth_user_add",
+    "url": "/admin/auth/user/add/",
+    "theme": "dark",
+    "width": 1440,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 1440,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "admin:auth_group_changelist",
+    "url": "/admin/auth/group/",
+    "theme": "dark",
+    "width": 1440,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 1440,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "admin:auth_group_add",
+    "url": "/admin/auth/group/add/",
+    "theme": "dark",
+    "width": 1440,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 1440,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "admin-user-edit",
+    "url": "/admin/auth/user/2/change/",
+    "theme": "dark",
+    "width": 1440,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 1440,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "admin-user-delete",
+    "url": "/admin/auth/user/2/delete/",
+    "theme": "dark",
+    "width": 1440,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 1440,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "snapshot-archived",
+    "url": "/snapshots/ccc8e8af-7543-4c35-9b52-f31f956ba61a/",
+    "theme": "dark",
+    "width": 1440,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 1440,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "removed-policy-detail",
+    "url": "/administration/naming/2/",
+    "theme": "dark",
+    "width": 1440,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 1440,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "ldap-settings",
+    "url": "/administration/authentication/?provider=ldap",
+    "theme": "dark",
+    "width": 1440,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 1440,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "bulk-confirmation-template",
+    "url": "/__style-audit__/bulk-review/",
+    "theme": "dark",
+    "width": 1440,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 1440,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "finding-detail-unused-group",
+    "url": "/environments/1/findings/1/",
+    "theme": "dark",
+    "width": 1440,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 1440,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "approval-recovery",
+    "url": "/environments/1/findings/1/recover-approval/",
+    "theme": "dark",
+    "width": 1440,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 1440,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "finding-detail-unused-service",
+    "url": "/environments/1/findings/2/",
+    "theme": "dark",
+    "width": 1440,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 1440,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "dashboard",
+    "url": "/",
+    "theme": "light",
+    "width": 390,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 390,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "environment-directory",
+    "url": "/environments/",
+    "theme": "light",
+    "width": 390,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 390,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "administration",
+    "url": "/administration/",
+    "theme": "light",
+    "width": 390,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 390,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "environment-schedules",
+    "url": "/administration/environments/",
+    "theme": "light",
+    "width": 390,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 390,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "all-collections",
+    "url": "/collections/",
+    "theme": "light",
+    "width": 390,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 390,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "activity",
+    "url": "/activity/",
+    "theme": "light",
+    "width": 390,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 390,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "my-work",
+    "url": "/my-work/",
+    "theme": "light",
+    "width": 390,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 390,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "testing-data",
+    "url": "/environments/testing-data/",
+    "theme": "light",
+    "width": 390,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 390,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "environment-new",
+    "url": "/environments/new/",
+    "theme": "light",
+    "width": 390,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 390,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "workspace-policy",
+    "url": "/administration/collection-policy/",
+    "theme": "light",
+    "width": 390,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 390,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "retention-settings",
+    "url": "/administration/retention/",
+    "theme": "light",
+    "width": 390,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 390,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "authentication-settings",
+    "url": "/administration/authentication/",
+    "theme": "light",
+    "width": 390,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 390,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "keycloak-settings",
+    "url": "/administration/keycloak/",
+    "theme": "light",
+    "width": 390,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 390,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "system-health",
+    "url": "/administration/health/",
+    "theme": "light",
+    "width": 390,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 390,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "audit-log",
+    "url": "/administration/audit/",
+    "theme": "light",
+    "width": 390,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 390,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "finding-policy",
+    "url": "/administration/finding-policy/",
+    "theme": "light",
+    "width": 390,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 390,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "review-approvals",
+    "url": "/administration/review-approvals/",
+    "theme": "light",
+    "width": 390,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 390,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "transient-emptiness",
+    "url": "/administration/transient-emptiness/",
+    "theme": "light",
+    "width": 390,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 390,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "password-change",
+    "url": "/account/password/",
+    "theme": "light",
+    "width": 390,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 390,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "naming-policies",
+    "url": "/administration/naming/",
+    "theme": "light",
+    "width": 390,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 390,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "settings-appearance",
+    "url": "/settings/?section=appearance",
+    "theme": "light",
+    "width": 390,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 390,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "settings-tables",
+    "url": "/settings/?section=tables",
+    "theme": "light",
+    "width": 390,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 390,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "settings-dates",
+    "url": "/settings/?section=dates",
+    "theme": "light",
+    "width": 390,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 390,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "settings-updates",
+    "url": "/settings/?section=updates",
+    "theme": "light",
+    "width": 390,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 390,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "settings-notifications",
+    "url": "/settings/?section=notifications",
+    "theme": "light",
+    "width": 390,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 390,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "environment",
+    "url": "/environments/1/",
+    "theme": "light",
+    "width": 390,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 390,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0,
+    "rechecked": true
+  },
+  {
+    "name": "environment-edit",
+    "url": "/environments/1/edit/",
+    "theme": "light",
+    "width": 390,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 390,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "environment-delete",
+    "url": "/environments/1/delete/",
+    "theme": "light",
+    "width": 390,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 390,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "collection-history",
+    "url": "/environments/1/collections/",
+    "theme": "light",
+    "width": 390,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 390,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "rule-history",
+    "url": "/environments/1/rule-history/",
+    "theme": "light",
+    "width": 390,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 390,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0,
+    "rechecked": true
+  },
+  {
+    "name": "snapshot-comparison",
+    "url": "/environments/1/compare/",
+    "theme": "light",
+    "width": 390,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 390,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "collection-coverage",
+    "url": "/environments/1/coverage/",
+    "theme": "light",
+    "width": 390,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 390,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0,
+    "rechecked": true
+  },
+  {
+    "name": "findings",
+    "url": "/environments/1/findings/",
+    "theme": "light",
+    "width": 390,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 390,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "deletion-history",
+    "url": "/environments/1/deletions/history/",
+    "theme": "light",
+    "width": 390,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 390,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "deletion-selection",
+    "url": "/environments/1/deletions/",
+    "theme": "light",
+    "width": 390,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 390,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "segmentation",
+    "url": "/environments/1/segmentation/",
+    "theme": "light",
+    "width": 390,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 390,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "segmentation-pair",
+    "url": "/environments/1/segmentation/workloads/",
+    "theme": "light",
+    "width": 390,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 390,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "naming-compliance",
+    "url": "/environments/1/naming/",
+    "theme": "light",
+    "width": 390,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 390,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "findings-unassigned",
+    "url": "/environments/1/findings/?review=unassigned",
+    "theme": "light",
+    "width": 390,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 390,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "findings-second_review",
+    "url": "/environments/1/findings/?review=second_review",
+    "theme": "light",
+    "width": 390,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 390,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "findings-ready",
+    "url": "/environments/1/findings/?review=ready",
+    "theme": "light",
+    "width": 390,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 390,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "findings-rejected",
+    "url": "/environments/1/findings/?review=rejected",
+    "theme": "light",
+    "width": 390,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 390,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "findings-decommissioned",
+    "url": "/environments/1/findings/?review=decommissioned",
+    "theme": "light",
+    "width": 390,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 390,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "findings-suppressed",
+    "url": "/environments/1/findings/?review=suppressed",
+    "theme": "light",
+    "width": 390,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 390,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "segmentation-matrix",
+    "url": "/environments/1/segmentation/?tab=matrix",
+    "theme": "light",
+    "width": 390,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 390,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "segmentation-priorities",
+    "url": "/environments/1/segmentation/?tab=priorities",
+    "theme": "light",
+    "width": 390,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 390,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "segmentation-settings",
+    "url": "/environments/1/segmentation/?tab=settings",
+    "theme": "light",
+    "width": 390,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 390,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "pair-populated",
+    "url": "/environments/1/segmentation/workloads/?snapshot=fbbfac0f-c8aa-487b-bd16-a8d632407aa2&source=%2Finfra%2Fvirtual-machines%2Faudit-database&destination=%2Finfra%2Fvirtual-machines%2Faudit-web&protocol=TCP&port=443",
+    "theme": "light",
+    "width": 390,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 390,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "pair-needs-assessment",
+    "url": "/environments/1/segmentation/workloads/?snapshot=fbbfac0f-c8aa-487b-bd16-a8d632407aa2&source=%2Finfra%2Fvirtual-machines%2Faudit-database&destination=%2Finfra%2Fvirtual-machines%2Faudit-web&protocol=TCP&port=443&status=unresolved",
+    "theme": "light",
+    "width": 390,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 390,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "proposal-new",
+    "url": "/environments/1/segmentation/proposals/new/?snapshot=fbbfac0f-c8aa-487b-bd16-a8d632407aa2&source=%2Finfra%2Fvirtual-machines%2Faudit-database&destination=%2Finfra%2Fvirtual-machines%2Faudit-web&protocol=TCP&port=443",
+    "theme": "light",
+    "width": 390,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 390,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "proposal-saved",
+    "url": "/environments/1/segmentation/proposals/1/",
+    "theme": "light",
+    "width": 390,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 390,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "policy-edit",
+    "url": "/administration/naming/1/",
+    "theme": "light",
+    "width": 390,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 390,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "policy-new",
+    "url": "/administration/naming/?new=1",
+    "theme": "light",
+    "width": 390,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 390,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "policy-duplicate",
+    "url": "/administration/naming/?duplicate=1",
+    "theme": "light",
+    "width": 390,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 390,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "policies-removed",
+    "url": "/administration/naming/?show=removed",
+    "theme": "light",
+    "width": 390,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 390,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "naming-compliant",
+    "url": "/environments/1/naming/?tab=compliant",
+    "theme": "light",
+    "width": 390,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 390,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "naming-exceptions",
+    "url": "/environments/1/naming/?tab=exceptions",
+    "theme": "light",
+    "width": 390,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 390,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "naming-all",
+    "url": "/environments/1/naming/?tab=all",
+    "theme": "light",
+    "width": 390,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 390,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "deletion-detail",
+    "url": "/deletions/b8b4a9f5-2c1d-49ce-b49b-967d6ae24132/",
+    "theme": "light",
+    "width": 390,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 390,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "deletion-plan",
+    "url": "/deletions/b8b4a9f5-2c1d-49ce-b49b-967d6ae24132/plan/",
+    "theme": "light",
+    "width": 390,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 390,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "deletion-configuration",
+    "url": "/deletion-items/2/configuration/",
+    "theme": "light",
+    "width": 390,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 390,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "deletion-reference-cleanup",
+    "url": "/deletion-items/2/reference-cleanup/",
+    "theme": "light",
+    "width": 390,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 390,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "collection-result",
+    "url": "/collections/13f00cd9-3001-4f33-9553-dbd31aa7109b/result/",
+    "theme": "light",
+    "width": 390,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 390,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "collection-diagnostics",
+    "url": "/collections/13f00cd9-3001-4f33-9553-dbd31aa7109b/diagnostics/",
+    "theme": "light",
+    "width": 390,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 390,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "task-cancel",
+    "url": "/tasks/deletion/b8b4a9f5-2c1d-49ce-b49b-967d6ae24132/cancel/",
+    "theme": "light",
+    "width": 390,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 390,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "impact-preview",
+    "url": "/snapshots/fbbfac0f-c8aa-487b-bd16-a8d632407aa2/impact/?path=%2Finfra%2Fdomains%2Fdefault%2Fgroups%2Fweb",
+    "theme": "light",
+    "width": 390,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 390,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "snapshot-overview",
+    "url": "/snapshots/fbbfac0f-c8aa-487b-bd16-a8d632407aa2/#overview",
+    "theme": "light",
+    "width": 390,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 390,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "snapshot-all-vms",
+    "url": "/snapshots/fbbfac0f-c8aa-487b-bd16-a8d632407aa2/#all-vms",
+    "theme": "light",
+    "width": 390,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 390,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "snapshot-all-groups",
+    "url": "/snapshots/fbbfac0f-c8aa-487b-bd16-a8d632407aa2/#all-groups",
+    "theme": "light",
+    "width": 390,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 390,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "snapshot-all-services",
+    "url": "/snapshots/fbbfac0f-c8aa-487b-bd16-a8d632407aa2/#all-services",
+    "theme": "light",
+    "width": 390,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 390,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "snapshot-tags-all",
+    "url": "/snapshots/fbbfac0f-c8aa-487b-bd16-a8d632407aa2/#tags-all",
+    "theme": "light",
+    "width": 390,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 390,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "snapshot-tags-scopes",
+    "url": "/snapshots/fbbfac0f-c8aa-487b-bd16-a8d632407aa2/#tags-scopes",
+    "theme": "light",
+    "width": 390,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 390,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "snapshot-dfw-overview",
+    "url": "/snapshots/fbbfac0f-c8aa-487b-bd16-a8d632407aa2/#dfw-overview",
+    "theme": "light",
+    "width": 390,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 390,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "snapshot-dfw-policies",
+    "url": "/snapshots/fbbfac0f-c8aa-487b-bd16-a8d632407aa2/#dfw-policies",
+    "theme": "light",
+    "width": 390,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 390,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "snapshot-dfw-rules",
+    "url": "/snapshots/fbbfac0f-c8aa-487b-bd16-a8d632407aa2/#dfw-rules",
+    "theme": "light",
+    "width": 390,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 390,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "snapshot-feature-guide",
+    "url": "/snapshots/fbbfac0f-c8aa-487b-bd16-a8d632407aa2/#feature-guide",
+    "theme": "light",
+    "width": 390,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 390,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "snapshot-coverage",
+    "url": "/snapshots/fbbfac0f-c8aa-487b-bd16-a8d632407aa2/#coverage",
+    "theme": "light",
+    "width": 390,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 390,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "snapshot-tags-coverage",
+    "url": "/snapshots/fbbfac0f-c8aa-487b-bd16-a8d632407aa2/#tags-coverage",
+    "theme": "light",
+    "width": 390,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 390,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "empty-inventory",
+    "url": "/workspace/inventory/?environment=2",
+    "theme": "light",
+    "width": 390,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 390,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "empty-environments",
+    "url": "/workspace/environments/?environment=2",
+    "theme": "light",
+    "width": 390,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 390,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "empty-firewall",
+    "url": "/workspace/firewall/?environment=2",
+    "theme": "light",
+    "width": 390,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 390,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "empty-help",
+    "url": "/workspace/help/?environment=2",
+    "theme": "light",
+    "width": 390,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 390,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "empty-segmentation",
+    "url": "/environments/2/segmentation/",
+    "theme": "light",
+    "width": 390,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 390,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "empty-naming-compliance",
+    "url": "/environments/2/naming/",
+    "theme": "light",
+    "width": 390,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 390,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "empty-findings",
+    "url": "/environments/2/findings/",
+    "theme": "light",
+    "width": 390,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 390,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "empty-environment",
+    "url": "/environments/2/",
+    "theme": "light",
+    "width": 390,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 390,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "admin:auth_user_changelist",
+    "url": "/admin/auth/user/",
+    "theme": "light",
+    "width": 390,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 390,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "admin:auth_user_add",
+    "url": "/admin/auth/user/add/",
+    "theme": "light",
+    "width": 390,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 390,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "admin:auth_group_changelist",
+    "url": "/admin/auth/group/",
+    "theme": "light",
+    "width": 390,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 390,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "admin:auth_group_add",
+    "url": "/admin/auth/group/add/",
+    "theme": "light",
+    "width": 390,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 390,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "admin-user-edit",
+    "url": "/admin/auth/user/2/change/",
+    "theme": "light",
+    "width": 390,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 390,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "admin-user-delete",
+    "url": "/admin/auth/user/2/delete/",
+    "theme": "light",
+    "width": 390,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 390,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "snapshot-archived",
+    "url": "/snapshots/ccc8e8af-7543-4c35-9b52-f31f956ba61a/",
+    "theme": "light",
+    "width": 390,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 390,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "removed-policy-detail",
+    "url": "/administration/naming/2/",
+    "theme": "light",
+    "width": 390,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 390,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "ldap-settings",
+    "url": "/administration/authentication/?provider=ldap",
+    "theme": "light",
+    "width": 390,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 390,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "bulk-confirmation-template",
+    "url": "/__style-audit__/bulk-review/",
+    "theme": "light",
+    "width": 390,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 390,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "finding-detail-unused-group",
+    "url": "/environments/1/findings/1/",
+    "theme": "light",
+    "width": 390,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 390,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "approval-recovery",
+    "url": "/environments/1/findings/1/recover-approval/",
+    "theme": "light",
+    "width": 390,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 390,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "finding-detail-unused-service",
+    "url": "/environments/1/findings/2/",
+    "theme": "light",
+    "width": 390,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 390,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "dashboard",
+    "url": "/",
+    "theme": "dark",
+    "width": 320,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 320,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "environment-directory",
+    "url": "/environments/",
+    "theme": "dark",
+    "width": 320,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 320,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "administration",
+    "url": "/administration/",
+    "theme": "dark",
+    "width": 320,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 320,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "environment-schedules",
+    "url": "/administration/environments/",
+    "theme": "dark",
+    "width": 320,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 320,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "all-collections",
+    "url": "/collections/",
+    "theme": "dark",
+    "width": 320,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 320,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "activity",
+    "url": "/activity/",
+    "theme": "dark",
+    "width": 320,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 320,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "my-work",
+    "url": "/my-work/",
+    "theme": "dark",
+    "width": 320,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 320,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "testing-data",
+    "url": "/environments/testing-data/",
+    "theme": "dark",
+    "width": 320,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 320,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "environment-new",
+    "url": "/environments/new/",
+    "theme": "dark",
+    "width": 320,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 320,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "workspace-policy",
+    "url": "/administration/collection-policy/",
+    "theme": "dark",
+    "width": 320,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 320,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "retention-settings",
+    "url": "/administration/retention/",
+    "theme": "dark",
+    "width": 320,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 320,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "authentication-settings",
+    "url": "/administration/authentication/",
+    "theme": "dark",
+    "width": 320,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 320,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "keycloak-settings",
+    "url": "/administration/keycloak/",
+    "theme": "dark",
+    "width": 320,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 320,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "system-health",
+    "url": "/administration/health/",
+    "theme": "dark",
+    "width": 320,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 320,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "audit-log",
+    "url": "/administration/audit/",
+    "theme": "dark",
+    "width": 320,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 320,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "finding-policy",
+    "url": "/administration/finding-policy/",
+    "theme": "dark",
+    "width": 320,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 320,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "review-approvals",
+    "url": "/administration/review-approvals/",
+    "theme": "dark",
+    "width": 320,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 320,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "transient-emptiness",
+    "url": "/administration/transient-emptiness/",
+    "theme": "dark",
+    "width": 320,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 320,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "password-change",
+    "url": "/account/password/",
+    "theme": "dark",
+    "width": 320,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 320,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "naming-policies",
+    "url": "/administration/naming/",
+    "theme": "dark",
+    "width": 320,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 320,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "settings-appearance",
+    "url": "/settings/?section=appearance",
+    "theme": "dark",
+    "width": 320,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 320,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "settings-tables",
+    "url": "/settings/?section=tables",
+    "theme": "dark",
+    "width": 320,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 320,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "settings-dates",
+    "url": "/settings/?section=dates",
+    "theme": "dark",
+    "width": 320,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 320,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "settings-updates",
+    "url": "/settings/?section=updates",
+    "theme": "dark",
+    "width": 320,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 320,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "settings-notifications",
+    "url": "/settings/?section=notifications",
+    "theme": "dark",
+    "width": 320,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 320,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "environment",
+    "url": "/environments/1/",
+    "theme": "dark",
+    "width": 320,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 320,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0,
+    "rechecked": true
+  },
+  {
+    "name": "environment-edit",
+    "url": "/environments/1/edit/",
+    "theme": "dark",
+    "width": 320,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 320,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "environment-delete",
+    "url": "/environments/1/delete/",
+    "theme": "dark",
+    "width": 320,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 320,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "collection-history",
+    "url": "/environments/1/collections/",
+    "theme": "dark",
+    "width": 320,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 320,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "rule-history",
+    "url": "/environments/1/rule-history/",
+    "theme": "dark",
+    "width": 320,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 320,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0,
+    "rechecked": true
+  },
+  {
+    "name": "snapshot-comparison",
+    "url": "/environments/1/compare/",
+    "theme": "dark",
+    "width": 320,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 320,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "collection-coverage",
+    "url": "/environments/1/coverage/",
+    "theme": "dark",
+    "width": 320,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 320,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0,
+    "rechecked": true
+  },
+  {
+    "name": "findings",
+    "url": "/environments/1/findings/",
+    "theme": "dark",
+    "width": 320,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 320,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "deletion-history",
+    "url": "/environments/1/deletions/history/",
+    "theme": "dark",
+    "width": 320,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 320,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "deletion-selection",
+    "url": "/environments/1/deletions/",
+    "theme": "dark",
+    "width": 320,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 320,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "segmentation",
+    "url": "/environments/1/segmentation/",
+    "theme": "dark",
+    "width": 320,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 320,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "segmentation-pair",
+    "url": "/environments/1/segmentation/workloads/",
+    "theme": "dark",
+    "width": 320,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 320,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "naming-compliance",
+    "url": "/environments/1/naming/",
+    "theme": "dark",
+    "width": 320,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 320,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "findings-unassigned",
+    "url": "/environments/1/findings/?review=unassigned",
+    "theme": "dark",
+    "width": 320,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 320,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "findings-second_review",
+    "url": "/environments/1/findings/?review=second_review",
+    "theme": "dark",
+    "width": 320,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 320,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "findings-ready",
+    "url": "/environments/1/findings/?review=ready",
+    "theme": "dark",
+    "width": 320,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 320,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "findings-rejected",
+    "url": "/environments/1/findings/?review=rejected",
+    "theme": "dark",
+    "width": 320,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 320,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "findings-decommissioned",
+    "url": "/environments/1/findings/?review=decommissioned",
+    "theme": "dark",
+    "width": 320,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 320,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "findings-suppressed",
+    "url": "/environments/1/findings/?review=suppressed",
+    "theme": "dark",
+    "width": 320,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 320,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "segmentation-matrix",
+    "url": "/environments/1/segmentation/?tab=matrix",
+    "theme": "dark",
+    "width": 320,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 320,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "segmentation-priorities",
+    "url": "/environments/1/segmentation/?tab=priorities",
+    "theme": "dark",
+    "width": 320,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 320,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "segmentation-settings",
+    "url": "/environments/1/segmentation/?tab=settings",
+    "theme": "dark",
+    "width": 320,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 320,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "pair-populated",
+    "url": "/environments/1/segmentation/workloads/?snapshot=fbbfac0f-c8aa-487b-bd16-a8d632407aa2&source=%2Finfra%2Fvirtual-machines%2Faudit-database&destination=%2Finfra%2Fvirtual-machines%2Faudit-web&protocol=TCP&port=443",
+    "theme": "dark",
+    "width": 320,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 320,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "pair-needs-assessment",
+    "url": "/environments/1/segmentation/workloads/?snapshot=fbbfac0f-c8aa-487b-bd16-a8d632407aa2&source=%2Finfra%2Fvirtual-machines%2Faudit-database&destination=%2Finfra%2Fvirtual-machines%2Faudit-web&protocol=TCP&port=443&status=unresolved",
+    "theme": "dark",
+    "width": 320,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 320,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "proposal-new",
+    "url": "/environments/1/segmentation/proposals/new/?snapshot=fbbfac0f-c8aa-487b-bd16-a8d632407aa2&source=%2Finfra%2Fvirtual-machines%2Faudit-database&destination=%2Finfra%2Fvirtual-machines%2Faudit-web&protocol=TCP&port=443",
+    "theme": "dark",
+    "width": 320,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 320,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "proposal-saved",
+    "url": "/environments/1/segmentation/proposals/1/",
+    "theme": "dark",
+    "width": 320,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 320,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "policy-edit",
+    "url": "/administration/naming/1/",
+    "theme": "dark",
+    "width": 320,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 320,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "policy-new",
+    "url": "/administration/naming/?new=1",
+    "theme": "dark",
+    "width": 320,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 320,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "policy-duplicate",
+    "url": "/administration/naming/?duplicate=1",
+    "theme": "dark",
+    "width": 320,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 320,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "policies-removed",
+    "url": "/administration/naming/?show=removed",
+    "theme": "dark",
+    "width": 320,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 320,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "naming-compliant",
+    "url": "/environments/1/naming/?tab=compliant",
+    "theme": "dark",
+    "width": 320,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 320,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "naming-exceptions",
+    "url": "/environments/1/naming/?tab=exceptions",
+    "theme": "dark",
+    "width": 320,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 320,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "naming-all",
+    "url": "/environments/1/naming/?tab=all",
+    "theme": "dark",
+    "width": 320,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 320,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "deletion-detail",
+    "url": "/deletions/b8b4a9f5-2c1d-49ce-b49b-967d6ae24132/",
+    "theme": "dark",
+    "width": 320,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 320,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "deletion-plan",
+    "url": "/deletions/b8b4a9f5-2c1d-49ce-b49b-967d6ae24132/plan/",
+    "theme": "dark",
+    "width": 320,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 320,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "deletion-configuration",
+    "url": "/deletion-items/2/configuration/",
+    "theme": "dark",
+    "width": 320,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 320,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "deletion-reference-cleanup",
+    "url": "/deletion-items/2/reference-cleanup/",
+    "theme": "dark",
+    "width": 320,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 320,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "collection-result",
+    "url": "/collections/13f00cd9-3001-4f33-9553-dbd31aa7109b/result/",
+    "theme": "dark",
+    "width": 320,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 320,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "collection-diagnostics",
+    "url": "/collections/13f00cd9-3001-4f33-9553-dbd31aa7109b/diagnostics/",
+    "theme": "dark",
+    "width": 320,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 320,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "task-cancel",
+    "url": "/tasks/deletion/b8b4a9f5-2c1d-49ce-b49b-967d6ae24132/cancel/",
+    "theme": "dark",
+    "width": 320,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 320,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "impact-preview",
+    "url": "/snapshots/fbbfac0f-c8aa-487b-bd16-a8d632407aa2/impact/?path=%2Finfra%2Fdomains%2Fdefault%2Fgroups%2Fweb",
+    "theme": "dark",
+    "width": 320,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 320,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "snapshot-overview",
+    "url": "/snapshots/fbbfac0f-c8aa-487b-bd16-a8d632407aa2/#overview",
+    "theme": "dark",
+    "width": 320,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 320,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "snapshot-all-vms",
+    "url": "/snapshots/fbbfac0f-c8aa-487b-bd16-a8d632407aa2/#all-vms",
+    "theme": "dark",
+    "width": 320,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 320,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "snapshot-all-groups",
+    "url": "/snapshots/fbbfac0f-c8aa-487b-bd16-a8d632407aa2/#all-groups",
+    "theme": "dark",
+    "width": 320,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 320,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "snapshot-all-services",
+    "url": "/snapshots/fbbfac0f-c8aa-487b-bd16-a8d632407aa2/#all-services",
+    "theme": "dark",
+    "width": 320,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 320,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "snapshot-tags-all",
+    "url": "/snapshots/fbbfac0f-c8aa-487b-bd16-a8d632407aa2/#tags-all",
+    "theme": "dark",
+    "width": 320,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 320,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "snapshot-tags-scopes",
+    "url": "/snapshots/fbbfac0f-c8aa-487b-bd16-a8d632407aa2/#tags-scopes",
+    "theme": "dark",
+    "width": 320,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 320,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "snapshot-dfw-overview",
+    "url": "/snapshots/fbbfac0f-c8aa-487b-bd16-a8d632407aa2/#dfw-overview",
+    "theme": "dark",
+    "width": 320,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 320,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "snapshot-dfw-policies",
+    "url": "/snapshots/fbbfac0f-c8aa-487b-bd16-a8d632407aa2/#dfw-policies",
+    "theme": "dark",
+    "width": 320,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 320,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "snapshot-dfw-rules",
+    "url": "/snapshots/fbbfac0f-c8aa-487b-bd16-a8d632407aa2/#dfw-rules",
+    "theme": "dark",
+    "width": 320,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 320,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "snapshot-feature-guide",
+    "url": "/snapshots/fbbfac0f-c8aa-487b-bd16-a8d632407aa2/#feature-guide",
+    "theme": "dark",
+    "width": 320,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 320,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "snapshot-coverage",
+    "url": "/snapshots/fbbfac0f-c8aa-487b-bd16-a8d632407aa2/#coverage",
+    "theme": "dark",
+    "width": 320,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 320,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "snapshot-tags-coverage",
+    "url": "/snapshots/fbbfac0f-c8aa-487b-bd16-a8d632407aa2/#tags-coverage",
+    "theme": "dark",
+    "width": 320,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 320,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "empty-inventory",
+    "url": "/workspace/inventory/?environment=2",
+    "theme": "dark",
+    "width": 320,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 320,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "empty-environments",
+    "url": "/workspace/environments/?environment=2",
+    "theme": "dark",
+    "width": 320,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 320,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "empty-firewall",
+    "url": "/workspace/firewall/?environment=2",
+    "theme": "dark",
+    "width": 320,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 320,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "empty-help",
+    "url": "/workspace/help/?environment=2",
+    "theme": "dark",
+    "width": 320,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 320,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "empty-segmentation",
+    "url": "/environments/2/segmentation/",
+    "theme": "dark",
+    "width": 320,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 320,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "empty-naming-compliance",
+    "url": "/environments/2/naming/",
+    "theme": "dark",
+    "width": 320,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 320,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "empty-findings",
+    "url": "/environments/2/findings/",
+    "theme": "dark",
+    "width": 320,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 320,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "empty-environment",
+    "url": "/environments/2/",
+    "theme": "dark",
+    "width": 320,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 320,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "admin:auth_user_changelist",
+    "url": "/admin/auth/user/",
+    "theme": "dark",
+    "width": 320,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 320,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "admin:auth_user_add",
+    "url": "/admin/auth/user/add/",
+    "theme": "dark",
+    "width": 320,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 320,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "admin:auth_group_changelist",
+    "url": "/admin/auth/group/",
+    "theme": "dark",
+    "width": 320,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 320,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "admin:auth_group_add",
+    "url": "/admin/auth/group/add/",
+    "theme": "dark",
+    "width": 320,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 320,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "admin-user-edit",
+    "url": "/admin/auth/user/2/change/",
+    "theme": "dark",
+    "width": 320,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 320,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "admin-user-delete",
+    "url": "/admin/auth/user/2/delete/",
+    "theme": "dark",
+    "width": 320,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 320,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "snapshot-archived",
+    "url": "/snapshots/ccc8e8af-7543-4c35-9b52-f31f956ba61a/",
+    "theme": "dark",
+    "width": 320,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 320,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "removed-policy-detail",
+    "url": "/administration/naming/2/",
+    "theme": "dark",
+    "width": 320,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 320,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "ldap-settings",
+    "url": "/administration/authentication/?provider=ldap",
+    "theme": "dark",
+    "width": 320,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 320,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "bulk-confirmation-template",
+    "url": "/__style-audit__/bulk-review/",
+    "theme": "dark",
+    "width": 320,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 320,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "finding-detail-unused-group",
+    "url": "/environments/1/findings/1/",
+    "theme": "dark",
+    "width": 320,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 320,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "approval-recovery",
+    "url": "/environments/1/findings/1/recover-approval/",
+    "theme": "dark",
+    "width": 320,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 320,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  },
+  {
+    "name": "finding-detail-unused-service",
+    "url": "/environments/1/findings/2/",
+    "theme": "dark",
+    "width": 320,
+    "status": 200,
+    "errors": [],
+    "scrollWidth": 320,
+    "font": "\"Avenir Next\", -apple-system, \"system-ui\", \"Segoe UI\", sans-serif",
+    "pane": {
+      "margin": "0px",
+      "borderRadius": "0px",
+      "top": 0
+    },
+    "lateStyles": [],
+    "legacy": [],
+    "legacyCount": 0
+  }
+]

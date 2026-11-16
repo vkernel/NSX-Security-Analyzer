@@ -1,5 +1,129 @@
 # Changelog
 
+## Unreleased
+
+- License: Apache License 2.0 with the Commons Clause License Condition v1.0. The software stays free to use, modify and share, but may not be sold, nor offered as a paid product or service whose value derives substantially from it. Releases published earlier remain available under Apache License 2.0.
+
+- Redesigned workspace: grouped sidebar with search and breadcrumb; Overview, Reviews (list with detail panel), Inventory overview, Groups and VMs with a docked evidence panel (Docked, Wide and Full screen widths, rule cards when narrow, resize, Open in new tab), Firewall Rules and Policies in NSX order, a References page, Services and Tags & scopes overviews, a page per collection with a result view, step-by-step deletion requests, Segmentation application cards, Naming outcome cards, Get started and Notifications pages and a centered sign-in card. Snapshots now record a VM count in their summary. No migration.
+
+- Reference exports: choose categories and columns per category (the evidence basis is always included), one table per category as CSV (ZIP), Excel, PDF, HTML, JSON or YAML, context in a separate about file or on every row, and optional raw evidence. Exports still read saved evidence only. No migration.
+
+- New visual language based on coss ui: neutral light and dark tokens, a light navigation rail, outline default buttons with a neutral primary, 36px controls (44px on phones), framed cards with hairline borders and soft shadows, quiet table headers, segmented in-panel tabs and rounded drawers. Implemented as tokens plus a `coss.css` component layer; markup is unchanged. No migration.
+
+- Collection publishes the snapshot and findings before building the browsing index; a failed, stopped or timed-out indexing step leaves the collection published and hands the index to the background rebuild, and the snapshot shows **Preparing browsing data** meanwhile. Collections against a manager that showed no throttling start at 75% of the previous run's settled request rate and concurrency. The VIF inventory is read alongside group member lists. Tag-condition matching does less repeated work. Usage-chart colours use theme tokens with dark-mode variants and at least 4:1 contrast. More pages use the shared page header. `finding-review-workflow.md` and `collection-performance.md` are restructured by task. No migration.
+
+- Clearer interface and help: the in-app user guide is rewritten as 16 task-based topics (was 39 feature-history topics) covering membership evidence, firewall references, exports, reviews and deletion; operator internals moved to the documentation. Repeated "not effective policy" caveats are shown once per view; user-facing "audit" wording now says "collection" (audit history keeps its name); Reviews naming is consistent; review counts and status badges use readable labels. Collection progress shows live counts for VM associations, group checks and network member lists. GitHub documentation corrected (worker lanes, concurrency setting, roles, PostgreSQL test setup, documentation index, historical design records). No migration.
+
+- Faster, more reliable NSX deletion: one live dependency scan per run, reused for up to 120 seconds (per-object identity, condition and pre-DELETE reads stay fresh); referencing objects in the same request are deleted first instead of blocking each other; objects verified absent earlier in the run are not counted as references; read-only verification requests are paced with bounded retries (DELETE/PUT never retried); unrelated republication of a finding no longer blocks a queued deletion; objects that cannot finish before the authorization or worker limit are marked **Not attempted** with **Preview remaining work**; armed automatic execution stops after two refreshes instead of looping; progress shows per-object timings and time remaining. No migration.
+
+- More reliable collection: NSX retrieval stops early enough to save, index and publish the snapshot (reserve of 15% of the worker limit, 300–40%); HTTP 429 responses wait on the shared pacer without using retry attempts; connection resets and read timeouts are retried once; a burst of overload errors reduces concurrency once, and local time-budget errors no longer count as NSX overload. No migration.
+
+- Firewall reference tables and exports show saved rule configuration in configured NSX order (category, policy sequence, rule sequence) with Category, Sources, Destinations, Services, Context profiles, Applied to, Action, State, Matched in and Reason columns; rules selected through a policy's Applied To are included; tag tables show one row per rule; exports add Rule category, Policy sequence and Rule sequence. No migration.
+
+- Collect complete paginated segment, port and IP lists for network-based groups and link VMs through exact VIF ownership and Policy-port attachments. Keep direct VM membership separate from attached VMs, retain network provenance in VM/group drawers and saved firewall references, deduplicate related-group totals, and expose incomplete network coverage. Reuse mandatory member pages, existing port configuration and one inventory per relevant segment; bridge fabric VM IDs only when needed. Requires a fresh collection on the updated worker; no new migration.
+
+- Save direct VM-to-group associations during collection instead of treating existence-probe samples as full saved membership. Share the exact saved edges across VM counts, group member lists and firewall references, including groups excluded from cleanup. Track completeness per VM; reuse positive associations to skip redundant group probes while retaining existing negative checks. Reuse the VM inventory, remove obsolete per-VM tag-candidate expansion, log association coverage/cost, and open complete saved VM references without a live NSX lookup. Existing snapshots require a fresh collection to obtain missing historical evidence; this collection fix adds no migration. Request savings depend on VM/group distribution.
+
+- Load live group VM members progressively in 100-member NSX batches and 25-row UI pages. Keep stable session positions, reuse loaded pages, display loaded/reported totals, and require a verified complete traversal before retiring old memberships. Scope server-side cursors to the environment, group, snapshot and refresh session; reject expired/superseded/changed continuations and preserve loaded rows on retries. Direct VM association lookups and collection are unchanged. Apply additive cache migration 0066.
+
+- Show cached positive VM memberships immediately while stale/incomplete observations refresh in the background. Retain stale labels, timestamps, partial coverage and failure messages. Reuse the first page returned by explicit group refresh and skip member counts/page loading when returning firewall references. Collection behavior and snapshot evidence are unchanged.
+
+- Use collection wording for queued confirmations, running status, notifications, progress, stop messages and environment history. Display Collecting and Waiting to start consistently, including retained queued jobs, without changing database states or queue behavior.
+
+- Simplify VM References to confirmed Groups and Firewall rules. Move assigned tags into Summary and remove the VM Members, Tag references and Tag-based rules tabs. Lazily refresh missing/stale current membership when an operator opens References, reuse fresh cache, retain explicit Refresh and separate historical snapshot evidence, and distinguish unknown membership from a complete empty result. Main collection adds no requests; no new migration beyond 0065.
+
+- Replace budget-limited browsing scans during collection with explicit, cached VM-to-group association checks. Share current relationships across VM/group drawers with per-owner completeness, timestamps, source-preserving navigation, pagination and separate immutable snapshot evidence. Label partial counts and tag possibilities clearly; use confirmed memberships for VM firewall references. Add a separate collection-aware cache-warming command. Apply additive migration 0065; detailed browsing adds no NSX requests to the main collection.
+
+- Reduce collection overhead from saved member lists: share initial pages with mandatory membership checks, reuse continuations, prune only simple known member types, and bound optional detail reads independently. Label explicit IP definitions as configured entries. Separate probe/page latency baselines and log member detail budgets, endpoint timings and concurrency changes. Default detail limits are 300 seconds/2,000 requests per collection and 5 seconds/8 requests per group; mandatory checks and the overall deadline remain unchanged. No migration required.
+
+- Save paginated resolved group member identities and use the same evidence for VM → Groups and Group → Members. Separate resolved membership from tag-condition references, show partial/unavailable/not-collected coverage, retain IP/port/segment categories, and use shared lazy member tables. Keep group detail responses small and support current VM drawers when following member links. Older snapshots need a new collection for member evidence; no schema migration is required.
+
+- Use the same rich firewall-reference table and automatic width for group/service drawers reached from VM/tag references or direct inventory selection. Keep parent/non-rule references under Other objects, preserve Back/page state, and fix loading when a saved renderer reopens a remembered References tab. Add bounded same-snapshot object reference pages without migration or reindexing.
+
+- Expand VM/tag firewall-reference drawers automatically and restore their reading width on other views or Back. Add shared Type, Category, Policy, Rule, ID, Seq, Action, State, matched field/group and reason columns using bounded same-snapshot DFW context. Preserve unknown/nested evidence, labelled colors, inspection and pagination. Existing snapshots benefit without migration or reindexing.
+
+- Replace nested VM reference disclosures with shared category tables across VM, tag and scope drawers, and apply the same table surface to retained group/service references. Show configured rule actions and recorded states with labelled theme-aware colors; inspect services and group provenance in tables with Back/page/focus preservation. Keep lazy 25-row loading and fetch compact rule metadata in one bounded page query. No migration required.
+
+- Add automatic static-subnet naming with Exactly one explicit subnet and Explicit single subnet. Canonicalize IPv4/IPv6 CIDRs to network_prefix, keep /32 and /128 under host policies, and exclude ranges, multiple entries and complex definitions. Preserve policy conflicts, collision checks and reviewed values. No migration or manual component proposals required. See `docs/guides/automatic-subnet-naming-policy.html`.
+
+- Keep the original name when opening a duplicate naming-policy draft, without adding a copy suffix. Show Duplicate policy in a separate Actions column instead of beneath the policy name.
+
+- Add automatic static-host naming: Exactly one explicit host IP condition and Explicit single host IP component, canonical IPv4/IPv6 formatting and editor defaults. Read the saved definition directly, accept host /32 and /128 entries, exclude broader subnets/ranges/multiple or nested/dynamic definitions, and retain conflict/collision/coverage checks. No per-group component proposals or new migrations required. See `docs/guides/automatic-host-naming-policy.html`.
+
+- Align naming draft examples with current reviewed static component values, excluding draft/rejected/stale or other-environment proposals. Explain missing custom scope values. Make queue counts follow filters and preserve filters across queues; include every attention outcome in issue counts and separate draft-policy counts from environment totals in impact previews. No migrations required.
+
+- Unify retained and new inventory/firewall table styling with Relay: name-first rows, selection first, review history under usage, and optional service Membership. Add a saved collapsible section menu, full module names, shorter work queues and responsive laptop context/columns. Preserve custom table layouts and existing evidence/review behavior. No migrations required; see the 4 November follow-up in `docs/design/production-ux-implementation-2026-11-03.md`.
+
+- Extend the Kubernetes migration Job deadline from 900 to 3600 seconds (one hour) for concurrent index builds over retained snapshots. Update deployment wait commands and guidance; periodic migration logging remains enabled. No Docker image rebuild is required.
+
+- Log PostgreSQL projection-index progress every 15 seconds during migration 0063: phase, elapsed time, tuple/block counters, database waits and blocker IDs, plus approximate source size and completion/failure timing. Use a bounded read-only observer connection; observer errors do not fail migration work.
+
+- Stop duplicate projection-index migrations promptly with a clear error instead of waiting silently for another migrator's advisory lock. Log index checks, reuse, concurrent removal and build start/completion. Add database-wait diagnosis steps for Kubernetes deployments.
+
+- Make PostgreSQL projection-index migration 0063 safe to retry after an interrupted deployment: reuse matching valid indexes, rebuild matching invalid indexes concurrently, and preserve snapshot records. Reject conflicting relation definitions without changing them. See recovery instructions in `docs/workspace-performance.md`.
+
+- Finish the UX follow-up: show filtered policy counts in recurring naming issues; add bounded, session-scoped recent-environment shortcuts; fix prose-link distinction, sort/disclosure target sizes, policy form label IDs, map roles and map-node focus restoration. Verify production-sized synthetic inventories and light/dark accessibility states; see `docs/design/production-ux-acceptance-2026-11-03.md`.
+
+- Implement the production UX audit across the Relay workspace: compact searchable environment context with one navigation, bounded snapshot history, direct light/dark switching, collection-specific details, filtered naming issue actions, quieter compliant rows, usage comparisons/ranked findings, readable inventory tables, server-rendered section navigation and mobile map controls. Preserve pinned evidence, role permissions and approval/execution guards. No new migrations; see `docs/design/production-ux-implementation-2026-11-03.md`.
+
+- Cache assembled application maps by snapshot, application scope and display filters, with bounded variants and collection-time preparation. Load connection rule details on expansion, reuse successful results locally and detect changed evidence/map versions. Apply migration 0064.
+
+- Reuse versioned snapshot projections for segmentation and VM rule investigations; cache VM membership and naming assessments with source/policy/proposal/date invalidation. Prepare projections during collection, skip unrelated tab calculations, bound group search and load membership details on demand. Send status fragments for automatic task updates and add database/analysis/render timings. Apply migrations 0062–0063; see `docs/workspace-performance.md`.
+
+- Contain retained report CSS so it cannot restyle the Relay navigation; load component styles before the shared theme. Replace legacy component palettes with Bridge/Relay tokens across segmentation, naming, evidence, progress, settings and administration. Correct dark-mode action labels and mobile table/path/metric overflow.
+
+- Apply Relay option 04 navigation and the selected Bridge 06 light palette: white/silver content, steel-blue controls and a dark module rail. Retain Relay dark mode, add saved top-bar appearance switching, improve mobile keyboard navigation and update sign-in/report branding. No database migration required.
+
+- Refine shared spacing, theme contrast, mobile environment context and table empty states.
+- Simplify naming compliance with contextual correction drawers, policy-grouped bulk review and clear selection counts.
+- Clarify policy drafts, component editing and activation; prevent save controls from covering editor content.
+- Improve application map setup, focused evidence and reading-position preservation.
+- Show readable deletion-plan status, execution guidance and the next eligible cleanup reviewer.
+
+
+## Development — 2026-10-30
+
+- Standardize inventory and rule evidence tabs (Summary, applicable Members, References, History and Technical details), add a shared keyboard-accessible tab controller, and simplify activity/collection diagnostics and cleanup actions. Clarify when snapshot evidence contains no review history.
+
+- Add shared record drawers for finding reviews, cleanup plans and collection diagnostics, plus compact evidence panels for naming, segmentation and deletion results. Preserve forms, reading position and full-page navigation; add naming component editing panels, single-panel scope pickers and evidence category navigation.
+
+- Separate naming policy overview and editing, add setup steps and a persistent component preview with inline issues. Add segmentation evidence summaries and a keyboard-accessible rule drawer; group secondary actions and optional details.
+
+- Add administrator naming-policy removal with explicit confirmation, revision safeguards, retained version/audit history and a separate removed-policy list. Removed policies no longer participate in assessment. Apply migration 0059.
+
+- Add VM-to-VM investigations with searchable workload pickers, explained candidate/unresolved firewall rules, IP/CIDR and protocol/port matching, bounded read-only membership checks, saved investigations and CSV export. Replace circular segmentation graphics with readable directional relationship cards.
+- Add local firewall rule proposals with explicit endpoints, intended policy/placement, owner, justification, preview, editing, discard, JSON export and revision safeguards. No NSX writes or deployment action. Apply migration 0058.
+
+- Add a read-only workload segmentation workspace with snapshot-pinned matrix/map, group and workload lookup, rule evidence, boundary review candidates, assignments and expiring exceptions, saved views, CSV export and bounded snapshot comparisons. Apply migration 0057. Configuration relationships do not establish effective access.
+
+- Replace the finding Owner filter with a searchable reviewer selector and consistent Anyone, Assigned to me and Unassigned choices. Keep controls inside the filter panel on narrow screens.
+- Add shared table counts and page-size controls across review, inventory, history and task lists; preserve filters and remember server-list page sizes for the browser session. Clarify that bulk selection applies to the current page. No migration required.
+
+## Development — 2026-10-29
+
+- Add searchable naming scope/tag selectors with evidence counts and environment comparisons, a value-mapping builder, static-proposal suggestions and an automatic server-evaluated naming example. Manual entry remains available; no migration required.
+
+- Correct naming compliance to assess NSX groups: dynamic/static/mixed templates, definition evidence, reviewed static components, nested/member suggestions, and audited naming exceptions. Migration 0056 isolates legacy VM proposals and requires group policy reactivation.
+
+- Add read-only VM naming policies with ordered components, environment scope mappings, category rules, draft impact previews, activation/version history, compliance and collision checks, bulk proposal ownership, CSV onboarding, stale-proposal safeguards and audit events. Apply migration 0055.
+
+- Fix new deletion previews looping back to expired requests: retire expired, unconfirmed verification entries under lock and require fresh checks. Expired entries no longer claim they are ready to confirm.
+
+- Apply the Network Shield SVG identity to sign-in, navigation, favicon, error/status pages, report guide, standalone reports and README; provide light/dark documentation assets.
+
+- Synchronize approval controls with server readiness after live verification, retaining draft reasons and blocking stale revisions.
+- Keep task status updates automatic with reconnect backoff, retry-only controls, stable list updates, and preserved reading/editing state.
+- Render review Actions in a viewport-positioned popover and remove the sticky decision card scrollbar.
+
+## Development — 2026-10-28
+
+- Add Evidence for approval for groups, services, firewall rules and policies: searchable saved details, approval comparisons, and read-only current-state checks with progress, member lists, explicit failures and renewed-review safeguards. Apply migration 0054 and deploy matching web/worker images.
+
+- Fix evidence-button column sizing in group and service inventory tables with bulk selection, including mobile checkbox spacing.
+- Preserve verified finding observations across skipped coverage warnings during history replay, subject to the effective maximum gap. Separate historical findings from current eligibility totals. Save unchanged review criteria after deployment to recover periods from retained evidence.
+- Deduplicate large snapshot search and relationship payloads, add bounded compaction commands and reliable per-environment retention scheduling, and expose storage growth and configurable budget alerts.
+- Add optional browsing-index archival with background restoration, bounded cache cleanup, optional legacy HTML removal, and Docker log rotation. Apply migrations 0051–0053 before starting the updated application components; historical compaction and browsing archival are opt-in.
+
 ## Development — 2026-10-26
 
 - Add an independent confirmed-deletion lane. Commit verified deletion evidence with finding closure and prevent overlapping snapshots/history replay from restoring deleted identities. Preserve review for newly recreated identities.

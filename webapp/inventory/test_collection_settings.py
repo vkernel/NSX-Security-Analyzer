@@ -1,12 +1,14 @@
 from unittest.mock import patch
+from datetime import timedelta
 
 from django.contrib.auth import get_user_model
 from django.test import TestCase, override_settings
 from django.urls import reverse
+from django.utils import timezone
 
 from .forms import EnvironmentForm
-from .models import Environment
-from .services import claim_job, enqueue, execute_job, engine
+from .models import AuditJob, Environment
+from .services import claim_job, enqueue, execute_job, engine, schedule_due
 from .tests import sample_report
 
 
@@ -17,6 +19,44 @@ class CollectionSettingsTests(TestCase):
                     password='test-password', timeout=30, retries=2, enabled=True,
                     sync_interval_minutes=60, max_concurrent_requests=12)
         return {**data, **changes}
+
+    def test_hour_intervals_save_and_schedule_without_overlap(self):
+        user = get_user_model().objects.create_user('schedule-admin', is_staff=True)
+        self.client.force_login(user)
+        response = self.client.get(reverse('environment-new'))
+        environment = None
+        for minutes, hours in ((120, 2), (180, 3), (240, 4), (480, 8)):
+            with self.subTest(hours=hours):
+                self.assertContains(response, f'<option value="{minutes}">Every {hours} hours</option>')
+                now = timezone.now()
+                with patch('django.utils.timezone.now', return_value=now):
+                    form = EnvironmentForm(self.data(sync_interval_minutes=minutes), instance=environment)
+                    self.assertTrue(form.is_valid(), form.errors)
+                    environment = form.save()
+                    self.assertEqual(environment.next_sync_at, now + timedelta(minutes=minutes))
+                    self.assertEqual(schedule_due(), 0)
+                due = environment.next_sync_at
+                with patch('django.utils.timezone.now', return_value=due):
+                    self.assertEqual(schedule_due(), 1)
+                    environment.refresh_from_db()
+                    self.assertEqual(environment.next_sync_at, due + timedelta(minutes=minutes))
+                    self.assertEqual(schedule_due(), 0)
+                # A still-running collection also prevents overlap at the next due time.
+                job = AuditJob.objects.get(environment=environment, status='queued')
+                job.status = 'running'; job.save(update_fields=['status'])
+                with patch('django.utils.timezone.now', return_value=environment.next_sync_at):
+                    self.assertEqual(schedule_due(), 0)
+                job.status = 'succeeded'; job.save(update_fields=['status'])
+                schedules = self.client.get(reverse('environment-schedules'))
+                self.assertContains(schedules, f'Every {hours} hours')
+        self.assertEqual(Environment().sync_interval_minutes, 60)
+
+    def test_schedule_rejects_unsupported_intervals(self):
+        for minutes in (-1, 90, '2 hours', ''):
+            with self.subTest(minutes=minutes):
+                form = EnvironmentForm(self.data(sync_interval_minutes=minutes))
+                self.assertFalse(form.is_valid())
+                self.assertIn('sync_interval_minutes', form.errors)
 
     def test_gui_saves_limit_and_rejects_invalid_values(self):
         user = get_user_model().objects.create_user('settings-admin', is_staff=True)

@@ -1,0 +1,11 @@
+{
+  "environment": 3,
+  "snapshot": "89133cd1-3fd3-470e-b091-2db3a59d7c1c",
+  "groups": 10839,
+  "vms": 4075,
+  "services": 1528,
+  "rules": 3239,
+  "policies": 133,
+  "preparation_seconds": 6.431,
+  "synthetic": true
+}

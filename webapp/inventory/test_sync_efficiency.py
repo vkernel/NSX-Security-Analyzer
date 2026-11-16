@@ -69,6 +69,7 @@ class OverlappingRetrievalTests(SimpleTestCase):
         with patch.object(collector, 'objects', side_effect=objects), \
              patch.object(collector, 'search_configuration', side_effect=search), \
              patch.object(collector, 'audit_dfw', side_effect=firewall), \
+             patch.object(collector, 'read_tag_inventory', return_value=[([], None), ([], None)]), \
              patch.object(collector, 'membership', side_effect=membership), \
              patch.object(collector, 'collect_references', side_effect=FinishedRetrieval):
             with self.assertRaises(FinishedRetrieval):

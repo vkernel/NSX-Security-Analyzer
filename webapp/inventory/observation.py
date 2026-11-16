@@ -37,11 +37,10 @@ def condition_fingerprint(kind, evidence):
     return hashlib.sha256(json.dumps(selected, sort_keys=True, separators=(',', ':')).encode()).hexdigest()
 
 
-def advance(finding, policy, environment, stamp, reset=False, row=None):
-    from .transient import apply, matching
-    if apply(finding, row or finding.evidence, getattr(policy, 'transient_rules', [])):
-        return
-    monitor = matching(row or finding.evidence, getattr(policy, 'transient_rules', [])) if finding.kind == 'empty_group' else None
+def criteria(kind, policy, environment, row):
+    """Resolve the same effective criteria for replay and paused findings."""
+    from .transient import matching
+    monitor = matching(row, getattr(policy, 'transient_rules', [])) if kind == 'empty_group' else None
     if monitor and monitor.mode == 'monitor':
         from copy import copy
         policy = copy(policy)
@@ -50,7 +49,17 @@ def advance(finding, policy, environment, stamp, reset=False, row=None):
         policy.maximum_gap_hours = monitor.maximum_gap_hours
     else:
         monitor = None
-    days = getattr(policy, finding.kind + '_days', None)
+    days = getattr(policy, kind + '_days', None)
+    gap = timedelta(hours=policy.maximum_gap_hours) if policy.maximum_gap_hours else timedelta(minutes=max(1440, 2 * environment.sync_interval_minutes))
+    signature = hashlib.sha256(json.dumps([days, policy.minimum_observations, gap.total_seconds()] + ([monitor.pk, monitor.tag_scope] if monitor else [])).encode()).hexdigest()
+    return policy, monitor, days, gap, signature
+
+
+def advance(finding, policy, environment, stamp, reset=False, row=None):
+    from .transient import apply
+    if apply(finding, row or finding.evidence, getattr(policy, 'transient_rules', [])):
+        return
+    policy, monitor, days, gap, signature = criteria(finding.kind, policy, environment, row or finding.evidence)
     finding.required_days = days or 0
     if days is None:
         finding.qualification = 'insufficient'
@@ -61,8 +70,6 @@ def advance(finding, policy, environment, stamp, reset=False, row=None):
         finding.policy_fingerprint = ''
         return
 
-    gap = timedelta(hours=policy.maximum_gap_hours) if policy.maximum_gap_hours else timedelta(minutes=max(1440, 2 * environment.sync_interval_minutes))
-    signature = hashlib.sha256(json.dumps([days, policy.minimum_observations, gap.total_seconds()] + ([monitor.pk, monitor.tag_scope] if monitor else [])).encode()).hexdigest()
     restart = (reset or not finding.observation_started or finding.policy_fingerprint != signature
                or stamp <= finding.last_seen or stamp - finding.last_seen > gap)
     if finding.kind == 'zero_hits':

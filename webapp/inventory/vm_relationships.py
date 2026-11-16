@@ -1,16 +1,24 @@
 """Bounded VM evidence projections, including previously prepared snapshots."""
 from django.db import connection
+from django.db.models.functions import Coalesce
 from django.http import Http404
 from .models import SnapshotRecord
 
 
-def read(snapshot_id, ordinal, section='summary', page=0, path=''):
+def read(snapshot_id, ordinal, section='summary', page=0, path='', context=False):
     row = SnapshotRecord.objects.filter(snapshot_id=snapshot_id, ordinal=ordinal, view='vms')
     summary = row.values('compact').first()
     if summary is None:
         raise Http404
     if section == 'summary':
-        return {'data': summary['compact']}
+        from .resolved_membership import vm_summary
+        return {'data': vm_summary(summary['compact'])}
+    if section == 'ip_groups':
+        from .ip_references import read
+        return read(snapshot_id,ordinal,max(0,page))
+    if section in ('confirmed_rules', 'confirmed_rule', 'confirmed_via_groups'):
+        from .confirmed_references import saved
+        return saved(snapshot_id, ordinal, section, page, path)
     page = max(0, page)
     # Values remain bound parameters. Only fixed JSON keys enter SQL text.
     base = 'FROM inventory_snapshotrecord WHERE snapshot_id = %s AND ordinal = %s AND view = %s'
@@ -21,7 +29,7 @@ def read(snapshot_id, ordinal, section='summary', page=0, path=''):
             import json
             value = cursor.fetchone()[0]
             return {'details': json.loads(value) if isinstance(value, str) else value}
-    if section not in ('tags', 'related_groups', 'related_rules', 'rule', 'via_groups'):
+    if section not in ('tags', 'related_groups', 'resolved_groups', 'network_groups', 'related_rules', 'rule', 'via_groups'):
         raise ValueError('Unknown relationship section')
     key = 'related_rules' if section in ('rule', 'via_groups') else section
     cte = "WITH source AS (SELECT data->%s AS items " + base + "), entries AS (SELECT value AS item FROM source, jsonb_array_elements(COALESCE(items, '[]'::jsonb))) "
@@ -36,7 +44,7 @@ def read(snapshot_id, ordinal, section='summary', page=0, path=''):
             detail = json.loads(found[0]) if isinstance(found[0], str) else found[0]
             # Shared definitions are looked up only after verifying the VM edge.
             from .models import SnapshotVMRule
-            shared = SnapshotVMRule.objects.filter(snapshot_id=snapshot_id, path=path).values_list('data', flat=True).first()
+            shared = SnapshotVMRule.objects.filter(snapshot_id=snapshot_id, path=path).annotate(resolved=Coalesce('payload__data', 'data')).values_list('resolved', flat=True).first()
             if shared is not None:
                 detail = dict(shared, **detail)
             detail.pop('via_groups', None)
@@ -47,16 +55,52 @@ def read(snapshot_id, ordinal, section='summary', page=0, path=''):
             items = [value[0] for value in cursor.fetchall()]
         elif section == 'related_rules':
             # Deduplicate legacy per-group entries before paging; keep provenance on group pages.
-            query = "SELECT jsonb_build_object('path', item->>'path', 'name', min(item->>'name')) FROM entries GROUP BY item->>'path' ORDER BY min(item->>'name'), item->>'path' LIMIT 26 OFFSET %s"
+            # Resolve only small display fields after limiting the deduplicated page.
+            # Services and provenance stay behind their explicit detail requests.
+            group_context = """, 'via_groups', (SELECT COALESCE(jsonb_agg(g.value), '[]'::jsonb)
+                FROM (SELECT DISTINCT g.value FROM entries e,
+                    jsonb_array_elements(COALESCE(e.item->'via_groups', jsonb_build_array(e.item->'via_group'))) g
+                    WHERE e.item->>'path' = page.path ORDER BY g.value LIMIT 26) g)""" if context else ''
+            query = f"""SELECT jsonb_build_object('path', page.path, 'name', page.name,
+                'action', COALESCE(to_jsonb(page.action), j.data->'action', r.data->'action'),
+                'disabled', COALESCE(to_jsonb(page.disabled::boolean), j.data->'disabled', r.data->'disabled'),
+                'policy_name', COALESCE(to_jsonb(page.policy_name), j.data->'policy_name', r.data->'policy_name'){group_context})
+                FROM (SELECT item->>'path' AS path, min(item->>'name') AS name,
+                    min(item->>'action') AS action, min(item->>'policy_name') AS policy_name,
+                    min(CASE WHEN jsonb_typeof(item->'disabled') = 'boolean' THEN item->>'disabled' END) AS disabled
+                    FROM entries GROUP BY item->>'path'
+                    ORDER BY min(item->>'name'), item->>'path' LIMIT 26 OFFSET %s) page
+                LEFT JOIN inventory_snapshotvmrule r ON r.snapshot_id = %s AND r.path = page.path
+                LEFT JOIN inventory_sharedsnapshotjson j ON j.id = r.payload_id
+                ORDER BY page.name, page.path"""
         else:
             query = 'SELECT item FROM entries LIMIT 26 OFFSET %s'
         if section != 'via_groups':
-            cursor.execute(cte + query, [key, *args, page*25])
+            cursor.execute(cte + query, [key, *args, page*25] + ([snapshot_id] if section == 'related_rules' else []))
             items = [value[0] for value in cursor.fetchall()]
     # psycopg raw JSONB is text with Django's connection configuration.
     import json
     items = [json.loads(value) if isinstance(value, str) else value for value in items]
-    return {'items': items[:25], 'page': page, 'has_next': len(items) > 25}
+    page_items = items[:25]
+    if context and section == 'related_rules':
+        from .firewall_reference_context import enrich
+        page_items = enrich(snapshot_id, page_items, vm=True)
+    result = {'items': page_items, 'page': page, 'has_next': len(items) > 25}
+    if section in ('resolved_groups','network_groups'):
+        from .resolved_membership import vm_summary
+        result['source'] = 'saved_snapshot'
+        result['status'] = (summary['compact'].get('network_membership_status','not_collected') if section=='network_groups'
+                            else vm_summary(summary['compact']).get('resolved_membership_status', 'not_collected'))
+        result['checked_at'] = summary['compact'].get('network_membership_checked_at' if section=='network_groups' else 'resolved_membership_checked_at')
+        result['notes'] = ['Direct VM associations and verified interface attachment links are distinct. Partial coverage can omit groups; no tag, name or IP inference is included.']
+        if summary['compact'].get('resolved_membership_scope'):
+            result['notes'].append('Scope: ' + summary['compact']['resolved_membership_scope'] + '.')
+        field = 'data__network_membership_notes' if section=='network_groups' else 'data__resolved_membership_notes'
+        evidence = row.values(field).first()
+        result['notes'].extend(evidence[field] or [])
+        if result['status'] == 'not_collected':
+            result['notes'] = ['VM membership was not saved in this snapshot. Select Current NSX to check this VM separately; current checks do not repair historical evidence.']
+    return result
 
 
 from django.db.models import Func, JSONField, F
@@ -75,9 +119,27 @@ class ExpandedVMData(Func):
         assert not data_params and not snapshot_params
         sql = f'''CASE WHEN {data}->>'_shared_vm_rules' = 'true' THEN
             jsonb_set({data} - '_shared_vm_rules', '{{related_rules}}',
-                COALESCE((SELECT jsonb_agg(COALESCE(r.data, '{{}}'::jsonb) || e.item ORDER BY e.position)
+                COALESCE((SELECT jsonb_agg(COALESCE(j.data, r.data, '{{}}'::jsonb) || e.item ORDER BY e.position)
                     FROM jsonb_array_elements({data}->'related_rules') WITH ORDINALITY AS e(item, position)
                     LEFT JOIN inventory_snapshotvmrule r ON r.snapshot_id = {snapshot}
-                        AND r.path = e.item->>'path'), '[]'::jsonb))
+                        AND r.path = e.item->>'path'
+                    LEFT JOIN inventory_sharedsnapshotjson j ON j.id = r.payload_id), '[]'::jsonb))
+            WHEN {data}->>'_shared_tag_evidence' = 'true' THEN
+              ({data} - '_shared_tag_evidence') || jsonb_build_object('resolved_tag_evidence',
+                (SELECT jsonb_build_object(
+                  'firewall_reference_note', COALESCE(p.tag_evidence->'firewall_reference_note', '""'::jsonb),
+                  'condition_sets', COALESCE((SELECT jsonb_object_agg(s.id, p.tag_evidence->'condition_sets'->s.id::int)
+                    FROM (SELECT DISTINCT value AS id FROM jsonb_array_elements_text(
+                      jsonb_build_array({data}->'condition_evidence_set', {data}->'review_condition_set'))
+                      WHERE value IS NOT NULL) s), '{{}}'::jsonb),
+                  'conditions', COALESCE((SELECT jsonb_object_agg(c.id::text, p.tag_evidence->'conditions'->c.id)
+                    FROM (SELECT DISTINCT value::text::int AS id FROM jsonb_array_elements(
+                      COALESCE(p.tag_evidence->'condition_sets'->({data}->>'condition_evidence_set')::int, {data}->'condition_evidence', '[]'::jsonb)
+                      || COALESCE(p.tag_evidence->'condition_sets'->({data}->>'review_condition_set')::int, {data}->'review_conditions', '[]'::jsonb))
+                      WHERE jsonb_typeof(value) = 'number') c), '{{}}'::jsonb),
+                  'firewall_rules', COALESCE((SELECT jsonb_object_agg(r.id::text, p.tag_evidence->'firewall_rules'->r.id)
+                    FROM (SELECT DISTINCT (value->>'rule')::int AS id
+                      FROM jsonb_array_elements(COALESCE({data}->'firewall_references', '[]'::jsonb))) r), '{{}}'::jsonb))
+                 FROM inventory_snapshotpresentation p WHERE p.snapshot_id = {snapshot}))
             ELSE {data} END'''
         return sql, []

@@ -1,101 +1,164 @@
 # Visual walkthrough
 
-These are screenshots of the real **development interface (UI/UX batches 1–3)** rendered locally with synthetic
-users, environments, snapshots and findings. No production inventory, credentials or
-live NSX connection was used. Synthetic full-snapshot and review fixtures were added
-for documentation; the built-in demo normally uses testing snapshots, which cannot
-be compared or used as operational review evidence.
+These screenshots show the current **development interface** rendered locally with
+the built-in synthetic demo (`load_demo_data`): fictional environments, VMs, groups,
+rules and users on `*.example.invalid` hosts. No production inventory, credentials or
+live NSX connection was used.
 
-Images use a desktop viewport and light theme. Your role, theme, screen size, saved
-filters and review state can change the available controls. Click an image on GitHub
-to view its full size. Screenshots illustrate appearance, not collection completeness
-or approval of any real object.
-
-The images predate category-specific approval modes, confirmed NSX deletion and the saved-configuration viewer.
-For current controls and their behavior, see the [review workflow](finding-review-workflow.md#approval-modes-by-category)
-and [deletion walkthrough](finding-review-workflow.md#using-the-deletion-preview).
+Images use a 1440 × 900 desktop viewport and the light theme unless noted. Your role,
+theme, screen size, saved filters and review state can change the available controls.
+Click an image on GitHub to view it at full size. Screenshots illustrate appearance,
+not collection completeness or approval of any real object.
 
 ## Sign in
 
-![Sign-in page with the NSX Security Analyzer shield logo](images/login.png)
+![Sign-in card with the NSX Security Analyzer logo, username and password fields](images/login.png)
 
-Enter your local credentials, or choose Keycloak or LDAPS when your administrator
-has enabled them. The LDAPS page uses the same branding and form layout.
+Enter your local credentials, or choose Keycloak or LDAPS when your administrator has
+enabled them. The directory sign-in page uses the same card.
+
+## Workspace overview and navigation
+
+![Workspace overview with collection health tiles, environment health, recent collections and finding qualification](images/overview.png)
+
+The sidebar groups pages under **Explore** and **Work**, with an environment switcher,
+search (Ctrl/⌘ K) and a collapsible rail. The overview shows failed and running
+collections, environment freshness and coverage, recent collections and how present
+findings qualify for review.
+
+![The same overview in the dark theme](images/overview-dark.png)
+
+![Phone layout with the navigation drawer open](images/mobile-navigation.png)
+
+On phones the navigation opens as a drawer.
+
+## Inventory
+
+![Inventory overview with a coverage warning, object counts, evidence coverage and needs-attention list](images/inventory-overview.png)
+
+The inventory overview summarises the latest saved snapshot from saved projections
+only: counts, evidence coverage per area (unknown coverage is never shown as
+complete) and the finding categories that need attention.
+
+![VM list with the evidence panel widened on firewall references](images/vm-evidence.png)
+
+Selecting a VM or group opens its evidence beside the list. The panel has **Docked**,
+**Wide** and **Full screen** widths and widens automatically for firewall references.
+Use **Open in new tab** to bookmark or share one object's evidence.
+
+![Docked evidence panel showing firewall references as one card per rule](images/vm-evidence-docked.png)
+
+In the docked width, firewall references show one card per rule.
+
+![Groups list with the evidence panel docked beside it](images/groups.png)
+
+![Services overview with filter cards, entries, rule counts and observations](images/services.png)
+
+![Tags and scopes overview with a scope list and values flagged for case differences or missing VMs](images/tags-scopes.png)
+
+## Firewall
+
+![Firewall rules in NSX processing order grouped by category and policy](images/firewall-rules.png)
+
+Rules open in configured NSX order (category, policy sequence, rule sequence) with
+Source, Destination, Services, Applied To, Action and State. **Sortable table** keeps
+the original searchable table with export and bulk selection.
+
+![Firewall policies in NSX order with the selected policy's rules beside the list](images/firewall-policies.png)
+
+![References page listing every saved rule that names a group, with field filters and export](images/references.png)
+
+**References** lists every saved rule that names a group or custom service, one row
+per field, with NOT for excluded fields. References describe saved configuration,
+not effective policy or traffic.
+
+![Export dialog with categories, column presets and custom columns](images/export-references.png)
+
+Exports let you choose categories and columns per category. The evidence basis is
+always included, so direct VM associations, interface attachments and IP/subnet
+matches stay distinguishable. Exports never start an NSX refresh.
 
 ## Find and review work
 
-![Finding reviews with owner and review-state columns](images/finding-reviews.png)
+![Reviews list with the selected finding's summary and decommissioning steps beside it](images/finding-reviews.png)
 
-Open an environment → **Finding reviews**. Use queue tabs and filters to find work.
-Selection controls appear only when an available bulk action applies to the queue.
-Assignment and review progress are shown separately.
+**Reviews** lists tasks by queue with the selected task's summary beside the list.
+Decisions stay on the review page itself.
 
-![Finding detail with evidence and decision controls](images/finding-detail.png)
+![Reviews with one finding selected and the bulk actions bar](images/finding-selection.png)
 
-Open the finding name to inspect evidence, readiness and review progress. Follow the
+![Assign owner page listing the selected finding with reviewer choice and confirmation](images/assign-owner.png)
+
+![Finding detail with review stages, evidence and review progress](images/finding-detail.png)
+
+Open a finding to inspect evidence, readiness and review progress. Follow the
 [finding review guide](finding-review-workflow.md) for assignment, required checks,
 independent approvals, manual completion and administrator-confirmed NSX deletion.
 
-For badges such as **8 / 7 days · 192 observations**, see
-[Reading observation badges](finding-review-workflow.md#reading-observation-badges).
-Observations count successful checks, not traffic hits.
+![Return to unassigned page with a required reason and confirmation](images/return-to-unassigned.png)
 
-## Return work to the queue
-
-![Required-reason dialog for returning selected work](images/return-to-unassigned.png)
-
-Select eligible rows → **Return to unassigned** → enter a reason → submit.
+Select eligible rows → **Actions → Return to unassigned** → enter a reason → confirm.
 Valid approvals and history are preserved; the server rechecks permissions and revisions.
 
-![Unassigned findings without release controls](images/unassigned-reviews.png)
+![Unassigned queue](images/unassigned-reviews.png)
 
-The **Unassigned** queue hides release controls. Open a finding and use
-**Assign owner** to take responsibility (under **Actions** when multiple actions are available). Search and select a reviewer in one field; unassigned work requires no assignment reason.
+![Assigned to me queue](images/my-work.png)
 
-## Compare saved evidence
+## Collections, history and coverage
 
-![Two selected snapshots labelled Before and After](images/snapshot-selection.png)
+![Collection result with duration, requests, objects saved, next steps, pacing and coverage](images/collection-result.png)
 
-Choose two eligible snapshots and select **Compare selected**. The earlier timestamp
-is Before; the later is After. For other pairs, use the comparison selectors.
-See [comparison and coverage](history-and-review.md) for eligibility and limitations.
+Each collection has its own page: progress phases while it runs, and a result view
+with request pacing, coverage and what happens next once it completes.
 
-## Check coverage
+![Environment page with collection controls and saved snapshot totals](images/environment.png)
 
-![Coverage dashboard with counts and expandable explanations](images/collection-coverage.png)
+![Snapshot history with two snapshots selected as Before and After](images/snapshot-selection.png)
 
-Review gaps, freshness and incomplete checks. Inventory-verification warnings can
-pause finding evaluation and approvals even when a snapshot remains browsable.
+Choose two snapshots and select **Compare selected**. The earlier timestamp is Before;
+the later is After. See [comparison and coverage](history-and-review.md).
 
-## Follow your work and background tasks
+![Snapshot comparison selectors](images/compare-snapshots.png)
 
-![My work with environment filters and readiness](images/my-work.png)
+![Collection coverage with observation totals, gaps and checks needing attention](images/collection-coverage.png)
 
-Use **My work** to filter assigned findings by environment and sort your queue.
-Readiness explains why a finding can or cannot progress.
+![Activity with collections, recalculations and comparisons](images/activity.png)
 
-![Activity with separate collection, recalculation and comparison queues](images/activity.png)
+## Segmentation and naming
 
-Open **Activity** in the top bar to follow collections, finding recalculations and
-snapshot comparisons. Each task type has its own queue and result links.
+![Segmentation with application cards and the selected application's configured connections](images/segmentation.png)
 
-## Administration
+![Naming compliance with outcome cards and recurring issues](images/naming.png)
 
-![Administration settings directory](images/administration.png)
+## Administration and account
 
-Administrators configure review approvals, authentication and operating policies.
-Use [operations](operations.md) for diagnostic collections and troubleshooting.
+![Administration directory](images/administration.png)
 
-![Authentication settings grouped by purpose](images/authentication-settings.png)
+![Review approval settings](images/review-approval-settings.png)
 
-Authentication forms group connection details, user lookup (LDAPS), role mapping
-and certificate trust. Editing forms show unsaved changes and warn before leaving.
-After validation fails, use the error summary links to reach the fields to correct.
+![Authentication settings](images/authentication-settings.png)
+
+![Audit log](images/diagnostic-collection.png)
+
+![Get started checklist with steps derived from the workspace](images/getting-started.png)
 
 ## Screenshot maintenance
 
-Captured on 15 October 2026 from the local development working tree, including
-the three UI/UX batches. These screenshots may be ahead of the published image. Assets are in `docs/images/` and shared across guides.
-Recapture the affected page when its controls or navigation change. Use an isolated
-synthetic database and a separate browser session; never capture a production
-account, secret field, token, real Manager hostname or private inventory.
+Captured on 16 November 2026 from the `development` branch with the synthetic demo
+data, using headless Chrome at 1440 × 900 (phone: 390 × 844 at 2×). Assets are in
+`docs/images/` and shared across guides. The step-by-step naming guides under
+`docs/guides/` use older captures. Recapture a page when its controls or navigation
+change. Use an isolated synthetic database and a separate browser session; never
+capture a production account, secret field, token, real Manager hostname or private
+inventory.
+
+### Drawer interaction checks
+
+- Reviews: select a task and verify the side panel follows; the primary action opens the review page, where decisions are made.
+- Evidence panel: switch Docked, Wide and Full screen, resize with the handle and arrow keys, and check that Escape leaves full screen before closing.
+- Naming policy, deletion verification and reference cleanup: inspect details without expanding the table vertically. Close restores focus to the opener.
+- Check at desktop and 390px mobile width. Without native dialog support, ordinary links and expandable details remain available.
+
+### Consistent tabs and accessibility
+
+Object evidence uses Summary, Members when applicable, References, History and Technical details. Check Arrow Left/Right, Home and End in tab lists; exactly one tab should participate in the Tab sequence, and each tab must reference its panel. Switching tabs must retain draft field values. These checks are regression coverage, not a claim of formal WCAG certification.

@@ -1,3 +1,4 @@
+from .preferences import table_page_size
 import json
 from datetime import timedelta
 from django.conf import settings
@@ -40,7 +41,7 @@ def audit_log(request):
         params.pop('page', None)
         params.pop('export', None)
         response = render(request, 'inventory/audit_log.html', {
-            'page': Paginator(rows, 50).get_page(request.GET.get('page')), 'query': query,
+            'page': Paginator(rows, table_page_size(request)).get_page(request.GET.get('page')), 'query': query,
             'outcome': outcome, 'query_string': params.urlencode(),
             'retention_days': settings.AUDIT_EVENT_RETENTION_DAYS,
             'environments': Environment.objects.filter(enabled=True),
@@ -60,6 +61,8 @@ def collection_diagnostics(request, pk):
     performance = (diagnostics or {}).get('report__performance') or {}
     endpoints = (performance.get('concurrency') or {}).get('endpoints') or {}
     phase_labels = {'inventory': 'Base inventory', 'search': 'Reference search', 'dfw': 'Firewall rules and counters',
+                    'vm_associations': 'VM associations (within membership phase)',
+                    'network_membership': 'Network members and VM interface attachments',
                     'membership': 'Group membership', 'tags': 'Tags and VM inventory'}
     retrieval_phases = [{'label': phase_labels.get(key, key.replace('_', ' ').capitalize()), 'seconds': value}
                         for key, value in performance.get('phases_seconds', {}).items()]

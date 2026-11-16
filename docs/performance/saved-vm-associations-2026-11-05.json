@@ -1,0 +1,46 @@
+{
+  "scope": "Synthetic membership request count and Python preparation only. Not collection runtime or a production ETA.",
+  "distributed_memberships": {
+    "vms": 1200,
+    "groups": 4493,
+    "nonempty_groups": 4000,
+    "previous_probe_only_requests": 4493,
+    "new_requests": 1693,
+    "new_request_breakdown": {
+      "association": 1200,
+      "probe": 493
+    },
+    "positive_group_probes_avoided": 4000,
+    "vm_coverage": "All VMs complete; four actual groups each",
+    "cleanup_classifications_equal": true
+  },
+  "highly_shared_memberships": {
+    "vms": 1200,
+    "groups": 4493,
+    "nonempty_groups": 4,
+    "previous_probe_only_requests": 4493,
+    "new_requests": 5689,
+    "new_request_breakdown": {
+      "association": 1200,
+      "probe": 4489
+    },
+    "positive_group_probes_avoided": 4,
+    "vm_coverage": "All VMs complete; four actual groups each",
+    "cleanup_classifications_equal": true
+  },
+  "preparation": {
+    "vms": 250,
+    "tag_candidate_groups_per_vm": 500,
+    "previous_tag_expansion": {
+      "seconds": 0.0163,
+      "vm_row_json_bytes": 10134200,
+      "candidate_edges_expanded": 125000
+    },
+    "association_projection": {
+      "seconds": 0.0028,
+      "vm_row_json_bytes": 216200,
+      "candidate_edges_expanded": 0
+    }
+  },
+  "limitations": "The previous probe-only design sampled identities and did not provide complete VM associations. Direct reads can add requests when many VMs share few groups. Existing pacing, statistics, search, persistence, latency, verification sampling and retries affect total collection time; they are not modeled here."
+}

@@ -128,6 +128,11 @@ def relevant_evidence_error(kind, row, search_coverage, stamp, interval_minutes)
 
 def approval_readiness(finding, *, deletion_live=False):
     def blocked(message): return {'status': 'blocked', 'message': message}
+    from .models import FindingLiveCheck
+    check = FindingLiveCheck.objects.filter(finding=finding,
+        snapshot_id_text=str(finding.snapshot_id or ''), status__in=['queued','running','failed','changed','stale']).first()
+    if check:
+        return blocked('Current-state verification: ' + check.message + ' A read-only check does not replace observation criteria or deletion verification.')
     from .transient import matching, policies_for
     transient_policy = matching(finding.evidence, policies_for(finding.environment_id)) if finding.kind == 'empty_group' else None
     if transient_policy and transient_policy.mode == 'suppress':
@@ -269,6 +274,11 @@ def decide(finding, actor, action, reason, owner=None, ticket='', manual_verifie
                         'evidence': finding.evidence, 'coverage': readiness['coverage'], 'coverage_key': readiness['coverage_key'],
                         'manual_verified': manual, 'manual_checks': manual_checks.strip() if manual else '',
                         'evidence_reference': evidence_reference.strip() if manual else ''}
+            from .models import FindingLiveCheck
+            live_check = FindingLiveCheck.objects.filter(finding=finding, status='succeeded', snapshot_id_text=str(finding.snapshot_id or '')).first()
+            if live_check:
+                decision['live_members'] = live_check.result.get('members', {})
+                decision['live_checked_at'] = live_check.finished_at.isoformat() if live_check.finished_at else None
             finding.approvals = {**finding.approvals, 'owner' if before == 'owner_review' else 'second': decision}
             extra = {'decision': decision}
             finding.workflow_state = 'second_review' if before == 'owner_review' and finding.required_approvals == 2 else 'ready'

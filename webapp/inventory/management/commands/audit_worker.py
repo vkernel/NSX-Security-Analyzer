@@ -14,10 +14,10 @@ from inventory.services import claim_job, expire_jobs, fail_job, stop_requested,
 
 
 class Command(BaseCommand):
-    help = "Run independent collection, finding-review indexing, comparison, deletion-preview and deletion-execution lanes."
+    help = "Run independent collection, finding-review, comparison, deletion and reference-export lanes."
 
     def add_arguments(self, parser):
-        parser.add_argument("--lane", choices=["all", "both", *LANES], default="all", help="Default supervises all five lanes independently; both is a legacy alias for all.")
+        parser.add_argument("--lane", choices=["all", "both", *LANES], default="all", help="Default supervises all lanes independently; both is a legacy alias for all.")
         parser.add_argument("--once", action="store_true", help="Process at most one queued job, then exit.")
 
     def handle(self, *args, **options):
@@ -127,6 +127,30 @@ class Command(BaseCommand):
         finally:
             FindingRecalculation.objects.filter(pk=job.pk, token=job.token, status='cancelling').update(status='cancelled', finished_at=timezone.now())
 
+    def run_browsing_restore(self):
+        from inventory.models import Snapshot
+        snapshot = Snapshot.objects.filter(browsing_status__in=['queued', 'running']).order_by('created_at').first()
+        if snapshot is None: return False
+        Snapshot.objects.filter(pk=snapshot.pk).update(browsing_status='running')
+        try:
+            with subprocess.Popen([sys.executable, str(settings.BASE_DIR / 'manage.py'), 'index_snapshots', '--snapshot', str(snapshot.pk)]) as process:
+                try:
+                    deadline = time.monotonic() + settings.AUDIT_TIMEOUT
+                    while process.poll() is None:
+                        self.check_lease()
+                        if time.monotonic() >= deadline:
+                            raise subprocess.TimeoutExpired('index_snapshots', settings.AUDIT_TIMEOUT)
+                        time.sleep(2)
+                finally:
+                    if process.poll() is None:
+                        process.kill()
+                        process.wait()
+        except (OSError, subprocess.TimeoutExpired) as exc:
+            log_failure('browsing_restore', exc)
+        finally:
+            Snapshot.objects.filter(pk=snapshot.pk, browsing_status='running').update(browsing_status='failed')
+        return True
+
     def run_comparison(self):
         from inventory.models import SnapshotComparison
         pair = SnapshotComparison.objects.filter(ready=False, status__in=['queued', 'running']).order_by('created_at').first()
@@ -175,6 +199,54 @@ class Command(BaseCommand):
             interrupted(batch.pk)
         return True
 
+    def run_finding_check(self):
+        from inventory.approval_live import claim, interrupted
+        from inventory.models import FindingLiveCheck
+        for pk in FindingLiveCheck.objects.filter(status='running').values_list('pk', flat=True):
+            interrupted(pk)
+        check = claim()
+        if not check: return False
+        try:
+            with subprocess.Popen([sys.executable, str(settings.BASE_DIR / 'manage.py'), 'run_finding_check', str(check.pk)]) as process:
+                try:
+                    deadline = time.monotonic() + min(settings.AUDIT_TIMEOUT, 600)
+                    while process.poll() is None:
+                        self.check_lease()
+                        if time.monotonic() >= deadline: break
+                        time.sleep(1)
+                finally:
+                    if process.poll() is None:
+                        process.kill(); process.wait()
+        finally:
+            interrupted(check.pk)
+        return True
+
+    def run_export(self):
+        from inventory.reference_exports import claim, fail
+        from inventory.models import ReferenceExport
+        # Only this independently leased lane may reconcile interrupted exports.
+        for pk in ReferenceExport.objects.filter(status='running').values_list('pk',flat=True):
+            fail(pk)
+        job=claim()
+        if job is None: return False
+        try:
+            with subprocess.Popen([sys.executable,str(settings.BASE_DIR/'manage.py'),'prepare_reference_export',str(job.pk)]) as process:
+                try:
+                    deadline=time.monotonic()+300
+                    while process.poll() is None:
+                        self.check_lease()
+                        status=ReferenceExport.objects.filter(pk=job.pk).values_list('status',flat=True).first()
+                        if status in (None,'cancelled','expired') or time.monotonic()>=deadline: break
+                        time.sleep(1)
+                finally:
+                    if process.poll() is None:
+                        process.kill();process.wait()
+        except OSError:
+            pass
+        finally:
+            fail(job.pk)
+        return True
+
     def run_worker(self, options):
         lane = options.get("lane", "all")
         self.heartbeat_lanes = tuple(LANES) if lane in ('all', 'both') else (lane,)
@@ -190,16 +262,25 @@ class Command(BaseCommand):
                 self.run_recalculation(recalculation)
                 if options['once']: return
                 continue
+            if lane in ('all', 'both', 'comparison') and self.run_browsing_restore():
+                if options['once']: return
+                continue
             if lane in ('all', 'both', 'comparison') and self.run_comparison():
                 if options['once']: return
                 continue
             if lane in ('all', 'both', 'deletion_preview') and self.run_deletion(preview=True):
                 if options['once']: return
                 continue
+            if lane in ('all', 'both', 'deletion_preview') and self.run_finding_check():
+                if options['once']: return
+                continue
             if lane in ('all', 'both', 'deletion_execution') and self.run_deletion():
                 if options['once']: return
                 continue
-            if lane in ('recalculation', 'comparison', 'deletion_preview', 'deletion_execution'):
+            if lane in ('all','both','exports') and self.run_export():
+                if options['once']: return
+                continue
+            if lane in ('recalculation', 'comparison', 'deletion_preview', 'deletion_execution', 'exports'):
                 if options['once']: return
                 time.sleep(2)
                 continue
@@ -241,6 +322,11 @@ class Command(BaseCommand):
                             process.kill()
                             process.wait()
                             raise
+                        finally:
+                            # A collector stopped while building browsing data leaves a published
+                            # snapshot; the background rebuild lane finishes its index.
+                            from inventory.models import Snapshot
+                            Snapshot.objects.filter(job_id=job.pk, browsing_status='indexing').update(browsing_status='queued')
                 except OSError:
                     LOG.error("job=%s collector subprocess could not start", job.pk)
                     fail_job(job.pk, "The worker could not start the collector process.")

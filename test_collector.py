@@ -970,7 +970,7 @@ examples.forEach((_,index) => {
             self.assertEqual(row["membership"], "not_supported")
             self.assertEqual(row["audit_exclusions"], [])
         self.assertEqual(report["objects"][0]["referenced_by"], [antrea["path"]])
-        self.assertEqual(client.get.call_count, 12)
+        self.assertEqual(client.get.call_count, 12)  # Mandatory first pages are reused for details.
         html = rendered_document(report)
         self.assertNotIn('Antrea / container groups excluded', html)
         self.assertIn('class="sort-key"', html)
@@ -1001,7 +1001,7 @@ examples.forEach((_,index) => {
         self.assertEqual(report["performance"]["workers"], 1)
         self.assertEqual(client.retries, 0)
         # Empty search results try all five compatible query variants, once each.
-        self.assertEqual(client.get.call_count, 17)
+        self.assertEqual(client.get.call_count, 17)  # Samples reuse probe pages and never follow cursors.
         searches = [call for call in client.get.call_args_list if call.args[0] == "/search/query"]
         self.assertEqual(len(searches), 5)
         self.assertEqual(len({call.args[1]["query"] for call in searches}), 5)
@@ -1010,7 +1010,7 @@ examples.forEach((_,index) => {
         self.assertTrue(all(r["usage"] == "unknown" for r in report["objects"]))
         self.assertEqual(report["dfw"]["policies"][0]["status"], "unknown")
         self.assertEqual(report["dfw"]["rules"][0]["hit_status"], "unknown")
-        self.assertIn("Testing sample — not a full audit", rendered_document(report))
+        self.assertIn("Testing sample — not a full collection", rendered_document(report))
 
     def test_repeated_reads_always_fetch_fresh_data(self):
         client = self.client_with_pages([{"results": [1]}, {"results": [2]}])
@@ -1249,6 +1249,20 @@ examples.forEach((_,index) => {
         self.assertEqual(tags["objects"][0]["firewall_references"],
                          [{"rule": 0, "via_group": "/g", "tag_use": "condition"}])
         self.assertEqual(tags["objects"][1]["firewall_references"][0]["tag_use"], "assignment")
+
+    def test_tag_firewall_references_include_rules_under_a_policy_applied_to(self):
+        groups = [{"path": "/g"}, {"path": "/parent", "expression": [{"paths": ["/g"]}]}]
+        policy = {"path": "/infra/domains/default/security-policies/p", "resource_type": "SecurityPolicy",
+                  "scope": ["/parent"]}
+        rules = [{"path": policy["path"] + "/rules/" + name, "resource_type": "Rule", "id": name, "rule_id": index,
+                  "display_name": name, "source_groups": ["ANY"], "scope": ["ANY"]} for index, name in enumerate(("a", "b"))]
+        other = {"path": "/infra/domains/default/security-policies/other/rules/c", "resource_type": "Rule", "id": "c",
+                 "rule_id": 9, "display_name": "c", "source_groups": ["ANY"]}
+        tags = {"objects": [{"group_conditions": {"/g": "Group"}, "group_assignments": {}}]}
+        nsx.add_tag_firewall_references(tags, groups, groups + [policy, *rules, other])
+        # Both rules of the policy, through the nested parent group; the unrelated policy's rule is excluded.
+        self.assertEqual(sorted(rule["name"] for rule in tags["firewall_rules"]), ["a", "b"])
+        self.assertEqual({ref["via_group"] for ref in tags["objects"][0]["firewall_references"]}, {"/g"})
 
     def test_tag_catalog_assignment_counts(self):
         for fields, expected in (

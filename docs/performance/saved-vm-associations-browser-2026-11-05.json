@@ -1,0 +1,12 @@
+{
+  "syntheticVMs": 2,
+  "actualGroupsPerVM": 4,
+  "unrelatedTagCandidates": 25,
+  "vmInventoryResolvedCount": 4,
+  "savedGroupsShown": 4,
+  "savedFirewallRuleShown": true,
+  "inverseGroupVMsShown": 2,
+  "completeSavedEvidenceDefault": true,
+  "currentMembershipRequests": 0,
+  "browserErrors": []
+}

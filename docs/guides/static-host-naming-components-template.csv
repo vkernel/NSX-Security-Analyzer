@@ -1,0 +1,5 @@
+group_path,scope,value
+REPLACE_WITH_ACTUAL_PATH_FOR_150,naming/object-type,HST
+REPLACE_WITH_ACTUAL_PATH_FOR_150,naming/address,10.128.196.150
+REPLACE_WITH_ACTUAL_PATH_FOR_151,naming/object-type,HST
+REPLACE_WITH_ACTUAL_PATH_FOR_151,naming/address,10.128.196.151

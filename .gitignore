@@ -36,3 +36,7 @@ htmlcov/
 
 # Generated inside the release image
 webapp/inventory/_build.json
+
+# Claude Code machine-specific context and permission settings
+/CLAUDE.local.md
+/.claude/settings.local.json

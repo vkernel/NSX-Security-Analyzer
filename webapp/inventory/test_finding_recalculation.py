@@ -35,6 +35,128 @@ class FindingRecalculationTests(TestCase):
         self.assertEqual(job.status, 'completed')
         return Finding.objects.get(environment=self.env, kind='empty_group')
 
+    def vdi_history(self):
+        from .models import TransientEmptinessPolicy
+        from .test_transient import config
+        rule = TransientEmptinessPolicy.objects.create(name='Citrix VDI Policy', tag_scope='VDI_Gebruiker', mode='monitor', empty_days=3, minimum_observations=3, maximum_gap_hours=24)
+        for day in range(9):
+            data = report()
+            data['objects'][0]['configuration'] = config()
+            self.snapshot(day, data=data)
+            synchronize(self.env.pk)
+        finding = Finding.objects.get(environment=self.env, kind='empty_group')
+        self.assertEqual((finding.qualification, finding.required_days), ('eligible', 3))
+        data = report(); data['objects'][0]['configuration'] = config()
+        data['inventory_warnings'] = [{'endpoint': '/infra/realized-state/virtual-machines', 'detail': 'Changing VM inventory'}]
+        self.snapshot(9, data=data)
+        synchronize(self.env.pk)
+        return rule, finding
+
+    def test_changed_vdi_period_replaces_stale_qualification_despite_coverage_pause(self):
+        rule, finding = self.vdi_history()
+        # Exercise the GUI save path, including queue creation.
+        response = self.client.post(reverse('transient-emptiness'), {'id': rule.pk, 'action': 'save', 'name': rule.name,
+            'enabled': 'on', 'environment': '', 'tag_scope': rule.tag_scope, 'reason': 'VDI sessions', 'mode': 'monitor',
+            'empty_days': 30, 'minimum_observations': 3, 'maximum_gap_hours': 24})
+        self.assertEqual(response.status_code, 302)
+        job = replay.claim(); replay.run(job.pk, job.token)
+        finding.refresh_from_db(); job.refresh_from_db()
+        self.assertEqual((finding.required_days, finding.qualification), (30, 'insufficient'))
+        self.assertIsNone(finding.qualified_at)
+        self.assertIn('Criteria changed; verification paused', finding.qualification_reason)
+        self.assertEqual(job.paused, 1)
+        response = self.client.get(reverse('findings', args=[self.env.pk]), {'owner': 'none', 'kind': 'empty_group'})
+        self.assertNotContains(response, 'data-assign-eligible="true"')
+        self.assertContains(response, '1 paused for incomplete evidence')
+        # Repeating replay must not restore stale eligibility.
+        finding = self.recalc()
+        self.assertEqual((finding.required_days, finding.qualification), (30, 'insufficient'))
+
+    def test_changed_policy_invalidates_approvals_but_keeps_owner_and_history(self):
+        rule, finding = self.vdi_history()
+        finding.workflow_state='ready'; finding.owner=self.admin
+        finding.approvals={'owner': {'actor_id': str(self.admin.pk)}}; finding.save()
+        rule.empty_days=30; rule.save()
+        finding=self.recalc()
+        self.assertEqual(finding.workflow_state, 'owner_review')
+        self.assertEqual(finding.owner_id, self.admin.pk)
+        self.assertEqual(finding.approvals, {})
+        self.assertTrue(finding.events.filter(details__action='approval_invalidated').exists())
+
+    def test_unchanged_policy_preserves_paused_decisions(self):
+        rule, finding = self.vdi_history()
+        finding.workflow_state='ready'; finding.owner=self.admin
+        finding.approvals={'owner': {'actor_id': str(self.admin.pk)}}; finding.save()
+        finding=self.recalc()
+        self.assertEqual(finding.required_days, 3)
+        self.assertEqual(finding.workflow_state, 'ready')
+        self.assertTrue(finding.approvals)
+
+    def test_replay_skips_warning_without_resetting_verified_period(self):
+        self.policy.empty_group_days=3; self.policy.maximum_gap_hours=96; self.policy.save()
+        self.snapshot(0); synchronize(self.env.pk)
+        self.snapshot(1); synchronize(self.env.pk)
+        data=report(); data['inventory_warnings']=[{'endpoint':'/infra/realized-state/virtual-machines'}]
+        self.snapshot(2,data=data); synchronize(self.env.pk)
+        self.snapshot(3); synchronize(self.env.pk)
+        collected = Finding.objects.get(environment=self.env, kind='empty_group')
+        finding=self.recalc()
+        self.assertEqual(finding.qualification, 'eligible')
+        self.assertEqual(finding.observation_count, 3)
+        self.assertEqual(finding.observation_days, 3)
+        for field in ('observation_started', 'observation_count', 'observation_days', 'qualification'):
+            self.assertEqual(getattr(finding, field), getattr(collected, field))
+
+    def test_warning_does_not_extend_maximum_successful_observation_gap(self):
+        self.policy.maximum_gap_hours=48; self.policy.save()
+        self.snapshot(0)
+        data=report(); data['inventory_warnings']=[{'endpoint':'/infra/realized-state/virtual-machines'}]
+        self.snapshot(1,data=data); self.snapshot(2,data=data); self.snapshot(3)
+        finding=self.recalc()
+        self.assertEqual(finding.qualification,'observing')
+        self.assertEqual(finding.observation_count,1)
+        self.assertEqual(finding.observation_days,0)
+
+    def test_empty_queue_counts_separate_historical_findings(self):
+        self.snapshot(0); synchronize(self.env.pk)
+        finding = Finding.objects.get(environment=self.env, kind='empty_group')
+        finding.present = False
+        finding.qualification = 'insufficient'
+        finding.save(update_fields=['present', 'qualification'])
+        response = self.client.get(reverse('findings', args=[self.env.pk]), {'owner': 'none'})
+        self.assertEqual(response.context['historical_finding_count'], 1)
+        self.assertNotIn('insufficient', [row['qualification'] for row in response.context['qualification_counts']])
+        self.assertContains(response, 'historical findings are no longer currently observed')
+
+    def test_qualification_counts_show_readable_labels(self):
+        self.snapshot(0); synchronize(self.env.pk)
+        Finding.objects.filter(environment=self.env, kind='empty_group').update(qualification='insufficient')
+        response = self.client.get(reverse('findings', args=[self.env.pk]))
+        labels = {row['qualification']: row['label'] for row in response.context['qualification_counts']}
+        self.assertEqual(labels['insufficient'], 'Insufficient evidence')
+        self.assertContains(response, '<dt>Insufficient evidence</dt>', html=False)
+
+    def test_vdi_warning_uses_own_gap_and_returning_members_restart(self):
+        from .models import TransientEmptinessPolicy
+        from .test_transient import config
+        rule = TransientEmptinessPolicy.objects.create(name='VDI', tag_scope='VDI_Gebruiker',
+            mode='monitor', empty_days=3, minimum_observations=2, maximum_gap_hours=48)
+        self.policy.maximum_gap_hours=96; self.policy.save()
+        data=report(); data['objects'][0]['configuration']=config()
+        warning=dict(data, inventory_warnings=[{'endpoint':'/infra/realized-state/virtual-machines'}])
+        self.snapshot(0,data=data); self.snapshot(1,data=warning); self.snapshot(2,data=data)
+        finding=self.recalc()
+        self.assertEqual((finding.observation_days, finding.observation_count), (2,2))
+        rule.maximum_gap_hours=24; rule.save()
+        finding=self.recalc()
+        self.assertEqual((finding.observation_days, finding.observation_count), (0,1))
+        rule.maximum_gap_hours=96; rule.save()
+        import copy
+        nonempty=copy.deepcopy(data); nonempty['objects'][0]['membership']='nonempty'
+        self.snapshot(3,state='nonempty',data=nonempty); self.snapshot(4,data=data)
+        finding=self.recalc()
+        self.assertEqual((finding.observation_days, finding.observation_count), (0,1))
+
     def test_publication_skips_unchanged_evidence_but_advances_observation(self):
         self.snapshot(0)
         synchronize(self.env.pk)
@@ -195,6 +317,9 @@ class FindingRecalculationTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn('Why some findings are not listed', response.json()['html'])
         self.assertIn('minimum of 24 hours', response.json()['html'])
-        for text in ('Return to unassigned', 'Compare selected', '1237/1238',
-                     'three attempts in total', 'Start diagnostic collection'):
+        for text in ('Return to unassigned', 'Compare selected', 'Start diagnostic collection',
+                     'Applied to (policy)', 'Not attempted', 'Export references'):
             self.assertIn(text, response.json()['html'])
+        # Operator internals live on the coverage page and in the documentation.
+        for text in ('1237/1238', 'My work', 'Overview, Relationships'):
+            self.assertNotIn(text, response.json()['html'])

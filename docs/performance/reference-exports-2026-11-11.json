@@ -1,0 +1,37 @@
+{
+  "synthetic": true,
+  "references": 1001,
+  "completed": [
+    {
+      "format": "json",
+      "seconds": 4.439
+    },
+    {
+      "format": "yaml",
+      "seconds": 2.414
+    },
+    {
+      "format": "html",
+      "seconds": 4.428
+    },
+    {
+      "format": "pdf",
+      "seconds": 4.425
+    }
+  ],
+  "errors": [],
+  "nsxRequests": 0,
+  "standaloneHtmlExternalRequests": 0,
+  "mobileWidth": 358,
+  "keyboard_and_dark_theme": "Passed: focus wraps within dialog, Escape closes it and restores trigger focus, dark theme and compact/mobile dimensions verified.",
+  "pdf_visual_review": "Passed: A3 landscape, wrapped paths, action colors, repeated headers, page numbers and final rule verified across 44 pages.",
+  "test_scope": "Synthetic fixtures only; production data was not used.",
+  "regression_tests": {
+    "full_django_suite": 984,
+    "full_django_result": "passed",
+    "javascript_suite": 110,
+    "javascript_result": "passed",
+    "focused_export_worker_suite": 37,
+    "focused_export_worker_result": "passed, including tag reference readers and final cancellation/rendering/metadata changes"
+  }
+}

@@ -1,0 +1,50 @@
+{
+  "headers": [
+    "Type",
+    "Category",
+    "Policy",
+    "Rule",
+    "ID",
+    "Seq",
+    "Action",
+    "State",
+    "Matched fields",
+    "Matched groups",
+    "Reason / limits",
+    "Details"
+  ],
+  "narrow": 759,
+  "width": 1759,
+  "errors": [],
+  "checks": [
+    {
+      "width": 1440,
+      "theme": "light",
+      "overflow": false,
+      "drawerOverflow": false
+    },
+    {
+      "width": 390,
+      "theme": "light",
+      "overflow": false,
+      "drawerOverflow": false
+    },
+    {
+      "width": 1440,
+      "theme": "dark",
+      "overflow": false,
+      "drawerOverflow": false
+    },
+    {
+      "width": 390,
+      "theme": "dark",
+      "overflow": false,
+      "drawerOverflow": false
+    }
+  ],
+  "vmAndTagContext": true,
+  "restoredWidth": true,
+  "django_tests": 839,
+  "final_focused_postgresql_tests": 19,
+  "javascript_tests": 74
+}

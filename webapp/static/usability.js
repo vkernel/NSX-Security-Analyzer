@@ -37,6 +37,7 @@
     const day=({'iso':`${p.year}-${p.month}-${p.day}`,'day-first':`${p.day}/${p.month}/${p.year}`,'month-first':`${p.month}/${p.day}/${p.year}`})[body.dataset.dateFormat] || readable;
     return `${day} ${p.hour}:${p.minute} ${p.timeZoneName}`;
   }
+  window.workspaceTimeText = formatTime;
   window.workspaceTime = value => {
     const time=document.createElement('time'); time.dateTime=value;
     const stamp=new Date(value);
@@ -51,7 +52,13 @@
     const controls=Object.fromEntries(Object.entries(selectors).map(([name,selector])=>[name,tools.querySelector(selector)]));
     const headers=Array.from(table.tHead.rows[0].cells);
     headers.forEach((cell,index)=>cell.dataset.columnIndex=index);
-    let columns=headers.map((cell,index)=>({index,visible:true}));
+    const panelId=widget.closest('[data-panel]').id;
+    function defaultColumns(){
+      const service=['all-services','unused-services'].includes(panelId);
+      return headers.map((cell,index)=>({index,visible:!(service && index===3)}))
+        .sort((a,b)=>Number(headers[b.index].classList.contains('inventory-selection-column'))-Number(headers[a.index].classList.contains('inventory-selection-column')));
+    }
+    let columns=defaultColumns();
     const saved=remember ? getState()[key] : null;
     if(saved) {
       Object.entries(saved.controls || {}).forEach(([name,value])=> {
@@ -60,7 +67,10 @@
         else if(control.tagName!=='SELECT' || Array.from(control.options).some(option=>option.value===value)) control.value=value;
       });
       (saved.filters || []).forEach(([index,filter])=> {if(index<headers.length) api.filters.set(index,filter);});
-      if(saved.columns?.length===headers.length && new Set(saved.columns.map(c=>c.index)).size===headers.length && saved.columns.every(c=>Number.isInteger(c.index) && c.index>=0 && c.index<headers.length) && saved.columns.some(c=>c.visible)) columns=saved.columns;
+      if(saved.columns?.length===headers.length && new Set(saved.columns.map(c=>c.index)).size===headers.length && saved.columns.every(c=>Number.isInteger(c.index) && c.index>=0 && c.index<headers.length) && saved.columns.some(c=>c.visible)){
+        // Adopt the new default for untouched old layouts; keep custom column choices.
+        if(!saved.columns.every((c,index)=>c.index===index && c.visible))columns=saved.columns;
+      }
     }
     const panel=document.createElement('details');panel.className='column-layout';
     const summary=document.createElement('summary');summary.textContent='Table columns';panel.append(summary);
@@ -84,7 +94,7 @@
       columns.forEach((column,position)=> {
         const line=document.createElement('div');line.className='column-choice';
         const label=document.createElement('label'), check=document.createElement('input');check.type='checkbox';check.checked=column.visible;
-        const caption=headers[column.index].querySelector('.header-filter')?.textContent.replace(/[●▾]/g,'').trim() || headers[column.index].textContent;
+        const caption=headers[column.index].querySelector('.header-filter')?.textContent.replace(/[●▾]/g,'').trim() || headers[column.index].textContent || headers[column.index].querySelector('input')?.getAttribute('aria-label') || 'Selection';
         check.disabled=column.visible && columns.filter(c=>c.visible).length===1;
         check.addEventListener('change',()=>{column.visible=check.checked;layout();editor();capture();});
         label.append(check,document.createTextNode(caption));line.append(label);
@@ -100,7 +110,7 @@
     reset.addEventListener('click',()=> {
       controls.search.value='';controls.mode.value='contains';controls.syntax.value='text';controls.evidence.checked=true;
       controls.size.value=document.body.dataset.reportPageSize || '25';controls.sort.value='name';controls.order.value='asc';api.filters.clear();
-      columns=headers.map((_,index)=>({index,visible:true}));api.filters.notify();editor();layout();capture();
+      columns=defaultColumns();api.filters.notify();editor();layout();capture();
     });panel.append(reset);
     let ready=false;
     widget.addEventListener('table-render',()=>{layout();if(ready)capture();});
@@ -123,24 +133,32 @@
       });
     }
     const center=document.querySelector('.notification-center'), list=document.getElementById('notification-list'), status=document.getElementById('notification-status');
+    let notificationSignature='',notificationBusy=false;
     async function refresh() {
+      if(notificationBusy)return;
       if(document.hidden) return;
       try {
-        const response=await fetch('/api/notifications/',{cache:'no-store'});
+        notificationBusy=true;
+        const response=await fetch('/api/notifications/',{cache:'no-store',signal:AbortSignal.timeout(15000)});
         if(!response.ok || response.redirected) throw new Error();
         const data=await response.json();document.getElementById('notification-count').textContent=data.unread ? String(data.unread) : '';
         center.querySelector('summary').setAttribute('aria-label',data.unread ? `Notifications, ${data.unread} unread` : 'Notifications');
-        list.replaceChildren();
+        const signature=JSON.stringify(data.items);
+        if(signature===notificationSignature)return;
+        if(center.open && list.contains(document.activeElement)){status.textContent='New notifications available; updates will appear when you finish using this list.';return;}
+        notificationSignature=signature;list.replaceChildren();
         data.items.forEach(item=> {
           const li=document.createElement('li'),link=document.createElement('a'),time=document.createElement('small');
           link.href=item.url;link.textContent=item.environment+' · '+item.label;time.textContent=formatTime(item.at);time.title=new Date(item.at).toISOString();
           if(item.unread) li.className='unread';li.append(link,time);list.append(li);
         });
         status.textContent=data.items.length?'Last 30 days · Up to 50 results':'No recent notifications.';
-      } catch(_) {status.textContent='Notifications unavailable. Retrying shortly.';}
+      } catch(_) {status.textContent='Notifications unavailable. Reconnecting automatically.';}finally{notificationBusy=false;}
     }
     center.addEventListener('toggle',()=>{if(center.open)refresh();});
     document.getElementById('notifications-read').addEventListener('click',async()=>{try{await post('/api/notifications/read/',{});await refresh();}catch(error){status.textContent=error.message;}});
-    refresh();setInterval(refresh,60000);
+    window.addEventListener('online',refresh);
+    document.addEventListener('visibilitychange',()=>{if(!document.hidden)refresh();});
+    refresh();setInterval(refresh,30000);
   });
 })();

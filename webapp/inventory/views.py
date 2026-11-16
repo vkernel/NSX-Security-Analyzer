@@ -1,3 +1,4 @@
+from .preferences import table_page_size
 from . import page_queries
 import json
 import logging
@@ -48,6 +49,25 @@ def snapshot_list():
     return page_queries.snapshots()
 
 
+QUALIFICATION_ORDER = [('eligible', 'Eligible for review', 'ok'), ('observing', 'Observing', 'info'),
+                       ('insufficient', 'Insufficient evidence', 'warn'), ('suppressed', 'Suppressed', 'neutral'),
+                       ('cleared', 'Condition cleared', 'neutral'), ('disabled', 'Qualification disabled', 'neutral')]
+
+
+def qualification_summary(counts):
+    """Ordered qualification counts with bar widths; saved values only."""
+    totals = {row['qualification']: row['total'] for row in counts}
+    total = sum(totals.values())
+    known = {key for key, _, _ in QUALIFICATION_ORDER}
+    entries = [{'key': key, 'label': label, 'tone': tone, 'total': totals.get(key, 0)} for key, label, tone in QUALIFICATION_ORDER]
+    other = sum(value for key, value in totals.items() if key not in known)
+    if other:
+        entries.append({'key': 'other', 'label': 'Other', 'tone': 'neutral', 'total': other})
+    for entry in entries:
+        entry['percent'] = round(entry['total'] * 100 / total, 2) if total else 0
+    return {'total': total, 'entries': [entry for entry in entries if entry['total']]}
+
+
 @login_required
 def dashboard(request):
     from .usability import freshness, policy
@@ -64,11 +84,12 @@ def dashboard(request):
     from .models import Finding
     from django.db.models import Count
     finding_counts = list(Finding.objects.filter(**scope).filter(present=True).values('qualification').annotate(total=Count('pk')))
+    finding_summary = qualification_summary(finding_counts)
     return render(request, "inventory/dashboard.html", {
         "stale_count":sum(card['freshness']['stale'] for card in cards), "failed_count":failed_count,
         "running_count":AuditJob.objects.filter(**scope).filter(status='running').count(), "queued_count":AuditJob.objects.filter(**scope).filter(status='queued').count(),
         "new_issue_count":sum((card['latest'].display_summary.get('new_coverage_issues') or 0) for card in cards if card['latest']),
-        "finding_counts": finding_counts, "cards": cards, "jobs": jobs, "environment_count": len(cards),
+        "finding_counts": finding_counts, "finding_summary": finding_summary, "cards": cards, "jobs": jobs, "environment_count": len(cards),
         "snapshot_count": Snapshot.objects.filter(**scope).count(),
         "active_count": AuditJob.objects.filter(**scope).filter(status__in=["queued", "running"]).count(),
     })
@@ -77,7 +98,7 @@ def dashboard(request):
 @login_required
 def environment_detail(request, pk):
     environment = get_object_or_404(page_queries.environments(), pk=pk)
-    snapshots = Paginator(snapshot_list().filter(environment=environment), preferences(request).page_size).get_page(request.GET.get("page"))
+    snapshots = Paginator(snapshot_list().filter(environment=environment), table_page_size(request)).get_page(request.GET.get("page"))
     from .usability import freshness
     return render(request, "inventory/environment.html", {
         "freshness": freshness(environment),
@@ -152,7 +173,7 @@ def environment_edit(request, pk=None):
         with transaction.atomic():
             current = Environment.objects.select_for_update().get(pk=pk) if pk else None
             if current and current.jobs.filter(status__in=["queued", "running"]).exists():
-                form.add_error(None, "Wait for the active audit to finish before editing this environment.")
+                form.add_error(None, "Wait for the active collection to finish before editing this environment.")
             elif current and current.manager != form.cleaned_data["manager"] and current.snapshots.exists():
                 form.add_error("manager", "Create a new environment for a different manager to preserve history.")
             else:
@@ -205,7 +226,7 @@ def collect(request, pk):
     environment = get_object_or_404(page_queries.environments(), pk=pk)
     try:
         enqueue(environment, request.user)
-        messages.success(request, "Audit queued. The worker will collect a new snapshot.")
+        messages.success(request, "Collection queued. Your collection is waiting to start. A new snapshot will be available when it completes.")
     except ValidationError as exc:
         from .audit_events import record
         record('collection.request_rejected', 'Environment', pk, outcome='failed')
@@ -225,7 +246,7 @@ def stop_collection(request, pk):
         messages.error(request, "The stop request could not be saved because the database is unavailable or busy. The collection may still be running. Ask an administrator to stop the worker and restore database availability.")
         return redirect('collection-history', pk=job.environment_id)
     if requested:
-        messages.success(request, "Stop requested. The worker will terminate the collection; earlier snapshots remain available.")
+        messages.success(request, "Stop requested. The collection will stop; earlier snapshots remain available.")
     else:
         messages.info(request, "This collection has already finished.")
     return redirect('collection-history', pk=job.environment_id)
@@ -261,6 +282,8 @@ def snapshot_detail(request, pk):
                    .only("id", "generated_at", "testing")[:50])
     if not any(item.pk == snapshot.pk for item in history):
         history.append(snapshot)
+    if snapshot.browsing_status != 'ready':
+        return render(request, 'inventory/snapshot_archived.html', {'snapshot': snapshot, 'environment': snapshot.environment})
     metadata_seconds = perf_counter() - started
     # JSONField maps to PostgreSQL JSONB; render from the immutable database snapshot.
     from .report_cache import presentation
@@ -271,7 +294,9 @@ def snapshot_detail(request, pk):
     else:
         report, report_diagnostics = presentation(snapshot, engine().render_html_report)
     presentation_seconds = perf_counter() - started - metadata_seconds
-    response = render(request, "inventory/snapshot.html", {
+    from .overview_summary import inventory_overview
+    overview = inventory_overview(snapshot)
+    response = render(request, "inventory/snapshot.html", {"overview": overview,
         "review_return": review_return, "finding_link": finding_link, "snapshot": snapshot, "environment": snapshot.environment, "history": history, "report": report, "report_diagnostics": report_diagnostics, "is_latest": bool(history and history[0].pk == snapshot.pk), "legacy_report": indexed is None})
     logging.getLogger("inventory.web").info(
         "Snapshot page snapshot=%s mode=%s metadata_seconds=%.3f presentation_seconds=%.3f render_seconds=%.3f response_bytes=%d",
@@ -364,7 +389,7 @@ def rule_history(request, pk):
         rows = rows.filter(status=selected)
     if query:
         rows = rows.filter(Q(name__icontains=query) | Q(path__icontains=query) | Q(rule_id_text__icontains=query))
-    page = Paginator(rows.order_by('sort_name','path').only('data','status'), preferences(request).page_size).get_page(request.GET.get('page'))
+    page = Paginator(rows.order_by('sort_name','path').only('data','status'), table_page_size(request)).get_page(request.GET.get('page'))
     page.object_list = [dict(timestamps(row.data, ('first','last','last_positive')), label=STATUS_LABELS[row.status])
                         for row in page.object_list]
     params = request.GET.copy()
@@ -423,7 +448,7 @@ def website_settings(request):
 def collection_history(request, pk):
     environment = get_object_or_404(page_queries.environments(), pk=pk)
     jobs = Paginator(page_queries.jobs(environment.jobs.all()),
-                     preferences(request).page_size).get_page(request.GET.get("page"))
+                     table_page_size(request)).get_page(request.GET.get("page"))
     return render(request, "inventory/collection_history.html", {"environment": environment, "jobs": jobs})
 
 
@@ -446,7 +471,7 @@ def retention_settings(request):
                 for field, value in form.cleaned_data.items():
                     setattr(current, field, value)
                 current.save(update_fields=list(form.cleaned_data))
-            messages.success(request, 'Retention policy saved. Cleanup runs hourly when enabled.')
+            messages.success(request, 'Storage policy saved. Cleanup uses bounded batches when enabled.')
             return redirect('retention-settings')
     rows = preview(policy) if request.method != 'POST' or form.is_valid() else []
     return render(request, 'inventory/retention_settings.html', {'form': form, 'policy': policy,
@@ -530,6 +555,31 @@ def interface_preferences(request):
 @login_required
 @require_GET
 def notifications(request):
+    return JsonResponse(notification_feed(request))
+
+
+@login_required
+@require_GET
+def notifications_page(request):
+    """Full notification list; the same items, order and read state as the header menu."""
+    from datetime import datetime
+    from .usability import policy
+    feed = notification_feed(request)
+    for item in feed['items']:
+        item['at_value'] = datetime.fromisoformat(item['at'])
+    options, personal = policy(), preferences(request)
+    custom = personal.notification_override
+    kinds = [('Failed collections', personal.notification_failed if custom else options.notify_failed),
+             ('Completed collections', personal.notification_completed if custom else options.notify_completed),
+             ('New coverage issues', personal.notification_coverage if custom else options.notify_coverage),
+             ('Review tasks', personal.notification_reviews)]
+    if custom:
+        kinds.append(('Testing collections', personal.notification_testing))
+    return render(request, 'inventory/notifications.html', {**feed, 'custom': custom, 'kinds': kinds,
+        'days': personal.notification_days if custom else 30})
+
+
+def notification_feed(request):
     from django.db.models import Q
     from django.utils import timezone
     from .usability import policy
@@ -558,9 +608,9 @@ def notifications(request):
     for job in jobs.order_by('-finished_at')[:50]:
         snapshot = getattr(job, 'snapshot', None)
         issues = (job.new_coverage_issues or 0) if snapshot else 0
-        label = 'Collection failed' if job.status == 'failed' else 'Audit completed'
+        label = 'Collection failed' if job.status == 'failed' else 'Collection completed'
         if job.testing:
-            label = 'Testing collection failed' if job.status == 'failed' else 'Testing audit completed'
+            label = 'Testing collection failed' if job.status == 'failed' else 'Testing collection completed'
         if notify_coverage and issues:
             label += f' · {issues} new coverage issue(s)'
         items.append({'id': str(job.pk), 'label': label, 'environment': job.environment.name, 'at': job.finished_at.isoformat(),
@@ -605,8 +655,19 @@ def notifications(request):
                 items.append({'id': 'cleanup-cancelled-' + str(decision.pk), 'label': 'Cleanup plan cancelled — approval no longer required',
                     'environment': '', 'at': decision.created_at.isoformat(), 'unread': is_unread,
                     'url': reverse('deletion-reference-cleanup', args=[decision.target_id])})
+    if request.user.is_superuser:
+        from .storage import storage_trend
+        from datetime import datetime, time
+        trend = storage_trend()
+        if trend.get('alert'):
+            stamp = timezone.make_aware(datetime.combine(trend['day'], time.min))
+            is_unread = not seen or stamp > seen
+            unread += int(is_unread)
+            items.append({'id': 'database-storage-' + str(trend['day']), 'label': trend['alert'],
+                          'environment': 'Database storage', 'at': stamp.isoformat(), 'unread': is_unread,
+                          'url': reverse('system-health')})
     items.sort(key=lambda item: item['at'], reverse=True)
-    return JsonResponse({'items': items[:50], 'unread': unread})
+    return {'items': items[:50], 'unread': unread}
 
 
 @login_required
@@ -615,6 +676,9 @@ def notifications_read(request):
     from .models import UserPreferences
     from django.utils import timezone
     UserPreferences.objects.update_or_create(user=request.user, defaults={'notifications_seen_at': timezone.now()})
+    if request.content_type != 'application/json':
+        # Plain form post from the notifications page.
+        return redirect('notifications-page')
     return JsonResponse({'saved': True})
 
 
@@ -642,7 +706,7 @@ def workspace_section(request, section):
             return redirect('environment', pk=environment.pk)
         snapshot = Snapshot.objects.only("id").filter(environment_id=environment.pk).first()
         if snapshot and section in sections:
-            allowed = set(sections.values()) | {'overview','all-groups','unused-groups','empty-groups','unknown-membership','unused-services','empty-policies','zero-hit-rules','disabled-rules','unknown-statistics','empty-group-rules','dfw-scope-rules','tags-both','tags-vm_only','tags-group_only','tags-other_only','tags-unknown','coverage','tags-coverage'}
+            allowed = set(sections.values()) | {'overview','all-groups','unused-groups','empty-groups','unknown-membership','unused-services','empty-policies','zero-hit-rules','disabled-rules','unknown-statistics','empty-group-rules','dfw-scope-rules','tags-both','tags-vm_only','tags-group_only','tags-other_only','tags-unknown','coverage','tags-coverage','object-references'}
             panel = request.GET.get('panel')
             return redirect(reverse('snapshot',args=[snapshot.pk])+'?browse=1#'+(panel if panel in allowed else sections[section]))
     return render(request, 'inventory/section_empty.html', {'environment':environment,'section_name':section.title()})
@@ -658,7 +722,7 @@ def environment_directory(request):
         from django.db.models import Q
         environments = environments.filter(Q(name__icontains=query)|Q(manager__icontains=query))
     options=policy()
-    page=Paginator(environments, preferences(request).page_size).get_page(request.GET.get('page'))
+    page=Paginator(environments, table_page_size(request)).get_page(request.GET.get('page'))
     cards=page_queries.cards(page.object_list,options)
     return render(request,'inventory/environment_directory.html',{'cards':cards,'page':page,'query':query,'view':request.GET.get('view','table')})
 
@@ -672,5 +736,17 @@ def all_collections(request):
     state=request.GET.get('status','')
     if state in AuditJob.Status.values:
         jobs=jobs.filter(status=state)
-    page=Paginator(jobs,preferences(request).page_size).get_page(request.GET.get('page'))
+    page=Paginator(jobs,table_page_size(request)).get_page(request.GET.get('page'))
     return render(request,'inventory/all_collections.html',{'jobs':page,'page':page,'selected_status':state,'statuses':AuditJob.Status.choices})
+
+
+@login_required
+@require_POST
+def theme_preferences(request):
+    """Save only appearance mode, without disturbing a user's other preferences."""
+    from .models import UserPreferences
+    theme = request.POST.get('theme', '')
+    if theme not in {'system', 'light', 'dark'}:
+        return JsonResponse({'error': 'Choose System, Light or Dark.'}, status=400)
+    UserPreferences.objects.update_or_create(user=request.user, defaults={'theme': theme})
+    return JsonResponse({'theme': theme})

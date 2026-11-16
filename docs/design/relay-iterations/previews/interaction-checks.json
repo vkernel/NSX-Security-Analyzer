@@ -1,0 +1,189 @@
+{
+  "checks": [
+    {
+      "check": "Original top bar / dark",
+      "passed": true
+    },
+    {
+      "check": "Original top bar / light",
+      "passed": true
+    },
+    {
+      "check": "Familiar sidebar / dark",
+      "passed": true
+    },
+    {
+      "check": "Familiar sidebar / light",
+      "passed": true
+    },
+    {
+      "check": "Compact labeled rail / dark",
+      "passed": true
+    },
+    {
+      "check": "Compact labeled rail / light",
+      "passed": true
+    },
+    {
+      "check": "Rail + section panel / dark",
+      "passed": true
+    },
+    {
+      "check": "Rail + section panel / light",
+      "passed": true
+    },
+    {
+      "check": "Grouped top menu / dark",
+      "passed": true
+    },
+    {
+      "check": "Grouped top menu / light",
+      "passed": true
+    },
+    {
+      "check": "Command workspace / dark",
+      "passed": true
+    },
+    {
+      "check": "Command workspace / light",
+      "passed": true
+    },
+    {
+      "check": "Primary + More / dark",
+      "passed": true
+    },
+    {
+      "check": "Primary + More / light",
+      "passed": true
+    },
+    {
+      "check": "Collapsible sidebar / dark",
+      "passed": true
+    },
+    {
+      "check": "Collapsible sidebar / light",
+      "passed": true
+    },
+    {
+      "check": "Bottom workspace dock / dark",
+      "passed": true
+    },
+    {
+      "check": "Bottom workspace dock / light",
+      "passed": true
+    },
+    {
+      "check": "Environment tree / dark",
+      "passed": true
+    },
+    {
+      "check": "Environment tree / light",
+      "passed": true
+    },
+    {
+      "check": "Focus drawer / dark",
+      "passed": true
+    },
+    {
+      "check": "Focus drawer / light",
+      "passed": true
+    },
+    {
+      "check": "Two-level ribbon / dark",
+      "passed": true
+    },
+    {
+      "check": "Two-level ribbon / light",
+      "passed": true
+    },
+    {
+      "check": "Workspace launcher / dark",
+      "passed": true
+    },
+    {
+      "check": "Workspace launcher / light",
+      "passed": true
+    },
+    {
+      "check": "Environment sidebar / dark",
+      "passed": true
+    },
+    {
+      "check": "Environment sidebar / light",
+      "passed": true
+    },
+    {
+      "check": "Right-hand navigation / dark",
+      "passed": true
+    },
+    {
+      "check": "Right-hand navigation / light",
+      "passed": true
+    },
+    {
+      "check": "Section flyouts / dark",
+      "passed": true
+    },
+    {
+      "check": "Section flyouts / light",
+      "passed": true
+    },
+    {
+      "check": "Investigation workbench / dark",
+      "passed": true
+    },
+    {
+      "check": "Investigation workbench / light",
+      "passed": true
+    },
+    {
+      "check": "Review workspace / dark",
+      "passed": true
+    },
+    {
+      "check": "Review workspace / light",
+      "passed": true
+    },
+    {
+      "check": "Wide canvas / dark",
+      "passed": true
+    },
+    {
+      "check": "Wide canvas / light",
+      "passed": true
+    },
+    {
+      "check": "Guided workspace / dark",
+      "passed": true
+    },
+    {
+      "check": "Guided workspace / light",
+      "passed": true
+    },
+    {
+      "check": "Chooser, filters, sharing and shortcut",
+      "passed": true
+    },
+    {
+      "check": "Comparison images and URLs",
+      "passed": true
+    },
+    {
+      "check": "Overview 1",
+      "passed": true
+    },
+    {
+      "check": "Overview 2",
+      "passed": true
+    },
+    {
+      "check": "Overview 3",
+      "passed": true
+    },
+    {
+      "check": "Overview 4",
+      "passed": true
+    }
+  ],
+  "errors": []
+}

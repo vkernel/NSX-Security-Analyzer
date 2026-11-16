@@ -1,5 +1,5 @@
 FROM python:3.12-slim
-LABEL org.opencontainers.image.licenses="Apache-2.0"
+LABEL org.opencontainers.image.licenses="LicenseRef-Apache-2.0-with-Commons-Clause-1.0"
 LABEL org.opencontainers.image.source="https://github.com/vkernel/NSX-Security-Analyzer"
 ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1
 WORKDIR /app/webapp

@@ -350,4 +350,4 @@ Users must sign in once and have the mapped application Operator or Administrato
 role before they can be selected as finding owners. In a finding's **Review
 decision panel**, choose **Actions → Assign owner** (or **Reassign owner**), search by name or email, then select the user
 shown as **Name · email · Keycloak**. Internal account identifiers are not used as
-owner labels. See the [click-by-click two-person review guide](finding-review-workflow.md#click-by-click-example-with-keycloak-users).
+owner labels. See the [click-by-click two-person review guide](finding-review-workflow.md#example-two-person-review-with-keycloak-users).

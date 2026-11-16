@@ -1,12 +1,17 @@
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="webapp/static/nsx-security-analyzer-logo.svg">
+  <img src="webapp/static/nsx-security-analyzer-logo-light.svg" width="360" alt="NSX Security Analyzer">
+</picture>
+
 # NSX Security Analyzer
 
 > **Release 0.5.3** includes compact review actions, returning assignments to
 > unassigned, and independent collection, finding recalculation and comparison lanes.
 > Deploy matching images for web, worker, scheduler and migrations. Stop old worker
 > replicas before starting the new workers; apply all pending migrations first.
+> The `development` branch and image add newer work; see the Unreleased section of
+> the [changelog](CHANGELOG.md).
 
-
-See [snapshot maintenance and stopping collections](docs/snapshot-maintenance.md) for optional refresh jobs and collection cancellation.
 
 An NSX Policy inventory and security review workspace with read-only collection and explicitly confirmed administrator deletion of approved objects. Collect inventory
 from multiple NSX Managers, explore firewall rules and reference evidence, and
@@ -18,10 +23,13 @@ The collector sends GET requests to NSX; it does not change rules or reset count
 
 ## What it does
 
-![Finding reviews showing owners, review stages and compact controls](docs/images/finding-reviews.png)
+![Workspace overview with collection health, environment health, recent collections and finding qualification](docs/images/overview.png)
 
-*Finding reviews in the current interface, using synthetic data.* See the
-[visual walkthrough](docs/screenshots.md) for assignment, comparison and coverage examples.
+![VM evidence panel beside the inventory list, showing firewall references in NSX order](docs/images/vm-evidence.png)
+
+*The current interface with the built-in synthetic demo data.* See the
+[visual walkthrough](docs/screenshots.md) for reviews, firewall rules, references,
+exports, collections, segmentation and administration.
 
 
 - Inventory VMs, groups, services, distributed firewall policies, rules, tags and scopes.
@@ -87,7 +95,7 @@ docker compose up --build -d
 
 On a fresh source deployment, database initialization creates username **`admin`**
 with password **`NSXSecurityA!`**. The application requires you to replace this initial password immediately after signing in. Existing administrators are left unchanged.
-No manual account-creation command is needed with release **0.5.2**.
+No manual account-creation command is needed.
 
 Open **http://localhost:8000** and sign in. In **Administration**, add an
 environment with its NSX Manager address, username and password. Retrieve and review its certificate if required and select a sync interval. Use **Test credentials** before saving to verify the entered account and TLS settings with a read-only Policy API request. Testing does not save credentials or change the collection schedule. It verifies basic read access, not all collection or deletion permissions. When changing the account or Manager, enter its password; a blank password can test the saved credential only for the unchanged account and Manager. You can also run a collection
@@ -98,22 +106,30 @@ The default service listens on loopback. Use an HTTPS reverse proxy for shared a
 
 ## Documentation
 
-- [Small, medium and large resource sizing](docs/resource-sizing.md)
-
-- [Collection performance and diagnostics](docs/collection-performance.md)
-- [Snapshot comparison, finding reviews and coverage](docs/history-and-review.md)
-
 | Guide | Contents |
 | --- | --- |
 | [Docker Hub installation](docs/docker-hub.md) | Prebuilt images, Compose setup and upgrades |
-| [Installation and configuration](webapp/README.md) | Docker, external PostgreSQL, TLS, users, scheduling and settings |
-| [Operations](docs/operations.md) | Upgrades, backups, recovery and troubleshooting |
+| [Kubernetes installation](deploy/kubernetes/README.md) | Manifests, migration Job and worker lanes |
+| [Installation and configuration](webapp/README.md) | Source build, external PostgreSQL, TLS, users, scheduling and settings |
+| [Keycloak](docs/keycloak.md) and [LDAPS](docs/ldaps.md) | Optional authentication providers |
+| [Operations](docs/operations.md) | Upgrades, worker lanes, backups, recovery, deletion limits and troubleshooting |
+| [Resource sizing](docs/resource-sizing.md) | Small, medium and large deployments |
+| [Collection performance](docs/collection-performance.md) | Request pacing, concurrency and diagnostics |
+| [Snapshot maintenance](docs/snapshot-maintenance.md) | Refresh jobs and stopping collections |
+| [Reviews and deletion](docs/finding-review-workflow.md) | Finding reviews, approvals, reference cleanup and NSX deletion |
+| [History and comparison](docs/history-and-review.md) | Snapshot comparison, review history and coverage |
+| [Reference exports](docs/reference-exports.md) | Exporting object references (CSV, PDF, JSON, YAML, HTML) |
+| [Segmentation](docs/segmentation.md) | Application segmentation and VM-to-VM investigation |
+| [Naming policies](docs/naming-policies.md) | Group naming components and proposals |
 | [Architecture](docs/architecture.md) | Components, storage and collection flow |
-| [Contributing](CONTRIBUTING.md) | Development setup, tests and pull requests |
-| [Security](SECURITY.md) | Reporting vulnerabilities and deployment boundaries |
-| [Support](SUPPORT.md) | Bug reports and useful diagnostics |
-| [Roadmap](roadmap.md) | Planned improvements and deferred features |
-| [Changelog](CHANGELOG.md) | Project changes |
+| [UI patterns](docs/ui-patterns.md) and [workspace performance](docs/workspace-performance.md) | Interface conventions and browsing performance |
+| [Screenshots](docs/screenshots.md) | Visual walkthrough with synthetic data |
+| [Contributing](CONTRIBUTING.md) | Development setup, PostgreSQL tests and pull requests |
+| [Claude Code handover](docs/claude-code-handover.md) | Published baseline, evidence semantics and continuation checklist |
+| [Security](SECURITY.md) and [Support](SUPPORT.md) | Vulnerability reporting, deployment boundaries and diagnostics |
+| [Roadmap](roadmap.md) and [Changelog](CHANGELOG.md) | Planned work and project changes |
+
+Dated files under [docs/design](docs/design/README.md) are historical design records.
 
 ## Scope and interpretation
 
@@ -136,13 +152,20 @@ External role mappings use the same Viewer, Operator and Administrator permissio
 Versioned releases are listed on GitHub and Docker Hub. No support SLA is offered.
 Validate the application against your NSX deployment before operational adoption.
 
-NSX Security Analyzer is licensed under the [Apache License 2.0](LICENSE).
+NSX Security Analyzer is **source-available** under the [Apache License 2.0 with the
+Commons Clause License Condition v1.0](LICENSE). You may use, study, modify and share it
+free of charge, including inside your organisation. You may not sell it, or offer a
+paid product or service (such as hosting or support) whose value derives entirely or
+substantially from it. Because of this condition the project is not "open source" as
+defined by the Open Source Initiative. Releases published before this change remain
+available under their original Apache License 2.0 terms.
+
 See [NOTICE](NOTICE) for project attribution. Third-party dependencies retain their
 own licenses; the project license does not replace their terms.
 
 This is an independent project and is not affiliated with or endorsed by VMware
 or Broadcom.
 
-Optional authentication providers: [Keycloak setup](docs/keycloak.md) and [LDAPS setup](docs/ldaps.md), configured under Administration → Authentication providers.
+## Naming standards
 
-Finding approval and manual decommissioning: [two-person review workflow](docs/finding-review-workflow.md).
+Use [Group naming policies and component proposals](docs/naming-policies.md) to compose names from ordered definition scopes and reviewed values, distinguish dynamic/static/mixed groups, and preview environment-specific rules.

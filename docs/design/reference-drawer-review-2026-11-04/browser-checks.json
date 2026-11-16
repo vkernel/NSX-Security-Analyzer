@@ -1,0 +1,46 @@
+{
+  "errors": [],
+  "requests": [
+    "summary",
+    "tags",
+    "related_rules",
+    "related_rules",
+    "rule",
+    "via_groups"
+  ],
+  "checks": [
+    {
+      "width": 1440,
+      "theme": "light",
+      "documentOverflow": false,
+      "drawerOverflow": false
+    },
+    {
+      "width": 390,
+      "theme": "light",
+      "documentOverflow": false,
+      "drawerOverflow": false
+    },
+    {
+      "width": 1440,
+      "theme": "dark",
+      "documentOverflow": false,
+      "drawerOverflow": false
+    },
+    {
+      "width": 390,
+      "theme": "dark",
+      "documentOverflow": false,
+      "drawerOverflow": false
+    }
+  ],
+  "shared": {
+    "groupReferenceTable": true,
+    "tagReferenceTable": true,
+    "backPreservesVmCategory": true,
+    "errors": []
+  },
+  "synthetic_rules": 63,
+  "django_tests": 836,
+  "javascript_tests": 72
+}

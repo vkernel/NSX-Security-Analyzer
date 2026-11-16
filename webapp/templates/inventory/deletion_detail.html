@@ -1,4 +1,4 @@
-{% extends 'base.html' %}{% load static %}{% block content %}
+{% extends 'base.html' %}{% load static %}{% block title %}{{ deletion_title|default:'NSX deletion' }} · {{ batch.environment.name }}{% endblock %}{% block content %}
 <a class="breadcrumb" href="{% url 'deletion-history' batch.environment_id %}">← Deletion history</a>
 {% include 'inventory/deletion_progress.html' %}
 {% include 'inventory/deletion_configuration_dialog.html' %}

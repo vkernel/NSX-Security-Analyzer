@@ -1,0 +1,1 @@
+<nav data-section-navigation class="page-tabs" aria-label="Review queues; totals for the environment scope before table filters">{% for entry in queue_links %}<a href="{{ entry.url }}" {% if entry.active %}aria-current="page"{% endif %}>{{ entry.label }} <span class="pill" data-review-queue-count="{{ entry.key }}">{{ entry.count }}</span></a>{% endfor %}</nav>

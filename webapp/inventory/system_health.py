@@ -63,10 +63,12 @@ def database_usage():
                 cursor.execute("SET LOCAL lock_timeout = '500ms'")
                 cursor.execute('SELECT pg_database_size(current_database())')
                 size = cursor.fetchone()[0]
-                cursor.execute('''SELECT relname, pg_total_relation_size(relid)
-                    FROM pg_catalog.pg_statio_user_tables
-                    ORDER BY pg_total_relation_size(relid) DESC LIMIT 10''')
-                tables = [{'name': name, 'size': value} for name, value in cursor.fetchall()]
+                cursor.execute('''SELECT t.relname, pg_total_relation_size(t.relid), pg_table_size(t.relid),
+                           pg_indexes_size(t.relid), s.n_live_tup, s.n_dead_tup, s.last_autovacuum
+                    FROM pg_catalog.pg_statio_user_tables t
+                    JOIN pg_catalog.pg_stat_user_tables s ON t.relid = s.relid
+                    ORDER BY pg_total_relation_size(t.relid) DESC LIMIT 10''')
+                tables = [dict(zip(('name', 'size', 'data_size', 'index_size', 'live_rows', 'dead_rows', 'last_vacuum'), row)) for row in cursor.fetchall()]
         return {'size': size, 'tables': tables}
     except DatabaseError:
         # Do not disclose database addresses, credentials or SQL error details in the UI.
@@ -80,7 +82,31 @@ def health_page(request):
     if not request.user.is_superuser:
         return HttpResponseForbidden('Administrator access required.')
     from .heartbeats import summary
+    from .storage import storage_trend
     return render(request, 'inventory/system_health.html', {
+        'storage_trend': storage_trend(),
+        'storage_sample': storage_sample() if request.GET.get('storage_sample') == '1' else None,
         'services': summary(),
         'metrics': resources(), 'database': database_usage(), 'measured_at': timezone.now(),
     })
+
+
+def storage_sample():
+    """Explicit bounded sample, not a full scan of hundreds of GB of payloads."""
+    if connection.vendor != 'postgresql':
+        return {'error': 'Storage sampling requires PostgreSQL.'}
+    try:
+        with transaction.atomic(), connection.cursor() as cursor:
+            cursor.execute("SET LOCAL statement_timeout = '5000ms'")
+            cursor.execute("SET LOCAL lock_timeout = '500ms'")
+            cursor.execute("""WITH sample AS (
+                SELECT * FROM inventory_snapshotrecord TABLESAMPLE SYSTEM (0.01) LIMIT 100
+            ) SELECT view, count(*), avg(pg_column_size(data)),
+                     avg(pg_column_size(compact)), avg(pg_column_size(columns)),
+                     avg(pg_column_size(search_evidence)), avg(pg_column_size(sort_values)),
+                     count(search_document_id)
+              FROM sample GROUP BY view ORDER BY view""")
+            rows = [dict(zip(('view', 'count', 'data', 'compact', 'columns', 'search', 'sort', 'shared'), row)) for row in cursor.fetchall()]
+        return {'rows': rows}
+    except DatabaseError:
+        return {'error': 'Sample unavailable or timed out. No data was changed.'}

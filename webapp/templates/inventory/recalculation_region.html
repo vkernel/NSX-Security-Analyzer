@@ -1,0 +1,3 @@
+<div id="recalculation-results" data-live-region data-poll="true">
+{% for recalculation in recalculations %}<p><strong>{{ recalculation.environment.name }}</strong> · {% include 'inventory/recalculation_status.html' %}</p>{% empty %}<p>No recalculations requested yet.</p>{% endfor %}
+</div>

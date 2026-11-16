@@ -9,7 +9,7 @@ steps to reproduce, expected behavior and a sanitized error summary. Expand the
 collection error to view technical details. Remove hostnames, account names,
 addresses, tokens and configuration details that should remain private.
 
-Do not attach `.env`, `.admin-credentials`, raw production snapshots or database
+Do not attach `.env` or other credential files, raw production snapshots or database
 backups. Security vulnerabilities belong in the private reporting process described
 in [SECURITY.md](SECURITY.md).
 

@@ -94,7 +94,7 @@ class WorkspaceTests(TestCase):
         job = enqueue(self.environment, self.operator)
         url = reverse("environment-edit", args=[self.environment.pk])
         response = self.client.post(url, form_data)
-        self.assertContains(response, "Wait for the active audit")
+        self.assertContains(response, "Wait for the active collection")
         job.status = "failed"
         job.save()
         self.make_snapshot()

@@ -1,0 +1,224 @@
+{
+  "states": [
+    {
+      "name": "environment-menu",
+      "theme": "light",
+      "violations": [],
+      "incomplete": [
+        {
+          "id": "color-contrast",
+          "nodes": 6
+        },
+        {
+          "id": "link-in-text-block",
+          "nodes": 1
+        }
+      ]
+    },
+    {
+      "name": "snapshot-history",
+      "theme": "light",
+      "violations": [],
+      "incomplete": [
+        {
+          "id": "color-contrast",
+          "nodes": 2
+        },
+        {
+          "id": "link-in-text-block",
+          "nodes": 2
+        }
+      ]
+    },
+    {
+      "name": "collection-details",
+      "theme": "light",
+      "violations": [],
+      "incomplete": [
+        {
+          "id": "color-contrast",
+          "nodes": 1
+        },
+        {
+          "id": "link-in-text-block",
+          "nodes": 1
+        }
+      ]
+    },
+    {
+      "name": "naming-evidence",
+      "theme": "light",
+      "violations": [],
+      "incomplete": [
+        {
+          "id": "link-in-text-block",
+          "nodes": 1
+        }
+      ]
+    },
+    {
+      "name": "component-editor",
+      "theme": "light",
+      "violations": [],
+      "incomplete": [
+        {
+          "id": "link-in-text-block",
+          "nodes": 1
+        }
+      ]
+    },
+    {
+      "name": "mobile-environment-menu",
+      "theme": "light",
+      "violations": [],
+      "incomplete": [
+        {
+          "id": "color-contrast",
+          "nodes": 4
+        }
+      ]
+    },
+    {
+      "name": "mobile-snapshot-history",
+      "theme": "light",
+      "violations": [],
+      "incomplete": [
+        {
+          "id": "color-contrast",
+          "nodes": 2
+        },
+        {
+          "id": "link-in-text-block",
+          "nodes": 1
+        }
+      ]
+    },
+    {
+      "name": "environment-menu",
+      "theme": "dark",
+      "violations": [],
+      "incomplete": [
+        {
+          "id": "color-contrast",
+          "nodes": 6
+        },
+        {
+          "id": "link-in-text-block",
+          "nodes": 1
+        }
+      ]
+    },
+    {
+      "name": "snapshot-history",
+      "theme": "dark",
+      "violations": [],
+      "incomplete": [
+        {
+          "id": "color-contrast",
+          "nodes": 2
+        },
+        {
+          "id": "link-in-text-block",
+          "nodes": 2
+        }
+      ]
+    },
+    {
+      "name": "collection-details",
+      "theme": "dark",
+      "violations": [],
+      "incomplete": [
+        {
+          "id": "color-contrast",
+          "nodes": 1
+        },
+        {
+          "id": "link-in-text-block",
+          "nodes": 1
+        }
+      ]
+    },
+    {
+      "name": "naming-evidence",
+      "theme": "dark",
+      "violations": [],
+      "incomplete": [
+        {
+          "id": "link-in-text-block",
+          "nodes": 1
+        }
+      ]
+    },
+    {
+      "name": "component-editor",
+      "theme": "dark",
+      "violations": [],
+      "incomplete": [
+        {
+          "id": "link-in-text-block",
+          "nodes": 1
+        }
+      ]
+    },
+    {
+      "name": "mobile-environment-menu",
+      "theme": "dark",
+      "violations": [],
+      "incomplete": [
+        {
+          "id": "color-contrast",
+          "nodes": 4
+        }
+      ]
+    },
+    {
+      "name": "mobile-snapshot-history",
+      "theme": "dark",
+      "violations": [],
+      "incomplete": [
+        {
+          "id": "color-contrast",
+          "nodes": 2
+        },
+        {
+          "id": "link-in-text-block",
+          "nodes": 1
+        }
+      ]
+    }
+  ],
+  "manual": [
+    {
+      "name": "Skip link moves keyboard focus to main",
+      "theme": "light",
+      "passed": true
+    },
+    {
+      "name": "SVG map text contrast against node surfaces",
+      "theme": "light",
+      "passed": true,
+      "minimumRatio": 5.81082329047473
+    },
+    {
+      "name": "Keyboard opens map application and Escape restores focus",
+      "theme": "light",
+      "passed": true
+    },
+    {
+      "name": "Skip link moves keyboard focus to main",
+      "theme": "dark",
+      "passed": true
+    },
+    {
+      "name": "SVG map text contrast against node surfaces",
+      "theme": "dark",
+      "passed": true,
+      "minimumRatio": 8.189654709626804
+    },
+    {
+      "name": "Keyboard opens map application and Escape restores focus",
+      "theme": "dark",
+      "passed": true
+    }
+  ]
+}
