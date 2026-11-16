@@ -74,3 +74,24 @@ class CollectionDetailTests(TestCase):
     def test_collection_lists_link_to_the_collection_page(self):
         response = self.client.get(reverse('collection-history', args=[self.env.pk]))
         self.assertContains(response, reverse('collection-detail', args=[self.done.pk]))
+
+    def test_completed_collection_shows_result_cards_and_next_steps(self):
+        from .models import Finding
+        self.snapshot.summary = {'vms': 10, 'groups': 5, 'rules': 7, 'policies': 2}
+        self.snapshot.save(update_fields=['summary'])
+        now = timezone.now()
+        Finding.objects.create(environment=self.env, snapshot=self.snapshot, kind='empty_group', path='/g', name='g', fingerprint='g',
+                               first_seen=now, last_seen=now, evaluated_at=now)
+        self.env.sync_interval_minutes = 60; self.env.next_sync_at = now + timedelta(hours=1)
+        self.env.save(update_fields=['sync_interval_minutes', 'next_sync_at'])
+        response = self.client.get(reverse('collection-detail', args=[self.done.pk]))
+        result = response.context['result']
+        self.assertEqual(result['objects'], 24)
+        self.assertIsNone(result['total_changes'])            # no earlier non-testing snapshot
+        texts = [step['text'] for step in result['steps']]
+        self.assertIn('1 finding evaluated from this snapshot', texts)
+        self.assertTrue(any('wait for complete coverage' in text for text in texts))
+        self.assertEqual(texts[-1], 'Next scheduled collection')
+        self.assertContains(response, 'Collection result')
+        self.assertContains(response, 'No earlier snapshot')
+        self.assertIsNone(self.client.get(reverse('collection-detail', args=[self.failed.pk])).context['result'])

@@ -281,3 +281,6 @@ body[data-theme] .collection-figures dt{margin:0;font-size:12px;font-weight:400;
 body[data-theme] .collection-figures dd{margin:2px 0 0;font-size:16px;font-weight:600;font-variant-numeric:tabular-nums}
 body[data-theme] .collection-history-table tr[aria-current=true]>td{background:var(--app-surface-soft)}
 body[data-theme] .collection-history-table td small{display:block;font-size:12px;color:var(--muted)}
+body[data-theme] .collection-status .collection-result-cards{margin:0 0 16px}
+body[data-theme] .collection-next .overview-rows li>span:first-child{flex:none;min-width:52px;justify-content:center}
+body[data-theme] .collection-next .overview-rows li>span:last-child{flex:1;min-width:0}

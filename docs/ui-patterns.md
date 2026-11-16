@@ -150,3 +150,11 @@ coverage index and is "unknown, not complete" until a snapshot is published.
 Stop and Diagnostics stay staff-only through the shared controls. The
 collection tables link each row's request time to this page; the existing
 `collection-result` redirect is unchanged.
+
+A completed collection shows the result instead of the phase cards: duration,
+requests (with throttled attempts), objects saved (from summary counts) and
+changes against the previous snapshot (only from an already calculated
+comparison, otherwise a link to compare), plus "What happens next": snapshot
+publication and browsing status, findings evaluated from the snapshot, a
+coverage note when the snapshot needs review, and the next scheduled collection.
+Administrator diagnostics stay on the separate staff-only diagnostics page.
