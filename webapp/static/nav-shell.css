@@ -12,6 +12,11 @@ body[data-theme] .nav-shell .nav-shell-head .relay-mark{width:28px;height:28px;c
 /* Environment context */
 body[data-theme] .nav-shell .nav-environment:empty{display:none}
 body[data-theme] .nav-shell .nav-environment .environment-switcher{width:100%;max-width:none;position:relative}
+/* The switcher panel was sized for the top bar; in the sidebar it spans the switcher exactly,
+   so opening it (and focusing its search field) never scrolls the sidebar sideways. */
+body[data-theme] .nav-shell .nav-environment .environment-switcher .workspace-switcher>.switcher-panel,
+body[data-theme] .nav-shell .nav-environment .environment-switcher .workspace-switcher[open]>.switcher-panel{left:0;right:0;width:auto;max-width:none;top:calc(100% + 6px);box-sizing:border-box}
+body[data-theme] .nav-shell .nav-environment .workspace-switcher{position:relative;width:100%}
 body[data-theme] .nav-shell .nav-environment select{width:100%;min-height:40px;padding:8px 32px 8px 10px;border:1px solid var(--line);border-radius:10px;background-color:var(--app-surface);color:var(--ink);font:inherit;font-size:13px;font-weight:500;box-shadow:var(--shadow-xs)}
 body[data-theme] .nav-shell .nav-environment .environment-fixed{display:flex;flex-direction:column;align-items:flex-start;gap:0;padding:8px 10px;border:1px solid var(--line);border-radius:10px;background:var(--app-surface);font-size:13px;min-width:0}
 body[data-theme] .nav-shell .nav-environment .environment-fixed>span{font-size:11px;color:var(--muted)}

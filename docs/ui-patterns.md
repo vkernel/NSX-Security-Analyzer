@@ -120,6 +120,19 @@ and export controls are unchanged. The row that opened the panel is marked with
 Narrow screens and other report pages keep the modal drawer. Report sub-views
 are shown as chip links, and the sidebar maps a sub-view to its list page.
 
+The docked panel has three widths: Docked (resizable with the left-edge handle
+or the arrow keys, 360px to 70% of the window, remembered), Wide (about 62% of
+the window, list still visible) and Full screen (Escape returns to the previous
+width; a second Escape closes). Opening Firewall rules switches a docked panel
+to Wide unless the user picked a width for that object; the choice is
+remembered per browser. In the docked width, firewall references show one card
+per rule (container query on the panel, labels from each cell's `data-label`);
+wide and full screen keep the table with a sticky header and rule name. The
+Category column is hidden visually where category heading rows exist. Coverage
+notes collapse into "About this evidence", category tabs wrap beside Export,
+and "Open in new tab" links to `?object=<path>&view=…&name=…`, which the
+snapshot page resolves to the exact saved record.
+
 ## Firewall rules and policies in NSX order
 
 The Rules and Policies pages open in an "NSX order" layout; "Sortable table"

@@ -158,10 +158,6 @@ body[data-theme] .report-content .overview-composition:not(:has(.overview-findin
 
 /* Groups and VMs: the evidence drawer docks beside the list on wide screens. */
 @media(min-width:1280px){
-  body.snapshot-page.evidence-docked .workspace-main{padding-right:clamp(420px,34vw,520px)}
-  body[data-theme] #detail-dialog.is-docked[open]{position:fixed;inset:72px 16px 16px auto;margin:0;width:clamp(400px,32vw,500px);max-width:none;max-height:none;height:auto;z-index:20;display:flex;flex-direction:column;overflow:hidden;border:1px solid var(--line);border-radius:14px;background:var(--app-surface);box-shadow:var(--shadow-xs);padding:0}
-  body[data-theme] #detail-dialog.is-docked[open] .dialog-heading{flex:none;padding:14px 16px;border-bottom:1px solid var(--line)}
-  body[data-theme] #detail-dialog.is-docked[open] #detail-body{flex:1;min-height:0;overflow:auto;padding:12px 16px}
 }
 body[data-theme] .report-content tr[aria-current=true]>td{background:var(--app-surface-soft)}
 body[data-theme] .report-content tr[aria-current=true]>td:first-child{box-shadow:inset 3px 0 0 var(--ink)}
@@ -179,8 +175,6 @@ body[data-theme] .inventory-filter-chips a[aria-current=page]{background:var(--i
 body[data-theme] .table-tools:has(>.report-view-selector .inventory-filter-chips){flex-wrap:wrap}
 body[data-theme] .table-tools>.report-view-selector:has(.inventory-filter-chips){order:-1;flex:1 0 100%;width:100%}
 @media(min-width:1280px){
-  body[data-theme] #detail-dialog.is-docked.evidence-expanded[open]{width:min(760px,52vw)}
-  body.snapshot-page.evidence-docked:has(#detail-dialog.evidence-expanded[open]) .workspace-main{padding-right:calc(min(760px,52vw) + 24px)}
 }
 
 /* Firewall rules in NSX order: category and policy heading rows, saved configuration cells. */
@@ -426,3 +420,63 @@ body[data-theme] .proposal-note{margin:0 0 12px}
 body[data-theme] .workspace-main .review-task-table td a.review-item-name:not(.button):not([role=button]){text-decoration:none}
 body[data-theme] .workspace-main .review-task-table td a.review-item-name:not(.button):not([role=button]):hover{text-decoration:underline}
 body[data-theme] .workspace-main .notification-page-list li>a:not(.button):not([role=button]){text-decoration:none}
+
+
+/* Docked evidence panel: docked (resizable), wide and full-screen modes. */
+@media(min-width:1280px){
+  body.snapshot-page.evidence-docked .workspace-main{padding-right:calc(var(--dock-width,460px) + 32px)}
+  body.snapshot-page.evidence-docked.evidence-docked-wide .workspace-main{padding-right:calc(min(1180px,62vw) + 32px)}
+  body.snapshot-page.evidence-docked.evidence-docked-full .workspace-main{padding-right:calc(var(--dock-width,460px) + 32px)}
+  body[data-theme] #detail-dialog.is-docked[open]{position:fixed;inset:72px 16px 16px auto;margin:0;width:var(--dock-width,460px);max-width:none;max-height:none;height:auto;z-index:20;display:flex;flex-direction:column;overflow:hidden;border:1px solid var(--line);border-radius:14px;background:var(--app-surface);box-shadow:var(--shadow-xs);padding:0}
+  body[data-theme] #detail-dialog.is-docked.mode-wide[open]{width:min(1180px,62vw)}
+  body[data-theme] #detail-dialog.is-docked.mode-full[open]{inset:8px;width:auto;z-index:60;box-shadow:0 12px 40px rgba(0,0,0,.18)}
+  body[data-theme] #detail-dialog.is-docked[open] .dialog-heading{flex:none;display:flex;align-items:center;flex-wrap:wrap;gap:8px;padding:12px 16px;border-bottom:1px solid var(--line)}
+  body[data-theme] #detail-dialog.is-docked[open] .dialog-heading h2{flex:1 1 200px;min-width:0;margin:0;font-size:16px;overflow-wrap:anywhere}
+  body[data-theme] #detail-dialog.is-docked[open] .evidence-expand{display:none}
+  body[data-theme] #detail-dialog.is-docked[open]>.evidence-context{flex:none;margin:0;padding:8px 16px 0;font-size:12px;color:var(--muted)}
+  body[data-theme] #detail-dialog.is-docked[open] #detail-body{flex:1;min-height:0;overflow:auto;padding:0 16px 16px;container:evidence/inline-size}
+  body[data-theme] #detail-dialog.is-docked[open] #detail-body>.evidence-tabs{position:sticky;top:0;z-index:3;margin:0 -16px 12px;padding:8px 16px 0;background:var(--app-surface);border-bottom:1px solid var(--line)}
+  .evidence-resize{position:absolute;left:-4px;top:0;bottom:0;width:8px;cursor:col-resize;z-index:4}
+  .evidence-resize::after{content:'';position:absolute;left:3px;top:50%;width:2px;height:40px;margin-top:-20px;border-radius:2px;background:var(--line)}
+  .evidence-resize:hover::after,.evidence-resize:focus-visible::after{background:var(--ink)}
+  .evidence-resize:focus-visible{outline:none}
+}
+.evidence-modes{display:inline-flex;padding:2px;border:1px solid var(--line);border-radius:10px;background:var(--app-surface-soft)}
+body[data-theme] .evidence-modes button{height:28px;min-height:0;padding:0 10px;border:0;border-radius:8px;background:transparent;box-shadow:none;color:var(--muted);font:inherit;font-size:12px}
+body[data-theme] .evidence-modes button[aria-pressed=true]{background:var(--app-surface);color:var(--ink);box-shadow:var(--shadow-xs);font-weight:500}
+body[data-theme] .evidence-new-tab{font-size:12px;color:var(--muted)}
+/* Coverage notes collapse; one toolbar row for categories and export; tabs wrap instead of scrolling. */
+body[data-theme] #detail-dialog .evidence-about{margin:0 0 10px;font-size:13px}
+body[data-theme] #detail-dialog .evidence-about>summary{cursor:pointer;font-size:12px;color:var(--muted)}
+body[data-theme] #detail-dialog .evidence-about>p{margin:6px 0 0}
+#detail-dialog .evidence-about:not(:has(>p:not([hidden]))){display:none}
+body[data-theme] #detail-dialog.is-docked .evidence-reference-tables{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px}
+body[data-theme] #detail-dialog.is-docked .evidence-reference-tables>.reference-export-toolbar{order:2;margin:0 0 0 auto}
+body[data-theme] #detail-dialog.is-docked .evidence-reference-tables>.evidence-category-tabs{order:1;flex:1 1 260px;flex-wrap:wrap;overflow:visible;margin:0;padding:0 0 8px}
+body[data-theme] #detail-dialog.is-docked .evidence-reference-tables>:not(.reference-export-toolbar):not(.evidence-category-tabs){order:3;flex:1 1 100%;min-width:0}
+body[data-theme] #detail-dialog.is-docked .evidence-membership-source{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:0 0 10px}
+
+/* Firewall references: the Category column repeats the heading rows, so it is hidden visually there. */
+body[data-theme] #detail-dialog .evidence-firewall-table:has(tr.evidence-group-row) tr:not(.evidence-group-row)>:first-child{display:none}
+/* Wide and full screen: header row and rule name stay visible while scrolling. */
+@media(min-width:1280px){
+  body[data-theme] #detail-dialog.is-docked:is(.mode-wide,.mode-full) .evidence-firewall-table{table-layout:auto;min-width:1100px}
+  body[data-theme] #detail-dialog.is-docked.mode-full .evidence-table-scroll:has(.evidence-firewall-table){max-height:calc(100vh - 240px);overflow:auto}
+  body[data-theme] #detail-dialog.is-docked:is(.mode-wide,.mode-full) .evidence-firewall-table thead th{position:sticky;top:0;z-index:2;background:var(--app-surface-soft)}
+  body[data-theme] #detail-dialog.is-docked:is(.mode-wide,.mode-full) .evidence-firewall-table td[data-label=Name]{position:sticky;left:0;z-index:1;background:var(--app-surface);box-shadow:1px 0 0 var(--line)}
+}
+/* Narrow docked panel: one card per rule instead of eleven columns. */
+@container evidence (max-width: 760px){
+  #detail-dialog .evidence-firewall-table{display:block;min-width:0!important;width:100%;border:0}
+  #detail-dialog .evidence-firewall-table caption,#detail-dialog .evidence-firewall-table thead{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%)}
+  #detail-dialog .evidence-firewall-table tbody{display:block}
+  #detail-dialog .evidence-firewall-table tr{display:block}
+  body #detail-dialog .evidence-table-scroll .evidence-firewall-table tr.evidence-group-row>th:first-child{display:block;width:auto;padding:8px 0 4px;border:0;background:none;text-align:left}
+  #detail-dialog .evidence-firewall-table tr:not(.evidence-group-row){display:grid;grid-template-columns:96px minmax(0,1fr);gap:4px 10px;margin:0 0 8px;padding:10px 12px;border:1px solid var(--line);border-radius:10px;background:var(--app-surface)}
+  #detail-dialog .evidence-firewall-table tr:not(.evidence-group-row)>td{display:contents}
+  #detail-dialog .evidence-firewall-table tr:not(.evidence-group-row)>td::before{content:attr(data-label);font-size:12px;color:var(--muted);padding-top:2px}
+  #detail-dialog .evidence-firewall-table tr:not(.evidence-group-row)>td>*{min-width:0;overflow-wrap:anywhere}
+  #detail-dialog .evidence-firewall-table tr:not(.evidence-group-row)>td[data-label=Category]{display:none}
+  #detail-dialog .evidence-firewall-table tr:not(.evidence-group-row)>td[data-label=Name]::before{display:none}
+  #detail-dialog .evidence-firewall-table tr:not(.evidence-group-row)>td[data-label=Name]>*{grid-column:1/-1;font-weight:600}
+}
