@@ -17,4 +17,4 @@
 <template id="inventory-bulk-template">{% include 'components/bulk_toolbar.html' with bulk_kind='inventory' bulk_id='bulk-inventory' %}</template>
 <nav class="page-tabs report-section-tabs" aria-label="Report pages"></nav><div class="report-view-selector"></div><div class="report-content">{{ report.content|safe }}</div>
 {% endblock %}
-{% block scripts %}<script src="{% static 'report-data.js' %}"></script><script src="{% static 'finding-snapshot.js' %}"></script><script src="{% static 'inventory-dock.js' %}" defer></script>{{ report.scripts|safe }}{% endblock %}
+{% block scripts %}<script src="{% static 'report-data.js' %}"></script><script src="{% static 'finding-snapshot.js' %}"></script><script src="{% static 'inventory-dock.js' %}" defer></script><script src="{% static 'rule-order.js' %}" defer></script>{{ report.scripts|safe }}{% endblock %}

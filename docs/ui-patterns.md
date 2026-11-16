@@ -119,3 +119,19 @@ and export controls are unchanged. The row that opened the panel is marked with
 `aria-current`; Escape, Close or leaving the list closes it and returns focus.
 Narrow screens and other report pages keep the modal drawer. Report sub-views
 are shown as chip links, and the sidebar maps a sub-view to its list page.
+
+## Firewall rules and policies in NSX order
+
+The Rules and Policies pages open in an "NSX order" layout; "Sortable table"
+switches back to the existing server table with search, filters, export and
+bulk selection (the choice is remembered per browser). `rule-order.js` reads
+`op=rule-order` and `op=policy-order` from the snapshot data endpoint
+(`inventory/rule_order.py`, `inventory/policy_order.py`). Both read saved records
+only and use the same `nsx_order_sql` ordering and `enrich` field values as the
+firewall reference drawers: category (Ethernet, Emergency, Infrastructure,
+Environment, Application), policy sequence, rule sequence, with heading rows and
+totals over the filtered set. Policy records in the `dfw` view are excluded from
+the rule list. A missing policy scope is "Not recorded"; an empty one is the
+whole DFW. Selecting a policy shows its facts and rules beside the list; "Open in
+Rules" filters the rule list to that policy. Rule and object names open the
+shared evidence drawer.

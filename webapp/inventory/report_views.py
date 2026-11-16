@@ -172,6 +172,14 @@ def snapshot_data(request, pk):
                 detail['via_groups'] = sorted(set(groups).intersection(rule_groups(detail)))
                 detail['membership_evidence'] = {group:evidence[group] for group in detail['via_groups']}
                 result = {'details':detail}
+            elif op == 'rule-order':
+                from .rule_order import read
+                result = read(pk, int(request.GET.get('page', '0')), query=request.GET.get('q', ''),
+                              category=request.GET.get('category', ''), action=request.GET.get('action', ''),
+                              policy=request.GET.get('policy', ''))
+            elif op == 'policy-order':
+                from .policy_order import read
+                result = read(pk, int(request.GET.get('page', '0')))
             elif op == 'object-references':
                 from .object_references import read
                 result = read(pk, request.GET.get('path', ''), request.GET.get('section', 'firewall'), int(request.GET.get('page', '0')))

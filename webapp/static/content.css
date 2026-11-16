@@ -182,3 +182,69 @@ body[data-theme] .table-tools>.report-view-selector:has(.inventory-filter-chips)
   body[data-theme] #detail-dialog.is-docked.evidence-expanded[open]{width:min(760px,52vw)}
   body.snapshot-page.evidence-docked:has(#detail-dialog.evidence-expanded[open]) .workspace-main{padding-right:calc(min(760px,52vw) + 24px)}
 }
+
+/* Firewall rules in NSX order: category and policy heading rows, saved configuration cells. */
+body[data-theme] #dfw-rules.rule-order-active>.table-widget{display:none}
+.rule-order{display:flex;flex-direction:column;gap:12px;margin:0 0 16px}
+.rule-order-body{display:flex;flex-direction:column;gap:12px}
+.rule-order-modes{display:inline-flex;align-self:flex-start;padding:2px;border:1px solid var(--line);border-radius:10px;background:var(--app-surface-soft)}
+body[data-theme] .rule-order-modes button{height:30px;padding:0 12px;border:0;border-radius:8px;background:transparent;color:var(--muted);font:inherit;font-size:13px;box-shadow:none}
+body[data-theme] .rule-order-modes button[aria-pressed=true]{background:var(--app-surface);color:var(--ink);box-shadow:var(--shadow-xs);font-weight:500}
+.rule-order-tools{display:flex;flex-wrap:wrap;align-items:center;gap:8px}
+body[data-theme] .rule-order-tools input[type=search]{flex:1 1 240px;min-width:0;max-width:360px}
+body[data-theme] .rule-order-tools select{width:auto}
+.rule-order-status{margin-left:auto;font-size:13px;color:var(--muted)}
+body[data-theme] .rule-order-views .report-view-selector{margin:0}
+body[data-theme] .rule-order-scroll{border:1px solid var(--line);border-radius:14px;background:var(--app-surface);overflow:auto}
+body[data-theme] .rule-order-table{width:100%;min-width:980px;table-layout:auto;border-collapse:collapse;margin:0;border:0;font-size:13px}
+body[data-theme] .rule-order-table thead th{position:sticky;top:0;z-index:1;padding:8px 12px;text-align:left;font-size:12px;font-weight:500;color:var(--muted);background:var(--app-surface-soft);border:0;border-bottom:1px solid var(--line);white-space:nowrap}
+body[data-theme] .rule-order-table td{padding:8px 12px;vertical-align:top;text-align:left;border:0;border-top:1px solid var(--line);overflow-wrap:break-word}
+body[data-theme] .rule-order-table td:first-child{width:56px;font-variant-numeric:tabular-nums;color:var(--muted)}
+body[data-theme] .rule-order-table tr.rule-order-heading th{padding:8px 12px;text-align:left;border:0;border-top:1px solid var(--line);font-weight:400}
+body[data-theme] .rule-order-table tr.rule-order-heading[data-level=category] th{background:var(--app-surface-soft);font-size:13px}
+body[data-theme] .rule-order-table tr.rule-order-heading[data-level=policy] th{padding-left:24px;font-size:13px}
+.rule-order-heading th strong{font-weight:600;margin-right:8px}
+.rule-order-heading th small{margin-right:8px;font-size:12px;color:var(--muted)}
+.rule-order-heading th small+small::before{content:'· ';}
+.rule-order-name{display:flex;flex-direction:column;gap:2px;min-width:160px}
+.rule-order-name small{font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums}
+body[data-theme] .rule-order-table tr.is-disabled td{color:var(--muted)}
+body[data-theme] .rule-order-table tr.is-disabled td:not(:first-child){opacity:.75}
+.rule-order-pager{display:flex;align-items:center;gap:8px;justify-content:flex-end;font-size:13px;color:var(--muted)}
+.rule-order-pager span{margin-right:auto}
+.rule-order-note{margin:0;font-size:12px;color:var(--muted)}
+body[data-theme] .rule-order-table td:first-child{width:1%;white-space:nowrap}
+body[data-theme] .rule-order-table .evidence-object-link{display:inline;width:auto;height:auto;min-height:0;margin:0;padding:0;border:0;background:transparent;box-shadow:none;color:var(--app-accent);font:inherit;text-align:left;overflow-wrap:break-word;cursor:pointer}
+body[data-theme] .rule-order-table .evidence-object-link:hover{text-decoration:underline}
+body[data-theme] .rule-order-table .rule-order-name>.evidence-object-link{font-weight:500;color:var(--ink)}
+body[data-theme] .rule-order-table .evidence-status{display:inline-flex;white-space:nowrap;padding:1px 8px}
+body[data-theme] .rule-order-table .evidence-rule-field{display:flex;flex-direction:column;align-items:flex-start;gap:2px}
+body[data-theme] .rule-order-table .evidence-rule-field>small{font-size:11px;color:var(--muted)}
+body[data-theme] .rule-order-table .evidence-more{padding:0;border:0;background:none;box-shadow:none;color:var(--muted);font-size:12px;height:auto;min-height:0}
+/* Policies in NSX order with the selected policy beside the list. */
+.policy-board{display:grid;grid-template-columns:minmax(0,1.6fr) minmax(300px,1fr);gap:16px;align-items:start}
+.policy-board:has(>.policy-detail[hidden]){grid-template-columns:minmax(0,1fr)}
+@media(max-width:1099px){.policy-board{grid-template-columns:minmax(0,1fr)}}
+body[data-theme] .policy-order-table{min-width:640px}
+body[data-theme] .policy-order-table tbody tr[aria-current=true]>td{background:var(--app-surface-soft)}
+body[data-theme] .policy-order-table tbody tr[aria-current=true]>td:first-child{box-shadow:inset 3px 0 0 var(--ink)}
+.policy-flags{display:flex;flex-wrap:wrap;gap:4px}
+body[data-theme] .policy-detail{position:sticky;top:76px;margin:0;padding:16px;display:flex;flex-direction:column;gap:14px}
+@media(max-width:1099px){body[data-theme] .policy-detail{position:static}}
+.policy-detail:focus{outline:none}.policy-detail:focus-visible{outline:2px solid var(--ink);outline-offset:2px}
+.policy-detail-head small{font-size:12px;color:var(--muted)}
+.policy-detail-head h2{margin:2px 0 0;font-size:16px;font-weight:600;overflow-wrap:anywhere}
+.policy-rules h3{margin:0 0 8px;font-size:13px;font-weight:600}
+.policy-rules ol{list-style:none;margin:0;padding:0;display:grid;gap:6px}
+.policy-rules li{display:flex;align-items:center;gap:8px;font-size:13px;min-width:0}
+.policy-rules li.is-disabled{color:var(--muted)}
+.policy-rules li small{font-size:12px;color:var(--muted)}
+.policy-rule-order{width:40px;flex:none;font-variant-numeric:tabular-nums;color:var(--muted)}
+body[data-theme] .policy-rules .evidence-object-link{flex:1;min-width:0;padding:0;border:0;background:none;box-shadow:none;height:auto;min-height:0;color:var(--ink);text-align:left;font:inherit;cursor:pointer}
+body[data-theme] .policy-rules .evidence-object-link:hover{text-decoration:underline}
+body[data-theme] .rule-order-policy{height:30px;padding:0 10px;border:1px solid var(--ink);border-radius:999px;background:var(--ink);color:var(--app-surface);font-size:13px}
+body[data-theme] #dfw-policies.rule-order-active>.table-widget{display:none}
+body[data-theme] .rule-order-table .rule-order-name{align-items:flex-start}
+body[data-theme] .rule-order-table .rule-order-name>.evidence-object-link{display:block;width:auto;text-align:left}
+body[data-theme] .policy-detail .review-facts .evidence-object-link{display:inline;padding:0;margin:0;border:0;background:none;box-shadow:none;height:auto;min-height:0;color:var(--app-accent);font:inherit;text-align:left;cursor:pointer}
+body[data-theme] .policy-detail .review-facts .evidence-rule-field{display:flex;flex-direction:column;align-items:flex-start;gap:2px}
