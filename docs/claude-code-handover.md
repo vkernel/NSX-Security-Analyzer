@@ -101,6 +101,25 @@ unchanged, with its original collection times. Complete-empty direct membership
 must not erase a separately verified saved attachment. Retain identity validation,
 project/scope separation, pagination checks, partial positives and excluded fields.
 
+### Workspace redesign (unpublished, on `development`)
+
+The accepted redesign is being implemented screen by screen; see
+[UI patterns](ui-patterns.md) for each pattern. Done so far: grouped sidebar with
+collapsible rail, flyouts, command palette (`api/search/`, saved snapshot names
+only, never NSX) and breadcrumb (`nav-shell.js`, `nav-shell.css`); Overview KPI
+tiles and finding qualification; Reviews list with a server-rendered side panel
+(`reviews_region.html`, `reviews.js`); Inventory overview summary from saved
+projections only (`overview_summary.py`); Groups/VMs docking the shared evidence
+drawer beside the list on wide screens (`inventory-dock.js`); report views as
+chip links. New snapshots record a VM count in `Snapshot.summary['vms']`; older
+ones show it as not recorded. `load_demo_data` builds synthetic environments by
+running the real collector against an in-process fake NSX on `*.example.invalid`.
+Still to build: Firewall rules and Policies, Collections and collection result,
+deletion flow, Services and Tags, References page, Segmentation and Naming
+panels, My work, Rule proposal, Get started, Notifications, Preferences, sign-in
+and change-password screens. Group list count columns (direct VMs, interfaces,
+IP matches, rules) need collection-time projections and are not built.
+
 ### Interface and review workflow
 
 The evidence drawer uses shared table-based references for VMs, groups and
@@ -154,7 +173,9 @@ before changing format schemas, job lifecycle or deployment requirements.
 
 ## Verification baseline
 
-The application baseline passed these checks on 13 November 2026:
+The published application baseline passed these checks on 13 November 2026. The
+unpublished redesign work on `development` passed 1,047 Django tests and 123
+JavaScript tests on 16 November 2026; no new image was published for it.
 
 | Check | Result |
 | --- | --- |

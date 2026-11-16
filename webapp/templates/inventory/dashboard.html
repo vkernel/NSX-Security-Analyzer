@@ -1,10 +1,17 @@
 {% extends 'base.html' %}{% block content %}
 {% url 'environment-directory' as directory_url %}{% include 'components/page_header.html' with title='Workspace overview' description='Collection health and the areas that need attention.' only %}
-<div class="operational-metrics operational-summary">
-<a class="{% if failed_count %}metric-error{% endif %}" href="{% url 'all-collections' %}?status=failed"><span>Failed collections</span><strong>{{ failed_count }}</strong><small>Last 24 hours</small></a>
-<a class="{% if stale_count %}metric-warning{% endif %}" href="#environment-health"><span>Stale or uncollected</span><strong>{{ stale_count }}</strong><small>Environment freshness</small></a>
-<a class="{% if running_count %}metric-active{% endif %}" href="{% url 'all-collections' %}?status=running"><span>Running collections</span><strong>{{ running_count }}</strong><small>{{ queued_count }} waiting in queue</small></a>
-<a class="{% if new_issue_count %}metric-warning{% endif %}" href="#environment-health"><span>New coverage issues</span><strong>{{ new_issue_count }}</strong><small>Latest saved snapshots</small></a></div>
-<div class="section-heading" id="environment-health"><h2>Environment health</h2><a href="{% url 'environment-directory' %}">Search all environments</a></div>{% include 'inventory/environment_table.html' %}
-<div class="section-heading"><h2>Recent collections</h2><a href="{% url 'all-collections' %}">View all collections</a></div>{% include 'inventory/recent_activity.html' %}<details class="overview-findings" data-dashboard-methodology><summary>Finding qualification summary</summary><p class="muted">Saved qualification counts across findings.</p><dl class="finding-counts">{% for entry in finding_counts %}<div><dt>{{ entry.qualification|capfirst }}</dt><dd>{{ entry.total }}</dd></div>{% empty %}<div><dt>No findings evaluated yet</dt><dd>—</dd></div>{% endfor %}</dl></details>
+<div class="operational-metrics operational-summary kpi-grid">
+<a class="kpi-card {% if failed_count %}metric-error{% endif %}" href="{% url 'all-collections' %}?status=failed"><span>Failed collections</span><strong>{{ failed_count }}</strong><small>Last 24 hours</small></a>
+<a class="kpi-card {% if stale_count %}metric-warning{% endif %}" href="#environment-health"><span>Stale or uncollected</span><strong>{{ stale_count }}</strong><small>Environment freshness</small></a>
+<a class="kpi-card {% if running_count %}metric-active{% endif %}" href="{% url 'all-collections' %}?status=running"><span>Running collections</span><strong>{{ running_count }}</strong><small>{{ queued_count }} waiting in queue</small></a>
+<a class="kpi-card {% if new_issue_count %}metric-warning{% endif %}" href="#environment-health"><span>New coverage issues</span><strong>{{ new_issue_count }}</strong><small>Latest saved snapshots</small></a></div>
+<section class="content-card" aria-labelledby="environment-health"><div class="section-heading content-card-head"><h2 id="environment-health">Environment health</h2><a href="{% url 'environment-directory' %}">Search all environments</a></div>{% include 'inventory/environment_table.html' %}</section>
+<div class="content-split">
+<section class="content-card" aria-labelledby="recent-collections-title"><div class="section-heading content-card-head"><h2 id="recent-collections-title">Recent collections</h2><a href="{% url 'all-collections' %}">View all collections</a></div>{% include 'inventory/recent_activity.html' %}</section>
+<section class="content-card overview-findings" data-dashboard-methodology aria-labelledby="finding-summary-title"><div class="section-heading content-card-head"><h2 id="finding-summary-title">Finding qualification</h2><a href="{% url 'my-work' %}?queue=all">Open reviews</a></div>
+<div class="content-card-body">{% if finding_summary.total %}<p class="muted small">{{ finding_summary.total }} present finding{{ finding_summary.total|pluralize }}, from saved qualification results.</p>
+<div class="qualification-bar" role="img" aria-label="{% for entry in finding_summary.entries %}{{ entry.label }} {{ entry.total }}{% if not forloop.last %}, {% endif %}{% endfor %}">{% for entry in finding_summary.entries %}<span class="tone-{{ entry.tone }}" style="width:{{ entry.percent|stringformat:'s' }}%"></span>{% endfor %}</div>
+<dl class="finding-counts qualification-legend">{% for entry in finding_summary.entries %}<div><dt><span class="legend-swatch tone-{{ entry.tone }}" aria-hidden="true"></span>{{ entry.label }}</dt><dd>{{ entry.total }}</dd></div>{% endfor %}</dl>
+<p class="muted small">Eligible for review is not approval to delete. Approval and live revalidation stay separate.</p>{% else %}<dl class="finding-counts"><div><dt>No findings evaluated yet</dt><dd>—</dd></div></dl>{% endif %}</div></section>
+</div>
 {% endblock %}

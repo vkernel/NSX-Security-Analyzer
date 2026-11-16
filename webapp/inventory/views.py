@@ -49,6 +49,25 @@ def snapshot_list():
     return page_queries.snapshots()
 
 
+QUALIFICATION_ORDER = [('eligible', 'Eligible for review', 'ok'), ('observing', 'Observing', 'info'),
+                       ('insufficient', 'Insufficient evidence', 'warn'), ('suppressed', 'Suppressed', 'neutral'),
+                       ('cleared', 'Condition cleared', 'neutral'), ('disabled', 'Qualification disabled', 'neutral')]
+
+
+def qualification_summary(counts):
+    """Ordered qualification counts with bar widths; saved values only."""
+    totals = {row['qualification']: row['total'] for row in counts}
+    total = sum(totals.values())
+    known = {key for key, _, _ in QUALIFICATION_ORDER}
+    entries = [{'key': key, 'label': label, 'tone': tone, 'total': totals.get(key, 0)} for key, label, tone in QUALIFICATION_ORDER]
+    other = sum(value for key, value in totals.items() if key not in known)
+    if other:
+        entries.append({'key': 'other', 'label': 'Other', 'tone': 'neutral', 'total': other})
+    for entry in entries:
+        entry['percent'] = round(entry['total'] * 100 / total, 2) if total else 0
+    return {'total': total, 'entries': [entry for entry in entries if entry['total']]}
+
+
 @login_required
 def dashboard(request):
     from .usability import freshness, policy
@@ -65,11 +84,12 @@ def dashboard(request):
     from .models import Finding
     from django.db.models import Count
     finding_counts = list(Finding.objects.filter(**scope).filter(present=True).values('qualification').annotate(total=Count('pk')))
+    finding_summary = qualification_summary(finding_counts)
     return render(request, "inventory/dashboard.html", {
         "stale_count":sum(card['freshness']['stale'] for card in cards), "failed_count":failed_count,
         "running_count":AuditJob.objects.filter(**scope).filter(status='running').count(), "queued_count":AuditJob.objects.filter(**scope).filter(status='queued').count(),
         "new_issue_count":sum((card['latest'].display_summary.get('new_coverage_issues') or 0) for card in cards if card['latest']),
-        "finding_counts": finding_counts, "cards": cards, "jobs": jobs, "environment_count": len(cards),
+        "finding_counts": finding_counts, "finding_summary": finding_summary, "cards": cards, "jobs": jobs, "environment_count": len(cards),
         "snapshot_count": Snapshot.objects.filter(**scope).count(),
         "active_count": AuditJob.objects.filter(**scope).filter(status__in=["queued", "running"]).count(),
     })
@@ -274,7 +294,9 @@ def snapshot_detail(request, pk):
     else:
         report, report_diagnostics = presentation(snapshot, engine().render_html_report)
     presentation_seconds = perf_counter() - started - metadata_seconds
-    response = render(request, "inventory/snapshot.html", {
+    from .overview_summary import inventory_overview
+    overview = inventory_overview(snapshot)
+    response = render(request, "inventory/snapshot.html", {"overview": overview,
         "review_return": review_return, "finding_link": finding_link, "snapshot": snapshot, "environment": snapshot.environment, "history": history, "report": report, "report_diagnostics": report_diagnostics, "is_latest": bool(history and history[0].pk == snapshot.pk), "legacy_report": indexed is None})
     logging.getLogger("inventory.web").info(
         "Snapshot page snapshot=%s mode=%s metadata_seconds=%.3f presentation_seconds=%.3f render_seconds=%.3f response_bytes=%d",

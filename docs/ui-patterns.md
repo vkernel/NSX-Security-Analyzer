@@ -19,6 +19,27 @@ hairline borders with a soft bottom shadow, 10px controls and 14px framed cards.
 - **Colour use:** status colour is reserved for outcomes (allow, drop, warnings);
   primary actions are neutral, and destructive actions stay red.
 
+## Workspace navigation
+
+The sidebar is one grouped, server-rendered menu (`workspace_shell.relay_sections`,
+`inventory/workspace_navigation.html`, `static/nav-shell.js`, `static/nav-shell.css`).
+- **Groups:** Overview and Activity, then **Explore** (Environments, Inventory, Firewall,
+  Segmentation, Naming compliance) and **Work** (Reviews, Collections, Administration).
+  Every module lists its pages; only the current module starts expanded. Permission
+  filtering stays on the server (viewers get no owner/second-approval queues or
+  administration).
+- **Collapsed rail:** *Collapse* narrows the sidebar to icons and is remembered with
+  the existing `menu:workspace:section-panel` preference. Hovering, focusing or clicking a
+  module icon opens its pages as a flyout; Escape closes it and returns focus.
+- **Environment context** sits at the top of the sidebar; the top bar shows a breadcrumb
+  (scope / module / page).
+- **Search (Ctrl K / ⌘K):** pages, review queues, environments and actions are filtered
+  in the browser. Object names come from `api/search/`, a prefix search over the latest
+  browsable full snapshot per environment. It never contacts NSX. A result opens the
+  matching report table with its search filled in (`?browse=1&find=<name>#<panel>`).
+- Page-level tabs (review queues, segmentation views, settings) stay in the page.
+- Phones use the same grouped menu as an off-canvas drawer.
+
 ## Actions and navigation
 
 Use a descriptive page title, a short purpose and environment context where relevant.
@@ -64,3 +85,37 @@ Paginated lists show the displayed range, matching result count, rows per page a
 Small unpaginated tables show rows currently displayed, not an inferred database total. Bulk selection refers to the current page and remains subject to action limits.
 
 The finding Owner filter uses the shared searchable reviewer selector, with Anyone, Assigned to me and Unassigned shortcuts. Changing the search text retains the previous filter until a result is chosen. Apply submits the selected filter.
+
+## Reviews list and side panel
+
+Reviews use one table styled as a two-line list (`.review-board`), with the
+selected task's summary beside it. The server renders one `[data-review-detail]`
+panel per row on the current page and shows the one named by `?selected=` (or
+the first row). Row links work without scripts; `reviews.js` swaps panels in
+place, keeps `?selected=` in the URL and restores the choice after live polling.
+The panel only links to the review page: assignment, approval, rejection and
+deletion preview stay there with their own authorization and revalidation.
+
+## Inventory overview summary
+
+`inventory/overview_summary.py` builds the overview's counts, evidence coverage
+and change totals from saved projections only: individual `Snapshot.summary`
+keys, the collection-time coverage index and an already calculated snapshot
+comparison. It never reads report JSON or the record index on first load and
+never starts a comparison. A missing coverage projection is shown as
+"Not recorded", never as complete; snapshots collected before the VM count was
+added to the summary show the VM count as not recorded. `application.js` places
+the summary at the top of the report's overview and reuses the report's finding
+categories as the "Needs attention" list.
+
+## Groups and VMs side panel
+
+On screens at least 1280px wide, the shared evidence drawer (`#detail-dialog`)
+docks beside the Groups and VMs lists (`all-groups`, `empty-groups`,
+`unused-groups`, `unknown-membership`, `all-vms`) instead of opening as a modal.
+`inventory-dock.js` only changes how the drawer is shown: the evidence renderer,
+its requests, tabs (Summary, Members, References, History, Technical details)
+and export controls are unchanged. The row that opened the panel is marked with
+`aria-current`; Escape, Close or leaving the list closes it and returns focus.
+Narrow screens and other report pages keep the modal drawer. Report sub-views
+are shown as chip links, and the sidebar maps a sub-view to its list page.

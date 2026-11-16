@@ -148,3 +148,25 @@ class ReviewsWorkspaceTests(TestCase):
         self.assertTrue(any('UNION' in row['sql'] and 'LIMIT 25 OFFSET 1225' in row['sql'] for row in queries))
         self.assertFalse(any('"report"' in row['sql'] or '"inventory_finding"."evidence"' in row['sql'] for row in queries))
         self.assertLess(len(queries),35)
+
+    def test_list_selects_a_side_panel_with_stage_steps_and_no_inline_decisions(self):
+        response=self.client.get(self.url,{'queue':'all','environment':self.env.pk,'sort':'name'})
+        rows=list(response.context['page'])
+        self.assertEqual(response.context['selected_key'],rows[0].key)
+        self.assertContains(response,'data-review-detail=',count=len(rows))
+        self.assertContains(response,'id="review-detail-%s"'%rows[0].key)
+        self.assertNotContains(response,'id="review-detail-%s" data-review-detail="%s" aria-labelledby="review-detail-title-%s" tabindex="-1" hidden'%((rows[0].key,)*3))
+        ready=next(r for r in rows if r.name=='Ready finding')
+        response=self.client.get(self.url,{'queue':'all','environment':self.env.pk,'sort':'name','selected':ready.key})
+        self.assertEqual(response.context['selected_key'],ready.key)
+        steps=next(r for r in response.context['page'] if r.key==ready.key).steps
+        self.assertEqual([s['state'] for s in steps],['done','done','done','current'])
+        self.assertEqual(steps[-1]['label'],'Live revalidation, then deletion')
+        unassigned=next(r for r in response.context['page'] if r.name=='Unassigned')
+        self.assertEqual([s['state'] for s in unassigned.steps],['current','next','next','next'])
+        # Selection links keep the queue scope; decisions stay on the review page (no POST forms in the list).
+        self.assertContains(response,'data-review-select="%s"'%ready.key)
+        region=response.content.decode().split('id="review-results"',1)[1]
+        self.assertNotIn('method="post"',region.split('</section>',1)[1].split('</div>\n</div>',1)[0])
+        response=self.client.get(self.url,{'queue':'all','environment':self.env.pk,'sort':'name','selected':'finding-0'})
+        self.assertEqual(response.context['selected_key'],rows[0].key)

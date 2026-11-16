@@ -126,7 +126,11 @@
       const selected=document.getElementById(id),heading=selected?.querySelector(':scope > h2');
       const pageTitle=document.querySelector('.report-toolbar h1');
       if(pageTitle){const copy=heading?.cloneNode(true),count=copy?.querySelector('.count');count?.remove();pageTitle.textContent=id==='overview'?'Inventory overview':copy?.textContent.trim() || 'Inventory';if(count){pageTitle.append(document.createTextNode(' '),count);}if(heading)heading.hidden=true;}
-      const slot=document.querySelector('.report-view-selector');tabs.after(slot);slot.replaceChildren();if(kind){const label=make('label','View'),select=make('select');select.setAttribute('aria-label','Filter '+kind);for(const [text,value] of filters[kind]){const option=new Option(text,value);option.selected=value===id;select.add(option);}select.addEventListener('change',()=>location.hash=select.value);label.append(select);slot.append(label);const tools=selected?.querySelector('.table-tools');if(tools)tools.append(slot);}
+      const slot=document.querySelector('.report-view-selector');tabs.after(slot);slot.replaceChildren();if(kind){
+        // Views are links styled as chips; counts come from the overview's saved finding categories.
+        const nav=make('nav',null,'inventory-filter-chips');nav.setAttribute('aria-label','Views');
+        for(const [text,value] of filters[kind]){const link=make('a',text);link.href='#'+value;const total=document.querySelector('#overview nav.cards a[href="#'+value+'"] b')?.textContent.trim();if(total){link.append(' ',make('span',total));}if(value===id)link.setAttribute('aria-current','page');nav.append(link);}
+        slot.append(nav);const tools=selected?.querySelector('.table-tools');if(tools)tools.append(slot);}
       document.dispatchEvent(new CustomEvent('report-navigation-ready'));
     }
     reportNavigation();window.addEventListener('hashchange',reportNavigation);
@@ -164,6 +168,19 @@
       const composition=make('div',null,'overview-composition');charts.before(composition);composition.append(charts,list);
       const note=overview.querySelector('.chart-note');if(note)composition.after(note);
       overview.querySelector('.inventory-shortcuts')?.classList.add('compact-inventory-totals');
+    }
+    // Saved-projection summary from the server leads the overview; report sections follow unchanged.
+    const summaryTemplate=document.getElementById('inventory-overview-summary');
+    if(overview&&summaryTemplate&&!overview.querySelector('[data-inventory-overview]')){
+      const summary=summaryTemplate.content.firstElementChild.cloneNode(true),heading=overview.querySelector(':scope > h1, :scope > h2:first-child');
+      if(heading&&heading.tagName==='H1')heading.after(summary);else overview.prepend(summary);
+      const findings=overview.querySelector('.overview-findings-list'),slot=summary.querySelector('[data-overview-attention]');
+      if(findings&&slot){
+        const card=make('section',null,'content-card overview-attention'),head=make('div',null,'content-card-head'),title=make('h2','Needs attention'),note=make('span','From saved evidence','muted small');
+        title.id='overview-attention-title';card.setAttribute('aria-labelledby',title.id);head.append(title,note);
+        findings.querySelector(':scope > h2')?.remove();card.append(head,...findings.childNodes);findings.remove();slot.replaceWith(card);
+      }else slot?.remove();
+      overview.querySelector('.compact-inventory-totals')?.setAttribute('hidden','');
     }
     document.querySelectorAll('#dfw-rules > p.muted,#zero-hit-rules > p.muted').forEach(note=>{const details=make('details',null,'snapshot-information');note.before(details);details.append(make('summary','How to interpret rule counters'),note);});
 

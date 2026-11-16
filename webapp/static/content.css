@@ -1,0 +1,184 @@
+/* Page content from the accepted redesign: framed cards, KPI tiles, status tones.
+   Loaded after nav-shell.css; colours come from design-system.css tokens. */
+
+/* KPI tiles */
+body[data-theme] .operational-summary.kpi-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;border:0;margin:0 0 20px;padding:0}
+body[data-theme] .kpi-grid>.kpi-card{display:flex;flex-direction:column;gap:2px;min-width:0;padding:14px 16px;border:1px solid var(--line);border-radius:14px;background:var(--app-surface);box-shadow:var(--shadow-xs);color:var(--ink);text-decoration:none}
+body[data-theme] .kpi-grid>.kpi-card:last-child{border-right:1px solid var(--line)}
+body[data-theme] .kpi-grid>.kpi-card:hover{border-color:var(--muted);text-decoration:none}
+body[data-theme] .kpi-grid>.kpi-card span{font-size:13px;color:var(--muted)}
+body[data-theme] .kpi-grid>.kpi-card strong{order:2;font-size:28px;line-height:1.2;font-weight:600;font-variant-numeric:tabular-nums}
+body[data-theme] .kpi-grid>.kpi-card small{order:3;font-size:12px;color:var(--muted)}
+body[data-theme] .kpi-grid>.kpi-card.metric-error strong{color:var(--error-text)}
+body[data-theme] .kpi-grid>.kpi-card.metric-warning strong{color:var(--warning-text)}
+body[data-theme] .kpi-grid>.kpi-card.metric-active strong{color:var(--info-text)}
+@media(max-width:1000px){body[data-theme] .operational-summary.kpi-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:520px){body[data-theme] .operational-summary.kpi-grid{grid-template-columns:minmax(0,1fr)}}
+
+/* Framed content cards with an inner heading row */
+body[data-theme] .content-card{border:1px solid var(--line);border-radius:14px;background:var(--app-surface);box-shadow:var(--shadow-xs);overflow:hidden;margin:0 0 20px;min-width:0}
+body[data-theme] .content-card>.content-card-head{display:flex;align-items:baseline;justify-content:space-between;gap:12px;flex-wrap:wrap;margin:0;padding:12px 16px;border-bottom:1px solid var(--line)}
+body[data-theme] .content-card>.content-card-head h2{margin:0;font-size:15px;font-weight:600}
+body[data-theme] .content-card>.content-card-head a{font-size:13px;color:var(--muted)}
+body[data-theme] .content-card>.table-scroll,body[data-theme] .content-card .recent-collections-wrap{margin:0;border:0;border-radius:0;box-shadow:none}
+body[data-theme] .content-card table{margin:0;border:0}
+body[data-theme] .content-card thead th{background:var(--app-surface-soft);font-size:12px;font-weight:500;color:var(--muted)}
+body[data-theme] .content-card .poll-status:empty{display:none}
+.content-card-body{padding:14px 16px;display:flex;flex-direction:column;gap:12px}
+.content-card-body>p{margin:0}
+.content-split{display:grid;grid-template-columns:minmax(0,1.6fr) minmax(280px,1fr);gap:16px;align-items:start}
+.content-split>.content-card{margin-bottom:20px}
+@media(max-width:1100px){.content-split{grid-template-columns:minmax(0,1fr)}}
+
+/* Status tones shared by bars, legends and pills */
+.tone-ok{background:var(--success-text)}.tone-info{background:var(--info-text)}.tone-warn{background:var(--warning-text)}.tone-bad{background:var(--error-text)}.tone-neutral{background:var(--muted)}
+.qualification-bar{display:flex;height:10px;border-radius:999px;overflow:hidden;background:var(--app-surface-soft);gap:2px}
+.qualification-bar>span{display:block;min-width:4px;height:100%}
+body[data-theme] .qualification-legend{display:grid;gap:6px;margin:0;padding:0;border:0;background:none}
+body[data-theme] .qualification-legend>div{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:0;border:0;background:none;font-size:13px}
+body[data-theme] .qualification-legend dt{display:flex;align-items:center;gap:8px;margin:0;font-weight:400;color:var(--ink)}
+body[data-theme] .qualification-legend dd{margin:0;font-size:14px;line-height:20px;font-weight:600;font-variant-numeric:tabular-nums}
+.legend-swatch{width:8px;height:8px;border-radius:2px;flex:none}
+body[data-theme] .overview-findings{padding:0;border:1px solid var(--line);border-radius:14px;background:var(--app-surface)}
+
+/* Pills: text plus a soft tone background, never colour alone */
+body[data-theme] .workspace-main .pill{display:inline-flex;align-items:center;gap:6px;padding:1px 8px;border-radius:999px;border:0;font-size:12px;font-weight:500;line-height:20px;white-space:nowrap;background:var(--app-surface-soft);color:var(--ink)}
+body[data-theme] .workspace-main .pill:is(.completed,.complete,.succeeded,.success,.ok,.allow,.compliant){background:var(--success-bg);color:var(--success-text)}
+body[data-theme] .workspace-main .pill:is(.failed,.error,.drop,.reject,.rejected){background:var(--error-bg);color:var(--error-text)}
+body[data-theme] .workspace-main .pill:is(.running,.queued,.info,.active){background:var(--info-bg);color:var(--info-text)}
+body[data-theme] .workspace-main .pill:is(.review,.warning,.partial,.stale){background:var(--warning-bg);color:var(--warning-text)}
+body[data-theme] .workspace-main .pill:is(.cancelled,.neutral,.paused){background:var(--app-surface-soft);color:var(--muted)}
+
+/* Review stages as cards: done, current and next are distinguishable without colour. */
+body[data-theme] .workspace-main ol.review-progress{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:8px;margin:12px 0 20px;padding:0;list-style:none;counter-reset:none}
+body[data-theme] .workspace-main ol.review-progress>li{display:flex;flex-direction:column;align-items:flex-start;gap:4px;margin:0;padding:10px 12px;border:1px dashed var(--line);border-radius:10px;background:transparent;font-size:13px;font-weight:500;color:var(--muted);min-width:0}
+body[data-theme] .workspace-main ol.review-progress>li::before,body[data-theme] .workspace-main ol.review-progress>li::after{display:none}
+body[data-theme] .workspace-main ol.review-progress>li>span{display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;background:var(--app-surface-soft);color:var(--muted);font-size:12px;font-weight:600}
+body[data-theme] .workspace-main ol.review-progress>li.done{border-style:solid;background:var(--app-surface-soft);color:var(--ink)}
+body[data-theme] .workspace-main ol.review-progress>li.done>span{background:var(--success-bg);color:var(--success-text)}
+body[data-theme] .workspace-main ol.review-progress>li.current{border:1px solid var(--ink);background:var(--app-surface);color:var(--ink);box-shadow:var(--shadow-xs)}
+body[data-theme] .workspace-main ol.review-progress>li.current>span{background:var(--ink);color:var(--app-surface)}
+
+/* Snapshot overview charts: cards wrap before legends get too narrow to read. */
+body[data-theme] .report-content .overview-composition .overview-charts{grid-template-columns:repeat(auto-fit,minmax(300px,1fr))}
+@container (max-width:420px){body[data-theme] .report-content .usage-summary .chart-legend{grid-template-columns:minmax(0,1fr)}}
+body[data-theme] .report-content .overview-composition .snapshot-chart{container-type:inline-size}
+body[data-theme] .report-content .usage-summary .chart-legend a{grid-template-columns:8px minmax(0,1fr) auto 48px;word-break:normal;overflow-wrap:normal}
+
+/* Reviews: a two-line task list with the selected task's summary beside it. */
+.review-board{display:grid;grid-template-columns:minmax(0,1.5fr) minmax(320px,1fr);gap:16px;align-items:start}
+@media(max-width:1099px){.review-board{grid-template-columns:minmax(0,1fr)}}
+body[data-theme] .review-board>.review-list{margin:0}
+body[data-theme] .review-board .review-task-table{min-width:0;width:100%;table-layout:auto}
+body[data-theme] .review-board .review-task-table tbody tr{border-top:1px solid var(--line)}
+body[data-theme] .review-board .review-task-table tbody tr:first-child{border-top:0}
+body[data-theme] .review-board .review-task-table td{padding:10px 14px;vertical-align:top;border:0;background:transparent}
+body[data-theme] .review-board .review-task-table tbody tr:hover{background:var(--app-surface-soft)}
+body[data-theme] .review-board .review-task-table tbody tr[aria-current=true]{background:var(--app-surface-soft);box-shadow:inset 3px 0 0 var(--ink)}
+body[data-theme] .review-board .review-task-table td.review-select{width:36px;padding-right:0}
+.review-item-line{display:flex;align-items:center;gap:8px;min-width:0}
+.review-kind{flex:none;width:26px;font-size:12px;font-weight:600;color:var(--muted);text-decoration:none;cursor:help}
+body[data-theme] .review-item-name{min-width:0;font-weight:500;color:var(--ink);overflow-wrap:anywhere;text-decoration:none}
+body[data-theme] .review-item-name:hover{text-decoration:underline}
+.review-item-meta{display:flex;flex-wrap:wrap;gap:4px 12px;margin-top:4px;padding-left:34px;font-size:12px;color:var(--muted)}
+.review-item-meta>span:first-child{flex:1 1 180px}
+body[data-theme] .review-board .review-stage{width:1%;text-align:right;white-space:nowrap}
+.review-stage small{display:block;margin-top:4px;font-size:12px;color:var(--warning-text)}
+.review-details{position:sticky;top:76px;min-width:0}
+@media(max-width:1099px){.review-details{position:static}}
+body[data-theme] .review-detail{margin:0;padding:16px;display:flex;flex-direction:column;gap:14px}
+.review-detail:focus{outline:none}.review-detail:focus-visible{outline:2px solid var(--ink);outline-offset:2px}
+.review-detail-head{display:flex;align-items:flex-start;gap:8px}
+.review-detail-head>div{flex:1;min-width:0}
+.review-detail-head h2{margin:0;font-size:16px;font-weight:600;overflow-wrap:anywhere}
+.review-detail-head p{margin:2px 0 0;font-size:13px;color:var(--muted)}
+body[data-theme] .review-facts{display:grid;grid-template-columns:max-content minmax(0,1fr);gap:8px 16px;margin:0;font-size:13px;border:0;padding:0;background:none}
+body[data-theme] .review-facts dt{color:var(--muted);font-weight:400;margin:0}
+body[data-theme] .review-facts dd{margin:0;overflow-wrap:anywhere}
+.review-facts dd small{display:block;color:var(--muted)}
+.review-steps{padding:12px;border-radius:12px;background:var(--app-surface-soft);display:flex;flex-direction:column;gap:8px}
+.review-steps strong{font-size:13px;font-weight:600}
+.review-steps ol{list-style:none;margin:0;padding:0;display:grid;gap:8px}
+.review-steps li{display:flex;align-items:center;gap:10px;font-size:13px;color:var(--muted)}
+.review-steps li>span[aria-hidden]{width:20px;height:20px;flex:none;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-size:11px;font-weight:600;border:1px solid var(--line)}
+.review-steps li.done{color:var(--ink)}
+.review-steps li.done>span[aria-hidden]{background:var(--ink);border-color:var(--ink);color:var(--app-surface)}
+.review-steps li.current{color:var(--ink);font-weight:500}
+.review-steps li.current>span[aria-hidden]{border:1.5px solid var(--ink);color:var(--ink)}
+.review-detail-actions{display:flex;flex-wrap:wrap;gap:8px}
+body[data-theme] .review-detail .notice,body[data-theme] .review-detail p.small{margin:0}
+body[data-theme] .review-detail-actions.cleanup-task-actions{flex-direction:row;min-width:0}
+body[data-theme] .review-board .review-task-table thead th{padding:8px 14px;text-align:left;border:0;border-bottom:1px solid var(--line)}
+body[data-theme] .review-board .review-task-table thead th:last-child{text-align:right}
+.review-context{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.review-context a{font-size:13px;color:var(--muted)}
+body[data-theme] .review-detail-actions.cleanup-task-actions{align-items:flex-start}
+body[data-theme] .review-detail .review-facts dd{font-weight:400;font-size:13px}
+body[data-theme] .review-board .review-task-table a.review-item-name{text-decoration:none}
+body[data-theme] .review-board .review-task-table a.review-item-name:hover{text-decoration:underline}
+
+/* Inventory overview: saved-projection summary ahead of the report's own charts. */
+.inventory-overview{display:flex;flex-direction:column;gap:16px;margin:0 0 24px}
+body[data-theme] .inventory-overview .operational-summary.kpi-grid{grid-template-columns:repeat(5,minmax(0,1fr));margin:0}
+@media(max-width:1200px){body[data-theme] .inventory-overview .operational-summary.kpi-grid{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media(max-width:640px){body[data-theme] .inventory-overview .operational-summary.kpi-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.overview-callout{display:flex;align-items:flex-start;gap:12px;padding:12px 14px;border-radius:12px;border:1px solid var(--warning-text);background:var(--warning-bg);color:var(--warning-text)}
+.overview-callout>div{flex:1;min-width:0}
+.overview-callout p{margin:2px 0 0;font-size:13px}
+body[data-theme] .overview-callout a{font-size:13px;font-weight:500;color:inherit;white-space:nowrap}
+.inventory-overview-split{grid-template-columns:repeat(2,minmax(0,1fr))}
+@media(max-width:1000px){.inventory-overview-split{grid-template-columns:minmax(0,1fr)}}
+body[data-theme] .inventory-overview .content-card{margin:0}
+body[data-theme] .overview-rows{list-style:none;margin:0;padding:0}
+body[data-theme] .overview-rows li{display:flex;align-items:center;gap:12px;margin:0;padding:10px 16px;border-top:1px solid var(--line);font-size:14px}
+body[data-theme] .overview-rows li:first-child{border-top:0}
+.overview-rows li>span:first-child{flex:1;min-width:0}
+.overview-rows small{font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums}
+.content-card-note{margin:0;padding:10px 16px;border-top:1px solid var(--line);font-size:12px;color:var(--muted)}
+/* The report's finding categories become the "Needs attention" list. */
+body[data-theme] .overview-attention nav.cards{display:flex;flex-direction:column;gap:0;margin:0;padding:0;border:0;grid-template-columns:none}
+body[data-theme] .overview-attention nav.cards>a{display:flex;align-items:center;gap:12px;margin:0;padding:10px 16px;border:0;border-top:1px solid var(--line);border-radius:0;box-shadow:none;background:transparent;color:var(--ink);text-decoration:none;min-height:0}
+body[data-theme] .overview-attention nav.cards>a:first-child{border-top:0}
+body[data-theme] .overview-attention nav.cards>a:hover{background:var(--app-surface-soft)}
+body[data-theme] .overview-attention nav.cards>a span{flex:1;min-width:0;font-weight:500;font-size:14px}
+body[data-theme] .overview-attention nav.cards>a b{order:2;font-weight:600;font-size:14px;font-variant-numeric:tabular-nums}
+body[data-theme] .overview-attention nav.cards>a::after{content:'›';order:3;color:var(--muted)}
+body[data-theme] .overview-attention>details,body[data-theme] .overview-attention>p{margin:0;padding:10px 16px;border-top:1px solid var(--line);font-size:12px;color:var(--muted)}
+.change-tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px}
+.change-tiles>div{padding:10px 12px;border-radius:10px;background:var(--app-surface-soft)}
+.change-tiles>div>span{font-size:12px;color:var(--muted)}
+.change-tiles p{display:flex;gap:10px;margin:2px 0 0;font-variant-numeric:tabular-nums}
+.change-tiles .added{color:var(--success-text)}.change-tiles .removed{color:var(--error-text)}
+.change-tiles p span{color:var(--muted)}
+.change-tiles small{display:block;font-size:12px;color:var(--warning-text)}
+body[data-theme] .overview-attention nav.cards>a.card{flex-direction:row;align-items:center;justify-content:flex-start;text-align:left}
+body[data-theme] .overview-attention nav.cards>a.card>span{text-align:left}
+body[data-theme] .report-content .overview-composition:not(:has(.overview-findings-list)){display:block}
+body[data-theme] .report-content .overview-composition:not(:has(.overview-findings-list)) .overview-charts{grid-template-columns:repeat(auto-fit,minmax(300px,1fr))}
+
+/* Groups and VMs: the evidence drawer docks beside the list on wide screens. */
+@media(min-width:1280px){
+  body.snapshot-page.evidence-docked .workspace-main{padding-right:clamp(420px,34vw,520px)}
+  body[data-theme] #detail-dialog.is-docked[open]{position:fixed;inset:72px 16px 16px auto;margin:0;width:clamp(400px,32vw,500px);max-width:none;max-height:none;height:auto;z-index:20;display:flex;flex-direction:column;overflow:hidden;border:1px solid var(--line);border-radius:14px;background:var(--app-surface);box-shadow:var(--shadow-xs);padding:0}
+  body[data-theme] #detail-dialog.is-docked[open] .dialog-heading{flex:none;padding:14px 16px;border-bottom:1px solid var(--line)}
+  body[data-theme] #detail-dialog.is-docked[open] #detail-body{flex:1;min-height:0;overflow:auto;padding:12px 16px}
+}
+body[data-theme] .report-content tr[aria-current=true]>td{background:var(--app-surface-soft)}
+body[data-theme] .report-content tr[aria-current=true]>td:first-child{box-shadow:inset 3px 0 0 var(--ink)}
+.inventory-filter-chips{display:flex;flex-wrap:wrap;gap:8px;margin:0}
+body[data-theme] .inventory-filter-chips a{display:inline-flex;align-items:center;gap:6px;height:30px;padding:0 12px;border:1px solid var(--line);border-radius:999px;background:var(--app-surface);color:var(--ink);font-size:13px;text-decoration:none}
+body[data-theme] .inventory-filter-chips a:hover{border-color:var(--muted)}
+body[data-theme] .inventory-filter-chips a[aria-current=page]{background:var(--ink);border-color:var(--ink);color:var(--app-surface)}
+.inventory-filter-chips span{font-size:12px;font-variant-numeric:tabular-nums;opacity:.75}
+/* While docked, the list keeps names and states; qualification detail and the Inspect column live in the panel. */
+@media(min-width:1280px){
+  body.evidence-docked .report-content :is(#all-groups,#empty-groups,#unused-groups,#unknown-membership,#all-vms) .row-qualification,
+  body.evidence-docked .report-content :is(#all-groups,#empty-groups,#unused-groups,#unknown-membership,#all-vms) .inventory-evidence-column{display:none}
+  body.evidence-docked .report-content :is(#all-groups,#empty-groups,#unused-groups,#unknown-membership,#all-vms) code.path{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:block}
+}
+body[data-theme] .table-tools:has(>.report-view-selector .inventory-filter-chips){flex-wrap:wrap}
+body[data-theme] .table-tools>.report-view-selector:has(.inventory-filter-chips){order:-1;flex:1 0 100%;width:100%}
+@media(min-width:1280px){
+  body[data-theme] #detail-dialog.is-docked.evidence-expanded[open]{width:min(760px,52vw)}
+  body.snapshot-page.evidence-docked:has(#detail-dialog.evidence-expanded[open]) .workspace-main{padding-right:calc(min(760px,52vw) + 24px)}
+}

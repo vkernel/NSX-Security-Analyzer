@@ -252,6 +252,9 @@ def prepare_snapshot(environment, report, imported=False):
         summary = {"inventory_warnings": bool(report.get("inventory_warnings")), "groups": report["groups_scanned"], "services": report["custom_services_scanned"],
                    "policies": len(dfw.get("policies", [])), "rules": len(dfw.get("rules", [])),
                    "tags": len(report.get("tags", {}).get("objects", []))}
+        vms = report.get("tags", {}).get("vms_scanned")
+        if isinstance(vms, int) and not isinstance(vms, bool):
+            summary["vms"] = vms
         from .evidence_coverage import issues
         summary['evidence_coverage'] = issues(report)
         from .usability import coverage_keys

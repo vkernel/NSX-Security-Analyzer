@@ -40,9 +40,9 @@ class RelayShellTests(TestCase):
         self.assertEqual(response.json(), {'saved': True})
         page = self.client.get(reverse('dashboard'))
         self.assertContains(page, 'data-section-expanded="false"')
-        self.assertContains(page, 'aria-controls="workspace-section-panel" aria-expanded="false"')
-        self.assertContains(page, 'aria-label="Show section menu"')
-        self.assertContains(page, 'id="workspace-section-panel"')
+        self.assertContains(page, 'aria-controls="primary-sidebar" aria-expanded="false"')
+        self.assertContains(page, 'aria-label="Expand navigation"')
+        self.assertContains(page, 'data-nav-shell')
         other = get_user_model().objects.create_user('navigation-other')
         self.client.force_login(other)
         self.assertContains(self.client.get(reverse('dashboard')), 'data-section-expanded="true"')
@@ -67,7 +67,7 @@ class RelayShellTests(TestCase):
         response = self.client.get(reverse('snapshot', args=[snapshot.pk]))
         self.assertContains(response, f'/naming/?environment={self.environment.pk}')
         self.assertNotContains(response, f'/naming/?environment={other.pk}')
-        self.assertContains(response, '<span class="section-environment">East</span>', html=True)
+        self.assertContains(response, f'<a href="/environments/{self.environment.pk}/">East</a>', html=True)
 
     def test_administration_sections_respect_operator_permissions_and_unsaved_environment(self):
         self.user.is_staff = True; self.user.save()
@@ -96,3 +96,88 @@ class RelayShellTests(TestCase):
         self.assertEqual(csrf.post(url, {'theme': 'light'}).status_code, 403)
         self.client.logout()
         self.assertEqual(self.client.post(url, {'theme': 'dark'}).status_code, 302)
+
+
+@override_settings(STORAGES={'staticfiles': {'BACKEND': 'django.contrib.staticfiles.storage.StaticFilesStorage'}})
+class GroupedNavigationTests(TestCase):
+    """Grouped sidebar, collapsed rail and the saved-snapshot search palette."""
+
+    def setUp(self):
+        self.environment = Environment.objects.create(name='East', slug='east', manager='https://east.example')
+
+    def login(self, **flags):
+        user = get_user_model().objects.create_user('nav-' + '-'.join(sorted(flags)) if flags else 'nav-viewer', **flags)
+        self.client.force_login(user)
+        return user
+
+    def test_every_module_lists_its_pages_with_permission_filtering(self):
+        self.login()
+        response = self.client.get(reverse('dashboard'))
+        self.assertContains(response, 'data-nav-module="inventory"')
+        self.assertContains(response, 'id="nav-pages-work"')
+        self.assertContains(response, '<p class="nav-section-label">Explore</p>', html=True)
+        self.assertContains(response, '<p class="nav-section-label">Work</p>', html=True)
+        self.assertContains(response, 'data-primary="activity"')
+        self.assertContains(response, '?queue=all')
+        # Viewers do not get owner or second-approval queues, or administration.
+        self.assertNotContains(response, '?queue=assigned')
+        self.assertNotContains(response, '?queue=second')
+        self.assertNotContains(response, 'id="nav-pages-administration"')
+        # Only the current module starts expanded.
+        self.assertContains(response, 'id="nav-pages-inventory" data-nav-pages role="group" aria-label="Inventory pages" hidden')
+
+    def test_operator_queues_and_administrator_pages(self):
+        self.login(is_staff=True, is_superuser=True)
+        response = self.client.get(reverse('my-work') + '?queue=assigned')
+        self.assertContains(response, '?queue=assigned" aria-current="page"')
+        self.assertContains(response, '?queue=second')
+        self.assertContains(response, 'data-primary="work" data-module-label="Reviews" title="Reviews" aria-label="Reviews" aria-current="true"')
+        admin = self.client.get(reverse('administration'))
+        self.assertContains(admin, 'id="nav-pages-administration"')
+        self.assertContains(admin, '<p class="nav-pages-heading">Access</p>', html=True)
+        self.assertContains(admin, reverse('review-approvals'))
+
+    def test_activity_is_its_own_module(self):
+        self.login()
+        response = self.client.get(reverse('activity'))
+        self.assertContains(response, 'data-primary="activity" data-module-label="Activity" title="Activity" aria-label="Activity" aria-current="page"')
+
+    def test_search_index_lists_pages_and_environments_without_inventory(self):
+        self.login()
+        response = self.client.get(reverse('dashboard'))
+        self.assertContains(response, 'id="navigation-index"')
+        self.assertContains(response, 'Reviews \\u203a All findings')
+        self.assertContains(response, '"type": "Environments", "label": "East"')
+        self.assertContains(response, 'data-search-url="' + reverse('navigation-search') + '"')
+
+    def test_search_endpoint_uses_saved_snapshot_records_only(self):
+        from unittest.mock import patch
+        from .services import engine
+        from .snapshot_index import build
+        self.login()
+        report = sample_report()
+        report['objects'][0]['name'] = 'web-tier-prod'
+        snapshot = prepare_snapshot(self.environment, report); snapshot.save()
+        build(snapshot)
+        with patch.object(engine(), 'NSXClient', side_effect=AssertionError('Search contacted NSX')):
+            data = self.client.get(reverse('navigation-search'), {'q': 'WEB-T'}).json()
+        self.assertEqual([item['label'] for item in data['results']], ['web-tier-prod'])
+        result = data['results'][0]
+        self.assertIn('East', result['meta'])
+        self.assertTrue(result['url'].startswith(reverse('snapshot', args=[snapshot.pk]) + '?browse=1&find=web-tier-prod#'))
+        self.assertIn('NSX is not contacted', data['source'])
+        self.assertEqual(self.client.get(reverse('navigation-search'), {'q': 'w'}).json()['results'], [])
+        self.assertEqual(self.client.get(reverse('navigation-search'), {'q': 'zz-missing'}).json()['results'], [])
+
+    def test_search_endpoint_requires_sign_in_and_get(self):
+        self.assertEqual(self.client.get(reverse('navigation-search'), {'q': 'web'}).status_code, 302)
+        self.login()
+        self.assertEqual(self.client.post(reverse('navigation-search'), {'q': 'web'}).status_code, 405)
+
+    def test_search_ignores_testing_and_unindexed_snapshots(self):
+        self.login()
+        report = sample_report(); report['objects'][0]['name'] = 'only-in-testing'
+        testing = prepare_snapshot(self.environment, dict(report, testing=True)); testing.testing = True; testing.save()
+        from .snapshot_index import build
+        build(testing)
+        self.assertEqual(self.client.get(reverse('navigation-search'), {'q': 'only'}).json()['results'], [])

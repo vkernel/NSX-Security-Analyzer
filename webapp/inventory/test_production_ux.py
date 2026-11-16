@@ -55,9 +55,11 @@ class ProductionUXTests(TestCase):
     def test_canonical_segmentation_navigation_is_rendered_without_client_cloning(self):
         SegmentationSettings.objects.create(environment=self.env,grouping_scope='Application')
         response=self.client.get(reverse('segmentation',args=[self.env.pk]),{'snapshot':str(self.snapshot.pk)})
-        text=response.content.decode();panel=text.split('data-section-links>',1)[1].split('</div>',1)[0]
-        self.assertIn('Security matrix',panel)
-        self.assertIn('data-section-navigation',panel)
+        text=response.content.decode()
+        sidebar=text.split('id="nav-pages-segmentation"',1)[1].split('</div>',1)[0]
+        self.assertIn('Security matrix',sidebar)
+        page=text.split('id="main"',1)[1]
+        self.assertIn('data-section-navigation',page)
 
     def test_naming_policy_filter_counts_and_queue_links_use_same_scope(self):
         from urllib.parse import parse_qs, urlparse

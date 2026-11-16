@@ -164,9 +164,44 @@ def page_rows(request, page, cleanup, return_to):
                 'Provide second approval' if request.user.is_staff and second else
                 'Review evidence' if request.user.is_staff and row.owner_id == request.user.pk and row.workflow_state == 'owner_review' else 'View review')
             row.review_url = reverse('finding-detail', args=[row.environment_id, row.pk]) + '?' + urlencode({'return_to': return_to})
+        present(row)
         result.append(row)
     page.object_list = result
     return page
+
+
+KIND_CODES = {'unused': 'GR', 'empty_group': 'GR', 'membership': 'GR', 'unused_service': 'SV',
+              'zero_hits': 'RU', 'disabled': 'RU', 'statistics': 'RU', 'empty_policy': 'PO', 'policy': 'PO', 'tag': 'TG'}
+STAGE_TONES = {'unassigned': 'neutral', 'owner_review': 'info', 'second_review': 'warning',
+               'ready': 'ok', 'decommissioned': 'ok', 'rejected': 'neutral'}
+
+
+def present(row):
+    """List and side-panel fields; decisions stay on the review page itself."""
+    if row.review_kind == 'cleanup':
+        row.key = f'cleanup-{row.pk}'
+        row.kind_code, row.tone = 'FW', 'warning' if row.task.get('second') else 'info'
+        row.steps = []
+        return row
+    row.key = f'finding-{row.pk}'
+    row.kind_code = KIND_CODES.get(row.kind, row.kind[:2].upper())
+    row.tone = STAGE_TONES.get(row.workflow_state, 'neutral')
+    labels = ['Assigned to a reviewer', 'Reviewed and approved']
+    if row.required_approvals == 2: labels.append('Second approval (four-eyes)')
+    labels.append('Live revalidation, then deletion')
+    reached = {'unassigned': 0, 'owner_review': 1, 'second_review': 2, 'ready': len(labels) - 1,
+               'decommissioned': len(labels)}.get(row.workflow_state, 0)
+    if not row.owner_id: reached = 0
+    row.steps = [{'label': label, 'number': index + 1,
+                  'state': 'done' if index < reached else 'current' if index == reached and row.workflow_state != 'rejected' else 'next'}
+                 for index, label in enumerate(labels)]
+    return row
+
+
+def selected_key(request, page):
+    keys = [row.key for row in page]
+    wanted = request.GET.get('selected', '')
+    return wanted if wanted in keys else (keys[0] if keys else '')
 
 
 def workspace(request, environment=None, *, legacy=False):
@@ -195,6 +230,7 @@ def workspace(request, environment=None, *, legacy=False):
     paginator = Paginator(query, table_page_size(request))
     page = paginator.get_page(params.get('page'))
     page = page_rows(request, page, selected_cleanup, request.get_full_path())
+    selection = request.GET.copy(); selection.pop('selected', None)
     base, _, _ = filtered_findings(request, environment, {}, include_history=True)
     if invalid_scope: base = base.none()
     counts = {key: in_queue(base, request.user, key).count() + sum(cleanup_in_queue(t, request.user, key) for t in cleanup) for key, _ in QUEUES}
@@ -214,5 +250,6 @@ def workspace(request, environment=None, *, legacy=False):
         'historical_finding_count': (environment.findings if environment else Finding.objects).filter(present=False).count() if not invalid_scope else 0,
         'recalculation': FindingRecalculation.objects.filter(environment=environment).first() if environment else None,
         'has_findings': any(r.review_kind=='finding' for r in page), 'has_cleanup': any(r.review_kind=='cleanup' for r in page),
-        'environments': Environment.objects.only('pk','name'), 'query_string': params.urlencode()}
+        'environments': Environment.objects.only('pk','name'), 'query_string': params.urlencode(),
+        'selected_key': selected_key(request, page), 'selection_query': selection.urlencode()}
     return render(request, 'inventory/reviews.html', context)
