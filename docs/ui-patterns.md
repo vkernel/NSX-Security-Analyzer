@@ -158,3 +158,12 @@ comparison, otherwise a link to compare), plus "What happens next": snapshot
 publication and browsing status, findings evaluated from the snapshot, a
 coverage note when the snapshot needs review, and the next scheduled collection.
 Administrator diagnostics stay on the separate staff-only diagnostics page.
+
+## Deletion request page
+
+The deletion request page shows a stage title (Deletion preview, Cleanup
+approvals, Confirm deletion, Deleting objects, Deletion result, or Deletion
+request cancelled) and five step cards marked done, current or not started.
+`deletion.detail` derives them from the same state the page already used for
+its step markers; forms, permissions, deadlines, live revalidation and the
+confirmation dialog are unchanged. A cancelled preview has no current step.

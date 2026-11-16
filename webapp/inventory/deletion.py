@@ -956,6 +956,19 @@ def detail(request, pk):
         'cleanup_rule_updates':sum(row.get('action') != 'delete_rule' for item in confirmation_items for row in item.cleanup_plan),
         'can_cancel': batch.status in ('preview_queued', 'checking', 'preview_ready', 'queued'),
         'can_confirm':batch.status=='preview_ready' and bool(confirmation_items) and not confirmation_expired}
+    # Presentation only: which step of the flow this request is in. Permissions and checks are unchanged.
+    step = (4 if execution and not active else 3 if execution else 1 if counts['cleanup_review'] else
+            2 if batch.status == 'preview_ready' else 0)
+    labels = [('Verify', 'Read-only live verification'), ('Approve', 'Reference cleanup approvals'),
+              ('Confirm', 'Ticket and permanent-deletion check'), ('Execute', 'Fresh live checks before each change'),
+              ('Results', 'Check every object outcome')]
+    stopped = batch.status in ('cancelled', 'cancelling') and not execution
+    context['deletion_steps'] = [{'number': index + 1, 'label': label, 'note': note,
+                                  # A cancelled preview has no current step; nothing was deleted.
+                                  'state': 'next' if stopped else 'done' if index < step else 'current' if index == step else 'next'}
+                                 for index, (label, note) in enumerate(labels)]
+    context['deletion_title'] = ('Deletion request cancelled' if stopped else
+                                 ('Deletion preview', 'Cleanup approvals', 'Confirm deletion', 'Deleting objects', 'Deletion result')[step])
     template = 'inventory/deletion_progress.html' if request.GET.get('fragment') == '1' and request.method == 'GET' else 'inventory/deletion_detail.html'
     response = render(request, template, context)
     response['Cache-Control'] = 'no-store'

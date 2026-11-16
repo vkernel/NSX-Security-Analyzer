@@ -749,3 +749,32 @@ class RemainingWorkTests(TestCase):
         self.assertNotIn(self.finding.pk, active.values_list('pk', flat=True))
         history, _, _ = filtered_findings(request, self.env, {'review':'rejected'})
         self.assertIn(self.finding.pk, history.values_list('pk', flat=True))
+
+
+@override_settings(STORAGES={'staticfiles': {'BACKEND': 'django.contrib.staticfiles.storage.StaticFilesStorage'}})
+class DeletionPresentationTests(TestCase):
+    """Step cards and titles are presentation only; they follow the request state."""
+    def setUp(self):
+        from django.contrib.auth import get_user_model
+        from .models import Environment, DeletionBatch
+        self.admin = get_user_model().objects.create_superuser('deletion-view-admin', password='synthetic-only')
+        self.env = Environment.objects.create(name='Deletion view', slug='deletion-view', manager='https://deletion-view.invalid')
+        self.batch = DeletionBatch.objects.create(environment=self.env, requested_by=self.admin, manager=self.env.manager, status='checking')
+        self.client.force_login(self.admin)
+
+    def states(self):
+        from django.urls import reverse
+        response = self.client.get(reverse('deletion-detail', args=[self.batch.pk]))
+        self.assertEqual(response.status_code, 200)
+        return response, [step['state'] for step in response.context['deletion_steps']]
+
+    def test_steps_and_titles_follow_the_request(self):
+        response, states = self.states()
+        self.assertEqual(states, ['current', 'next', 'next', 'next', 'next'])
+        self.assertEqual(response.context['deletion_title'], 'Deletion preview')
+        self.assertContains(response, 'aria-current="step"', count=1)
+        self.batch.status = 'cancelled'; self.batch.save(update_fields=['status'])
+        response, states = self.states()
+        self.assertEqual(set(states), {'next'})
+        self.assertEqual(response.context['deletion_title'], 'Deletion request cancelled')
+        self.assertNotContains(response, 'aria-current="step"')

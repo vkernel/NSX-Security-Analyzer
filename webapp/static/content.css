@@ -284,3 +284,17 @@ body[data-theme] .collection-history-table td small{display:block;font-size:12px
 body[data-theme] .collection-status .collection-result-cards{margin:0 0 16px}
 body[data-theme] .collection-next .overview-rows li>span:first-child{flex:none;min-width:52px;justify-content:center}
 body[data-theme] .collection-next .overview-rows li>span:last-child{flex:1;min-width:0}
+
+/* Deletion request: stage title, step cards, summary tiles and a framed results table. */
+.deletion-context{margin:0 0 4px;font-size:13px;color:var(--muted);text-transform:none;letter-spacing:0}
+body[data-theme] .workspace-main ol.deletion-steps>li small{font-size:12px;font-weight:400;color:var(--muted)}
+body[data-theme] .deletion-summary{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin:0 0 16px;padding:0;border:0;background:none}
+body[data-theme] .deletion-summary>div{display:flex;flex-direction:column;gap:2px;padding:14px 16px;border:1px solid var(--line);border-radius:14px;background:var(--app-surface);box-shadow:var(--shadow-xs)}
+body[data-theme] .deletion-summary>div span{font-size:13px;color:var(--muted)}
+body[data-theme] .deletion-summary>div strong{font-size:24px;font-weight:600;font-variant-numeric:tabular-nums}
+body[data-theme] .deletion-progress-card{border:1px solid var(--line);border-radius:14px;background:var(--app-surface);box-shadow:var(--shadow-xs);padding:16px;margin:0 0 16px}
+body[data-theme] .deletion-progress-card.operation-state-warning{border-color:var(--warning-text)}
+body[data-theme] .deletion-progress-card h2{margin:0 0 8px;font-size:16px;font-weight:600}
+body[data-theme] #deletion-progress>.table-scroll{border:1px solid var(--line);border-radius:14px;background:var(--app-surface);box-shadow:var(--shadow-xs);overflow:auto}
+body[data-theme] .deletion-results{margin:0;border:0}
+body[data-theme] .deletion-results thead th{background:var(--app-surface-soft);font-size:12px;font-weight:500;color:var(--muted)}
