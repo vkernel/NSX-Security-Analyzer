@@ -120,8 +120,10 @@ Firewall (`object-references.js`); Segmentation application cards and Naming
 outcome cards; Get started and Notifications pages; a centered sign-in card. New snapshots record a VM count in `Snapshot.summary['vms']`; older
 ones show it as not recorded. `load_demo_data` builds synthetic environments by
 running the real collector against an in-process fake NSX on `*.example.invalid`.
-Still to build: Rule proposal restyle (My work is covered by the Reviews queues and
-Preferences by Personal settings). Group list count columns (direct VMs, interfaces,
+All designed screens are built or covered (My work by the Reviews queues,
+Preferences by Personal settings); the Rule proposal page shows the proposed rule
+and notes. Not built: the Naming name-component side panel and a service
+"duplicate of" observation. Group list count columns (direct VMs, interfaces,
 IP matches, rules) need collection-time projections and are not built.
 
 ### Interface and review workflow

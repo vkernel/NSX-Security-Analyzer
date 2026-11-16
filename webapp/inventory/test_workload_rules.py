@@ -80,6 +80,8 @@ class WorkloadInvestigationTests(TestCase):
         obj=FirewallRuleProposal.objects.get();self.assertEqual(obj.configuration['action'],'ALLOW')
         url=reverse('segmentation-proposal',args=[self.env.pk,obj.pk])
         self.assertEqual(self.client.get(url+'?export=json').json()['deployed'],False)
+        page=self.client.get(url)
+        self.assertContains(page,'Proposed rule');self.assertContains(page,'never creates or changes rules in NSX')
         response=self.client.post(url,self.draft(revision='0'));self.assertContains(response,'Proposal changed')
         self.client.post(url,{'action':'discard','revision':'1'});obj.refresh_from_db();self.assertEqual(obj.state,'discarded')
         self.client.post(url,self.draft(revision=str(obj.revision)));obj.refresh_from_db();self.assertEqual(obj.state,'discarded')

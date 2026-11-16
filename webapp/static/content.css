@@ -414,3 +414,15 @@ body[data-theme] .notification-page-list a:hover strong{text-decoration:underlin
 .notification-page-list time{flex:none;font-size:12px;color:var(--muted);white-space:nowrap}
 body[data-theme] .content-card-head form{margin:0}
 body[data-theme] .notification-page-list a :is(strong,small){text-decoration:none}
+
+/* Rule proposal: proposed rule fields beside the notes. */
+.proposal-board{display:grid;grid-template-columns:minmax(0,1.5fr) minmax(260px,1fr);gap:16px;align-items:start;margin:0 0 16px}
+@media(max-width:1000px){.proposal-board{grid-template-columns:minmax(0,1fr)}}
+body[data-theme] .proposal-board .content-card{margin:0}
+body[data-theme] .proposal-board .pair-proposal-preview{padding:0}
+body[data-theme] .proposal-fields{padding:14px 16px}
+body[data-theme] .proposal-fields dd{font-weight:400;overflow-wrap:anywhere}
+body[data-theme] .proposal-note{margin:0 0 12px}
+body[data-theme] .workspace-main .review-task-table td a.review-item-name:not(.button):not([role=button]){text-decoration:none}
+body[data-theme] .workspace-main .review-task-table td a.review-item-name:not(.button):not([role=button]):hover{text-decoration:underline}
+body[data-theme] .workspace-main .notification-page-list li>a:not(.button):not([role=button]){text-decoration:none}

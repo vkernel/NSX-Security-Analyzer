@@ -216,3 +216,10 @@ endpoint, which redirects for a plain form post and keeps its JSON contract for
 the header menu. Both are linked from the account menu. Sign-in, directory
 sign-in and password change use one centered card; providers, forms and
 validation are unchanged.
+
+## Rule proposal
+
+A saved firewall rule proposal shows a "Proposed rule" field list (action,
+source, destination, service, policy, placement, logging) beside a Notes card,
+with the statement that the analyzer never creates or changes rules in NSX. The
+similar-rules check, VM context and edit form are unchanged.
