@@ -221,3 +221,71 @@ class ReferenceFormatTests(SimpleTestCase):
         self.assertIn('&lt;script&gt;alert(1)&lt;/script&gt;',output)
         self.assertIn('Content-Security-Policy',output);self.assertNotIn('src=',output)
         self.assertIn('Filter references',output)
+
+
+@override_settings(STORAGES={'staticfiles':{'BACKEND':'django.contrib.staticfiles.storage.StaticFilesStorage'}})
+class SelectedExportTests(TransactionTestCase):
+    """Category and column choice: narrow tables, required evidence basis, no NSX contact."""
+    # Same synthetic fixture as ReferenceExportTests, without re-running its tests.
+    setUp, record, rules, create, finish = (ReferenceExportTests.setUp, ReferenceExportTests.record, ReferenceExportTests.rules,
+                                            ReferenceExportTests.create, ReferenceExportTests.finish)
+    def selected(self,**overrides):
+        return self.create(**{'sections':['firewall','objects'],'columns':{'firewall':['name','action']},'context':'separate','raw':False,**overrides})
+
+    def test_csv_zip_has_one_table_per_category_and_keeps_evidence_basis(self):
+        import zipfile
+        self.rules(3)
+        job=self.selected(format='csv')
+        content=self.finish(job);job.refresh_from_db()
+        self.assertTrue(job.filename.endswith('.zip'));self.assertEqual(job.content_type,'application/zip')
+        archive=zipfile.ZipFile(io.BytesIO(content))
+        self.assertEqual(sorted(archive.namelist()),['about.csv','firewall-rules.csv','other-objects.csv'])
+        rows=list(csv.reader(io.StringIO(archive.read('firewall-rules.csv').decode('utf-8-sig'))))
+        self.assertEqual(rows[0],['Name','Action','Evidence basis'])          # required column added, schema order
+        self.assertEqual(len(rows),4);self.assertEqual(rows[1][2],'Saved group reference')
+        about=archive.read('about.csv').decode('utf-8-sig')
+        self.assertIn('Synthetic exports',about);self.assertIn('Firewall rules',about)
+        self.assertNotIn('Structured reference JSON',archive.read('firewall-rules.csv').decode('utf-8-sig'))
+
+    def test_single_category_with_context_on_rows_is_one_csv(self):
+        self.rules(2)
+        job=self.selected(format='csv',sections=['firewall'],columns={'firewall':['name']},context='rows',raw=True)
+        rows=list(csv.reader(io.StringIO(self.finish(job).decode('utf-8-sig'))))
+        job.refresh_from_db();self.assertTrue(job.filename.endswith('.csv'))
+        self.assertEqual(rows[0][:2],['Environment','Object']);self.assertEqual(rows[0][-3:],['Name','Evidence basis','Raw evidence (JSON)'])
+        self.assertEqual(rows[1][0],'Synthetic exports')
+
+    def test_xlsx_has_about_and_category_sheets(self):
+        import zipfile
+        self.rules(2)
+        job=self.selected(format='xlsx')
+        archive=zipfile.ZipFile(io.BytesIO(self.finish(job)))
+        workbook=archive.read('xl/workbook.xml').decode()
+        self.assertIn('name="About"',workbook);self.assertIn('name="Firewall rules"',workbook);self.assertIn('name="Other objects"',workbook)
+        sheet=archive.read('xl/worksheets/sheet2.xml').decode()
+        self.assertIn('Evidence basis',sheet);self.assertIn('Rule 000',sheet)
+        job.refresh_from_db();self.assertTrue(job.filename.endswith('.xlsx'))
+
+    def test_json_follows_selection_and_validation_rejects_unknown_choices(self):
+        self.rules(2)
+        document=json.loads(self.finish(self.selected(format='json')))
+        self.assertEqual(document['schema_version'],2)
+        self.assertEqual(document['sections'][0]['columns'],['Name','Action','Evidence basis'])
+        self.assertNotIn('items',document['sections'][0])
+        self.assertTrue(document['sections'][0]['notes'])
+        # Unlisted categories default to the essential preset.
+        self.assertIn('Evidence basis',document['sections'][1]['columns'])
+        for bad in ({'sections':['nope']},{'sections':[]},{'columns':{'firewall':['secret']}},{'columns':{'objects':['name'],'firewall':'x'}},
+                    {'context':'inline'},{'raw':'yes'},{'columns':{'resolved_groups':['name']}}):
+            values={'view':'inventory','path':self.path,'format':'json','source':'saved_snapshot','request_key':str(uuid.uuid4()),
+                    'sections':['firewall'],'columns':{'firewall':['name']},**bad}
+            self.assertEqual(self.client.post(self.url,json.dumps(values),content_type='application/json').status_code,400,bad)
+        values={'view':'inventory','path':self.path,'section':'all','format':'xlsx','source':'saved_snapshot','request_key':str(uuid.uuid4())}
+        self.assertEqual(self.client.post(self.url,json.dumps(values),content_type='application/json').status_code,400)
+
+    def test_dialog_receives_column_choices(self):
+        data=self.client.get(self.url).json()
+        firewall=data['columns']['confirmed_rules']
+        self.assertTrue(any(c['key']=='evidence_basis' and c['required'] for c in firewall))
+        self.assertTrue(any(c['key']=='matched_in' and not c['essential'] for c in firewall))
+        self.assertIn('interfaces',[c['key'] for c in data['columns']['network_groups']])

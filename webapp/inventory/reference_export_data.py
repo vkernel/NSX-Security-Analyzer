@@ -38,8 +38,25 @@ def validate(snapshot, values):
     if not isinstance(values,dict): raise ValueError('Invalid export request.')
     options = {key:values.get(key) for key in ('view','path','id','section','format','source')}
     record = owner(snapshot, options)
-    if options['section'] not in ('all', *SECTIONS[record.view]): raise ValueError('Choose a reference category.')
-    if options['format'] not in ('csv','pdf','json','yaml','html'): raise ValueError('Choose a supported format.')
+    if 'sections' in values:
+        # Category and column choice; requests without it keep the original single-schema output.
+        from .reference_export_columns import normalize
+        sections, columns = values.get('sections'), values.get('columns') or {}
+        if not isinstance(sections, list) or not sections or len(sections) != len(set(sections)) or any(key not in SECTIONS[record.view] for key in sections):
+            raise ValueError('Choose at least one reference category.')
+        if not isinstance(columns, dict) or set(columns) - set(sections):
+            raise ValueError('Choose columns from the list for each category.')
+        if values.get('context', 'separate') not in ('separate', 'rows'): raise ValueError('Choose where to place the export context.')
+        if not isinstance(values.get('raw', False), bool): raise ValueError('Invalid export request.')
+        from .reference_export_columns import preset
+        options['sections'] = [key for key in SECTIONS[record.view] if key in sections]
+        options['columns'] = {key: normalize(key, columns[key]) if key in columns else preset(key, 'essential') for key in options['sections']}
+        options['context'] = values.get('context', 'separate')
+        options['raw'] = values.get('raw', False)
+        options['section'] = options['sections'][0] if len(options['sections']) == 1 else 'all'
+    elif options['section'] not in ('all', *SECTIONS[record.view]): raise ValueError('Choose a reference category.')
+    if options['format'] not in ('csv','pdf','json','yaml','html','xlsx'): raise ValueError('Choose a supported format.')
+    if options['format'] == 'xlsx' and 'sections' not in options: raise ValueError('Choose categories and columns for spreadsheet exports.')
     if options['source'] not in ('saved_snapshot','current_cache'): raise ValueError('Choose an evidence source.')
     if options['source']=='current_cache' and record.view!='vms': raise ValueError('Cached current observations are available for VMs only.')
     options['object_name']=record.name
@@ -63,7 +80,7 @@ def build(job):
     snapshot, options = job.snapshot, job.options
     record = owner(snapshot, options)
     selected = SECTIONS[record.view]
-    keys = list(selected) if options['section']=='all' else [options['section']]
+    keys = list(options['sections']) if options.get('sections') else list(selected) if options['section']=='all' else [options['section']]
     current = options['source']=='current_cache'
     context, ip, current_metadata = None, None, {}
     if record.view=='vms':

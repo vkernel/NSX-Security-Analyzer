@@ -5,7 +5,8 @@ import io
 import json
 
 MIMES = {'csv':'text/csv; charset=utf-8','pdf':'application/pdf','json':'application/json',
-         'yaml':'application/yaml','html':'text/html; charset=utf-8'}
+         'yaml':'application/yaml','html':'text/html; charset=utf-8','zip':'application/zip',
+         'xlsx':'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}
 MAX_CONTENT = 64*1024*1024
 # Rows arrive in configured NSX order (category, policy sequence, rule sequence).
 COLUMNS = ('Rule category','Name','Path','Policy','Policy sequence','Rule sequence','Rule ID','Sources','Destinations','Services','Context profiles','Applied to','Action','State','Matched in','Reason / evidence')
@@ -84,7 +85,7 @@ def csv_bytes(document):
     return ('\ufeff'+output.getvalue()).encode('utf-8')
 
 
-def html_bytes(document):
+def html_bytes(document,tables=None,raw=True):
     esc = lambda value: html.escape(text(value),quote=True)
     metadata = document['metadata']
     parts = ['<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">',
@@ -94,13 +95,13 @@ def html_bytes(document):
         '<p>'+esc(metadata['environment'])+' · Snapshot '+esc(metadata['snapshot_id'])+'<br>Collected '+esc(metadata['collected_at'])+' · Requested '+esc(metadata['requested_at'])+' · Prepared '+esc(metadata['prepared_at'])+'</p>',
         '<p>'+esc(metadata['note'])+'</p><label for="search">Filter references</label> <input id="search" type="search" placeholder="Search this report">']
     for section in document['sections']:
-        columns,weights,rows=report_table(section)
+        columns,weights,rows=report_table(section) if tables is None else (*tables[section['key']][:1],None,tables[section['key']][1])
         parts.extend(['<section><h2>'+esc(section['label'])+' ('+str(section['count'])+')</h2>',
             '<p class="status">'+esc(human(section.get('status','unknown')))+' · '+esc(human(section['source']))+' · '+esc(section.get('checked_at'))+'</p>',
             '<p>'+esc(' '.join(section['notes']))+'</p><div class="table-scroll"><table><thead><tr>'+''.join('<th scope="col">'+esc(column)+'</th>' for column in columns)+'</tr></thead><tbody>'])
         for item,cells in zip(section['items'],rows):
             parts.append('<tr data-reference>'+''.join('<td'+(' class="action-'+cells[ACTION].lower()+'"' if len(cells)==len(COLUMNS) and index==ACTION and cells[ACTION].lower() in ('allow','drop','reject') else '')+'>'+esc(value)+'</td>' for index,value in enumerate(cells))+'</tr>')
-            parts.append('<tr data-reference><td colspan="'+str(len(columns))+'"><details><summary>Structured reference</summary><pre>'+esc(json.dumps(item,ensure_ascii=False,indent=2))+'</pre></details></td></tr>')
+            if raw: parts.append('<tr data-reference><td colspan="'+str(len(columns))+'"><details><summary>Structured reference</summary><pre>'+esc(json.dumps(item,ensure_ascii=False,indent=2))+'</pre></details></td></tr>')
         if not section['items']: parts.append('<tr><td colspan="'+str(len(columns))+'">No references retained in this category. See coverage above.</td></tr>')
         parts.append('</tbody></table></div></section>')
     # Constant script only; inventory content is always escaped, never executable.
@@ -112,7 +113,7 @@ def html_bytes(document):
     return ''.join(parts).encode('utf-8')
 
 
-def pdf_bytes(document):
+def pdf_bytes(document,tables=None):
     from pathlib import Path
     import reportlab
     from reportlab.pdfbase import pdfmetrics
@@ -139,7 +140,8 @@ def pdf_bytes(document):
     story=[para(metadata['object']['name']+' — References',heading),para(text(metadata['object'].get('type',metadata['object'].get('view')))+' · '+text(metadata['object'].get('path'))),para(metadata['environment']+' · Snapshot '+metadata['snapshot_id']),
         para('Collected '+metadata['collected_at']+' · Requested '+metadata['requested_at']+' · Prepared '+metadata['prepared_at']),para(metadata['note']),Spacer(1,10)]
     for section in document['sections']:
-        columns,weights,rows=report_table(section)
+        if tables is None: columns,weights,rows=report_table(section)
+        else: columns,rows=tables[section['key']];weights=[1]*len(columns)
         widths=[pdf.width*weight/sum(weights) for weight in weights]
         story.append(KeepTogether([para(section['label']+' ('+str(section['count'])+')',heading),
             para(human(section.get('status','unknown'))+' · '+human(section['source'])+' · '+text(section.get('checked_at'))),para(' '.join(section['notes'])),Spacer(1,6)]))
@@ -157,6 +159,159 @@ def pdf_bytes(document):
         canvas.drawString(28,16,'Reference report · '+metadata['environment']);canvas.drawRightString(size[0]-28,16,'Page '+str(doc.page))
     pdf.build(story,onFirstPage=footer,onLaterPages=footer)
     return output.getvalue()
+
+
+# Selected categories and columns (requests that include "sections").
+CONTEXT = ('Environment','Object','Object path','Snapshot','Collected at','Category','Coverage','Checked at','Notes')
+
+
+def selected_tables(document,options):
+    from .reference_export_columns import table
+    for section in document['sections']:
+        labels,rows=table(section,options['columns'][section['key']])
+        if options.get('raw'):
+            labels=labels+['Raw evidence (JSON)'];rows=[row+[text(item)] for row,item in zip(rows,section['items'])]
+        yield section,labels,rows
+
+
+def context_values(document,section):
+    metadata=document['metadata']
+    return [metadata['environment'],metadata['object']['name'],metadata['object'].get('path'),metadata['snapshot_id'],metadata['collected_at'],
+            section['label'],human(section.get('status','unknown')),section.get('checked_at'),' '.join(section['notes'])]
+
+
+def about_rows(document):
+    metadata=document['metadata']
+    rows=[('Field','Value'),('Environment',metadata['environment']),('Object',metadata['object']['name']),('Object type',metadata['object'].get('type')),
+          ('Object path',metadata['object'].get('path')),('Snapshot',metadata['snapshot_id']),('Collected at',metadata['collected_at']),
+          ('Requested at',metadata['requested_at']),('Prepared at',metadata['prepared_at']),('Evidence source',metadata['evidence']),('Note',metadata['note']),
+          (),('Category','Coverage','Source','Checked at','Rows','Notes')]
+    for section in document['sections']:
+        rows.append((section['label'],human(section.get('status','unknown')),human(section['source']),section.get('checked_at'),section['count'],' '.join(section['notes'])))
+    return rows
+
+
+def csv_text(rows):
+    output=io.StringIO(newline='');writer=csv.writer(output)
+    for row in rows: writer.writerow([safe_cell(value) for value in row])
+    return ('\ufeff'+output.getvalue()).encode('utf-8')
+
+
+def selected_csv(document,options):
+    """One CSV per category; a ZIP with an about file unless context repeats on one category's rows."""
+    import zipfile
+    files=[]
+    for section,labels,rows in selected_tables(document,options):
+        if options.get('context')=='rows':
+            prefix=context_values(document,section)
+            body=[list(CONTEXT)+labels]+[prefix+row for row in rows] or []
+            if not rows: body.append(prefix+['']*len(labels))
+        else:
+            body=[labels]+rows
+        files.append((slug(section['label'])+'.csv',csv_text(body)))
+    if options.get('context')=='rows' and len(files)==1: return files[0][1],'csv'
+    output=io.BytesIO()
+    with zipfile.ZipFile(output,'w',zipfile.ZIP_DEFLATED) as archive:
+        archive.writestr(zipfile.ZipInfo('about.csv',date_time=(2000,1,1,0,0,0)),csv_text(about_rows(document)))
+        for name,content in files: archive.writestr(zipfile.ZipInfo(name,date_time=(2000,1,1,0,0,0)),content)
+    return output.getvalue(),'zip'
+
+
+def slug(value):
+    import re
+    return re.sub(r'[^a-z0-9]+','-',text(value).lower()).strip('-') or 'category'
+
+
+def xlsx_bytes(document,options):
+    """Minimal Office Open XML workbook with inline strings: an About sheet and one sheet per category."""
+    import zipfile
+    from xml.sax.saxutils import escape
+    def cell_ref(col,row):
+        letters=''
+        while col: col,rest=divmod(col-1,26);letters=chr(65+rest)+letters
+        return letters+str(row)
+    def clean(value):
+        # Characters that XML 1.0 does not allow are dropped; the text stays readable.
+        return ''.join(char for char in text(value) if char in '\t\n\r' or ord(char)>=32)
+    def sheet(rows,bold_first=True):
+        out=['<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetViews><sheetView workbookViewId="0">'
+             '<pane ySplit="1" topLeftCell="A2" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews><sheetData>']
+        for r,row in enumerate(rows,1):
+            out.append('<row r="%d">'%r)
+            for c,value in enumerate(row,1):
+                style=' s="1"' if bold_first and r==1 else ''
+                out.append('<c r="%s" t="inlineStr"%s><is><t xml:space="preserve">%s</t></is></c>'%(cell_ref(c,r),style,escape(clean(value))))
+            out.append('</row>')
+        out.append('</sheetData></worksheet>')
+        return ''.join(out).encode('utf-8')
+    sheets=[('About',sheet(about_rows(document)))]
+    names={'About'}
+    for section,labels,rows in selected_tables(document,options):
+        if options.get('context')=='rows':
+            prefix=context_values(document,section)
+            rows=[prefix+row for row in rows] or [prefix+['']*len(labels)];labels=list(CONTEXT)+labels
+        name=''.join(char for char in section['label'] if char not in '[]:*?/\\')[:31] or 'Category'
+        base,index=name,2
+        while name in names: name=(base[:28]+' '+str(index));index+=1
+        names.add(name);sheets.append((name,sheet([labels]+rows)))
+    output=io.BytesIO()
+    with zipfile.ZipFile(output,'w',zipfile.ZIP_DEFLATED) as archive:
+        add=lambda path,content: archive.writestr(zipfile.ZipInfo(path,date_time=(2000,1,1,0,0,0)),content)
+        add('[Content_Types].xml','<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">'
+            '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/>'
+            '<Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>'
+            '<Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>'
+            +''.join('<Override PartName="/xl/worksheets/sheet%d.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>'%i for i in range(1,len(sheets)+1))+'</Types>')
+        add('_rels/.rels','<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+            '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>')
+        add('xl/workbook.xml','<?xml version="1.0" encoding="UTF-8" standalone="yes"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" '
+            'xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets>'
+            +''.join('<sheet name="%s" sheetId="%d" r:id="rId%d"/>'%(escape(name,{'"':'&quot;'}),i,i) for i,(name,_) in enumerate(sheets,1))+'</sheets></workbook>')
+        add('xl/_rels/workbook.xml.rels','<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+            +''.join('<Relationship Id="rId%d" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet%d.xml"/>'%(i,i) for i in range(1,len(sheets)+1))
+            +'<Relationship Id="rId%d" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>'%(len(sheets)+1))
+        add('xl/styles.xml','<?xml version="1.0" encoding="UTF-8" standalone="yes"?><styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'
+            '<fonts count="2"><font><sz val="11"/><name val="Calibri"/></font><font><b/><sz val="11"/><name val="Calibri"/></font></fonts>'
+            '<fills count="2"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill></fills>'
+            '<borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders><cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>'
+            '<cellXfs count="2"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/><xf numFmtId="0" fontId="1" fillId="0" borderId="0" xfId="0" applyFont="1"/></cellXfs></styleSheet>')
+        for i,(_,content) in enumerate(sheets,1): add('xl/worksheets/sheet%d.xml'%i,content)
+    return output.getvalue()
+
+
+def selected_document(document,options):
+    """JSON/YAML: chosen columns per category; raw items only when requested."""
+    sections=[]
+    for section,labels,rows in selected_tables(document,options):
+        entry={key:section.get(key) for key in ('key','label','source','status','checked_at','notes','count')}
+        entry['columns']=labels;entry['rows']=[dict(zip(labels,row)) for row in rows]
+        if options.get('raw'): entry['items']=section['items']
+        sections.append(entry)
+    return {'schema_version':2,'metadata':document['metadata'],'selection':{'sections':options['sections'],'columns':options['columns'],
+            'context':options.get('context'),'raw':bool(options.get('raw'))},'sections':sections}
+
+
+def render_selected(document,format,options):
+    if format=='csv': return selected_csv(document,options)
+    if format=='xlsx': return xlsx_bytes(document,options),'xlsx'
+    if format in ('json','yaml'):
+        data=selected_document(document,options)
+        if format=='json': return json.dumps(data,ensure_ascii=False,indent=2).encode('utf-8'),'json'
+        import yaml
+        return yaml.safe_dump(data,allow_unicode=True,sort_keys=False).encode('utf-8'),'yaml'
+    tables={section['key']:(labels,rows) for section,labels,rows in selected_tables(document,options)}
+    if format=='html': return html_bytes(document,tables,bool(options.get('raw'))),'html'
+    if format=='pdf': return pdf_bytes(document,tables),'pdf'
+    raise ValueError('Unsupported export format.')
+
+
+def render_export(document,format,options):
+    """(content, file extension). Selection-aware when the request chose categories."""
+    if options and options.get('sections'):
+        result,extension=render_selected(document,format,options)
+        if len(result)>MAX_CONTENT: raise ValueError('Export exceeds 64 MiB. Export one category at a time.')
+        return result,extension
+    return render(document,format),format
 
 
 def render(document,format):

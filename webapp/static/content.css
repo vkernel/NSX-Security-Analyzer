@@ -480,3 +480,16 @@ body[data-theme] #detail-dialog .evidence-firewall-table:has(tr.evidence-group-r
   #detail-dialog .evidence-firewall-table tr:not(.evidence-group-row)>td[data-label=Name]::before{display:none}
   #detail-dialog .evidence-firewall-table tr:not(.evidence-group-row)>td[data-label=Name]>*{grid-column:1/-1;font-weight:600}
 }
+
+/* Export dialog: categories with column presets, context and raw options, preview. */
+body[data-theme] .reference-export-dialog{width:min(560px,calc(100vw - 32px))}
+body[data-theme] .reference-export-categories{display:flex;flex-direction:column;gap:8px;margin:12px 0;padding:12px;border:1px solid var(--line);border-radius:12px}
+body[data-theme] .reference-export-categories legend{padding:0 4px;font-size:13px;font-weight:600}
+.reference-export-category{display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;gap:6px 10px}
+.reference-export-category>label{font-size:14px}
+body[data-theme] .reference-export-category select{width:auto;font-size:13px}
+.reference-export-columns{grid-column:1/-1;display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:4px 12px;padding:8px 0 4px 26px}
+.reference-export-columns>div,.reference-export-check{display:flex;align-items:center;gap:6px;font-size:13px}
+.reference-export-columns label{font-size:13px;font-weight:400}
+.reference-export-check{margin:8px 0}
+.reference-export-preview{margin:8px 0;font-size:13px;color:var(--muted)}

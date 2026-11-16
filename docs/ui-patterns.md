@@ -236,3 +236,22 @@ A saved firewall rule proposal shows a "Proposed rule" field list (action,
 source, destination, service, policy, placement, logging) beside a Notes card,
 with the statement that the analyzer never creates or changes rules in NSX. The
 similar-rules check, VM context and edit form are unchanged.
+
+## Reference export choices
+
+The export dialog lists the object's reference categories as checkboxes (the
+open category is pre-selected) with a column preset per category: Essential,
+All columns or Choose columns. The column lists come from the export endpoint
+(`reference_export_columns.py`), never from the page. "Evidence basis" is
+always included, so direct VM associations, interface attachments, IP/subnet
+matches and saved configuration stay distinguishable in any narrowed export;
+coverage, timestamps and notes are always kept. Context (environment, snapshot,
+coverage) goes into a separate about file or sheet, or onto every row; raw JSON
+evidence is opt-in. CSV is one file per category (a ZIP with `about.csv`, or a
+single CSV when one category has context on every row); Excel is a workbook
+with an About sheet and one sheet per category, written without extra
+libraries; PDF and HTML use the chosen columns; JSON and YAML use schema
+version 2 with the chosen columns. The dialog remembers choices per object type
+in the browser. Requests without `sections` keep the original single-schema
+output. Exports still read saved evidence only and keep ownership, quota,
+expiry and the export lane.

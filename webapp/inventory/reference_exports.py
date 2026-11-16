@@ -18,7 +18,7 @@ from django.utils.text import slugify
 from django.views.decorators.http import require_http_methods, require_GET
 from .models import ReferenceExport, Snapshot, MembershipRelation, MembershipLookup
 from .reference_export_data import validate, owner, build, MAX_ROWS
-from .reference_export_formats import render, MIMES, MAX_CONTENT
+from .reference_export_formats import render_export, MIMES, MAX_CONTENT
 
 LOG = logging.getLogger('inventory.exports')
 MAX_ARTIFACT = 16*1024*1024
@@ -64,7 +64,11 @@ def collection(request, pk):
     if request.method=='GET':
         expire()
         jobs=ReferenceExport.objects.filter(snapshot=snapshot,requested_by=request.user).defer('artifact','observation').order_by('-created_at')[:10]
-        response=JsonResponse({'items':[state(job) for job in jobs]});response['Cache-Control']='private, no-store';return response
+        from .reference_export_columns import describe
+        from .reference_export_data import SECTIONS
+        # Column choices per category, so the dialog never hard-codes the export schema.
+        columns=describe({key for sections in SECTIONS.values() for key in sections})
+        response=JsonResponse({'items':[state(job) for job in jobs],'columns':columns});response['Cache-Control']='private, no-store';return response
     try:
         expire()
         if len(request.body)>12000: raise ValueError('Invalid export request.')
@@ -163,18 +167,18 @@ def prepare(pk):
             job=ReferenceExport.objects.select_related('snapshot__environment').defer('artifact','snapshot__report','snapshot__html').get(pk=pk,status='running')
             if job.snapshot.browsing_status!='ready': raise ValueError('Snapshot browsing is no longer ready. Retry after indexing finishes.')
             document=build(job)
-        content=render(document,job.options['format'])
+        content,extension=render_export(document,job.options['format'],job.options)
         packed=gzip.compress(content,mtime=0)
         if len(packed)>MAX_ARTIFACT: raise ValueError('Export exceeds the file-size limit. Export one category at a time.')
         name=slugify(document['metadata']['object']['name'])[:70] or 'object'
-        filename=f"{name}-references-{str(job.snapshot_id)[:8]}.{job.options['format']}"
+        filename=f"{name}-references-{str(job.snapshot_id)[:8]}.{extension}"
         with transaction.atomic():
             get_user_model().objects.select_for_update().get(pk=job.requested_by_id)
             used=ReferenceExport.objects.filter(requested_by_id=job.requested_by_id,expires_at__gt=timezone.now()).exclude(pk=pk).aggregate(size=Sum('artifact_bytes'))['size'] or 0
             if used+len(packed)>USER_QUOTA: raise ValueError('Export storage limit reached. Retry after existing exports expire.')
             ReferenceExport.objects.filter(pk=pk,status='running',expires_at__gt=timezone.now()).update(status='ready',artifact=packed,
                 artifact_bytes=len(packed),content_bytes=len(content),checksum=hashlib.sha256(content).hexdigest(),filename=filename,
-                content_type=MIMES[job.options['format']],finished_at=timezone.now(),observation={})
+                content_type=MIMES[extension],finished_at=timezone.now(),observation={})
     except ReferenceExport.DoesNotExist: return
     except Exception as exc:
         LOG.exception('Reference export failed job=%s',pk)
