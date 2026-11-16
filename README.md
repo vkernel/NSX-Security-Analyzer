@@ -23,10 +23,13 @@ The collector sends GET requests to NSX; it does not change rules or reset count
 
 ## What it does
 
-![Finding reviews showing owners, review stages and compact controls](docs/images/finding-reviews.png)
+![Workspace overview with collection health, environment health, recent collections and finding qualification](docs/images/overview.png)
 
-*Finding reviews in the current interface, using synthetic data.* See the
-[visual walkthrough](docs/screenshots.md) for assignment, comparison and coverage examples.
+![VM evidence panel beside the inventory list, showing firewall references in NSX order](docs/images/vm-evidence.png)
+
+*The current interface with the built-in synthetic demo data.* See the
+[visual walkthrough](docs/screenshots.md) for reviews, firewall rules, references,
+exports, collections, segmentation and administration.
 
 
 - Inventory VMs, groups, services, distributed firewall policies, rules, tags and scopes.
@@ -149,7 +152,14 @@ External role mappings use the same Viewer, Operator and Administrator permissio
 Versioned releases are listed on GitHub and Docker Hub. No support SLA is offered.
 Validate the application against your NSX deployment before operational adoption.
 
-NSX Security Analyzer is licensed under the [Apache License 2.0](LICENSE).
+NSX Security Analyzer is **source-available** under the [Apache License 2.0 with the
+Commons Clause License Condition v1.0](LICENSE). You may use, study, modify and share it
+free of charge, including inside your organisation. You may not sell it, or offer a
+paid product or service (such as hosting or support) whose value derives entirely or
+substantially from it. Because of this condition the project is not "open source" as
+defined by the Open Source Initiative. Releases published before this change remain
+available under their original Apache License 2.0 terms.
+
 See [NOTICE](NOTICE) for project attribution. Third-party dependencies retain their
 own licenses; the project license does not replace their terms.
 

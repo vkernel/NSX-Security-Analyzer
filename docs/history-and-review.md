@@ -11,7 +11,7 @@ Screenshots show version 0.5.3 with synthetic documentation data. Names, counts 
 
 *Select two eligible snapshots on the same page, then choose Compare selected.*
 
-![Compact earlier and later snapshot comparison selectors](images/compare-snapshots.png)
+![Earlier and later snapshot comparison selectors](images/compare-snapshots.png)
 
 *Use these selectors for any retained eligible pair, including snapshots on different history pages.*
 

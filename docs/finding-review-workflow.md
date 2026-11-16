@@ -59,7 +59,7 @@ Open **Reviews** in the main menu for daily work. An environment's **Findings** 
 opens the same workspace with that environment selected; older `/my-work/` and
 environment findings bookmarks still work.
 
-![Finding reviews queue](images/finding-reviews.png)
+![Reviews queue with the selected finding's summary beside the list](images/finding-reviews.png)
 
 | Queue | Contents |
 | --- | --- |
@@ -121,7 +121,7 @@ In **Unassigned**, select rows (the header checkbox selects up to 100 on the cur
 page) and choose **Actions → Assign owner** to assign several at once. Findings changed
 or assigned by someone else since selection are skipped with an explanation.
 
-![Reassign owner dialog with reviewer selection and reason](images/assign-owner.png)
+![Assign owner page with the selected finding, reviewer choice and confirmation](images/assign-owner.png)
 
 *Reassign owner uses one searchable user selector. Reassigning owned work resets
 approvals; assigning released work preserves valid progress.*
@@ -146,9 +146,9 @@ still cannot give the second approval. Evidence and policy changes invalidate ap
 as usual. The server rechecks each finding's revision and permission; changed or
 ineligible rows are skipped with individual reasons.
 
-![Selected finding with contextual return-to-unassigned toolbar](images/finding-selection.png)
+![Selected finding with the bulk actions bar](images/finding-selection.png)
 
-![Return-to-unassigned dialog asking for a required reason](images/return-to-unassigned.png)
+![Return to unassigned page asking for a required reason](images/return-to-unassigned.png)
 
 ### Bulk actions
 
@@ -238,7 +238,7 @@ fingerprint, evidence, reference-search scope and any manual verification detail
 
 ### Reading the review page
 
-![Finding detail with evidence, readiness and review actions](images/finding-detail.png)
+![Finding detail with review stages, evidence and review progress](images/finding-detail.png)
 
 *Synthetic documentation data. Available actions depend on your role and review state.*
 

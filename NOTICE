@@ -1,7 +1,10 @@
 NSX Security Analyzer
 Copyright 2026 D'Angelo Karijopawiro and contributors.
 
-Licensed under the Apache License, Version 2.0.
+Licensed under the Apache License, Version 2.0, with the Commons Clause License
+Condition v1.0: you may use, modify and share the software free of charge, but you
+may not sell it or a product or service whose value derives entirely or
+substantially from it. See LICENSE for the full terms.
 https://github.com/vkernel/NSX-Security-Analyzer
 
 Third-party components remain subject to their respective licenses and notices.

@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- License: Apache License 2.0 with the Commons Clause License Condition v1.0. The software stays free to use, modify and share, but may not be sold, nor offered as a paid product or service whose value derives substantially from it. Releases published earlier remain available under Apache License 2.0.
+
+- Redesigned workspace: grouped sidebar with search and breadcrumb; Overview, Reviews (list with detail panel), Inventory overview, Groups and VMs with a docked evidence panel (Docked, Wide and Full screen widths, rule cards when narrow, resize, Open in new tab), Firewall Rules and Policies in NSX order, a References page, Services and Tags & scopes overviews, a page per collection with a result view, step-by-step deletion requests, Segmentation application cards, Naming outcome cards, Get started and Notifications pages and a centered sign-in card. Snapshots now record a VM count in their summary. No migration.
+
+- Reference exports: choose categories and columns per category (the evidence basis is always included), one table per category as CSV (ZIP), Excel, PDF, HTML, JSON or YAML, context in a separate about file or on every row, and optional raw evidence. Exports still read saved evidence only. No migration.
+
 - New visual language based on coss ui: neutral light and dark tokens, a light navigation rail, outline default buttons with a neutral primary, 36px controls (44px on phones), framed cards with hairline borders and soft shadows, quiet table headers, segmented in-panel tabs and rounded drawers. Implemented as tokens plus a `coss.css` component layer; markup is unchanged. No migration.
 
 - Collection publishes the snapshot and findings before building the browsing index; a failed, stopped or timed-out indexing step leaves the collection published and hands the index to the background rebuild, and the snapshot shows **Preparing browsing data** meanwhile. Collections against a manager that showed no throttling start at 75% of the previous run's settled request rate and concurrency. The VIF inventory is read alongside group member lists. Tag-condition matching does less repeated work. Usage-chart colours use theme tokens with dark-mode variants and at least 4:1 contrast. More pages use the shared page header. `finding-review-workflow.md` and `collection-performance.md` are restructured by task. No migration.

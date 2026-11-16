@@ -1,7 +1,8 @@
 # Contributing
 
 Discuss substantial changes in an issue before opening a pull request. Contributions intentionally submitted for inclusion are provided under the
-[Apache License 2.0](LICENSE), unless explicitly stated otherwise. Only submit work
+[Apache License 2.0 with the Commons Clause License Condition v1.0](LICENSE), unless
+explicitly stated otherwise. Only submit work
 you have the right to contribute.
 
 For Claude Code, start with [CLAUDE.md](CLAUDE.md) and the
