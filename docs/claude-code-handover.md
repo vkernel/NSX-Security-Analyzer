@@ -30,16 +30,16 @@ requested. The remaining review backlog is listed under "Suggested next actions"
 | --- | --- |
 | Repository | [vkernel/NSX-Security-Analyzer](https://github.com/vkernel/NSX-Security-Analyzer) |
 | Branch | `development` |
-| Application commit | `5670ede802476c456ed98fd8f744cf7dce62dfbd` |
+| Application commit | `aa008c797b7b3ca86324ec96ee0ae71b63068c4a` |
 | Application version | `0.5.3`; inspect the build revision as well as the version |
 | Mutable image | `vkernel/nsx-security-analyzer:development` |
-| Pinned image | `vkernel/nsx-security-analyzer:development-5670ede` |
-| Published image digest | `sha256:e120672cec944a3ef5949d240264bb334503e38cadde4a98277f6906153709e3` |
+| Pinned image | `vkernel/nsx-security-analyzer:development-aa008c7` |
+| Published image digest | `sha256:d219657c4279817cfd01687a7373c54c3ac7b683c0b7b773d6c85e6c000baae8` |
 | Platforms | `linux/amd64` and `linux/arm64` |
 | Latest migration | `0069_reference_exports` |
 
 These publication results were verified on 16 November 2026 (build date
-`2026-11-16T08:51:59Z`). Recheck mutable tags
+`2026-11-16T09:12:58Z`). Recheck mutable tags
 and the remote branch before a later publication. The handover documentation is
 published separately from the application image. The running cluster's revision
 and migration state must be inspected before claiming that a rollout is complete.
@@ -102,7 +102,7 @@ unchanged, with its original collection times. Complete-empty direct membership
 must not erase a separately verified saved attachment. Retain identity validation,
 project/scope separation, pagination checks, partial positives and excluded fields.
 
-### Workspace redesign (published in `development-5670ede`)
+### Workspace redesign (published in `development-aa008c7`)
 
 The accepted redesign is being implemented screen by screen; see
 [UI patterns](ui-patterns.md) for each pattern. Done so far: grouped sidebar with
@@ -114,7 +114,8 @@ projections only (`overview_summary.py`); Groups/VMs docking the shared evidence
 drawer beside the list on wide screens (`inventory-dock.js`); report views as
 chip links; Firewall Rules and Policies in NSX order with a policy panel
 (`rule-order.js`, `rule_order.py`, `policy_order.py`); a page per collection
-with a result view once completed (`collection_detail.py`); deletion requests
+with a result view once completed (`collection_detail.py`); the docked evidence panel has Docked, Wide and Full
+screen widths, rule cards when narrow, a resize handle and an Open in new tab link; deletion requests
 with a stage title and step cards (presentation only); Services and Tags & scopes
 overviews (`catalog-views.js`, `catalog_views.py`); a References page under
 Firewall (`object-references.js`); Segmentation application cards and Naming
@@ -180,8 +181,8 @@ before changing format schemas, job lifecycle or deployment requirements.
 
 ## Verification baseline
 
-The published application baseline (`5670ede`) passed 1,066 Django tests,
-133 JavaScript tests and 113 offline collector tests on 16 November 2026. Both
+The published application baseline (`aa008c7`) passed 1,066 Django tests,
+136 JavaScript tests and 113 offline collector tests on 16 November 2026. Both
 registry platforms were pulled by digest: non-root user, build revision and
 date, fresh migrations to `0069`, system check and static assets passed. The
 table below records the earlier 13 November baseline checks.
