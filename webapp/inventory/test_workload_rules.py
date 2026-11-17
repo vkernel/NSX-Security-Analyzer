@@ -56,6 +56,21 @@ class WorkloadInvestigationTests(TestCase):
         response=self.client.get(self.url,self.query)
         self.assertContains(response,'candidate rule')
         self.assertContains(response,'not an Allowed / Blocked verdict')
+    def test_policy_applied_to_takes_precedence_in_the_scope_check(self):
+        # The rule's own Applied To is ANY; NSX enforces the policy's Applied To instead.
+        self.rule.data['configuration']['policy']['scope']=['/infra/domains/default/groups/Unrelated'];self.rule.save()
+        rule=investigate(self.snapshot,self.src,self.dst,'TCP','1433')['candidates'][0]
+        self.assertEqual(rule['scope_status'],'Scope requires manual assessment')
+        self.assertTrue(rule['applied_from_policy'])
+        self.assertEqual([item['label'] for item in rule['applied_to']],['Unrelated'])
+        self.rule.data['configuration']['policy']['scope']=[self.group_a];self.rule.save()
+        rule=investigate(self.snapshot,self.src,self.dst,'TCP','1433')['candidates'][0]
+        self.assertEqual(rule['scope_status'],'Potential endpoint scope match')
+        self.rule.data['configuration']['policy']['scope']=['ANY'];self.rule.data['configuration']['rule']['scope']=['/infra/domains/default/groups/Unrelated'];self.rule.save()
+        rule=investigate(self.snapshot,self.src,self.dst,'TCP','1433')['candidates'][0]
+        self.assertEqual(rule['scope_status'],'Scope requires manual assessment','With a policy Applied To of ANY the rule\'s own applies.')
+        self.assertFalse(rule['applied_from_policy'])
+
     def test_unresolved_exclusion_and_disabled_rules_are_not_silently_ignored(self):
         self.rule.data['configuration']['rule']['sources_excluded']=True;self.rule.save()
         result=investigate(self.snapshot,self.src,self.dst,'TCP','1433')

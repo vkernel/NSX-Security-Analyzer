@@ -11,18 +11,25 @@ CATEGORIES = {'Ethernet': 0, 'Emergency': 1, 'Infrastructure': 2, 'Environment':
 DIRECTIONS={'IN_OUT':'In and out','IN':'In','OUT':'Out'}
 
 
-def display_fields(rule,policy):
-    """Labels for the rule drawer only; matching above is unchanged.
+def effective_scope(rule,policy):
+    """Applied To that NSX enforces: a policy Applied To other than ANY takes precedence over
+    the rule's own; otherwise the rule's Applied To (or the policy's when the rule has none)."""
+    policy_scope=policy.get('scope') if isinstance(policy.get('scope'),list) else []
+    if policy_scope and not all(str(v).upper()=='ANY' for v in policy_scope):
+        return policy_scope,True
+    own=rule.get('scope')
+    return (own if isinstance(own,list) else policy_scope),False
 
-    A policy Applied To that is not ANY takes precedence over the rule's own, as in NSX."""
+
+def display_fields(rule,policy):
+    """Labels for the rule drawer; the Applied To shown is the one the scope check uses."""
     def labels(values):
         values=values if isinstance(values,list) else []
         return [{'label':'Any' if str(v).upper()=='ANY' else str(v).rsplit('/',1)[-1],'path':str(v)} for v in values]
-    policy_scope=policy.get('scope') if isinstance(policy.get('scope'),list) else []
-    from_policy=bool(policy_scope) and not all(str(v).upper()=='ANY' for v in policy_scope)
+    scope,from_policy=effective_scope(rule,policy)
     action=str(rule.get('action','')).upper()
     return {'direction_label':DIRECTIONS.get(rule.get('direction'),rule.get('direction') or 'Not recorded'),
-            'applied_to':labels(policy_scope if from_policy else rule.get('scope',policy_scope)),'applied_from_policy':from_policy,
+            'applied_to':labels(scope),'applied_from_policy':from_policy,
             'action_tone':'ok' if action=='ALLOW' else 'bad' if action in ('DROP','REJECT') else 'neutral',
             'logged':rule.get('logged')}
 
@@ -182,7 +189,7 @@ def investigate(snapshot, source_record, destination_record, protocol='', port='
         b,why_b=endpoint(rule.get('destination_groups'),destination,destination_names,rule.get('destinations_excluded',False))
         svc,why_s=service_match(rule,catalog,protocol,port)
         if 'no_match' in (a,b,svc): continue
-        scope=rule.get('scope',policy.get('scope',[]))
+        scope,_=effective_scope(rule,policy)
         sa,_=endpoint(scope,source,source_names);sb,_=endpoint(scope,destination,destination_names)
         entry={'name':item.get('name','Unnamed rule'),'path':item.get('path',''),'policy':item.get('policy_name',''),
             'category':item.get('category') or policy.get('category','Unknown'), 'policy_order':policy.get('sequence_number'),
