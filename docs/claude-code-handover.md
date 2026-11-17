@@ -30,16 +30,16 @@ requested. The remaining review backlog is listed under "Suggested next actions"
 | --- | --- |
 | Repository | [vkernel/NSX-Security-Analyzer](https://github.com/vkernel/NSX-Security-Analyzer) |
 | Branch | `development` |
-| Application commit | `2e470ec019e45714801aa140c757ddd3ce049f9a` |
+| Application commit | `457a76070a37431c4b82407e73f165f21171cf2f` |
 | Application version | `0.5.3`; inspect the build revision as well as the version |
 | Mutable image | `vkernel/nsx-security-analyzer:development` |
-| Pinned image | `vkernel/nsx-security-analyzer:development-2e470ec` |
-| Published image digest | `sha256:32fff4dead6d75479d8a3ad4814fd40626b3d3c3447f53815fe52dc5fc26a9f0` |
+| Pinned image | `vkernel/nsx-security-analyzer:development-457a760` |
+| Published image digest | `sha256:6a3f2b8c0d03e8ecf18a4bdcf550445716578c80917b16bd08e1dfc02bcba826` |
 | Platforms | `linux/amd64` and `linux/arm64` |
 | Latest migration | `0070_collection_slots_and_retry` |
 
 These publication results were verified on 17 November 2026 (build date
-`2026-11-17T06:24:40Z`). Recheck mutable tags
+`2026-11-17T07:42:08Z`). Recheck mutable tags
 and the remote branch before a later publication. The handover documentation is
 published separately from the application image. The running cluster's revision
 and migration state must be inspected before claiming that a rollout is complete.
@@ -197,7 +197,7 @@ adds interface details to them. Two bulk counter probes run only with eight or m
 counter workers. `summary.performance` feeds the staff-only performance trend.
 Tests: `inventory.test_collection_resilience` and `test_collector.py`.
 
-### Firewall Summary (not yet published)
+### Firewall Summary (published in `development-457a760`)
 
 `collector.dfw_figures` computes the Firewall Summary figures (version 1). Publication
 saves them in `summary.firewall`; `firewall_overview.py` reads that key, or for older
@@ -211,13 +211,14 @@ N/A without enabled ALLOW rules. Tests: `inventory.test_firewall_overview`.
 
 ## Verification baseline
 
-The published application baseline (`2e470ec`) passed 1,087 Django tests,
-138 JavaScript tests and 113 offline collector tests (9 skipped) on 16–17 November
-2026, plus a live PostgreSQL check with two collection slots: a worker killed with
-SIGKILL mid-collection left the job running, and restarting the lane failed it as
-`WORKER_ORPHANED` with exactly one queued retry. Both registry platforms were run
-by digest: non-root user, build revision and date, migrations to `0070` (fresh on
-AMD64), system check and static assets passed. `test_workload_rules` failed once in
+The published application baseline (`457a760`) passed 1,093 Django tests,
+139 JavaScript tests and 113 offline collector tests (9 skipped) on 17 November
+2026. Both registry platforms ran by digest against separate empty databases:
+non-root user, build revision and date, fresh migrations to `0070`, system check
+and static assets passed. The collection-slot work (`2e470ec`) also passed a
+live PostgreSQL check with two slots: a worker killed with SIGKILL mid-collection
+left the job running, and restarting the lane failed it as `WORKER_ORPHANED` with
+exactly one queued retry. `test_workload_rules` failed once in
 an earlier full run and passed alone and in the next full run; treat it as
 order-sensitive until investigated. The
 table below records the earlier 13 November baseline checks.
