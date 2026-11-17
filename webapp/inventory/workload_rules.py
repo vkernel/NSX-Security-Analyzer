@@ -7,6 +7,25 @@ RULE_LIMIT = 10000
 CATEGORIES = {'Ethernet': 0, 'Emergency': 1, 'Infrastructure': 2, 'Environment': 3, 'Application': 4}
 
 
+
+DIRECTIONS={'IN_OUT':'In and out','IN':'In','OUT':'Out'}
+
+
+def display_fields(rule,policy):
+    """Labels for the rule drawer only; matching above is unchanged.
+
+    A policy Applied To that is not ANY takes precedence over the rule's own, as in NSX."""
+    def labels(values):
+        values=values if isinstance(values,list) else []
+        return [{'label':'Any' if str(v).upper()=='ANY' else str(v).rsplit('/',1)[-1],'path':str(v)} for v in values]
+    policy_scope=policy.get('scope') if isinstance(policy.get('scope'),list) else []
+    from_policy=bool(policy_scope) and not all(str(v).upper()=='ANY' for v in policy_scope)
+    action=str(rule.get('action','')).upper()
+    return {'direction_label':DIRECTIONS.get(rule.get('direction'),rule.get('direction') or 'Not recorded'),
+            'applied_to':labels(policy_scope if from_policy else rule.get('scope',policy_scope)),'applied_from_policy':from_policy,
+            'action_tone':'ok' if action=='ALLOW' else 'bad' if action in ('DROP','REJECT') else 'neutral',
+            'logged':rule.get('logged')}
+
 def addresses(value):
     """Only address-bearing fields, not arbitrary strings such as gateways or IDs."""
     found = set()
@@ -171,6 +190,7 @@ def investigate(snapshot, source_record, destination_record, protocol='', port='
             'direction':rule.get('direction','Not recorded'), 'scope':scope, 'scope_status':'Potential endpoint scope match' if 'candidate' in (sa,sb) else 'Scope requires manual assessment',
             'source_reason':why_a,'destination_reason':why_b,'service_reason':why_s,
             'configuration':config,'services':rule.get('services',[]), 'inline':rule.get('service_entries',[]),
+            **display_fields(rule,policy),
             'status':'candidate' if a==b==svc=='candidate' else 'unresolved'}
         (candidates if entry['status']=='candidate' else unresolved).append(entry)
     def order(row):

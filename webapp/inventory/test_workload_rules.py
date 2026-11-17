@@ -154,3 +154,17 @@ class WorkloadInvestigationTests(TestCase):
         response=self.client.post(self.draft_url,self.draft(source='/groups/broad'))
         self.assertEqual(response.status_code,302)
         self.assertEqual(FirewallRuleProposal.objects.get().configuration['source'],'/groups/broad')
+
+
+class RuleDrawerLabelTests(SimpleTestCase):
+    def test_policy_applied_to_takes_precedence_and_values_are_labelled(self):
+        from .workload_rules import display_fields
+        fields = display_fields({'scope': ['ANY'], 'direction': 'IN_OUT', 'action': 'DROP', 'logged': True},
+                                {'scope': ['/infra/domains/default/groups/app']})
+        self.assertTrue(fields['applied_from_policy'])
+        self.assertEqual(fields['applied_to'], [{'label': 'app', 'path': '/infra/domains/default/groups/app'}])
+        self.assertEqual((fields['direction_label'], fields['action_tone'], fields['logged']), ('In and out', 'bad', True))
+        own = display_fields({'scope': ['ANY'], 'action': 'ALLOW'}, {'scope': ['ANY']})
+        self.assertFalse(own['applied_from_policy'])
+        self.assertEqual(own['applied_to'][0]['label'], 'Any')
+        self.assertEqual((own['direction_label'], own['action_tone']), ('Not recorded', 'ok'))

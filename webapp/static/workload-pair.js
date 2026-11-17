@@ -37,9 +37,8 @@
    if(!body.dataset.tabbed&&window.WorkspaceTabs){
     body.dataset.tabbed='true';const nav=document.createElement('nav');nav.className='panel-evidence-tabs';nav.setAttribute('aria-label','Firewall rule evidence');
     const summary=document.createElement('section'),references=document.createElement('section'),technical=document.createElement('section'),history=document.createElement('section');
-    const facts=document.createElement('p');facts.textContent=row.querySelector('summary').textContent.trim();summary.append(facts);
     for(const child of [...body.children]){if(child.matches('.pair-match'))references.append(child);else if(child.matches('details'))technical.append(child);else summary.append(child);}
-    history.textContent='This is saved configuration evidence. Open the saved firewall rule for its snapshot context; this view does not contain review history.';
+    const empty=document.createElement('div');empty.className='evidence-empty';const heading=document.createElement('strong');heading.textContent='No history in this view';const note=document.createElement('p');note.className='muted';note.textContent='This is saved configuration evidence. Open the saved firewall rule for its snapshot context; this view does not contain review history.';empty.append(heading,note);history.append(empty);
     body.append(nav,summary,references,history,technical);window.WorkspaceTabs(nav,[{label:'Summary',panel:summary},{label:'References',panel:references},{label:'History',panel:history},{label:'Technical details',panel:technical}]);
    }
    drawer.querySelector('[data-rule-drawer-body]').replaceChildren(body);drawer.showModal();
