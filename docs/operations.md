@@ -337,10 +337,52 @@ update background processing. Release installation defaults are pinned to 0.5.3.
 The default `audit_worker --lane all` supervises six independent lanes: collection,
 finding-review indexing/recalculation, comparison, deletion preview, deletion
 execution and reference exports. One task per lane can run side by side; extra
-tasks of each type wait. See [reference exports](reference-exports.md) for the
+tasks of each type wait. Extra collection lanes run when `NSX_COLLECTION_SLOTS` is
+above 1 (below). See [reference exports](reference-exports.md) for the
 export lane and its retention limits. PostgreSQL leases enforce these limits
 across replicas; same-environment publication can briefly wait on a database lock.
 See System health for each lane's heartbeat and worker logs for actual progress.
+
+### Parallel collections and automatic retry
+
+These are deployment settings, not GUI settings. Set them as environment variables
+with the same value on the migration job, web, worker and scheduler, then restart
+those services. In Docker Compose they are in `deploy/compose.yaml` (or your `.env`);
+in Kubernetes in `deploy/kubernetes/manifests/config.yaml`.
+
+| Variable | Default | Effect |
+| --- | --- | --- |
+| `NSX_COLLECTION_SLOTS` | `1` | How many collections run at the same time, each for a different environment (1–4). |
+| `NSX_COLLECTION_RETRY_SECONDS` | `900` | Wait before the one automatic retry of a collection that failed for a temporary reason (minimum 60). |
+
+**Collection slots.** With the default of 1, collections of all environments run
+one after another. With 2 or more, the worker starts one collection lane per slot
+(`collection`, `collection_2`, `collection_3`, `collection_4`), each with its own
+PostgreSQL lease and collector process. For example, three environments scheduled
+at the same time finish in roughly the time of the slowest one instead of the sum.
+
+- One environment never runs two collections, whatever the slot count.
+- NSX request limits (concurrency, pacing, retries) stay per environment and
+  Manager, so extra slots do not put more load on one Manager.
+- Slots share the worker's CPU and memory and the database. Add one collection
+  worker's memory per extra slot (see [resource sizing](resource-sizing.md)) and
+  check PostgreSQL connections before raising the value.
+- **Administration → Operations → System health** lists each slot ("Collection slot 2").
+- When a slot's worker restarts after a crash, it fails the collection it left
+  running (`WORKER_ORPHANED`) instead of blocking that environment until the stale
+  timeout. After lowering the value, the first slot cleans up collections left in
+  slots that no longer run.
+
+**Automatic retry.** A collection that fails for a temporary reason (HTTP 429 or 5xx
+from NSX, network timeouts or connection errors, database lock timeouts or
+deadlocks, or a stopped or crashed worker) is queued once more after
+`NSX_COLLECTION_RETRY_SECONDS`. Authentication and TLS errors, the collection time
+limit, testing samples, manual stops and paused environments never retry, and a
+retry is never retried. While a retry waits, **Run collection** starts it immediately
+and **Stop collection** cancels it. The failed collection and its retry link to
+each other. See [collection performance](collection-performance.md#interrupted-and-failed-collections)
+for details and **Collection history → Performance trend** for durations and
+failures per environment.
 
 An older three-lane development build reused the comparison lease ID for finding
 task claiming. The correction is included from build `0764747`. Stop old worker
