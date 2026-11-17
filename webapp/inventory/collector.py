@@ -2339,6 +2339,55 @@ def overview_charts(groups, services, rules, testing=False):
         'Zero counters do not prove historical non-use. Select a legend entry to open its report page.</p>')
 
 
+def rule_dimension(row, key):
+    values = row.get(key)
+    if not isinstance(values, list) or not values or any(not isinstance(v, str) or not v for v in values):
+        return "unknown"
+    return "any" if any(v.upper() == "ANY" for v in values) else "specific"
+
+
+# Review prompts for enabled ALLOW rules (key, label, predicate). They can overlap.
+ALLOW_PROMPTS = (
+    ("any_endpoint", "ANY source or destination", lambda r: any(rule_dimension(r, k) == "any" for k in ("source_groups", "destination_groups"))),
+    ("any_both", "ANY source and destination", lambda r: all(rule_dimension(r, k) == "any" for k in ("source_groups", "destination_groups"))),
+    ("any_service", "ANY in the services field", lambda r: rule_dimension(r, "services") == "any"),
+    ("any_scope", "ANY Applied to scope", lambda r: rule_dimension(r, "scope") == "any"),
+    ("unknown_service", "Missing or invalid service information", lambda r: rule_dimension(r, "services") == "unknown"),
+    ("unknown_scope", "Missing or invalid Applied to scope", lambda r: rule_dimension(r, "scope") == "unknown"),
+)
+
+
+def dfw_figures(dfw, testing=False):
+    """Firewall summary figures from saved rules and policies (small and JSON-safe).
+
+    Saved with each snapshot and shown by the Firewall Summary page. The segmentation
+    figure is a rule configuration proxy, never a workload coverage score."""
+    dfw = dfw if isinstance(dfw, dict) else {}
+    rules = [r for r in dfw.get("rules", []) if isinstance(r, dict)]
+    policies = [p for p in dfw.get("policies", []) if isinstance(p, dict)]
+    enabled = [r for r in rules if not r.get("disabled")]
+    allows = [r for r in enabled if str(r.get("action", "")).upper() == "ALLOW"]
+    bounded = sum(all(rule_dimension(r, k) == "specific" for k in ("source_groups", "destination_groups")) for r in allows)
+    incomplete = bool(testing) or bool(dfw.get("errors")) or any(p.get("status") == "unknown" for p in policies)
+    categories = sorted({str(p.get("category", "Unspecified")) for p in policies} | {str(r.get("category", "Unspecified")) for r in rules})
+    return {
+        "version": 1, "policies": len(policies), "rules": len(rules), "enabled": len(enabled), "disabled": len(rules) - len(enabled),
+        "traffic": sum(r.get("hit_status") == "traffic_recorded" for r in enabled),
+        "zero_hits": sum(r.get("hit_status") == "zero_hits" for r in enabled),
+        "unknown_activity": sum(r.get("hit_status") not in {"traffic_recorded", "zero_hits", "not_supported"} for r in enabled),
+        "empty_policies": sum(p.get("status") == "empty" for p in policies),
+        "allows": len(allows), "bounded": bounded,
+        "unknown_endpoints": sum(any(rule_dimension(r, k) == "unknown" for k in ("source_groups", "destination_groups")) for r in allows),
+        "incomplete": incomplete, "testing": bool(testing),
+        "prompts": [{"key": key, "label": label, "count": sum(bool(test(r)) for r in allows)} for key, label, test in ALLOW_PROMPTS],
+        "actions": [{"action": action, "count": count} for action, count in sorted(Counter(str(r.get("action", "Unspecified")) for r in enabled).items())],
+        "categories": [{"category": category, "policies": sum(str(p.get("category", "Unspecified")) == category for p in policies),
+                        "enabled": sum(str(r.get("category", "Unspecified")) == category and not r.get("disabled") for r in rules),
+                        "disabled": sum(str(r.get("category", "Unspecified")) == category and bool(r.get("disabled")) for r in rules)}
+                       for category in categories],
+    }
+
+
 def dfw_overview(dfw, testing=False):
     """Configuration indicators, not a workload coverage or effective-policy score."""
     rules, policies = dfw.get("rules", []), dfw.get("policies", [])

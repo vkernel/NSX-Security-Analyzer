@@ -159,7 +159,44 @@ test('snapshot report hash keeps the sidebar module, page and breadcrumb in step
   assert.equal(d.querySelector('.topbar-breadcrumb').textContent, 'Production/Firewall/Rules');
   w.location.hash = '#overview';
   w.dispatchEvent(new w.HashChangeEvent('hashchange'));
+  await tick();
   assert.ok(d.querySelector('[data-nav-module=inventory]').classList.contains('is-active'));
+  w.close();
+});
+
+test('aliases, pages without a sidebar link and unknown hashes never keep a stale breadcrumb', async () => {
+  const dom = new JSDOM(`<body data-section-expanded="true"><aside data-nav-shell><nav class="nav-tree">
+    <div class="nav-module has-pages" data-nav-module="inventory"><div class="nav-row"><a href="#overview" data-primary="inventory" data-module-label="Inventory">Inventory</a></div><div data-nav-pages><a href="/snapshots/s1/#overview">Overview</a></div></div>
+    <div class="nav-module has-pages is-active" data-nav-module="firewall"><div class="nav-row"><a href="#dfw-overview" data-primary="firewall" data-module-label="Firewall" aria-current="true">Firewall</a></div><div data-nav-pages><a href="/snapshots/s1/#dfw-overview" aria-current="page">Summary</a></div></div>
+    <a href="/workspace/help/" data-primary="help">Help</a>
+  </nav></aside><nav class="topbar-breadcrumb"><span>Production</span><span aria-hidden="true">/</span><span>Firewall</span><span aria-hidden="true">/</span><span aria-current="page">Summary</span></nav>
+  <header class="app-page-header"><h1>Distributed firewall overview</h1></header>
+  <section data-panel id="overview" hidden></section><section data-panel id="dfw-overview"></section><section data-panel id="coverage" hidden></section></body>`,
+    {url: 'https://example.test/snapshots/s1/?browse=1#dfw-overview', runScripts: 'outside-only'});
+  const w = dom.window, d = w.document;
+  w.matchMedia = () => ({matches: true, addEventListener() {}});
+  w.eval(source);
+  await new Promise(resolve => d.addEventListener('DOMContentLoaded', resolve, {once: true}));
+  const crumb = () => d.querySelector('.topbar-breadcrumb').textContent;
+  const current = () => d.querySelector('[data-nav-pages] a[aria-current]')?.textContent || '';
+  // The report shows a panel for the hash (or its default panel), like application.js does.
+  const show = (id, heading, primary) => {
+    d.querySelectorAll('[data-panel]').forEach(panel => { panel.hidden = panel.id !== id; });
+    d.querySelector('h1').innerHTML = heading;
+    d.querySelectorAll('[data-primary]').forEach(a => a.toggleAttribute('aria-current', a.dataset.primary === primary));
+  };
+  for (const [hash, panel, heading, primary, expected, page] of [
+    ['#inventory-overview', 'overview', 'Inventory', 'inventory', 'Production/Inventory/Overview', 'Overview'],
+    ['#coverage', 'coverage', 'Coverage &amp; definitions', 'help', 'Production/Help/Coverage & definitions', ''],
+    ['#not-a-page', 'overview', 'Inventory <span>12</span>', 'inventory', 'Production/Inventory/Overview', 'Overview'],
+  ]) {
+    w.location.hash = hash;
+    show(panel, heading, primary);
+    w.dispatchEvent(new w.HashChangeEvent('hashchange'));
+    await tick();
+    assert.equal(crumb(), expected, hash);
+    assert.equal(current(), page, hash + ' sidebar page');
+  }
   w.close();
 });
 

@@ -148,6 +148,7 @@ class SlotAndRetryTests(TestCase):
         figures = job.snapshot.summary['performance']
         for key in ('elapsed_seconds', 'requests', 'throttled', 'concurrency_final', 'concurrency_peak', 'unknown_membership', 'search_incomplete'):
             self.assertIn(key, figures)
+        self.assertEqual(job.snapshot.summary['firewall']['version'], 1, 'Firewall Summary figures are saved at publish.')
 
     def test_temporary_nsx_failure_queues_exactly_one_retry(self):
         job = self.collect(AuditError('Service unavailable', status_code=503))

@@ -357,6 +357,7 @@ def prepare_snapshot(environment, report, imported=False):
         if not imported:
             from .collection_trend import performance_summary
             summary['performance'] = performance_summary(report)
+        summary['firewall'] = audit.dfw_figures(report.get('dfw'), bool(report.get('testing')))
         from .usability import coverage_keys
         if not imported and not report.get('testing'):
             keys = coverage_keys(report)

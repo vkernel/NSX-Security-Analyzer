@@ -497,3 +497,31 @@ body[data-theme] .reference-export-category select{width:auto;font-size:13px}
 body[data-theme] .trend-duration{position:relative;isolation:isolate;display:inline-block;min-width:120px;padding:2px 6px;font-variant-numeric:tabular-nums;white-space:nowrap}
 body[data-theme] .trend-bar{position:absolute;inset:0 auto 0 0;width:var(--bar,0%);border-radius:4px;background:color-mix(in srgb,var(--app-accent) 16%,transparent);z-index:-1}
 body[data-theme] .collection-trend-table td small{display:block;font-size:12px;color:var(--muted)}
+/* Firewall Summary: same components as the inventory overview, plus indicator and action bars. */
+.firewall-overview .indicator-value{display:flex;flex-direction:column;gap:2px;margin:0 0 10px}
+.firewall-overview .indicator-value strong{font-size:28px;line-height:1.2;font-weight:600;font-variant-numeric:tabular-nums}
+.firewall-overview .indicator-value span{font-size:13px;color:var(--muted)}
+.firewall-overview .indicator-bar,.firewall-overview .action-bar{display:block;height:8px;border-radius:999px;background:var(--app-surface-soft);overflow:hidden}
+.firewall-overview .indicator-bar{margin:0 0 12px}
+.firewall-overview .indicator-bar>span,.firewall-overview .action-bar>span{display:block;height:100%;border-radius:inherit;background:var(--app-accent)}
+.firewall-overview .snapshot-information{margin:8px 0 0;font-size:13px}
+.firewall-overview .snapshot-information p{color:var(--muted)}
+body[data-theme] .firewall-overview .review-prompts li{padding:0}
+body[data-theme] .workspace-main .firewall-overview .review-prompts li a:not(.button):not([role=button]),body[data-theme] .firewall-overview .review-prompts a *{text-decoration:none}
+body[data-theme] .firewall-overview .review-prompts a{display:flex;align-items:center;gap:12px;width:100%;padding:10px 16px;color:var(--ink)}
+body[data-theme] .firewall-overview .review-prompts a:hover span:first-child{text-decoration:underline}
+body[data-theme] .firewall-overview .review-prompts a:hover{background:var(--app-surface-soft)}
+body[data-theme] .firewall-overview .review-prompts a:focus-visible{outline:2px solid var(--app-accent);outline-offset:-2px}
+.firewall-overview .review-prompts span{flex:1;min-width:0}
+.firewall-overview .review-prompts b,.firewall-overview .action-rows b{font-weight:600;font-variant-numeric:tabular-nums}
+body[data-theme] .firewall-overview .review-prompts a::after{content:'›';color:var(--muted)}
+.firewall-overview .action-rows li>span:first-child{flex:0 0 7em;font-weight:500}
+.firewall-overview .action-rows .action-bar{flex:1}
+.firewall-overview .action-rows b{min-width:3ch;text-align:right}
+body[data-theme] .firewall-overview .category-table{width:100%;min-width:0;margin:0;border:0}
+.firewall-overview .category-table th,.firewall-overview .category-table td{vertical-align:middle}
+body[data-theme] .firewall-overview .category-table thead th{white-space:normal}
+body[data-theme] .firewall-overview .category-table th[scope=row]{font-size:14px;font-weight:500;text-align:left;color:var(--ink)}
+.firewall-overview .category-table td{font-variant-numeric:tabular-nums}
+.firewall-detail-split{grid-template-columns:minmax(0,1.6fr) minmax(260px,1fr)}
+@media(max-width:1000px){.firewall-detail-split{grid-template-columns:minmax(0,1fr)}}

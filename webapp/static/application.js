@@ -182,6 +182,13 @@
       }else slot?.remove();
       overview.querySelector('.compact-inventory-totals')?.setAttribute('hidden','');
     }
+    // Firewall Summary: the server-rendered summary replaces the report's legacy overview body.
+    const firewallSection=document.getElementById('dfw-overview'),firewallTemplate=document.getElementById('firewall-overview-summary');
+    if(firewallSection&&firewallTemplate&&!firewallSection.querySelector('[data-firewall-overview]')){
+      const heading=firewallSection.querySelector(':scope > h2');
+      [...firewallSection.children].forEach(node=>{if(node!==heading)node.remove();});
+      firewallSection.append(firewallTemplate.content.firstElementChild.cloneNode(true));
+    }
     document.querySelectorAll('#dfw-rules > p.muted,#zero-hit-rules > p.muted').forEach(note=>{const details=make('details',null,'snapshot-information');note.before(details);details.append(make('summary','How to interpret rule counters'),note);});
 
     function rememberMenu(details,key){

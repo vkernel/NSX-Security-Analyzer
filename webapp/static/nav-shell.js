@@ -250,41 +250,60 @@
     'tags-both': 'tags-all', 'tags-vm_only': 'tags-all', 'tags-group_only': 'tags-all', 'tags-other_only': 'tags-all', 'tags-unknown': 'tags-all',
     'zero-hit-rules': 'dfw-rules', 'disabled-rules': 'dfw-rules', 'unknown-statistics': 'dfw-rules', 'empty-group-rules': 'dfw-rules', 'dfw-scope-rules': 'dfw-rules',
   };
+  // The panel the report actually shows: aliases (#inventory-overview) and unknown hashes
+  // fall back to a visible panel, so the breadcrumb never describes another page.
+  function shownPanel() {
+    const requested = decodeURIComponent(location.hash.slice(1));
+    const target = requested && document.getElementById(requested);
+    if (target && target.matches('[data-panel]') && !target.hidden) return requested;
+    return document.querySelector('[data-panel]:not([hidden])')?.id || requested;
+  }
+  function headingText() {
+    const heading = document.querySelector('.app-page-header h1, .page-heading h1');
+    // Text nodes only: a count badge inside the heading is not part of the page name.
+    return heading ? [...heading.childNodes].filter(node => node.nodeType === Node.TEXT_NODE).map(node => node.textContent).join('').trim() : '';
+  }
   function syncHash(shell) {
     const hash = location.hash;
     if (!hash || hash.length < 2) return;
+    const panel = shownPanel();
+    if (!panel) return;
     const here = location.pathname;
     const matching = target => [...shell.querySelectorAll('[data-nav-pages] a[href]')].filter(link => {
       const url = new URL(link.href, location.href);
       return url.hash === target && url.pathname === here;
     });
-    let links = matching(hash);
-    const parent = PARENT_VIEWS[decodeURIComponent(hash.slice(1))];
+    let links = matching('#' + panel);
+    const parent = PARENT_VIEWS[panel];
     if (!links.length && parent) links = matching('#' + parent);
-    if (!links.length) return;
-    const link = links[0], module = link.closest('.nav-module');
+    const link = links[0] || null;
+    // Without its own sidebar page, the section comes from the report's primary-section marker.
+    const module = link ? link.closest('.nav-module') : document.querySelector('[data-primary][aria-current]')?.closest('.nav-module') || null;
     shell.querySelectorAll('[data-nav-pages] a[aria-current]').forEach(a => a.removeAttribute('aria-current'));
-    link.setAttribute('aria-current', 'page');
+    if (link) link.setAttribute('aria-current', 'page');
     shell.querySelectorAll('.nav-module.is-active').forEach(m => {
       if (m === module) return;
       m.classList.remove('is-active');
       m.querySelector('[data-primary]')?.removeAttribute('aria-current');
     });
-    module.classList.add('is-active');
-    module.querySelector('[data-primary]')?.setAttribute('aria-current', 'true');
-    if (!collapsed()) setOpen(module, true);
+    if (module) {
+      module.classList.add('is-active');
+      module.querySelector('[data-primary]')?.setAttribute('aria-current', 'true');
+      if (!collapsed()) setOpen(module, true);
+    }
     const crumb = document.querySelector('.topbar-breadcrumb');
     if (crumb) {
       const parts = crumb.querySelectorAll(':scope>span:not([aria-hidden])');
-      const label = module.querySelector('[data-module-label]')?.dataset.moduleLabel;
+      const label = module?.querySelector('[data-module-label]')?.dataset.moduleLabel || (!module && document.querySelector('[data-primary="help"][aria-current]') ? 'Help' : '');
       if (parts[1] && label) parts[1].textContent = label;
-      if (parts[2]) parts[2].textContent = link.textContent.trim();
+      const page = link ? link.textContent.trim() : headingText();
+      if (parts[2] && page) parts[2].textContent = page;
     }
   }
 
   function init() {
     const shell = document.querySelector('[data-nav-shell]');
-    if (shell) { initCollapse(shell); initTree(shell); initPalette(shell); syncHash(shell); addEventListener('hashchange', () => syncHash(shell)); }
+    if (shell) { initCollapse(shell); initTree(shell); initPalette(shell); syncHash(shell); setTimeout(() => syncHash(shell), 0); addEventListener('hashchange', () => setTimeout(() => syncHash(shell), 0)); }
     applyFind();
   }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init); else init();
