@@ -19,6 +19,7 @@
 <article class="review-detail content-card" id="review-detail-{{ item.key }}" data-review-detail="{{ item.key }}" aria-labelledby="review-detail-title-{{ item.key }}" tabindex="-1"{% if item.key != selected_key %} hidden{% endif %}>
 <header class="review-detail-head"><div><h2 id="review-detail-title-{{ item.key }}">{{ item.name }}</h2><p>{{ item.task_label }} · {{ item.environment.name }}</p></div><span class="pill {{ item.tone }}">{{ item.stage }}</span></header>
 {% if item.review_kind == 'finding' %}
+<div class="review-tiles" role="group" aria-label="Review progress"><div><span>Observed</span><strong>{{ item.observation_days }} d</strong><small>{% if item.required_days %}{{ item.required_days }} days required{% else %}No minimum recorded{% endif %}</small></div><div><span>Observations</span><strong>{{ item.observation_count }}</strong><small>successful</small></div><div><span>Approvals</span><strong>{{ item.approval_count }} / {{ item.required_approvals }}</strong><small>recorded</small></div></div>
 <dl class="review-facts">
 <dt>Finding</dt><dd>{{ item.qualification_reason|default:item.task_label }}</dd>
 <dt>Observed</dt><dd>{{ item.observation_count }} successful observation{{ item.observation_count|pluralize }} over {{ item.observation_days }} day{{ item.observation_days|pluralize }}{% if item.required_days %} (criteria: {{ item.required_days }} day{{ item.required_days|pluralize }}){% endif %}</dd>

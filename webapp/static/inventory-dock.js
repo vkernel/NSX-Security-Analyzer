@@ -92,9 +92,8 @@
       else if (!firewall && mode === 'wide' && read(KEY_MODE) !== 'wide') setMode('docked');
     }).observe(dialog, {attributes: true, attributeFilter: ['class']});
 
-    // Long coverage notes collapse into "About this evidence" in the docked panel; the text is unchanged.
+    // Long coverage notes collapse into "About this evidence" at every panel width; the text is unchanged.
     new MutationObserver(() => {
-      if (!dialog.classList.contains('is-docked')) return;
       body.querySelectorAll('section.evidence-table-section:not([data-about])').forEach(section => {
         const notes = [...section.children].filter(node => node.matches('p.evidence-note'));
         if (!notes.length) return;

@@ -1,37 +1,177 @@
 (() => {
   const make=(tag,text,className)=>{const node=document.createElement(tag);if(text)node.textContent=text;if(className)node.className=className;return node;};
   const evidenceTabs=new Map();
+  /* Drawer Summary: state badges and an evidence strip lead (how complete each evidence
+     kind is), then count tiles and a details card in the page components. Values are
+     labels, never raw stored strings; unknown and partial evidence never look empty. */
+  const STATES={
+    power_state:{VM_RUNNING:['Running','ok'],VM_STOPPED:['Powered off','neutral'],VM_SUSPENDED:['Suspended','neutral'],UNKNOWN:['Power state unknown','warn']},
+    membership:{nonempty:['Has members','ok'],empty:['Empty','neutral'],unknown:['Membership unknown','warn'],not_assessed:['Membership not assessed','neutral']},
+    usage:{referenced:['Referenced','ok'],unused_candidate:['No references found','warn'],unknown:['Usage unknown','warn'],not_assessed:['Usage not assessed','neutral']},
+    hit_status:{traffic_recorded:['Traffic recorded','ok'],zero_hits:['Zero recorded hits','warn'],not_supported:['Counters not supported','neutral'],unknown:['Activity unknown','warn']},
+    action:{ALLOW:['Allow','ok'],DROP:['Drop','bad'],REJECT:['Reject','bad'],JUMP_TO_APPLICATION:['Jump to application','neutral']},
+    disabled:{true:['Disabled','neutral'],false:['Enabled','ok']},
+    policy_status:{has_rules:['Has rules','ok'],empty:['Empty policy','warn'],unknown:['Rules unknown','warn']},
+    tag_status:{both:['VMs and groups','ok'],vm_only:['VM use','ok'],group_only:['Group use','ok'],other_only:['Other resource use','ok'],unknown:['Needs review','warn']},
+  };
+  const COVERAGE={complete:['Complete','ok'],partial:['Partial','warn'],unknown:['Unknown','warn'],unavailable:['Unavailable','warn'],not_collected:['Not collected','neutral'],not_applicable:['Not applicable','neutral']};
+  const humanize=value=>{const text=String(value).replaceAll('_',' ').trim().toLowerCase();return text.charAt(0).toUpperCase()+text.slice(1);};
+  const typeLabel=row=>row.inventory_type||(row.kind==='custom_service'?'Custom service':row.kind?humanize(row.kind):row.power_state!==undefined?'Virtual machine':row.action!==undefined?'Firewall rule':row.rule_count!==undefined?'Firewall policy':'');
+  const pill=(text,tone)=>make('span',text,'pill evidence-pill '+(tone||'neutral'));
+  function stateFor(row,key){
+    const value=row[key];if(value===undefined||value===null||value==='')return null;
+    const table=key==='status'?(row.rule_count!==undefined?STATES.policy_status:row.inventory_type==='Tag'?STATES.tag_status:null):STATES[key];
+    if(!table)return null;
+    const found=table[String(value)];return found||[humanize(value),'neutral'];
+  }
+  function evidenceSummary(row){
+    const nodes=[],badges=make('div',null,'evidence-badges');
+    for(const key of ['power_state','action','disabled','hit_status','membership','usage','status']){
+      if(key==='membership'&&row.membership==='not_applicable')continue;
+      const state=stateFor(row,key);if(state)badges.append(pill(...state));
+    }
+    if(Array.isArray(row.finding_assessments))for(const label of new Set(row.finding_assessments.map(item=>item?.label).filter(Boolean)))badges.append(pill(label,/eligible/i.test(label)?'info':'neutral'));
+    if(badges.children.length)nodes.push(badges);
+    // Evidence strip: one tile per saved evidence kind, with its own completeness.
+    const strip=make('div',null,'evidence-strip');strip.setAttribute('role','group');strip.setAttribute('aria-label','Membership evidence');
+    for(const [count,status,label] of [['direct_group_count','direct_membership_status','Direct VM groups'],['network_group_count','network_membership_status','Interface groups'],['resolved_group_count','resolved_membership_status','All saved groups']]){
+      if(row[status]==null&&row[count]==null)continue;
+      const tile=make('div'),state=COVERAGE[row[status]]||(row[status]?[humanize(row[status]),'neutral']:['Not recorded','neutral']);
+      const known=row[count]!=null&&!['unknown','unavailable','not_collected'].includes(row[status]);
+      tile.append(make('span',label),make('strong',known?String(row[count]):'—'));
+      const note=pill(row[status]==='partial'&&known?'Partial · confirmed only':state[0],state[1]);tile.append(note);strip.append(tile);
+    }
+    if(strip.children.length)nodes.push(strip);
+    // Count tiles for the object's main quantities.
+    const tiles=make('div',null,'evidence-tiles');
+    const references=Array.isArray(row.referenced_by)?row.referenced_by.length:null;
+    for(const [value,label,note] of [[row.tag_count,'Tags',row.inventory_type==='Scope'?'in this scope':'assigned'],[references,'Configuration references','direct, saved'],[row.rule_count,'Rules','in this policy'],[row.hit_count,'Recorded hits','current counters'],
+      [row.inventory_type==='Virtual machine'?null:row.group_count,'Groups','referencing this tag'],[row.other_count,'Other resources','assignments'],[row.tagged_objects,'Catalog assignments','NSX catalog']]){
+      if(value===undefined||value===null||value==='')continue;
+      const tile=make('div');tile.append(make('span',label),make('strong',String(value)),make('small',note));tiles.append(tile);
+    }
+    if(tiles.children.length)nodes.push(tiles);
+    // Remaining descriptive facts as labelled rows.
+    const card=make('div',null,'evidence-card'),head=make('div',null,'evidence-card-head'),rows=make('dl',null,'evidence-rows');
+    head.append(make('h3','Details'));card.append(head,rows);
+    const fact=(label,value)=>{if(value===undefined||value===null||value==='')return;rows.append(make('dt',label),make('dd',String(value)));};
+    fact('Type',typeLabel(row));
+    const scope=Array.isArray(row.scope)?row.scope:row.scope==null||row.scope===''?[]:[row.scope];
+    // A rule's own Applied To; a policy's Applied To can take precedence and is shown in the rule fields.
+    const scopeLabel=row.inventory_type==='Tag'||row.inventory_type==='Scope'?'Scope':row.action!==undefined?'Rule Applied to':'Applied to';
+    if(scope.length&&!(row.action!==undefined&&Array.isArray(row.source_groups)))fact(scopeLabel,scope.map(value=>String(value).toUpperCase()==='ANY'?'Any':scopeLabel==='Scope'?String(value):String(value).split('/').pop()).join(', '));
+    fact('Category',row.category);
+    if(row.policy_name)fact('Policy',row.policy_name);
+    if(row.resolved_membership_scope)fact('Evidence scope',row.resolved_membership_scope);
+    const checked=row.resolved_membership_checked_at||row.network_membership_checked_at;
+    if(checked){const dd=make('dd');if(window.workspaceTime){const template=document.createElement('template');template.innerHTML=window.workspaceTime(checked);dd.append(template.content);}else dd.textContent=checked;rows.append(make('dt','Membership checked'),dd);}
+    if(rows.children.length)nodes.push(card);
+    return nodes;
+  }
+  // Older report markup inside the Summary tab: per-finding qualification lines and
+  // note lists become cards; the wording is kept, only "33 / 21 days" is spelled out.
+  function summaryCards(items,hasReferenceTile){
+    const result=[],readiness=[],notes=[];
+    for(const node of items){
+      if(node.matches?.('p.row-qualification')){readiness.push(node);continue;}
+      if(node.matches?.('ul.notes')){notes.push(...node.children);continue;}
+      if(hasReferenceTile&&node.matches?.('span.muted')&&/^No configuration references found\.?$/.test(node.textContent.trim()))continue;
+      result.push(node);
+    }
+    const card=(title,rows)=>{const box=make('div',null,'evidence-card'),head=make('div',null,'evidence-card-head'),list=make('ul',null,'evidence-list');head.append(make('h3',title));list.append(...rows);box.append(head,list);return box;};
+    const cards=[];
+    if(readiness.length)cards.push(card('Review readiness',readiness.map(node=>{
+      const badge=node.querySelector('.badge')?.textContent.trim()||'',detail=node.querySelector('small')?.textContent.trim()||'';
+      const [kind,state]=badge.includes(':')?badge.split(/:\s*/,2):['',badge];const item=make('li'),text=make('div');
+      text.append(make('strong',kind?humanize(kind):'Finding'));
+      if(detail)text.append(make('small',detail.replace(/^(\d+) \/ (\d+) days/,'$1 days observed, $2 required')));
+      item.append(text,pill(state||'Not assessed',/eligible/i.test(state)?'info':'neutral'));return item;})));
+    if(notes.length)cards.push(card('Notes',notes.map(note=>{const item=make('li');item.append(make('span',note.textContent.trim()));return item;})));
+    return [...cards,...result];
+  }
+  // Firewall rules: saved rule fields, counters and empty-group references as cards. Excluded
+  // Source/Destination fields are negated (NOT); a policy Applied To takes precedence.
+  function ruleCards(row,body){
+    const rule=row.configuration?.rule||{},policy=row.configuration?.policy||{},cards=[];
+    const card=(title,content,note)=>{const box=make('div',null,'evidence-card'),head=make('div',null,'evidence-card-head');head.append(make('h3',title));box.append(head,content);if(note)box.append(make('p',note,'evidence-card-note'));return box;};
+    const values=list=>{
+      const cell=make('dd',null,'evidence-values');const items=Array.isArray(list)?list:[];
+      if(!items.length){cell.append(make('span','Not recorded','muted'));return cell;}
+      for(const value of items){
+        const text=String(value);
+        if(text.toUpperCase()==='ANY'){cell.append(make('span','Any','evidence-value'));continue;}
+        const name=text.split('/').pop();
+        if(text.startsWith('/infra/')&&window.openRelatedEvidence){const link=make('button',name,'evidence-object-link evidence-value');link.type='button';link.title=text;link.onclick=()=>window.openRelatedEvidence(body,{path:text},name);cell.append(link);}
+        else{const span=make('span',name,'evidence-value');span.title=text;cell.append(span);}
+      }
+      return cell;
+    };
+    const fields=make('dl',null,'evidence-rows rule-field-rows');
+    const field=(label,list,negated,origin)=>{const dt=make('dt',label),dd=values(list);if(negated)dd.prepend(make('span','NOT','evidence-not'));if(origin)dd.prepend(make('span',origin,'evidence-origin'));fields.append(dt,dd);};
+    field('Sources',row.source_groups,rule.sources_excluded===true);
+    field('Destinations',row.destination_groups,rule.destinations_excluded===true);
+    field('Services',row.services);
+    const policyScope=Array.isArray(policy.scope)&&policy.scope.length&&!policy.scope.every(value=>String(value).toUpperCase()==='ANY')?policy.scope:null;
+    field('Applied to',policyScope||row.scope,false,policyScope?'From policy':'');
+    if(rule.direction)fields.append(make('dt','Direction'),make('dd',humanize(rule.direction).replace('In out','In and out')));
+    if(rule.logged!==undefined)fields.append(make('dt','Logging'),make('dd',rule.logged?'On':'Off'));
+    cards.push(card('Rule fields',fields,'Saved configuration, not effective policy or observed traffic.'));
+    const counters=make('dl',null,'evidence-rows');
+    if(row.statistics_checked_at){const dd=make('dd');if(window.workspaceTime){const template=document.createElement('template');template.innerHTML=window.workspaceTime(row.statistics_checked_at);dd.append(template.content);}else dd.textContent=row.statistics_checked_at;counters.append(make('dt','Checked'),dd);}
+    for(const sample of Array.isArray(row.statistics)?row.statistics:[]){
+      const point=String(sample.enforcement_point||'Enforcement point').split('/').pop(),parts=[];
+      for(const [key,label] of [['hit_count','hits'],['packet_count','packets'],['byte_count','bytes'],['session_count','sessions']])if(sample[key]!=null)parts.push(Number(sample[key]).toLocaleString()+' '+label);
+      const dt=make('dt','Enforcement point '+point);dt.title=sample.enforcement_point||'';counters.append(dt,make('dd',parts.join(' · ')||'No counter values'));
+    }
+    if(row.statistics_retry)counters.append(make('dt','Timeout recovery'),make('dd','One sequential recovery attempt after the first pass'+(row.statistics_retry.initial_checked_at?'; initial check '+row.statistics_retry.initial_checked_at:'')));
+    {const history=row.last_positive_observation,dd=make('dd');
+     if(history&&history.observed_at){dd.append(Number(history.hit_count||0).toLocaleString()+' hit(s) at ');if(window.workspaceTime){const template=document.createElement('template');template.innerHTML=window.workspaceTime(history.observed_at);dd.append(template.content);}else dd.append(history.observed_at);}
+     else dd.textContent='Unavailable \u2014 no saved positive snapshot';
+     counters.append(make('dt','Last positive count'),dd);}
+    if(counters.children.length)cards.push(card('Counters',counters,'Saved audit observations, not the last packet time. Traffic and resets between collections may be missed.'));
+    if(Array.isArray(row.empty_group_references)&&row.empty_group_references.length){
+      const list=make('ul',null,'evidence-list');
+      for(const item of row.empty_group_references){const li=make('li'),text=make('div');text.append(make('strong',item.name||String(item.path||'').split('/').pop()),make('small',(item.field||'Field not recorded')+' field'));li.append(text,pill('Confirmed empty','warn'));list.append(li);}
+      cards.push(card('Empty group references',list));
+    }
+    return cards;
+  }
+  function isLegacyRuleNode(node){
+    if(node.matches?.('details[data-evidence-section="overview"]')&&/Counter\s*&\s*rule details/i.test(node.querySelector(':scope > summary')?.textContent||''))return true;
+    if(node.matches?.('h3')&&/Confirmed empty group references/i.test(node.textContent))return true;
+    if(node.matches?.('p')&&(/^Last observed positive count:/i.test(node.textContent.trim())||/^Saved audit observation, not the last packet time/i.test(node.textContent.trim())))return true;
+    return false;
+  }
+  function placeImpact(nodes,link,groups){
+    const head=nodes.find(node=>node.classList?.contains('evidence-card'))?.querySelector('.evidence-card-head');
+    if(head){link.className='evidence-card-action';head.append(link);}else groups.get('Summary').push(link);
+  }
   window.workspaceEvidence=(body,title,row)=> {
     body.closest('dialog')?.classList.remove('evidence-firewall-wide');
     window.objectReferenceTables?.(body,row);
     window.objectMembershipTables?.(body,row);
     window.referenceListTables?.(body);
     const nodes=Array.from(body.children), groups=new Map([['Summary',[]],['Members',[]],['References',[]],['History',[]],['Technical details',[]]]);
-    const summary=make('dl',null,'evidence-facts');
+    const summaryNodes=row?evidenceSummary(row):[];
     if(row){
-      if(!row.inventory_type && row.kind)summary.append(make('dt','Type'),make('dd',row.kind.replaceAll('_',' ')));
-      for(const [key,label] of [['inventory_type','Type'],['scope','Scope'],['status','Assessment'],['other_count','Other resources'],['tagged_objects','NSX catalog assignments'],['usage','Usage'],['membership','Membership'],['hit_status','Activity'],['power_state','Power state'],['tag_count','Tags'],['group_count','Groups referencing tags'],['action','Action'],['disabled','Disabled'],['hit_count','Recorded hits'],['rule_count','Rules'],['category','Category']]){
-        if(key==='group_count'&&row.inventory_type==='Virtual machine')continue;
-        if(row[key]!==undefined && row[key]!==null && row[key]!=='')summary.append(make('dt',label),make('dd',String(row[key]).replaceAll('_',' ')));
-      }
-      if(row.referenced_by)summary.append(make('dt','Configuration references'),make('dd',String(row.referenced_by.length)));
-      if(row.resolved_membership_status){
-        const state=row.resolved_membership_status.replaceAll('_',' '),count=row.resolved_group_count;
-        summary.append(make('dt','Saved VM groups'),make('dd',count==null?state:(row.resolved_membership_status==='partial'?count+' confirmed; total unknown':count)),make('dt','Saved membership coverage'),make('dd',state));
-      }
-      if(row.membership_definition?.methods?.length)groups.get('Technical details').push(make('p','Membership method: '+row.membership_definition.methods.join(', ')));
-      if(row.path){const identity=make('div',null,'evidence-identity');identity.append(make('code',row.path));const copy=make('button','Copy path');copy.type='button';copy.dataset.copyPath=row.path;identity.append(copy);groups.get('Technical details').push(identity);}
+      // Identity card: the exact saved path (with copy), membership method and NSX unique ID.
+      const identityRows=make('dl',null,'evidence-rows');
+      if(row.path){const dd=make('dd',null,'evidence-identity');dd.append(make('code',row.path));const copy=make('button','Copy path');copy.type='button';copy.dataset.copyPath=row.path;dd.append(copy);identityRows.append(make('dt','Path'),dd);}
+      if(row.membership_definition?.methods?.length)identityRows.append(make('dt','Membership method'),make('dd',row.membership_definition.methods.join(', ')));
+      if(row.unique_id)identityRows.append(make('dt','Unique ID'),make('dd',String(row.unique_id)));
+      if(row.rule_id!=null)identityRows.append(make('dt','Rule ID'),make('dd',String(row.rule_id)));
+      if(identityRows.children.length){const card=make('div',null,'evidence-card'),head=make('div',null,'evidence-card-head');head.append(make('h3','Identity'));card.append(head,identityRows);groups.get('Technical details').push(card);}
     }
     if(row?.statistics_checked_at){const timing=make('p','Counters checked: '),time=make('time');time.dateTime=row.statistics_checked_at;time.textContent=new Date(row.statistics_checked_at).toString();if(window.workspaceTime){const template=document.createElement('template');template.innerHTML=window.workspaceTime(row.statistics_checked_at);timing.append(template.content);}else timing.append(time);groups.get('Technical details').push(timing);}
     const impactBase=document.querySelector('[data-impact-base]')?.dataset.impactBase;
     if(impactBase && row?.path && (row.kind==='group' || row.inventory_type==='Group' || row.policy_path || row.rule_count!==undefined)){
-      const link=make('a','Impact preview','button');link.href=impactBase+'?'+new URLSearchParams({path:row.path});groups.get('Summary').push(link);
+      const link=make('a','Impact preview','button');link.href=impactBase+'?'+new URLSearchParams({path:row.path});placeImpact(summaryNodes,link,groups);
     }
     if(impactBase && (row?.inventory_type==='Virtual machine' || row?.inventory_type==='Tag')){
       const params=row.inventory_type==='Tag'?{action:'remove-tag',scope:row.scope||'',tag:row.name}:{action:'delete-vm',path:row.path};
-      const link=make('a','Impact preview','button');link.href=impactBase+'?'+new URLSearchParams(params);groups.get('Summary').push(link);
+      const link=make('a','Impact preview','button');link.href=impactBase+'?'+new URLSearchParams(params);placeImpact(summaryNodes,link,groups);
     }
-    if(summary.children.length)groups.get('Summary').push(summary);
+    groups.get('Summary').unshift(...summaryNodes);
     for(const node of nodes){
       // Explicit sections are emitted by new reports. Keep older saved reports readable.
       const caption=node.querySelector(':scope > summary')?.textContent || '';
@@ -43,6 +183,13 @@
       if(node.tagName==='DETAILS')node.open=key==='Summary'&&node.dataset.evidenceLazy!== 'true';
       groups.get(key).push(node);
     }
+    {const lead=groups.get('Summary').slice(0,summaryNodes.length);let rest=groups.get('Summary').slice(summaryNodes.length);
+     if(row&&row.action!==undefined&&Array.isArray(row.source_groups)){
+       // The old rule block is replaced; its empty-group list (an h3 followed by a list) goes with it.
+       rest=rest.filter((node,index)=>!isLegacyRuleNode(node)&&!(node.matches?.('ul')&&rest[index-1]&&isLegacyRuleNode(rest[index-1])&&/empty group/i.test(rest[index-1].textContent)));
+       lead.push(...ruleCards(row,body));
+     }
+     groups.set('Summary',[...lead,...summaryCards(rest,summaryNodes.some(node=>node.classList?.contains('evidence-tiles')&&/Configuration references/.test(node.textContent)))]);}
     if(row && !row.evidence_summary_only && !groups.get('Technical details').some(node=>node.matches('details,pre,.code-block')) && row.power_state===undefined){
       const source=make('details');source.append(make('summary','Saved object data'));const content=make('div');source.append(content);
       source.addEventListener('toggle',()=>{if(source.open&&!content.children.length)content.append(window.technicalEvidence(row));});groups.get('Technical details').push(source);
@@ -52,13 +199,17 @@
       const path=code.textContent.trim();if(!path.startsWith('/infra/')||path.includes(',')||code.closest('button'))return;
       const link=make('button',path,'evidence-object-link');link.type='button';link.onclick=()=>window.openRelatedEvidence(body,{path},path.split('/').pop());code.replaceWith(link);
     });
+    body.dataset.evidenceType=row?typeLabel(row):'';
     window.prepareEvidenceDrawer?.(body);
+    // The tabs already name the view, so the title keeps only the object's name.
+    const heading=title&&title.nodeType===1?title:body.closest('dialog')?.querySelector('.dialog-heading h2');
+    if(heading&&row)heading.textContent=heading.textContent.replace(/\s+\u2014\s+[^\u2014]+$/,'');
     body.replaceChildren();const tabs=make('div',null,'evidence-tabs');tabs.setAttribute('role','tablist');body.append(tabs);
     const type=row?.inventory_type || row?.kind || (row?.power_state!==undefined?'vm':row?.action!==undefined?'rule':'object');
     let first=true;
     groups.forEach((items,label)=>{
       if(!items.length&&label==='Members'&&!(row?.kind==='group'||row?.inventory_type==='Group'))return;
-      if(!items.length&&label==='History')items.push(make('p','This snapshot contains point-in-time evidence. Open Reviews for decision and observation history.','muted'));
+      if(!items.length&&label==='History'){const empty=make('div',null,'evidence-empty');empty.append(make('strong','No history in this snapshot'),make('p','This snapshot contains point-in-time evidence. Open Reviews for decision and observation history.','muted'));items.push(empty);}
       if(!items.length)items.push(make('p',label==='References'?'No relationship details recorded for this object.':'No additional details recorded.','muted'));
       const button=make('button',label), panel=make('div',null,'evidence-panel');button.type='button';
       const id='evidence-'+label.toLowerCase().replaceAll(' ','-');panel.id=id;button.id=id+'-tab';button.setAttribute('role','tab');button.setAttribute('aria-controls',id);button.setAttribute('aria-selected',String(first));button.tabIndex=first?0:-1;
@@ -83,7 +234,8 @@
     const environment=document.querySelector('#environment-switcher option:checked')?.textContent || document.querySelector('.environment-fixed a')?.textContent;
     const snapshotControl=document.querySelector('[data-snapshot-open]') || document.querySelector('.snapshot-context');
     const snapshot=snapshotControl?.getAttribute('aria-label') || snapshotControl?.textContent;
-    context.textContent=[environment,snapshot].filter(Boolean).join(' · ');
+    // The object's type leads the context line (set by workspaceEvidence for this drawer).
+    context.textContent=[body.dataset.evidenceType,environment,snapshot].filter(Boolean).join(' · ');
     if(context.textContent)heading.after(context);
     dialog.scrollTop=0;
   };
