@@ -32,6 +32,8 @@ services:
       POSTGRES_SSLMODE: "prefer"
       POSTGRES_CONNECT_TIMEOUT: "10"
       NSX_AUDIT_TIMEOUT: "3600"
+      NSX_COLLECTION_SLOTS: "1"
+      NSX_COLLECTION_RETRY_SECONDS: "900"
   web:
     image: vkernel/nsx-security-analyzer:0.5.3
     restart: always
@@ -49,6 +51,8 @@ services:
       POSTGRES_SSLMODE: "prefer"
       POSTGRES_CONNECT_TIMEOUT: "10"
       NSX_AUDIT_TIMEOUT: "3600"
+      NSX_COLLECTION_SLOTS: "1"
+      NSX_COLLECTION_RETRY_SECONDS: "900"
     expose:
       - "8000"
   worker:
@@ -75,6 +79,8 @@ services:
       POSTGRES_SSLMODE: "prefer"
       POSTGRES_CONNECT_TIMEOUT: "10"
       NSX_AUDIT_TIMEOUT: "3600"
+      NSX_COLLECTION_SLOTS: "1"
+      NSX_COLLECTION_RETRY_SECONDS: "900"
   scheduler:
     image: vkernel/nsx-security-analyzer:0.5.3
     restart: always
@@ -99,5 +105,7 @@ services:
       POSTGRES_SSLMODE: "prefer"
       POSTGRES_CONNECT_TIMEOUT: "10"
       NSX_AUDIT_TIMEOUT: "3600"
+      NSX_COLLECTION_SLOTS: "1"
+      NSX_COLLECTION_RETRY_SECONDS: "900"
 volumes:
   postgres-data: {}

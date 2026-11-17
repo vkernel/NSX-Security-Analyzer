@@ -1,5 +1,5 @@
 {% extends 'base.html' %}{% block title %}Collection history · NSX Security Analyzer{% endblock %}{% block content %}{% load workflow_status %}{% workflow_status %}
-<a class="breadcrumb" href="{% url 'environment' environment.pk %}">← {{ environment.name }}</a><div class="page-heading"><div><p class="eyebrow">COLLECTION HISTORY</p><h1>{{ environment.name }}</h1><p class="lead">{{ jobs.paginator.count }} collections · {{ jobs.paginator.per_page }} per page</p></div></div>
+<a class="breadcrumb" href="{% url 'environment' environment.pk %}">← {{ environment.name }}</a><div class="page-heading"><div><p class="eyebrow">COLLECTION HISTORY</p><h1>{{ environment.name }}</h1><p class="lead">{{ jobs.paginator.count }} collections · {{ jobs.paginator.per_page }} per page</p></div>{% if user.is_staff %}<a class="button" href="{% url 'collection-trend' environment.pk %}">Performance trend</a>{% endif %}</div>
 {% include 'inventory/jobs.html' with bulk_collections=True %}
 {% load table_controls %}{% table_footer jobs %}
 {% endblock %}

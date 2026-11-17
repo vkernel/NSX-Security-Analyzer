@@ -1,6 +1,6 @@
 from django.urls import path
 from . import deletion_plan, approval_evidence, naming_views, segmentation_views, workload_views
-from . import current_membership, reference_exports, navigation_search, collection_detail, getting_started
+from . import current_membership, reference_exports, navigation_search, collection_detail, getting_started, collection_trend
 from . import storage_views, activity_views, authentication_settings, keycloak_settings, system_health, views, history_views, diagnostic_views, report_views, impact, transient, deletion, task_cancellation, bulk_actions
 
 urlpatterns = [
@@ -74,6 +74,7 @@ urlpatterns = [
     path("administration/retention/", views.retention_settings, name="retention-settings"),
     path("settings/", views.website_settings, name="website-settings"),
     path("environments/<int:pk>/collections/", views.collection_history, name="collection-history"),
+    path("environments/<int:pk>/collections/trend/", collection_trend.collection_trend, name="collection-trend"),
     path("environments/<int:pk>/rule-history/", views.rule_history, name="rule-history"),
     path("administration/", views.administration, name="administration"),
     path("", views.dashboard, name="dashboard"),

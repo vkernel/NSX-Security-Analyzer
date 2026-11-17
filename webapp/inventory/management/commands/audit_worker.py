@@ -9,8 +9,8 @@ from django.utils import timezone
 from django.core.management.base import BaseCommand
 from django.db import close_old_connections, DatabaseError
 from inventory.diagnostics import LOG, log_failure, phase
-from inventory.worker_lanes import LANES
-from inventory.services import claim_job, expire_jobs, fail_job, stop_requested, finish_stopped_job
+from inventory.worker_lanes import LANES, active_lanes, collection_lane
+from inventory.services import claim_job, expire_jobs, fail_job, stop_requested, finish_stopped_job, reconcile_orphaned_collections, schedule_retry
 
 
 class Command(BaseCommand):
@@ -28,7 +28,7 @@ class Command(BaseCommand):
         try:
             if options['once']:
                 from inventory.worker_lanes import lease
-                lanes = tuple(LANES) if options['lane'] in ('all', 'both') else (options['lane'],)
+                lanes = tuple(active_lanes()) if options['lane'] in ('all', 'both') else (options['lane'],)
                 with ExitStack() as stack:
                     owned = [stack.enter_context(lease(lane)) for lane in lanes]
                     if any(item is False for item in owned): return
@@ -63,7 +63,7 @@ class Command(BaseCommand):
     def supervise_lanes(self):
         processes = []
         try:
-            for lane in LANES:
+            for lane in active_lanes():
                 processes.append(subprocess.Popen([sys.executable, str(settings.BASE_DIR / 'manage.py'),
                                                    'audit_worker', '--lane', lane]))
             while True:
@@ -249,8 +249,13 @@ class Command(BaseCommand):
 
     def run_worker(self, options):
         lane = options.get("lane", "all")
-        self.heartbeat_lanes = tuple(LANES) if lane in ('all', 'both') else (lane,)
+        self.heartbeat_lanes = tuple(active_lanes()) if lane in ('all', 'both') else (lane,)
         LOG.info("Collection worker started lane=%s timeout_seconds=%s", lane, settings.AUDIT_TIMEOUT)
+        slot = 'collection' if lane in ('all', 'both') else lane
+        if collection_lane(slot) and getattr(self, 'lane_connections', None):
+            # Holding this slot's lease proves no other worker runs its collection, so a job
+            # still marked running for the slot belongs to a worker that died.
+            reconcile_orphaned_collections(slot)
         while True:
             self.check_lease()
             close_old_connections()
@@ -287,7 +292,7 @@ class Command(BaseCommand):
             with phase('worker', 'expire_stale_jobs', quiet=True):
                 expire_jobs()
             with phase('worker', 'claim_queued_job', quiet=True):
-                job = claim_job()
+                job = claim_job(slot)
             if job and stop_requested(job.pk):
                 finish_stopped_job(job.pk)
                 if options["once"]:
@@ -312,6 +317,7 @@ class Command(BaseCommand):
                             process.kill()
                             process.wait()
                             fail_job(job.pk, "The worker was stopped during collection. You can start a new audit.", {"error": {"code": "WORKER_STOPPED"}})
+                            schedule_retry(job.pk, "WORKER_STOPPED")
                             raise
                         except DatabaseError:
                             LOG.error("job=%s database supervision failed; killing collector; status reconciliation requires database recovery", job.pk)

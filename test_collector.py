@@ -169,9 +169,12 @@ class InventoryTests(unittest.TestCase):
         groups = [{'path': '/groups/g' + str(i)} for i in range(4)]
         services = [{'path': '/services/s'}]
         with patch.object(nsx, 'search_configuration', return_value=([], {'query': 'filtered-query'})) as search:
-            with self.assertRaises(nsx.AuditError) as raised:
-                nsx.verified_configuration_search(Mock(), groups, services)
-        message = str(raised.exception)
+            resources, coverage = nsx.verified_configuration_search(Mock(), groups, services)
+        # Persistent gaps publish with failed coverage instead of failing the collection.
+        self.assertEqual(resources, [])
+        self.assertTrue(coverage['failed'])
+        self.assertEqual(coverage['status'], 'incomplete')
+        message = coverage['errors'][0]
         self.assertIn('missing 5 inventory objects', message)
         self.assertIn('groups=4/4, services=1/1', message)
         self.assertIn('returned=0 records, 0 distinct paths', message)
@@ -221,7 +224,23 @@ class InventoryTests(unittest.TestCase):
                     self.assertIn('search_and_dfw', report['performance']['phases_seconds'])
                     self.assertEqual(report['objects'], [])
 
-    def test_only_one_bulk_probe_runs_at_a_time(self):
+    def test_bulk_probes_follow_the_live_request_limit(self):
+        from webapp.inventory.concurrency import AdaptiveRequests
+        # A fresh limiter starts at 2 even with maximum 8: one probe. Only a settled
+        # limit of 6 or more allows a second; no limiter keeps one.
+        for live, allowed in ((None, 1), (2, 1), (5, 1), (6, 2), (8, 2)):
+            with self.subTest(live=live):
+                controller = None
+                if live is not None:
+                    controller = AdaptiveRequests(maximum=8)
+                    controller.limit = live
+                peak, result = self.bulk_peak(8, controller)
+                self.assertLessEqual(peak, allowed)
+                self.assertLessEqual(result['collection_diagnostics']['bulk_concurrency'], allowed)
+                self.assertEqual(len(result['rules']),3)
+                self.assertTrue(all(r['hit_status']=='zero_hits' for r in result['rules']))
+
+    def bulk_peak(self, workers, controller=None):
         import threading
         import time
         lock=threading.Lock()
@@ -229,6 +248,7 @@ class InventoryTests(unittest.TestCase):
         peak=0
         client=Mock()
         client.statistics_backoff={}
+        client.request_controller=controller
         def items(path, **kwargs):
             nonlocal active, peak
             if path=='/d/security-policies': return [{'path':'/p1'},{'path':'/p2'},{'path':'/p3'}]
@@ -240,10 +260,8 @@ class InventoryTests(unittest.TestCase):
             with lock: active-=1
             return [{'rule':'a','hit_count':0}]
         client.items.side_effect=items
-        result,_=nsx.audit_dfw(client,[{'path':'/d'}],workers=8)
-        self.assertEqual(peak,1)
-        self.assertEqual(len(result['rules']),3)
-        self.assertTrue(all(r['hit_status']=='zero_hits' for r in result['rules']))
+        result,_=nsx.audit_dfw(client,[{'path':'/d'}],workers=workers)
+        return peak, result
 
     def test_ethernet_rules_skip_all_statistics_requests(self):
         client = Mock()
@@ -1536,8 +1554,9 @@ examples.forEach((_,index) => {
             with self.subTest(fallback=fallback):
                 client = Mock()
                 client.items.side_effect = ([[], [], [], [], fallback] if not fallback else [[], [], fallback]) * 3
-                with self.assertRaisesRegex(nsx.AuditError, 'services=1/1'):
-                    nsx.verified_configuration_search(client, [self.group], [{'path': '/infra/services/s'}])
+                _, coverage = nsx.verified_configuration_search(client, [self.group], [{'path': '/infra/services/s'}])
+                self.assertTrue(coverage['failed'])
+                self.assertIn('services=1/1', coverage['errors'][0])
                 self.assertEqual(client.items.call_count, 15 if not fallback else 9)
 
     def test_search_compatibility_preserves_broad_scope_when_possible(self):

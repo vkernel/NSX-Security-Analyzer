@@ -36,7 +36,8 @@ def _active(lookup, session):
 
 
 def _gate(env):
-    if AuditJob.objects.filter(environment=env, status__in=['queued', 'running']).exists():
+    # An automatic retry waiting for its start time does not hold the manager yet.
+    if AuditJob.objects.filter(environment=env, status__in=['queued', 'running']).exclude(not_before__gt=timezone.now()).exists():
         _error('Collection has priority. Retry the current membership check when it finishes.', 'collection_busy')
 
 

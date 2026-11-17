@@ -72,6 +72,16 @@ def enqueue(environment, user, testing=False, debug_until=None):
             raise ValidationError("This environment has been deleted.")
         if not environment.enabled:
             raise ValidationError("This environment is paused. Enable it before collecting.")
+        pending = environment.jobs.filter(status="queued", not_before__gt=timezone.now()).first()
+        if pending is not None and not testing and debug_until is None:
+            # A requested collection replaces the wait of a scheduled automatic retry.
+            pending.not_before = None
+            pending.requested_by = pending.requested_by or user
+            pending.progress_stage = "Waiting for a collection worker"
+            pending.save(update_fields=["not_before", "requested_by", "progress_stage"])
+            return pending
+        if pending is not None:
+            raise ValidationError("An automatic retry is waiting for this environment. Start a normal collection to run it now, or stop it first.")
         if environment.jobs.filter(status__in=["queued", "running"]).exists():
             raise ValidationError("A collection is already queued or running for this environment.")
         return AuditJob.objects.create(environment=environment, requested_by=user,
@@ -107,27 +117,113 @@ def schedule_due():
     return count
 
 
-def claim_job():
+def claim_job(slot="collection"):
+    """Claim the oldest due collection for one collection slot (one running job per slot)."""
     with transaction.atomic():
         from django.db import connection
+        from django.db.models import Q
         if connection.vendor == "postgresql":
             with connection.cursor() as cursor:
                 cursor.execute("SELECT pg_advisory_xact_lock(781249310)")
-        jobs = AuditJob.objects.filter(status="queued").order_by("created_at")
+        jobs = AuditJob.objects.filter(status="queued").filter(
+            Q(not_before__isnull=True) | Q(not_before__lte=timezone.now())).order_by("created_at")
         if connection.features.has_select_for_update_skip_locked:
             jobs = jobs.select_for_update(skip_locked=True)
         else:
             jobs = jobs.select_for_update()
-        # One collection globally, including different NSX environments.
-        if AuditJob.objects.filter(status="running").exists():
+        # At most the configured number of collections run at once, and never two for one
+        # environment (the one-active-collection constraint covers queued and running).
+        if AuditJob.objects.filter(status="running").count() >= settings.COLLECTION_SLOTS:
             return None
         job = jobs.first()
         if job:
             job.status = "running"
             job.started_at = timezone.now()
             job.progress_stage = "Starting collection"
-            job.save(update_fields=["status", "started_at", "progress_stage"])
+            job.worker_slot = slot
+            job.save(update_fields=["status", "started_at", "progress_stage", "worker_slot"])
         return job
+
+
+# Failure codes worth one automatic retry: temporary NSX, network or database conditions,
+# and workers stopped by a restart. Authentication, TLS, coverage, deadline, testing and
+# manual stops never retry.
+RETRY_CODES = {"NSX_UNAVAILABLE", "NETWORK_TIMEOUT", "NETWORK_ERROR", "DNS_ERROR", "DATABASE_LOCK_TIMEOUT",
+               "DATABASE_DEADLOCK", "WORKER_STOPPED", "WORKER_STALE", "WORKER_ORPHANED"}
+
+
+def failure_code(exc):
+    """Classify a collection exception by type and HTTP status, never by message text."""
+    import socket
+    import urllib3
+    from .collector import AuditError
+    from .request_pacing import CollectionDeadlineExceeded
+    import ssl
+    chain, current = [], exc
+    while current is not None and all(current is not item for item in chain) and len(chain) < 20:
+        chain.append(current)
+        current = current.__cause__ or (None if current.__suppress_context__ else current.__context__)
+    # Conditions that a retry cannot fix win over any transport error in the same chain.
+    if any(isinstance(item, CollectionDeadlineExceeded) for item in chain):
+        return "COLLECTION_DEADLINE"
+    if any(isinstance(item, (ssl.SSLError, urllib3.exceptions.SSLError)) for item in chain):
+        return "TLS_ERROR"
+    for current in chain:
+        status = getattr(current, "status_code", None)
+        if isinstance(current, AuditError) and status in (401, 403):
+            return "NSX_ACCESS_DENIED"
+        if isinstance(current, AuditError) and status in (429, 500, 502, 503, 504):
+            return "NSX_UNAVAILABLE"
+        # NewConnectionError subclasses urllib3's connect timeout; test it first.
+        if isinstance(current, (ConnectionError, urllib3.exceptions.ProtocolError, urllib3.exceptions.NewConnectionError)):
+            return "NETWORK_ERROR"
+        if isinstance(current, (TimeoutError, socket.timeout, urllib3.exceptions.TimeoutError)):
+            return "NETWORK_TIMEOUT"
+    return None
+
+
+def schedule_retry(job_id, code):
+    """Queue one delayed retry for a temporary failure; never for a retry, testing or a paused environment."""
+    from datetime import timedelta
+    from django.db import IntegrityError
+    if code not in RETRY_CODES:
+        return None
+    try:
+        with transaction.atomic():
+            job = AuditJob.objects.select_related("environment").filter(pk=job_id, status="failed").first()
+            if job is None or job.retry_of_id or job.testing or job.debug_until:
+                return None
+            environment = Environment.objects.select_for_update().filter(pk=job.environment_id).first()
+            if environment is None or not environment.enabled:
+                return None
+            if environment.jobs.filter(status__in=["queued", "running"]).exists():
+                return None
+            start = timezone.now() + timedelta(seconds=settings.COLLECTION_RETRY_SECONDS)
+            retry = AuditJob.objects.create(environment=environment, requested_by=job.requested_by, scheduled=job.scheduled,
+                                            config=environment.collection_config(), retry_of=job, not_before=start,
+                                            progress_stage="Automatic retry after a temporary failure")
+            LOG.info("job=%s automatic retry queued retry_job=%s code=%s not_before=%s", job_id, retry.pk, code, start.isoformat())
+            return retry
+    except IntegrityError:
+        return None  # Another collection became active meanwhile.
+
+
+def reconcile_orphaned_collections(slot):
+    """Fail collections left running by a dead worker of this slot; the slot's lease proves none is alive."""
+    from django.db.models import Q
+    from .worker_lanes import COLLECTION_LANES
+    matches = Q(worker_slot=slot)
+    if slot == "collection":
+        # The default slot also owns rows from workers that predate slots and rows of
+        # slots no longer configured (NSX_COLLECTION_SLOTS lowered), which no lane runs.
+        matches |= Q(worker_slot="") | Q(worker_slot__in=COLLECTION_LANES[settings.COLLECTION_SLOTS:])
+    ids = list(AuditJob.objects.filter(matches, status="running").values_list("pk", flat=True)[:100])
+    for job_id in ids:
+        LOG.warning("job=%s orphaned collection reconciled slot=%s", job_id, slot)
+        fail_job(job_id, "The worker running this collection stopped. Earlier snapshots remain available.",
+                 {"error": {"code": "WORKER_ORPHANED", "slot": slot}})
+        schedule_retry(job_id, "WORKER_ORPHANED")
+    return len(ids)
 
 
 def update_progress(job_id, completed, stage):
@@ -225,6 +321,7 @@ def expire_jobs():
         LOG.warning("job=%s stale collection expired timeout_seconds=%s grace_seconds=300", job_id, settings.AUDIT_TIMEOUT)
         fail_job(job_id, "Worker stopped or the audit exceeded its time limit. You can start a new audit.",
                  {'error': {'code': 'WORKER_STALE', 'message': 'No terminal job state recorded before timeout plus grace period.'}})
+        schedule_retry(job_id, 'WORKER_STALE')
     return len(ids)
 
 
@@ -257,6 +354,9 @@ def prepare_snapshot(environment, report, imported=False):
             summary["vms"] = vms
         from .evidence_coverage import issues
         summary['evidence_coverage'] = issues(report)
+        if not imported:
+            from .collection_trend import performance_summary
+            summary['performance'] = performance_summary(report)
         from .usability import coverage_keys
         if not imported and not report.get('testing'):
             keys = coverage_keys(report)
@@ -420,8 +520,10 @@ def execute_job(job_id):
     except Exception as exc:
         failure = log_failure(job.pk, exc)
         detail = failure['chain'][0]['message'] if failure['chain'] else 'Collection failed.'
+        code = failure_code(exc) or failure.get('code')
         fail_job(job.pk, redact(detail) or "Collection could not be completed. Check the collection diagnostics.",
-                 {'timeline': diagnostic_log.TIMELINE, 'error': failure})
+                 {'timeline': diagnostic_log.TIMELINE, 'error': {**failure, 'code': code}})
+        schedule_retry(job.pk, code)
     finally:
         observability.PROCESS_CONTEXT.clear()
         observability.PROCESS_SECRETS = ()

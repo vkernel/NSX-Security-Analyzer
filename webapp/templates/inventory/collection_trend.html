@@ -1,0 +1,27 @@
+{% extends 'base.html' %}{% load workspace_time %}
+{% block title %}Collection performance · {{ environment.name }}{% endblock %}
+{% block content %}
+<a class="breadcrumb" href="{% url 'collection-history' environment.pk %}">← Collection history</a>
+<header class="page-heading app-page-header"><div><p class="eyebrow">COLLECTION PERFORMANCE</p><h1>{{ environment.name }}</h1>
+<p class="lead">Last {{ overview.count }} finished collections (testing samples excluded). Figures are saved with each snapshot; nothing here contacts NSX.</p></div></header>
+<div class="kpi-grid operational-summary" role="group" aria-label="Collection trend summary">
+<div class="kpi-card"><span>Median duration</span><strong>{{ overview.median }}</strong><small>Successful collections</small></div>
+<div class="kpi-card"><span>Longest</span><strong>{{ overview.longest }}</strong><small>Successful collections</small></div>
+<div class="kpi-card"><span>Failed</span><strong>{{ overview.failed }}</strong><small>of {{ overview.count }} collections</small></div>
+<div class="kpi-card"><span>With NSX throttling</span><strong>{{ overview.throttled }}</strong><small>HTTP 429 responses slowed these runs</small></div>
+</div>
+<section class="content-card" aria-labelledby="trend-title"><div class="content-card-head"><h2 id="trend-title">Collections</h2></div>
+{% if entries %}<div class="table-scroll"><table class="collection-history-table collection-trend-table" data-server-footer="true"><thead><tr>
+<th>Started</th><th>Result</th><th>Duration</th><th>Slowest phase</th><th>Requests</th><th>Retries</th><th>Throttled</th><th>Concurrency</th><th>Counter fallbacks</th><th>Unknown evidence</th></tr></thead><tbody>
+{% for entry in entries %}{% with job=entry.job figures=entry.figures %}<tr>
+<td><a href="{% url 'collection-detail' job.pk %}">{% if job.started_at %}{% user_time job.started_at %}{% else %}{% user_time job.created_at %}{% endif %}</a>{% if job.retry_of_id %}<small>Automatic retry</small>{% elif job.scheduled %}<small>Scheduled</small>{% endif %}</td>
+<td>{% if job.status == 'succeeded' %}<span class="pill {% if entry.needs_review %}warning{% else %}succeeded{% endif %}">{% if entry.needs_review %}Needs review{% else %}Complete{% endif %}</span>{% else %}<span class="pill failed">Failed</span>{% if entry.error_code %}<small>{{ entry.error_code }}</small>{% endif %}{% endif %}</td>
+<td><span class="trend-duration"><span class="trend-bar" style="--bar: {{ entry.bar }}%" aria-hidden="true"></span>{{ entry.duration_label }}</span></td>
+<td>{{ entry.slowest_phase|default:"—" }}</td>
+<td>{{ figures.requests|default_if_none:"—" }}</td><td>{{ figures.retries|default_if_none:"—" }}</td><td>{{ figures.throttled|default_if_none:"—" }}</td>
+<td>{% if figures.concurrency_peak is not None %}{{ figures.concurrency_final }} / peak {{ figures.concurrency_peak }}{% else %}—{% endif %}</td>
+<td>{{ figures.fallback_rules|default_if_none:"—" }}</td>
+<td>{% if figures.unknown_membership is None %}{% if entry.snapshot_id %}Not recorded{% else %}—{% endif %}{% else %}{{ figures.unknown_membership }} membership · {{ figures.unknown_statistics }} counters{% if figures.search_incomplete %}<small>Reference search incomplete</small>{% endif %}{% endif %}</td>
+</tr>{% endwith %}{% endfor %}</tbody></table></div>
+{% else %}<p class="muted content-card-body">No finished collections yet.</p>{% endif %}</section>
+{% endblock %}

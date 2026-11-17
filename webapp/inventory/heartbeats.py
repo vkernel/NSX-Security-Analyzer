@@ -17,9 +17,11 @@ def beat(name):
 def summary():
     saved = {row.name: row for row in ServiceHeartbeat.objects.all()}
     result = []
-    for name in ('collection', 'recalculation', 'comparison', 'deletion_preview', 'deletion_execution', 'exports', 'scheduler'):
+    from .worker_lanes import active_lanes
+    for name in (*active_lanes(), 'scheduler'):
         row = saved.get(name)
         age = (timezone.now() - row.seen_at).total_seconds() if row else None
-        result.append({'name': name, 'pod': row.pod if row else '', 'seen_at': row.seen_at if row else None,
+        label = ('Collection slot ' + name.rsplit('_', 1)[1]) if name.startswith('collection_') else name.replace('_', ' ').capitalize()
+        result.append({'name': name, 'label': label, 'pod': row.pod if row else '', 'seen_at': row.seen_at if row else None,
                        'status': 'Reporting' if age is not None and age < 180 else 'Not reporting'})
     return result

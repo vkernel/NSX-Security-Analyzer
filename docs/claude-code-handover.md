@@ -181,6 +181,22 @@ Artifacts are compressed in PostgreSQL. The export lane has a five-minute proces
 deadline and its own heartbeat. Read [reference exports](reference-exports.md)
 before changing format schemas, job lifecycle or deployment requirements.
 
+### Collection reliability (not yet published)
+
+Migration `0070` adds `AuditJob.not_before`, `retry_of` and `worker_slot`.
+Collection lanes `collection`, `collection_2`…`collection_4` each hold their own
+advisory lock (IDs 781249311 and 781249331–333); `NSX_COLLECTION_SLOTS` (default 1)
+chooses how many run. A lane that takes its lock fails collections still running
+for its slot (`WORKER_ORPHANED`). `services.failure_code` classifies failures by
+exception type and HTTP status; `schedule_retry` queues one delayed retry for
+temporary codes only. Reference-search gaps publish with `search_coverage.failed`
+and unknown usage instead of failing the collection; unused findings pause.
+The network phase starts once search and membership finish (`OVERLAP_NETWORK_PHASE`)
+and must reuse the same VM records saved in `tags.virtual_machines`, because it
+adds interface details to them. Two bulk counter probes run only with eight or more
+counter workers. `summary.performance` feeds the staff-only performance trend.
+Tests: `inventory.test_collection_resilience` and `test_collector.py`.
+
 ## Verification baseline
 
 The published application baseline (`e7f1f13`) passed 1,071 Django tests,

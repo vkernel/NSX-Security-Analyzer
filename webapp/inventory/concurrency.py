@@ -154,6 +154,7 @@ def adapt_requests(client, maximum=8):
     from .request_pacing import RequestPacer
     pacer = RequestPacer(deadline=getattr(client, "request_deadline", None))
     client.request_pacer = pacer
+    client.request_controller = controller  # Read-only use: phases size optional work by the live limit.
     client.request_context = threading.local()
     original = client._get
 

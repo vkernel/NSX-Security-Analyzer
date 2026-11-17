@@ -31,6 +31,11 @@ def report_issues(report, needs_review=False):
     if report.get('tags', {}).get('unsupported_conditions'):
         found = True
         yield {'area':'Tags','name':'Unsupported conditions','detail':'Some tag conditions could not be evaluated.'}
+    search = report.get('search_coverage', {}) or {}
+    for error in search.get('errors', []) or (['Reference search failed or is incomplete.'] if search.get('failed') else []):
+        found = True
+        yield {'area':'Reference search','name':'Incomplete search coverage',
+               'detail':str(error) + ' Unused-object findings are paused; existing decisions are retained.'}
     if report.get('search_coverage', {}).get('mode') != 'all_types':
         found = True
         yield {'area':'Search','name':'Limited or unrecorded coverage',

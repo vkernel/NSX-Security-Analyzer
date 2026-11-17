@@ -72,6 +72,11 @@ if os.getenv("DJANGO_TRUST_PROXY", "0") == "1":
 DATA_UPLOAD_MAX_MEMORY_SIZE = 50 * 1024 * 1024
 FILE_UPLOAD_MAX_MEMORY_SIZE = 2 * 1024 * 1024
 AUDIT_TIMEOUT = int(os.getenv("NSX_AUDIT_TIMEOUT", "3600"))
+# Collections of different environments that may run at the same time (one per environment).
+# Each runs in its own process with a full report in memory; raise only with memory headroom.
+COLLECTION_SLOTS = max(1, min(4, int(os.getenv("NSX_COLLECTION_SLOTS", "1") or 1)))
+# Delay before the single automatic retry of a collection that failed for a temporary reason.
+COLLECTION_RETRY_SECONDS = max(60, int(os.getenv("NSX_COLLECTION_RETRY_SECONDS", "900") or 900))
 
 # Logs are captured by the container runtime; no file volume is required.
 LOGGING = {

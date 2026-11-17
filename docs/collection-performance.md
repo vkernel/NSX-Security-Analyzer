@@ -20,7 +20,7 @@ locks:
 
 | Lane | Work |
 | --- | --- |
-| Collection | One collection across all environments |
+| Collection | One collection at a time; extra collection slots (`NSX_COLLECTION_SLOTS`, 1–4, default 1) run collections for different environments in parallel |
 | Recalculation | Finding-review indexing and criteria recalculation |
 | Comparison | Snapshot comparisons |
 | Deletion preview | Read-only NSX deletion previews |
@@ -28,7 +28,10 @@ locks:
 | Exports | Reference exports |
 
 Lanes have separate queues, so a recalculation or comparison can run alongside a
-collection. Publication for one environment briefly serializes on its environment lock,
+collection. With `NSX_COLLECTION_SLOTS=2` or more, each slot is its own lane
+(`collection`, `collection_2`, …) with its own lock; one environment never has two
+collections, and the slots share the database and worker CPU, not NSX limits, which stay
+per environment and Manager. Size worker memory for one collector process per slot. Publication for one environment briefly serializes on its environment lock,
 and a newly saved snapshot can make a running recalculation retry against the new
 history. Separate Analyzer databases do not share these limits. Stop old worker replicas
 before starting upgraded workers so old and new lane behavior cannot overlap.
@@ -40,6 +43,23 @@ not collection progress or database health. Kubernetes readiness probes and Dock
 healthchecks read local heartbeat files; they do not restart services or query
 PostgreSQL.
 
+### Interrupted and failed collections
+
+- **Orphaned runs.** When a collection lane acquires its lock, any collection still
+  marked running for that slot belongs to a worker that died (only the lock holder can
+  run it), so it is failed immediately with `WORKER_ORPHANED` instead of blocking the
+  environment until the stale timeout. A collector process left behind cannot publish:
+  publication requires the job to still be running.
+- **One automatic retry.** A collection that fails for a temporary reason (HTTP 429 or
+  5xx from NSX, network timeout or connection error, database lock timeout or deadlock,
+  a stopped, stale or orphaned worker) is queued once more after
+  `NSX_COLLECTION_RETRY_SECONDS` (default 900, minimum 60). Authentication and TLS
+  failures, the collection deadline or worker time limit, testing samples, manual stops
+  and paused environments never retry, and a retry is never retried. The failure is
+  classified by exception type and HTTP status, not by message text. Starting a
+  collection by hand while a retry waits starts that retry now. Both collection pages
+  link to each other.
+
 ### Collection stages
 
 The collection page shows the current stage. Percentages count completed stages, not
@@ -49,10 +69,10 @@ time remaining.
 | --- | --- | --- |
 | 0 · Reading domains, groups and services | Domains, then every domain's group list and the service list | Group and service lists |
 | 1 · Scanning references, firewall counters and VM associations | Starts three retrieval branches: configuration search, DFW rules and counters, and membership | Search, DFW and membership branches |
-| 2 · Completing firewall rules and counters | Search finished; DFW continues | |
+| 2 · Completing firewall rules and counters | Search finished; DFW continues | Once membership is also done, network member lists start alongside the DFW counter tail |
 | 3 · Collecting VM associations and checking group membership | DFW finished; membership continues | |
 | 4 · Checking tags and VM assignments | Reference analysis, tag analysis | |
-| 4 · Collecting network members and linking VM interface attachments | Network member lists and VM interface inventory for network-based groups | Member lists across groups |
+| 4 · Collecting network members and linking VM interface attachments | Network member lists and VM interface inventory for network-based groups (usually already running since stage 2) | Member lists across groups |
 | 5 · Preparing report and hit history | Build the report, carry forward hit history | |
 | 6 · Saving snapshot | Save, index and synchronize findings | |
 | 7 · Completed | **Completed** or **Completed with coverage warnings** | |
@@ -280,9 +300,10 @@ If NSX returns no usable interface IPs, the VM shows **Unavailable**.
 Rule hit counters are read per policy in bulk where possible, with per-rule fallback.
 
 - **Bulk policy statistics** use an eight-second connect/read timeout (or the environment
-  timeout if shorter) and one attempt. Only one bulk probe runs at a time; the remaining
-  counter workers serve rule fallbacks, which start as soon as their policy's bulk
-  request finishes.
+  timeout if shorter) and one attempt. One bulk probe runs at a time, or two when the
+  counter pool has at least eight workers (`bulk_concurrency` in the DFW diagnostics);
+  the remaining counter workers serve rule fallbacks, which start as soon as their
+  policy's bulk request finishes.
 - **Fallback** to individual rules happens for incomplete, ambiguous or malformed bulk
   evidence. Bulk entries are mapped by exact rule path, or by `internal_rule_id` to the
   system-assigned numeric `rule_id` within the same policy. Display names and
@@ -328,9 +349,13 @@ directly collected groups and services.
    search is retried up to three times (waiting two and four seconds).
 
 All query alternatives and retries share a budget of five search scans. Partial results
-are never accepted. Persistent gaps fail the collection with missing group/service
-counts, returned record counts, the query and up to three missing path samples. A gap
-alone does not prove indexing lag; query behavior or path scope can explain it.
+are never accepted as complete. If gaps persist after three attempts, the collection
+still publishes, but `search_coverage` is marked failed with the missing group/service
+counts, returned record counts, the query and up to three missing path samples. Every
+group or service without a positive reference then has **unknown** usage (never
+**Unused candidate**), the snapshot needs review, coverage lists the gap, and existing
+unused-object findings are paused with their decisions kept. A gap alone does not prove
+indexing lag; query behavior or path scope can explain it.
 
 ### Inventory changes during collection
 
@@ -361,16 +386,23 @@ request statistics, retries, concurrency and stage timings. Request statistics a
 available while the source snapshot is retained; for live or interrupted work, use the
 worker logs. Older snapshots may lack newer metrics.
 
+**Collection history → Performance trend** (staff) compares the last 30 finished
+collections of one environment: duration, slowest phase, requests, retries, throttled
+attempts, final and peak concurrency, counter fallbacks and unknown membership or
+counter evidence, plus the error code of failed runs and which runs were automatic
+retries. New snapshots save these figures in `summary.performance`; older snapshots
+show the request figures read from their report and **Not recorded** for evidence gaps.
+
 ### Where to find the numbers
 
 | Location | Contents |
 | --- | --- |
-| `performance.phases_seconds` | `inventory`, `search`, `dfw`, `search_and_dfw`, `membership`, `vm_associations`, `parallel_retrieval`, `references`, `tags`, `network_membership` |
+| `performance.phases_seconds` | `inventory`, `search`, `dfw`, `search_and_dfw`, `membership`, `vm_associations`, `parallel_retrieval`, `references`, `tags`, `network_membership` (wait at stage 4), `network_collection` (network phase run time; overlaps `dfw` when `membership.network_overlapped_with_firewall` is true) |
 | Publication timeline | `retrieve_nsx_inventory`, `prepare_snapshot`, `write_snapshot`, `index_snapshot`, `synchronize_findings`, `wait_for_environment_lock` and commit time |
 | `performance.concurrency` | Initial, peak and final limit, increases, decreases, per-endpoint queue wait, and per-endpoint successes, failures by status, p95 and maximum latency |
 | `performance.request_pacing` | Completed and failed attempts, average and final rate, throttled attempts, aggregate pacing wait |
 | `performance.membership` | Groups checked, probe calls, probes per group, outcomes, endpoint responses, typed-plan groups and omitted probes, VM fast-path counters, VM probe comparison, network statistics |
-| `dfw.collection_diagnostics` | Policies evaluated, bulk successes, cooldown skips, fallback rules and categorized fallback reasons |
+| `dfw.collection_diagnostics` | Policies evaluated, bulk successes, cooldown skips, fallback rules, categorized fallback reasons and `bulk_concurrency` |
 | `performance.collection_scope` | Group rows and unique paths per domain; added/removed group counts versus the previous snapshot from the same Manager, with up to ten samples |
 | **Collecting worker** | Version, full revision, build time and configured maximum of the worker that collected the snapshot (older snapshots show "Not recorded") |
 

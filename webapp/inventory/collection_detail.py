@@ -106,5 +106,6 @@ def collection_detail(request, pk):
     context = {'job': job, 'environment': job.environment, 'snapshot': snapshot, 'progress': job.progress,
                'phases': phases(job), 'pacing': figures, 'active': job.status in ('queued', 'running'), 'coverage': coverage,
                'result': result(job, snapshot, figures, coverage) if snapshot and job.status == 'succeeded' else None,
-               'history': history(job)}
+               'history': history(job),
+               'retry': job.retries.only('id', 'status', 'not_before').order_by('created_at').first() if job.status == 'failed' else None}
     return render(request, 'inventory/collection_detail.html', context)

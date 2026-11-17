@@ -49,8 +49,11 @@ do not apply this dedicated-instance table to an entire shared database blindly.
 
 The default worker supervises collection, finding recalculation and comparison
 subprocesses in one container. All share its resource limits. PostgreSQL permits
-one active task per type globally; additional replicas do not enable concurrent
-collections of different environments or add memory to a single collection.
+one active task per type globally; additional replicas do not add memory to a single
+collection. To collect several environments at once, set `NSX_COLLECTION_SLOTS` (1–4,
+default 1) on web, worker and scheduler alike: each slot runs one environment's collector
+process, so add the collection worker memory row once per extra slot and check PostgreSQL
+connections. An environment never runs two collections.
 Keep one scheduler replica initially. Adding Gunicorn processes or web replicas also
 increases total memory and database connections; measure before increasing either.
 

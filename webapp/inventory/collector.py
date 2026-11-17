@@ -1077,6 +1077,11 @@ def policy_statistics(client, policy, rules, defer_fallback=False):
     return results
 
 
+# A second concurrent bulk counter probe needs this live request limit (two probes plus
+# room for at least four other requests).
+BULK_SECOND_PROBE_LIMIT = 6
+
+
 def audit_dfw(client, domains, workers=4, testing=False):
     policies, rules, errors, configuration = [], [], [], []
     jobs = []
@@ -1162,21 +1167,32 @@ def audit_dfw(client, domains, workers=4, testing=False):
     # All requests still acquire the shared client limiter. Allow counter tasks
     # to use spare capacity without raising the configured HTTP concurrency.
     statistics_workers = max(1, workers)
+    # Bulk policy probes are slow and heavy on NSX. Allow a second concurrent probe only
+    # while the live adaptive request limit leaves room for search, membership and
+    # per-rule fallbacks; without a live limiter keep one probe.
+    controller = getattr(client, "request_controller", None)
+
+    def bulk_limit():
+        limit = getattr(controller, "limit", None)
+        return 2 if type(limit) is int and limit >= BULK_SECOND_PROBE_LIMIT and statistics_workers >= 2 else 1
     diagnostics["statistics_workers"] = statistics_workers
+    diagnostics["bulk_concurrency"] = 1
     with ThreadPoolExecutor(max_workers=statistics_workers) as pool:
         active = {}
         while queue or active:
             while queue and len(active) < statistics_workers:
-                # Never occupy both statistics slots with optional bulk probes.
                 # Pick available fallback work instead of blocking a pool thread.
-                bulk_active = any(value is not None for value in active.values())
+                bulk_running = sum(value is not None for value in active.values())
+                allowed = bulk_limit()
                 candidate = next((i for i, task in enumerate(queue)
-                                  if task[2] is None or not bulk_active), None)
+                                  if task[2] is None or bulk_running < allowed), None)
                 if candidate is None:
                     break
                 function, args, policy_rules = queue[candidate]
                 del queue[candidate]
                 active[pool.submit(function, *args)] = policy_rules
+                if policy_rules is not None:
+                    diagnostics["bulk_concurrency"] = max(diagnostics["bulk_concurrency"], bulk_running + 1)
             done, _ = wait(active, return_when=FIRST_COMPLETED)
             for future in done:
                 policy_rules = active.pop(future)
@@ -1297,6 +1313,14 @@ def read_tag_inventory(client, workers=1):
             return [], str(exc)
     with ThreadPoolExecutor(max_workers=workers) as pool:
         return list(pool.map(read_tags, paths))
+
+
+SAVED_VM_FIELDS = {"path", "id", "external_id", "display_name", "power_state", "compute_ids", "host_id", "source", "guest_info", "tags"}
+
+
+def saved_vm_list(vms):
+    """The VM records saved with tags and used for network attachments (one definition for both)."""
+    return [{k: v for k, v in vm.items() if k in SAVED_VM_FIELDS} for vm in vms if not vm.get("marked_for_delete")]
 
 
 def audit_tags(client, groups, testing=False, resources=(), workers=1, inventories=None):
@@ -1508,7 +1532,7 @@ def audit_tags(client, groups, testing=False, resources=(), workers=1, inventori
             "vm_inventory_complete": not testing and not vm_errors and not any(
                 warning.get('endpoint') == '/infra/realized-state/virtual-machines'
                 for warning in (client.inventory_warnings if isinstance(getattr(client, 'inventory_warnings', None), list) else [])),
-            "virtual_machines": [{k:v for k,v in vm.items() if k in {"path","id","external_id","display_name","power_state","compute_ids","host_id","source","guest_info","tags"}} for vm in vms if not vm.get("marked_for_delete")],
+            "virtual_machines": saved_vm_list(vms),
             "testing": testing, "vms_scanned": len(vms), "groups_scanned": len(groups),
             "note": TAG_NOTE, "statuses": TAG_STATUSES}
 
@@ -1662,6 +1686,7 @@ def needs_review(report):
             or bool(report.get("tags", {}).get("unsupported_conditions"))
             or any(r["status"] == "unknown" for r in report.get("tags", {}).get("objects", []))
             or bool(dfw.get("errors"))
+            or bool(report.get("search_coverage", {}).get("failed") or report.get("search_coverage", {}).get("errors"))
             or any(r["hit_status"] == "unknown" for r in dfw.get("rules", [])))
 
 
@@ -1785,12 +1810,45 @@ def verified_configuration_search(client, groups, services, testing=False):
                  len(found), coverage.get("query", "<unknown>"), sample)
         coverage.update(status="incomplete", error=detail[:2000], missing_groups=len(missing_groups), missing_services=len(missing_services))
         if attempt == attempts - 1:
-            raise AuditError(detail + " Coverage could not be verified after {} attempts; "
-                             "possible search query, indexing, or path-scope mismatch.".format(attempts))
+            # Publish the rest of the collection: reference usage becomes unknown (never
+            # unused) and the gap stays visible in coverage, findings and needs-review.
+            LOG.warning("%s Coverage could not be verified after %d attempts; reference usage is unknown for this snapshot.",
+                        detail, attempts)
+            coverage.update(failed=True, inventory_coverage_retries=attempt, errors=[
+                detail[:1800] + " Coverage could not be verified after {} attempts; possible search query, indexing, "
+                "or path-scope mismatch. Objects without a positive reference have unknown usage.".format(attempts)])
+            budget = getattr(client, '_search_scan_budget', None)
+            if isinstance(budget, dict):
+                coverage['search_scans'] = 5 - budget['remaining']
+            return resources, coverage
         delay = 2 ** (attempt + 1)
         LOG.warning("%s Restarting the complete search in %ss (attempt %d/%d).",
                     detail, delay, attempt + 2, attempts)
         time.sleep(delay)
+
+
+# Start network membership once search and VM associations are done, overlapping the
+# firewall counter tail. Tests switch it off to compare against the sequential order.
+OVERLAP_NETWORK_PHASE = True
+
+
+def start_background(function, name):
+    """Run one phase beyond the retrieval pool so later phases need not wait for it.
+
+    A daemon thread: if the collection fails meanwhile, the collector process exits
+    without waiting for this read-only phase."""
+    from concurrent.futures import Future
+    future = Future()
+
+    def run():
+        if not future.set_running_or_notify_cancel():
+            return
+        try:
+            future.set_result(function())
+        except BaseException as exc:
+            future.set_exception(exc)
+    threading.Thread(target=run, name=name, daemon=True).start()
+    return future
 
 
 def audit(client, workers=4, testing=False, progress=None):
@@ -1990,6 +2048,19 @@ def audit(client, workers=4, testing=False, progress=None):
 
     # All retrieval tasks use the same client's adaptive request limiter. Keep diagnostic
     # samples and single-worker calls sequential; worker callbacks stay on this thread.
+    def read_network(vms):
+        # Needs only the search results, the group inventory and the VM inventory read
+        # with VM associations; it does not depend on firewall rules or counters. It adds
+        # interface and address details to these VM records, which the report saves.
+        started = time.perf_counter()
+        evidence, stats = collect_network(client, all_groups, vms, probes=network_probes, workers=workers,
+                                          testing=testing, resources=resources, collect_addresses=True)
+        return evidence, stats, round(time.perf_counter() - started, 2)
+
+    from .network_membership import collect as collect_network, apply as apply_network
+    # The network phase overlaps the firewall counter tail once search and membership are done.
+    overlap_network = OVERLAP_NETWORK_PHASE and not testing and workers > 1
+    network_future, network_vms = None, []
     with ThreadPoolExecutor(max_workers=1 if testing or workers == 1 else 3) as pool:
         search_future = pool.submit(read_search)
         dfw_future = pool.submit(read_dfw)
@@ -1997,14 +2068,31 @@ def audit(client, workers=4, testing=False, progress=None):
         try:
             resources, search_coverage, phases["search"] = search_future.result()
             progress(2, "Completing firewall rules and counters")
-            dfw, dfw_configuration, phases["dfw"] = dfw_future.result()
-            phases['search_and_dfw'] = round(time.perf_counter()-combined_started, 2)
-            progress(3, "Collecting VM associations and checking group membership")
-            memberships, phases['membership'] = membership_future.result()
+            if overlap_network:
+                # Whichever of DFW and membership finishes first is handled first: network
+                # members start as soon as membership is done; stage 3 follows DFW.
+                pending = {dfw_future, membership_future}
+                while pending:
+                    done, pending = wait(pending, return_when=FIRST_COMPLETED)
+                    if membership_future in done:
+                        memberships, phases['membership'] = membership_future.result()
+                        network_vms = saved_vm_list(tag_inventories[1][0]) if tag_inventories else []
+                        network_future = start_background(lambda: read_network(network_vms), 'network-membership')
+                    if dfw_future in done:
+                        dfw, dfw_configuration, phases["dfw"] = dfw_future.result()
+                        phases['search_and_dfw'] = round(time.perf_counter()-combined_started, 2)
+                        progress(3, "Collecting VM associations and checking group membership")
+            else:
+                dfw, dfw_configuration, phases["dfw"] = dfw_future.result()
+                phases['search_and_dfw'] = round(time.perf_counter()-combined_started, 2)
+                progress(3, "Collecting VM associations and checking group membership")
+                memberships, phases['membership'] = membership_future.result()
         except BaseException:
             search_future.cancel()
             dfw_future.cancel()
             membership_future.cancel()
+            if network_future is not None:
+                network_future.cancel()
             raise
     membership_diagnostics['saved_member_lists'] = {
         endpoint: dict(Counter(evidence['endpoints'][endpoint]['status'] for evidence in resolved_members.values()))
@@ -2027,12 +2115,14 @@ def audit(client, workers=4, testing=False, progress=None):
     for rule in dfw["rules"]:
         rule_references[rule["path"]] = {key: rule[key] for key in ("path", "name", "rule_id", "policy_rule_id")}
     rows = []
+    # A positive reference stands; absence of one proves nothing when search coverage failed.
+    search_incomplete = bool(search_coverage.get("failed") or search_coverage.get("errors"))
     group_paths = {g["path"] for g in groups}
     for index, obj in enumerate(groups + custom, 1):
         is_group = obj["path"] in group_paths
         row = {"kind": "group" if is_group else "custom_service",
                "name": obj.get("display_name", obj.get("id", "")), "path": obj["path"],
-               "usage": "referenced" if refs[obj["path"]] else "unknown" if testing else "unused_candidate",
+               "usage": "referenced" if refs[obj["path"]] else "unknown" if testing or search_incomplete else "unused_candidate",
                "referenced_by": sorted(refs[obj["path"]]),
                "reference_details": [rule_references[path] for path in sorted(refs[obj["path"]]) if path in rule_references],
                "membership": "not_applicable", "notes": []}
@@ -2087,6 +2177,11 @@ def audit(client, workers=4, testing=False, progress=None):
         limitations += " TESTING ONLY: one record per list and no pagination. No unused-object, policy-emptiness or rule-activity conclusions. Empty or excluded samples can leave checks unexercised."
         for row in rows:
             row["notes"].append("Testing mode: sampled reference search; absence of a reference does not establish non-use.")
+    if search_incomplete and not testing:
+        limitations += " Reference search coverage could not be verified; objects without a positive reference have unknown usage."
+        for row in rows:
+            if row["usage"] == "unknown":
+                row["notes"].append("Usage unknown: reference search coverage could not be verified in this collection.")
     if search_coverage["mode"] == "explicit_types":
         limitations += (" Compatibility search is limited to these configuration types: "
                         + ", ".join(search_coverage["resource_types"])
@@ -2096,16 +2191,23 @@ def audit(client, workers=4, testing=False, progress=None):
     tag_started = time.perf_counter()
     tags = audit_tags(client, all_groups, testing=testing, workers=workers, inventories=tag_inventories,
                       resources=resources + all_groups + services + dfw_configuration)
+    if network_future is not None:
+        # The network phase adds interface details to these same records (same inventory
+        # read and projection); save them, and use them for every later step. Until it
+        # finishes, later steps read these records by key only and never iterate them.
+        tags['virtual_machines'] = network_vms
     tags["search_coverage"] = search_coverage
     add_tag_firewall_references(tags, all_groups, resources + all_groups + dfw_configuration)
     from .vm_associations import apply_to_groups
     apply_to_groups(tags, inventory['groups'], membership_evidence)
-    from .network_membership import collect as collect_network, apply as apply_network
     phases['tags'] = round(time.perf_counter()-tag_started,2)
     network_started = time.perf_counter()
     progress(4, 'Collecting network members and linking VM interface attachments')
-    network_evidence, network_stats = collect_network(client, all_groups, tags.get('virtual_machines', []),
-        probes=network_probes, workers=workers, testing=testing, resources=resources, collect_addresses=True)
+    if network_future is not None:
+        network_evidence, network_stats, phases['network_collection'] = network_future.result()
+        membership_diagnostics['network_overlapped_with_firewall'] = True
+    else:
+        network_evidence, network_stats, phases['network_collection'] = read_network(tags.get('virtual_machines', []))
     address_stats = network_evidence.pop('address_diagnostics', {})
     if address_stats:
         network_stats['vm_addresses'] = address_stats

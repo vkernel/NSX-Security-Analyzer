@@ -5,7 +5,7 @@ from django.db import connection
 from .models import Environment, AuditJob
 from .services import claim_job
 from . import finding_recalculation
-from .worker_lanes import lease, LANES
+from .worker_lanes import lease, LANES, active_lanes, collection_lane
 from .management.commands.audit_worker import Command
 
 
@@ -66,7 +66,7 @@ class SupervisorTests(SimpleTestCase):
         self.addCleanup(reconcile.stop)
 
     def test_supervisor_starts_and_stops_all_lanes(self):
-        processes=[MagicMock() for _ in LANES]
+        processes=[MagicMock() for _ in active_lanes()]
         for process in processes: process.poll.return_value=None
         with patch('inventory.management.commands.audit_worker.subprocess.Popen',side_effect=processes) as spawn, patch('inventory.management.commands.audit_worker.time.sleep',side_effect=KeyboardInterrupt):
             with self.assertRaises(KeyboardInterrupt): Command().supervise_lanes()
@@ -91,7 +91,7 @@ class SupervisorTests(SimpleTestCase):
                      patch.object(command, 'run_comparison', return_value=False) as comparison:
                     command.run_worker({'lane': lane, 'once': True})
                 self.assertEqual(exports.call_count, int(lane == 'exports'))
-                self.assertEqual(collection.call_count, int(lane == 'collection'))
+                self.assertEqual(collection.call_count, int(collection_lane(lane)))
                 self.assertEqual(recalculation.call_count, int(lane == 'recalculation'))
                 self.assertEqual(comparison.call_count, int(lane == 'comparison'))
                 self.assertEqual(command.heartbeat_lanes, (lane,))

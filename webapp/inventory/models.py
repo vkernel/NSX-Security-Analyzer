@@ -90,6 +90,11 @@ class AuditJob(models.Model):
     debug_until = models.DateTimeField(null=True, blank=True)
     progress_completed = models.PositiveSmallIntegerField(default=0, validators=[MaxValueValidator(7)])
     progress_stage = models.CharField(max_length=150, default="Waiting for a collection worker")
+    # Automatic retry after a transient failure starts no earlier than this time.
+    not_before = models.DateTimeField(null=True, blank=True)
+    retry_of = models.ForeignKey("self", null=True, blank=True, on_delete=models.SET_NULL, related_name="retries")
+    # Collection lane that claimed the job; used to fail it if that lane's worker died.
+    worker_slot = models.CharField(max_length=24, blank=True, default="")
 
     def get_status_display(self):
         # Collection labels also reach polling responses and bulk exports.
