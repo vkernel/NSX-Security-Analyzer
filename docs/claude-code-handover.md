@@ -30,16 +30,16 @@ requested. The remaining review backlog is listed under "Suggested next actions"
 | --- | --- |
 | Repository | [vkernel/NSX-Security-Analyzer](https://github.com/vkernel/NSX-Security-Analyzer) |
 | Branch | `development` |
-| Application commit | `e7f1f13a41f797449aad9899fd08126660b025a1` |
+| Application commit | `2e470ec019e45714801aa140c757ddd3ce049f9a` |
 | Application version | `0.5.3`; inspect the build revision as well as the version |
 | Mutable image | `vkernel/nsx-security-analyzer:development` |
-| Pinned image | `vkernel/nsx-security-analyzer:development-e7f1f13` |
-| Published image digest | `sha256:e8691c9da9956aa27036b636e48c3e87843e25cab4365cde12136ce78b464510` |
+| Pinned image | `vkernel/nsx-security-analyzer:development-2e470ec` |
+| Published image digest | `sha256:32fff4dead6d75479d8a3ad4814fd40626b3d3c3447f53815fe52dc5fc26a9f0` |
 | Platforms | `linux/amd64` and `linux/arm64` |
-| Latest migration | `0069_reference_exports` |
+| Latest migration | `0070_collection_slots_and_retry` |
 
-These publication results were verified on 16 November 2026 (build date
-`2026-11-16T10:04:16Z`). Recheck mutable tags
+These publication results were verified on 17 November 2026 (build date
+`2026-11-17T06:24:40Z`). Recheck mutable tags
 and the remote branch before a later publication. The handover documentation is
 published separately from the application image. The running cluster's revision
 and migration state must be inspected before claiming that a rollout is complete.
@@ -181,7 +181,7 @@ Artifacts are compressed in PostgreSQL. The export lane has a five-minute proces
 deadline and its own heartbeat. Read [reference exports](reference-exports.md)
 before changing format schemas, job lifecycle or deployment requirements.
 
-### Collection reliability (not yet published)
+### Collection reliability (published in `development-2e470ec`)
 
 Migration `0070` adds `AuditJob.not_before`, `retry_of` and `worker_slot`.
 Collection lanes `collection`, `collection_2`…`collection_4` each hold their own
@@ -199,10 +199,15 @@ Tests: `inventory.test_collection_resilience` and `test_collector.py`.
 
 ## Verification baseline
 
-The published application baseline (`e7f1f13`) passed 1,071 Django tests,
-138 JavaScript tests and 113 offline collector tests on 16 November 2026. Both
-registry platforms were pulled by digest: non-root user, build revision and
-date, fresh migrations to `0069`, system check and static assets passed. The
+The published application baseline (`2e470ec`) passed 1,087 Django tests,
+138 JavaScript tests and 113 offline collector tests (9 skipped) on 16–17 November
+2026, plus a live PostgreSQL check with two collection slots: a worker killed with
+SIGKILL mid-collection left the job running, and restarting the lane failed it as
+`WORKER_ORPHANED` with exactly one queued retry. Both registry platforms were run
+by digest: non-root user, build revision and date, migrations to `0070` (fresh on
+AMD64), system check and static assets passed. `test_workload_rules` failed once in
+an earlier full run and passed alone and in the next full run; treat it as
+order-sensitive until investigated. The
 table below records the earlier 13 November baseline checks.
 
 | Check | Result |
